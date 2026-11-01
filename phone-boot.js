@@ -136,6 +136,39 @@ async function updatesDialog() {
   }
 }
 
+// ---- extensions made for a computer screen ----------------------------------------------
+// Cabinet Designer looks and works like it does on the PC only in a window at least about 1100 wide
+// and 600 tall. On the phone its page is laid out at that size and scaled down to fit, so it is the
+// same designer as on the PC (turn the phone sideways for a bigger view).
+const DESKTOP_SIZED = new Set(['cabinet-designer']);
+const DESK_W = 1100;
+const DESK_H = 600;
+function fitDesktopFrame(iframe) {
+  const box = iframe.parentElement;
+  const id = (iframe.getAttribute('src') || '').match(/\/ext\/([^/]+)\//)?.[1];
+  if (!box || !DESKTOP_SIZED.has(id)) return;
+  const bar = box.querySelector('.ext-bar');
+  const w = box.clientWidth;
+  const h = box.clientHeight - (bar && bar.offsetParent ? bar.offsetHeight : 0);
+  if (!w || !h) return;
+  const scale = Math.min(1, w / DESK_W, h / DESK_H);
+  box.style.overflow = 'hidden';
+  Object.assign(iframe.style, scale < 1
+    ? { flex: 'none', width: `${w / scale}px`, height: `${h / scale}px`, transform: `scale(${scale})`, transformOrigin: '0 0' }
+    : { flex: '', width: '', height: '', transform: '', transformOrigin: '' });
+}
+const frameSizes = new ResizeObserver((entries) => {
+  for (const e of entries) e.target.querySelectorAll(':scope > iframe').forEach(fitDesktopFrame);
+});
+new MutationObserver(() => {
+  for (const iframe of document.querySelectorAll('.ext-frame > iframe')) {
+    if (iframe.dataset.fitted) continue;
+    iframe.dataset.fitted = '1';
+    fitDesktopFrame(iframe);
+    frameSizes.observe(iframe.parentElement);
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
 // ---- the phone's menu: backup and storage ------------------------------------------------
 
 const navSection = $('#sign-out').parentElement;
