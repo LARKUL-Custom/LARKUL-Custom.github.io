@@ -14,32 +14,58 @@ function listEditor(ref, prop, cols, rows) {
   <div class="row-actions"><button class="btn sm" data-act="list-add" data-ref="${esc(ref)}" data-prop="${prop}">Add hole</button></div>`;
 }
 
-/* ---------- Part drawing ---------- */
-function partSVG(p, maxH) {
+/* ---------- Part drawing ----------
+   Black and white like Mozaik: a white part with a black outline, and the only colour is the operations:
+   grey on the face up, green on the flip side, red for the one picked (opt.sel). Banded edges get a thin inner line.
+   Each operation is a group with
+   data-pe-op ('u3' = the part editor's own operation 3, 'g5' = the fifth one from the cabinet); opt.hit adds wide
+   see-through copies so even a 5 mm hole is easy to click. */
+// The face most holes, grooves and routes are on is machined face up; the one opposite it is the flip side. Same rule as the CNC file.
+function partFaces(p) {
+  const cnt = {}; (p.ops || []).forEach(o => { if (o.face && (o.type === 'bore' || o.type === 'groove' || o.type === 'path')) cnt[o.face] = (cnt[o.face] || 0) + 1; });
+  const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || null, OPP = typeof CNC_OPPOSITE !== 'undefined' ? CNC_OPPOSITE : {};
+  return { top, back: top ? OPP[top] || null : null };
+}
+// The key of every operation, in q.ops order: the part editor's own ones by number, the cabinet's counted in order.
+function partOpKeys(p) { let g = 0; return p.ops.map(o => o.user !== undefined ? 'u' + o.user : o.type === 'notch' ? '' : 'g' + (g++)); }
+function partSVG(p, maxH, opt) {
+  opt = opt || {};
   const pad = Math.max(p.L, p.W) * 0.06 + 1.5, fs = Math.max(p.L, p.W) / 34 + 0.6;
-  let s = `<svg viewBox="${-pad} ${-pad} ${p.L + 2 * pad} ${p.W + 2 * pad + fs * 2}" style="max-height:${maxH || 320}px">`;
+  let s = `<svg class="partsvg" viewBox="${-pad} ${-pad} ${p.L + 2 * pad} ${p.W + 2 * pad + fs * 2}" style="max-height:${maxH || 320}px">`;
   s += p.outline ? `<polygon class="pp-part nss" points="${p.outline.map(q => `${q.x},${r3(p.W - q.y)}`).join(' ')}"/>` : `<rect class="pp-part nss" x="0" y="0" width="${p.L}" height="${p.W}"/>`;
-  // Banded edges as thick strips in the band's color, just inside the part outline.
-  const bw = fs * 0.32, ends = { L1: [0, bw / 2, p.L, bw / 2], L2: [0, p.W - bw / 2, p.L, p.W - bw / 2], W1: [bw / 2, 0, bw / 2, p.W], W2: [p.L - bw / 2, 0, p.L - bw / 2, p.W] };
-  EDGE_KEYS.forEach(k => { const b = p.band && edgeband(p.band[k]); if (b) { const [x1, y1, x2, y2] = ends[k]; s += `<line class="pp-band-o" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke-width="${bw * 1.5}"/><line class="pp-band" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke-width="${bw}" style="stroke:${esc(b.color || '#c90')}"/>`; } });
-  p.ops.forEach(o => {
-    if (o.type === 'notch') s += `<rect class="pp-notch nss" x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}"/>`;
-    if (o.type === 'pocket') s += `<rect class="pp-pocket nss" x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}"/>`;
-    if (o.type === 'cutout') s += `<rect class="pp-cutout nss" x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}"/>`;
-    if (o.type === 'rabbet') s += `<rect class="pp-pocket nss" x="${o.x - o.width}" y="${o.y - o.width}" width="${o.w + 2 * o.width}" height="${o.h + 2 * o.width}" fill="none"/>`;
-    if (o.type === 'profile') s += `<rect class="pp-pocket nss" x="${o.x + o.inset}" y="${o.y + o.inset}" width="${Math.max(0, o.w - 2 * o.inset)}" height="${Math.max(0, o.h - 2 * o.inset)}"/>`;
-    if (o.type === 'groove') s += `<line class="pp-groove" x1="${o.x1}" y1="${o.y1}" x2="${o.x2}" y2="${o.y2}" stroke-width="${o.width}"/>`;
-    if (o.type === 'path') { const pp = o.pts.map(q => `${q.x},${q.y}`).join(' '); s += o.pocket ? `<polygon class="pp-pocket nss" points="${pp}"/>` : `<${o.closed ? 'polygon' : 'polyline'} class="pp-path" points="${pp}" stroke-width="${o.dia || 0.375}"/>`; }
+  // Edge banding: a thin black line just inside each banded edge, the way a shop drawing marks it.
+  const bi = fs * 0.24, bl = { L1: [0, bi, p.L, bi], L2: [0, p.W - bi, p.L, p.W - bi], W1: [bi, 0, bi, p.W], W2: [p.L - bi, 0, p.L - bi, p.W] };
+  EDGE_KEYS.forEach(k => { if (p.band && edgeband(p.band[k])) { const [x1, y1, x2, y2] = bl[k]; s += `<line class="pp-band nss" x1="${r3(x1)}" y1="${r3(y1)}" x2="${r3(x2)}" y2="${r3(y2)}"/>`; } });
+  const { back } = partFaces(p), keys = partOpKeys(p);
+  // The shape of one operation, without its class; null when it has nothing to draw (an edge profile).
+  const geo = o => {
+    if (o.type === 'pocket' || o.type === 'cutout') return [o.type === 'cutout' ? 'pp-cutout' : 'pp-pocket', `<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}"`];
+    if (o.type === 'rabbet') return ['pp-pocket open', `<rect x="${o.x - o.width}" y="${o.y - o.width}" width="${o.w + 2 * o.width}" height="${o.h + 2 * o.width}"`];
+    if (o.type === 'profile') return ['pp-pocket', `<rect x="${o.x + o.inset}" y="${o.y + o.inset}" width="${Math.max(0, o.w - 2 * o.inset)}" height="${Math.max(0, o.h - 2 * o.inset)}"`];
+    if (o.type === 'groove') return ['pp-groove', `<line x1="${o.x1}" y1="${o.y1}" x2="${o.x2}" y2="${o.y2}" stroke-width="${o.width}"`];
+    if (o.type === 'path') { const pp = o.pts.map(q => `${q.x},${q.y}`).join(' '); return o.pocket ? ['pp-pocket', `<polygon points="${pp}"`] : ['pp-path', `<${o.closed ? 'polygon' : 'polyline'} points="${pp}" stroke-width="${o.dia || 0.375}"`]; }
+    if (o.type === 'bore') return ['pp-bore', `<circle cx="${o.x}" cy="${o.y}" r="${Math.max(o.dia / 2, 0.09)}"`];
+    if (o.type === 'hbore') { const k = Math.max(0.35, fs * 0.4); return ['pp-hbore', `<path d="M${o.x} ${o.y} l${o.x ? 1.4 * k : -1.4 * k} ${-k} v${2 * k} z"`]; }
+    if (o.type === 'edgeslot') return ['pp-hbore', `<rect x="${o.x ? o.x - 0.3 : 0}" y="${o.y - o.len / 2}" width="0.3" height="${o.len}"`];
+    if (o.type === 'pockethole') return ['pp-pocket', `<rect x="${o.x - 0.5}" y="${o.y - 0.19}" width="1" height="0.38" rx="0.19"`];
+    return null;
+  };
+  const one = (o, i) => {
+    if (o.type === 'notch') return `<rect class="pp-notch nss" x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}"/>`;
+    const g = geo(o); if (!g) return '';
+    const k = keys[i], cls = `po${back && o.face === back ? ' flip' : ''}${opt.sel && k === opt.sel ? ' sel' : ''}`;
+    const nss = /pp-groove|pp-path/.test(g[0]) ? '' : ' nss';
+    return `<g class="${cls}" data-pe-op="${k}">${g[1]} class="${g[0]}${nss}"/>${opt.hit ? `${g[1]} class="pe-hit"/>` : ''}</g>`;
+  };
+  // Holes go on top of the routes and pockets, and the picked operation on top of everything.
+  const order = p.ops.map((o, i) => i).sort((a, b) => {
+    const r = i => (opt.sel && keys[i] === opt.sel ? 2 : 0) + (['bore', 'hbore', 'edgeslot', 'pockethole'].includes(p.ops[i].type) ? 1 : 0);
+    return r(a) - r(b) || a - b;
   });
-  p.ops.forEach(o => {
-    if (o.type === 'bore') s += `<circle class="pp-bore nss${o.dia > 0.5 ? ' big' : ''}${o.why === 'pull' ? ' pull' : ''}" cx="${o.x}" cy="${o.y}" r="${Math.max(o.dia / 2, 0.09)}"/>`;
-    if (o.type === 'hbore') { const k = Math.max(0.35, fs * 0.4); s += `<path class="pp-hbore" d="M${o.x} ${o.y} l${o.x ? 1.4 * k : -1.4 * k} ${-k} v${2 * k} z"/>`; }
-    if (o.type === 'edgeslot') s += `<rect class="pp-hbore" x="${o.x ? o.x - 0.3 : 0}" y="${o.y - o.len / 2}" width="0.3" height="${o.len}"/>`;
-    if (o.type === 'pockethole') s += `<rect class="pp-pocket nss" x="${o.x - 0.5}" y="${o.y - 0.19}" width="1" height="0.38" rx="0.19"/>`;
-  });
+  order.forEach(i => { s += one(p.ops[i], i); });
   s += `<text class="lbl-m" x="${p.L / 2}" y="${p.W + fs * 1.5}" font-size="${fs}" text-anchor="middle">${fmtLen(p.L, 1)} (x)</text>`;
   s += `<text class="lbl-m" x="${-fs * 0.6}" y="${p.W / 2}" font-size="${fs}" text-anchor="middle" transform="rotate(-90 ${-fs * 0.6} ${p.W / 2})">${fmtLen(p.W, 1)} (y)</text>`;
-  s += `<circle class="snapdot" cx="0" cy="0" r="${fs * 0.25}"/></svg>`;
+  s += `<circle class="pp-origin" cx="0" cy="0" r="${fs * 0.18}"/></svg>`;
   return s;
 }
 // Small edge diagram for a part kind: the outline with banded edges drawn thick, laid out like the part drawing (L1 on top).

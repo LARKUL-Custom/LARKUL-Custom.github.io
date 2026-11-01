@@ -191,13 +191,14 @@ let opClip = null;
 
 /* ----- Simulation (O8): a dot runs the bit over every cut on the part, in order ----- */
 function peSimPaths(q) {
+  // Operations are already in the drawing's frame (y down from L1); only the outline is stored y up.
   const Y = y => q.W - y, out = [];
   q.ops.forEach(o => {
-    if (o.type === 'bore') out.push({ pts: [{ x: o.x, y: Y(o.y) }], drill: true });
-    else if (o.type === 'groove') out.push({ pts: [{ x: o.x1, y: Y(o.y1) }, { x: o.x2, y: Y(o.y2) }] });
+    if (o.type === 'bore') out.push({ pts: [{ x: o.x, y: o.y }], drill: true });
+    else if (o.type === 'groove') out.push({ pts: [{ x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 }] });
     else if (o.type === 'path') {
-      const pts = o.pts.map(z => ({ x: z.x, y: Y(z.y) }));
-      if (o.pocket) pocketPaths(o.pts, o.dia || 0.375, o.pocketOpts).forEach(pp => out.push({ pts: pp.map(z => ({ x: z.x, y: Y(z.y) })) }));
+      const pts = o.pts.map(z => ({ x: z.x, y: z.y }));
+      if (o.pocket) pocketPaths(o.pts, o.dia || 0.375, o.pocketOpts).forEach(pp => out.push({ pts: pp.map(z => ({ x: z.x, y: z.y })) }));
       else out.push({ pts: o.closed ? [...pts, pts[0]] : pts });
     }
   });

@@ -251,7 +251,7 @@ function pePart() {
 const peKeyOf = p => p.editKey || peKey(p.name);
 const peAdded = (c, key) => (c.addParts || []).find(a => peKey(a.name) === key);
 const peEdit = (c, key) => ((c.partEdits = c.partEdits || {})[key] = c.partEdits[key] || {});
-function openPartEdit(cid, key, tab) { ui.partEdit = { cab: cid, key: peKey(key), tab: tab || (ui.partEdit && ui.partEdit.tab) || 'ops', op: 0, pt: -1 }; renderPartEdit(); }
+function openPartEdit(cid, key, tab) { ui.partEdit = { cab: cid, key: peKey(key), tab: tab || (ui.partEdit && ui.partEdit.tab) || 'ops', sel: '', pt: -1 }; renderPartEdit(); }
 function closePartEdit() { ui.partEdit = null; const el = $('#partedit'); if (el) el.remove(); if (ui.quick) renderQuick(); }
 // The outline to start from: the part as it is now, each point anchored to its nearest end and edge.
 function peStartPts(q) {
@@ -265,7 +265,7 @@ function peStartPts(q) {
 }
 // A generated operation as an editable one, in the editor's frame (y up).
 function peFromOp(o, q) {
-  const Y = y => r3(q.W - y), base = { name: o.why || '', face: 'top', depth: o.through ? 0 : o.depth }, A = list => list.map(p => peAnchor(p, q.L, q.W));
+  const Y = y => r3(q.W - y), base = { name: o.why || '', face: peFaceOf(o, q), depth: o.through ? 0 : o.depth }, A = list => list.map(p => peAnchor(p, q.L, q.W));
   if (o.type === 'bore') return { ...base, type: 'drill', dia: o.dia, pts: A([{ x: o.x, y: Y(o.y) }]) };
   if (o.type === 'groove') return { ...base, type: 'groove', width: o.width, pts: A([{ x: o.x1, y: Y(o.y1) }, { x: o.x2, y: Y(o.y2) }]) };
   if (o.type === 'pocket' || o.type === 'cutout') { const y0 = Y(o.y + o.h), y1 = Y(o.y); return { ...base, type: o.type === 'cutout' ? 'path' : 'pocket', closed: true, depth: o.type === 'cutout' ? 0 : o.depth, tool: peDefTool(), pts: A([{ x: o.x, y: y0 }, { x: o.x + o.w, y: y0 }, { x: o.x + o.w, y: y1 }, { x: o.x, y: y1 }]) }; }
@@ -294,13 +294,14 @@ const PE_SHAPES = [
   ['round', 'Round', (L, W) => { const r = r3(Math.min(L, W) / 2); return [{ x: 0, y: 0, r }, { x: 0, y: 0, ax: 'R', r }, { x: 0, y: 0, ax: 'R', ay: 'T', r }, { x: 0, y: 0, ay: 'T', r }]; }],
 ];
 
-// The drawing: the part, its operations, and the points of the one being edited as numbered handles.
+// The drawing: the part, its operations (click one to pick it; it turns red), and the points of the picked one as numbered handles.
 function peSVG(q, e, s) {
-  let svg = partSVG(q, 2000).replace(/style="max-height:[^"]*"/, 'class="pe-draw" preserveAspectRatio="xMidYMid meet"');
+  const pick = s.tab === 'shape' ? '' : s.sel || '';
+  let svg = partSVG(q, 2000, { sel: pick, hit: s.tab !== 'band' && !s.trace }).replace(/style="max-height:[^"]*"/, 'preserveAspectRatio="xMidYMid meet"').replace('class="partsvg"', 'class="partsvg pe-draw"');
   const fs = Math.max(q.L, q.W) / 34 + 0.6, r = fs * 0.32, Y = y => q.W - y;
   let pts = [], closed = false;
   if (s.tab === 'shape') { pts = e.pts || peStartPts(q); closed = true; }
-  else if (s.tab === 'ops') { const u = (e.ops || [])[s.op]; if (u) { pts = u.pts || []; closed = u.type === 'pocket' || (u.type === 'path' && u.closed); } }
+  else if (s.tab === 'ops') { const sel = peSelOp(cab(s.cab), q, e, s), u = sel && sel.u; if (u && !['perimeter', 'edgebore'].includes(u.type)) { pts = u.pts || []; closed = u.type === 'pocket' || (u.type === 'path' && u.closed); } }
   const vars = partVars(cab(s.cab), q), P = pts.map(p => { const z = peView(peXY(p, vars, q.L, q.W), q, e); return { x: z.x, y: Y(z.y), fx: typeof p.x === 'string' || typeof p.y === 'string' }; }).filter(p => isFinite(p.x) && isFinite(p.y));
   let under = '', h = '';
   // A picture to trace over, and the snap grid.
@@ -318,19 +319,8 @@ function peSVG(q, e, s) {
     if (s.tab === 'shape') P.forEach((p, i) => { const q2 = P[(i + 1) % P.length]; h += `<line class="pe-seg nss${i === s.seg ? ' on' : ''}" data-act="pe-seg" data-id="${i}" x1="${r3(p.x)}" y1="${r3(p.y)}" x2="${r3(q2.x)}" y2="${r3(q2.y)}"/>`; });
     else h += `<${closed ? 'polygon' : 'polyline'} class="pe-line nss" points="${P.map(p => `${r3(p.x)},${r3(p.y)}`).join(' ')}"/>`;
   }
-  P.forEach((p, i) => { h += `<g class="pe-h${i === s.pt ? ' on' : ''}${p.fx ? ' fx' : ''}" data-pe-pt="${i}"><circle class="nss" cx="${r3(p.x)}" cy="${r3(p.y)}" r="${r}"/><text x="${r3(p.x + r * 1.3)}" y="${r3(p.y - r * 1.3)}" font-size="${fs * 0.8}">${i + 1}</text></g>`; });
-  // O16: the back side, seen from behind (mirrored), with the flip-side operations picked out. Points can't be dragged here.
-  if (ui.peBack && s.tab === 'ops') {
-    const cnt = {}; q.ops.forEach(o => { if (o.face) cnt[o.face] = (cnt[o.face] || 0) + 1; });
-    const top = Object.keys(cnt).sort((x, y) => cnt[y] - cnt[x])[0], back = top && typeof CNC_OPPOSITE !== 'undefined' ? CNC_OPPOSITE[top] : null;
-    let mark = '';
-    q.ops.filter(o => back && o.face === back).forEach(o => {
-      if (o.type === 'bore') mark += `<circle class="pe-backop nss" cx="${o.x}" cy="${o.y}" r="${Math.max(o.dia / 2, 0.12) + 0.08}"/>`;
-      else if (o.type === 'groove') mark += `<line class="pe-backop" x1="${o.x1}" y1="${o.y1}" x2="${o.x2}" y2="${o.y2}" stroke-width="${o.width}"/>`;
-      else if (o.type === 'path') mark += `<${o.closed ? 'polygon' : 'polyline'} class="pe-backop" points="${o.pts.map(z => `${z.x},${z.y}`).join(' ')}" stroke-width="${o.dia || 0.25}"/>`;
-    });
-    return svg.replace(/(<svg[^>]*)>([\s\S]*)<\/svg>$/, (m, open, body) => `${open.replace('class="pe-draw"', 'class="pe-draw pe-backview"')}><g transform="translate(${q.L} 0) scale(-1 1)">${under}${body.replace(/<text[\s\S]*?<\/text>/g, '')}${mark}</g><text class="lbl-m" x="${r3(q.L / 2)}" y="${r3(q.W + fs * 1.5)}" font-size="${r3(fs)}" text-anchor="middle">Back side, seen from behind${back ? '' : ' (nothing on the back)'}</text></svg>`);
-  }
+  const hc = s.tab === 'ops' ? ' op' : '';
+  P.forEach((p, i) => { h += `<g class="pe-h${hc}${i === s.pt ? ' on' : ''}${p.fx ? ' fx' : ''}" data-pe-pt="${i}"><circle class="nss" cx="${r3(p.x)}" cy="${r3(p.y)}" r="${r}"/><text x="${r3(p.x + r * 1.3)}" y="${r3(p.y - r * 1.3)}" font-size="${fs * 0.8}">${i + 1}</text></g>`; });
   return svg.replace(/(<svg[^>]*>)/, `$1${under}`).replace('</svg>', h + '</svg>');
 }
 const PE_AX = [{ v: '', l: 'L' }, { v: 'R', l: 'R' }, { v: 'C', l: 'C' }], PE_AY = [{ v: '', l: 'B' }, { v: 'T', l: 'T' }, { v: 'M', l: 'M' }];
@@ -345,51 +335,83 @@ const peIn = (label, path, v, hint) => `<label class="f"><span>${label}</span><i
 const peCount = (label, path, v) => `<label class="f"><span>${label}</span><input class="pe-in${typeof v === 'string' && v !== '' && !isFinite(+v) ? ' fx' : ''}" data-path="${path}" value="${esc(v ?? '')}" aria-label="${esc(label)}"></label>`;
 const peSel = (label, path, v, options) => `<label class="f"><span>${label}</span><select class="pe-in" data-path="${path}" aria-label="${esc(label.replace(/<[^>]+>/g, ''))}">${options.map(o => `<option value="${esc(o.v)}"${String(o.v) === String(v) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}</select></label>`;
 
-const PE_ADD = [['drill', 'Drill points'], ['linebore', '32 mm line bore'], ['closedpath', 'Tool path, closed (4 points)'], ['openpath', 'Tool path, open (4 points)'], ['perimeter', 'Perimeter path (follows the outline)'], ['groove', 'Groove'], ['pocket', 'Pocket'], ['edgebore', 'Edge bore'], ['text', 'Engrave text']];
+const PE_ADD = [['drill', 'Drill points'], ['linebore', '32 mm line bore'], ['closedpath', 'Tool path, closed'], ['openpath', 'Tool path, open'], ['perimeter', 'Perimeter path (follows the outline)'], ['groove', 'Groove'], ['pocket', 'Pocket'], ['edgebore', 'Edge bore'], ['text', 'Engrave text']];
 const peOpName = o => (PE_OPS.find(t => t[0] === o.type) || [])[1] || o.type;
+// The operations that come from the cabinet (hardware, joints, templates), in the order the drawing numbers them.
+const peGen = q => q.ops.filter(o => o.user === undefined && o.type !== 'notch');
+const peFaceOf = (o, q) => { const f = partFaces(q); return f.back && o.face === f.back ? 'back' : 'top'; };
+// The picked operation: one of the part's own ('u3'), or one from the cabinet ('g5') shown as the operation it would become.
+function peSelOp(c, q, e, s) {
+  const k = s.sel || '', i = +k.slice(1);
+  if (k[0] === 'u') { const u = (e.ops || [])[i]; return u ? { kind: 'u', i, u, P: 'ops.' + i } : null; }
+  if (k[0] === 'g') { const o = peGen(q)[i]; return o ? { kind: 'g', i, o, u: peFromOp(o, q), P: 'gen.' + i } : null; }
+  return null;
+}
+// Changing an operation from the cabinet makes it the part's own: the original is turned off and an editable copy takes its place.
+function peTake(e, q, gi) {
+  const o = peGen(q)[gi], u = o && peFromOp(o, q); if (!u) return -1;
+  const t = opText(o); (e.hide = e.hide || []).push(t);
+  if (e.hideIf && e.hideIf[t] !== undefined) { u.hideIf = e.hideIf[t]; delete e.hideIf[t]; if (!Object.keys(e.hideIf).length) delete e.hideIf; }
+  (e.ops = e.ops || []).push(u); return e.ops.length - 1;
+}
+// A path into the editor's data; 'gen.5.dia' takes operation 5 over first and becomes 'ops.N.dia'.
+function peRealPath(e, q, s, path) {
+  const m = path.match(/^gen\.(\d+)(.*)$/); if (!m) return path;
+  const i = peTake(e, q, +m[1]); if (i < 0) return null;
+  s.sel = 'u' + i; return 'ops.' + i + m[2];
+}
+// A copy of the picked operation as a part operation (for Duplicate, Copy and templates).
+function peOpCopy(c, q, key) { const e = (c.partEdits || {})[ui.partEdit.key] || {}, sel = peSelOp(c, q, e, { sel: key }); return sel && sel.u ? clone(sel.u) : null; }
 function peOpsTab(c, q, e, s) {
-  const ops = e.ops || [], u = ops[s.op];
-  const gen = q.ops.filter(o => o.user === undefined && o.type !== 'notch'), hif = e.hideIf || {};
-  const list = ops.map((o, i) => `<button class="pe-op${i === s.op ? ' on' : ''}${o.off ? ' off' : ''}" data-act="pe-op" data-id="${i}"><b><span class="pe-id">U${i + 1}</span> ${esc(o.name || peOpName(o))}</b><span>${esc(peOpName(o))}${o.type === 'path' ? (o.closed ? ', closed' : ', open') : ''}${(o.pts || []).length ? ` · ${(o.pts || []).length} point${(o.pts || []).length === 1 ? '' : 's'}` : ''}${o.hideIf ? ' · hide rule' : ''}</span></button>`).join('');
-  let form = '';
-  if (u) {
-    const P = 'ops.' + s.op, t = u.type, path = t === 'path' || t === 'pocket', made = q.ops.filter(o => o.user === s.op);
-    const passes = Math.max(0, ...made.filter(o => o.passes).map(o => o.passes)), tools = peTools();
-    const toolList = t === 'pocket' ? [{ v: 'auto', l: 'Auto (biggest bit that fits)' }, ...tools] : tools;
-    const toolSel = peSel('Tool', P + '.tool', u.tool || peDefTool(), toolList.some(x => x.v === u.tool) || !u.tool ? toolList : [...toolList, { v: u.tool, l: u.tool + ' (not in the tool library)' }]);
-    const fields = t === 'drill' ? peIn('Diameter', P + '.dia', u.dia)
-      : t === 'groove' ? `${peIn('Width', P + '.width', u.width)}${peIn('Length (blank = to point 2)', P + '.len', u.len)}${peCount('Angle°', P + '.angle', u.angle)}`
-      : t === 'linebore' ? `${peCount('Holes', P + '.count', u.count)}${peIn('Spacing', P + '.spacing', u.spacing)}${peCount('Angle°', P + '.angle', u.angle)}${peIn('Second row offset (0 = none)', P + '.row2', u.row2)}${peIn('Diameter', P + '.dia', u.dia)}`
-      : t === 'perimeter' ? `${toolSel}${peIn('Inset from the edge', P + '.inset', u.inset)}${peSel('Cut', P + '.side', u.side || 'center', PE_OFFSETS)}`
-      : t === 'edgebore' ? `${peSel('Edge', P + '.edge', u.edge || 'W1', PE_EDGES)}${peIn('Positions along the edge', P + '.at', u.at, '2, PartW - 2')}${peIn('Diameter', P + '.dia', u.dia)}${peIn('In from the face', P + '.inset', u.inset)}`
-      : t === 'text' ? `${peIn('Text', P + '.text', u.text)}${peIn('Letter height', P + '.height', u.height)}${peCount('Angle°', P + '.angle', u.angle)}${toolSel}`
-      : `${toolSel}${t === 'path' ? `${peSel('Path', P + '.closed', u.closed ? '1' : '', [{ v: '1', l: 'Closed' }, { v: '', l: 'Open' }])}${peSel('Cut', P + '.side', u.side || 'center', PE_OFFSETS)}` : ''}${peIn('Offset (+ bigger, − smaller)', P + '.offset', u.offset)}`;
-    const pocketF = t === 'pocket' ? `${peSel('Pocket pattern', P + '.pStyle', u.pStyle || 'raster', [{ v: 'raster', l: 'Back and forth' }, { v: 'spiral', l: 'Spiral (rings)' }])}${peSel('Order', P + '.pOrder', u.pOrder || 'out-in', [{ v: 'out-in', l: 'Outside in' }, { v: 'in-out', l: 'Inside out (less tear-out)' }])}${peSel('Direction', P + '.pDir', u.pDir || '', [{ v: '', l: 'Machine setting' }, { v: 'cw', l: 'Clockwise' }, { v: 'ccw', l: 'Counter-clockwise' }])}` : '';
-    const cleanF = path && (t === 'pocket' || u.closed) ? `<label class="f chk"><input type="checkbox" class="pe-in" data-path="${P}.clean"${u.clean ? ' checked' : ''}> <span>Clean out sharp inside corners with a V-bit</span></label>${u.clean ? peSel('Clean-out bit', P + '.cleanTool', u.cleanTool || (peVbits()[0] || {}).v || '', peVbits().length ? peVbits() : [{ v: '', l: 'Add a V-bit in CNC tools' }]) : ''}` : '';
-    const ptsHint = t === 'linebore' ? 'Point 1 is the first hole' : t === 'text' ? 'Point 1 is the start of the text' : 'x from the left end, y up from the bottom edge';
-    form = `<div class="pe-form">
-      <div class="pe-formhead"><span class="pe-id">U${s.op + 1}</span> ${esc(peOpName(u))}${passes > 1 ? ` <span class="pill">${passes} passes</span>` : ''}${made.some(o => o.cleanout) ? ` <span class="pill">${made.filter(o => o.cleanout).length} corner clean-outs</span>` : ''}</div>
-      <div class="pe-grid">${peIn('Name', P + '.name', u.name)}${peSel('Face', P + '.face', u.face || 'top', [{ v: 'top', l: 'Top (face up)' }, { v: 'back', l: 'Back (flip side)' }])}
-      ${fields}${peIn(t === 'edgebore' ? 'Depth into the edge' : 'Depth (0 = through)', P + '.depth', u.depth)}${pocketF}${peIn('Hide when (formula)', P + '.hideIf', u.hideIf, 'PartW < 12')}</div>${cleanF}
-      ${t === 'perimeter' || t === 'edgebore' ? '' : `<div class="eyebrow">Points <span class="muted">${ptsHint}</span></div>${pePtsTable(u.pts || [], P + '.pts', s.pt, path)}`}
-      <div class="row-actions"><button class="btn sm" data-act="pe-op-off" data-id="${s.op}">${u.off ? 'Turn on' : 'Turn off'}</button><button class="btn sm" data-act="pe-op-dup" data-id="${s.op}">Duplicate</button>
-        ${path || t === 'perimeter' ? `<span class="pe-copyoff"><input class="pe-copyoff-v" value="${esc(peShow(ui.peCopyOff ?? 0.125))}" aria-label="Offset for the copy"><button class="btn sm" data-act="pe-op-offcopy" data-id="${s.op}" title="A copy moved out (+) or in (−) by this much, for a second bit">Copy with offset</button></span>` : ''}
-        <button class="btn sm" data-act="pe-op-copy" data-id="${s.op}">Copy</button><button class="btn sm" data-act="pe-op-tpl" data-id="${s.op}" title="Keep it in the operation templates, for any part">Save as template</button><button class="btn sm danger" data-act="pe-op-del" data-id="${s.op}">Delete</button></div></div>`;
-  }
-  const hidden = (e.hide || []), hidRule = Object.keys(hif).filter(k => hif[k] !== '' && !gen.some(o => opText(o) === k));
+  const ops = e.ops || [], gen = peGen(q), hif = e.hideIf || {}, sel = peSelOp(c, q, e, s);
   const tpls = typeof OP_TEMPLATES !== 'undefined' ? OP_TEMPLATES : [], clip = typeof opClip !== 'undefined' && opClip ? opClip : null;
-  const hifIn = k => `<input class="pe-hideif" data-key="${esc(k)}" value="${esc(peShow(hif[k]))}" placeholder="Hide when…" aria-label="Hide when (formula)">`;
-  return `<div class="pe-addbar"><select class="pe-addtype" aria-label="Operation to add">${PE_ADD.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}${tpls.length ? `<optgroup label="Templates">${tpls.map(t => `<option value="tpl:${esc(t.id)}">${esc(t.name)}</option>`).join('')}</optgroup>` : ''}</select><button class="btn primary sm" data-act="pe-op-add">Add operation</button>
-      <button class="btn sm" data-act="pe-tpl-del" title="Delete the template picked in the list">Delete template</button>
-      ${clip ? `<button class="btn sm" data-act="pe-op-paste">Paste ${clip.length} operation${clip.length === 1 ? '' : 's'}</button>` : ''}${ops.length > 1 ? '<button class="btn sm" data-act="pe-op-copyall">Copy all</button>' : ''}
-      <span class="sp"></span><button class="btn sm" data-act="pe-back" aria-pressed="${!!ui.peBack}" title="See the part from behind, with the flip-side operations">Back side</button><button class="btn sm" data-act="pe-sim" title="Runs the bit over every cut, in order">${icon('play')}Simulate</button></div>
-    ${ops.length ? `<div class="pe-oplist">${list}</div>` : '<div class="note">No operations of your own yet. Add one, or take over one this part already has below.</div>'}
-    ${form}
-    <details class="pe-gen"${gen.length && !ops.length ? ' open' : ''}><summary>From the cabinet (${gen.length})${hidden.length + hidRule.length ? ` · ${hidden.length + hidRule.length} turned off` : ''}</summary>
-      <div class="note">These come from the hardware, joints and templates. Edit makes a copy you can change and turns the original off. Hide when takes a formula, like PartW &lt; 12.</div>
-      <table class="t"><tbody>${gen.map((o, i) => `<tr><td><span class="pe-id">G${i + 1}</span> ${esc(opText(o))}</td><td class="muted">${esc(o.why || '')}</td><td>${hifIn(opText(o))}</td><td class="pe-rowbtn">${peFromOp(o, q) ? `<button class="btn sm" data-act="pe-take" data-id="${i}">Edit</button>` : ''}<button class="btn sm" data-act="pe-hide" data-id="${i}">Turn off</button></td></tr>`).join('') || '<tr><td class="muted">None</td></tr>'}
-      ${hidRule.map(k => `<tr class="muted"><td><s>${esc(k)}</s></td><td>hidden by its rule</td><td>${hifIn(k)}</td><td></td></tr>`).join('')}
-      ${hidden.map((t, i) => `<tr class="muted"><td><s>${esc(t)}</s></td><td></td><td></td><td><button class="btn sm" data-act="pe-unhide" data-id="${i}">Turn on</button></td></tr>`).join('')}</tbody></table></details>`;
+  const bar = `<div class="pe-addbar"><select class="pe-addtype" aria-label="Add an operation"><option value="">+ Add an operation…</option>${PE_ADD.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}${tpls.length ? `<optgroup label="Templates">${tpls.map(t => `<option value="tpl:${esc(t.id)}">${esc(t.name)}</option>`).join('')}</optgroup>` : ''}</select>
+    ${clip ? `<button class="btn sm" data-act="pe-op-paste">Paste ${clip.length === 1 ? '' : clip.length + ' '}operation${clip.length === 1 ? '' : 's'}</button>` : ''}</div>`;
+  const shown = q.ops.filter(o => o.type !== 'notch' && o.type !== 'edge').length;
+  const legend = `<div class="pe-legend"><span><i class="lg"></i>This face</span><span><i class="lg flip"></i>Flip side</span><span><i class="lg sel"></i>Picked</span></div>`;
+  // Turned off: the part's own operations switched off, the cabinet's taken off, and the ones a hide rule takes off.
+  const hidRule = Object.keys(hif).filter(k => hif[k] !== '' && !gen.some(o => opText(o) === k));
+  const off = [...ops.map((u, i) => u.off ? `<tr><td>${esc(u.name || peOpName(u))}</td><td><button class="btn sm" data-act="pe-op-on" data-id="${i}">Turn on</button></td></tr>` : '').filter(Boolean),
+    ...(e.hide || []).map((t, i) => `<tr><td>${esc(t)}</td><td><button class="btn sm" data-act="pe-unhide" data-id="${i}">Turn on</button></td></tr>`),
+    ...hidRule.map(k => `<tr><td>${esc(k)} <span class="muted">(hide rule ${esc(String(hif[k]))})</span></td><td><button class="btn sm" data-act="pe-unrule" data-id="${esc(k)}">Turn on</button></td></tr>`)];
+  const offBox = off.length ? `<details class="pe-gen"><summary>Turned off (${off.length})</summary><table class="t"><tbody>${off.join('')}</tbody></table></details>` : '';
+  // Operations with nothing to draw (an edge profile) can still be picked here.
+  const blind = gen.map((o, i) => o.type === 'edge' ? `<button class="btn sm${s.sel === 'g' + i ? ' on' : ''}" data-act="pe-pick" data-id="g${i}">${esc(o.why || opText(o))}</button>` : '').join('');
+  if (!sel) return `${bar}${legend}<div class="pe-empty">${shown ? `Click an operation in the drawing to change it. <span class="muted">${shown} on this part.</span>` : 'No operations on this part yet. Add one above.'}</div>
+    ${blind ? `<div class="pe-blind"><span class="muted">Not in the drawing:</span>${blind}</div>` : ''}${ops.length > 1 ? '<div class="row-actions"><button class="btn sm" data-act="pe-op-copyall">Copy all of this part\'s own operations</button></div>' : ''}${offBox}`;
+  return `${bar}${legend}${peOpForm(c, q, e, s, sel)}${offBox}`;
+}
+// The picked operation's settings. One from the cabinet shows the same boxes; changing any of them makes it the part's own.
+function peOpForm(c, q, e, s, sel) {
+  const key = s.sel, gen = sel.kind === 'g', u = sel.u, o = sel.o, hif = e.hideIf || {};
+  const flip = gen ? peFaceOf(o, q) === 'back' : u.face === 'back';
+  const close = `<button class="btn sm pe-x" data-act="pe-desel" aria-label="Done with this operation" title="Done">×</button>`;
+  const head = `<div class="pe-formhead"><span class="pe-dot${flip ? ' flip' : ''}"></span><b>${esc(gen ? (o.why || opText(o)) : (u.name || peOpName(u)))}</b>${u ? (gen || (u.name && u.name !== peOpName(u)) ? `<span class="muted">${esc(peOpName(u))}${gen ? ', from the cabinet' : ''}</span>` : '') : '<span class="muted">from the cabinet</span>'}<span class="grow"></span>${close}</div>`;
+  const hideGen = gen ? `<label class="f"><span>Hide when (formula)</span><input class="pe-hideif" data-key="${esc(opText(o))}" value="${esc(peShow(hif[opText(o)]))}" placeholder="PartW < 12" aria-label="Hide when (formula)"></label>` : '';
+  const tplName = u && (u.name || peOpName(u)), tpl = !gen && (typeof OP_TEMPLATES !== 'undefined' ? OP_TEMPLATES : []).find(t => t.name === tplName);
+  const actions = `<div class="row-actions">${u ? `<button class="btn sm" data-act="pe-op-dup" data-id="${key}">Duplicate</button><button class="btn sm" data-act="pe-op-copy" data-id="${key}">Copy</button><button class="btn sm" data-act="pe-op-tpl" data-id="${key}">${tpl ? 'Update template' : 'Save as template'}</button>${tpl ? `<button class="btn sm" data-act="pe-tpl-del" data-id="${esc(tpl.id)}">Delete template</button>` : ''}` : ''}
+    <span class="grow"></span>${gen ? `<button class="btn sm danger" data-act="pe-hide" data-id="${sel.i}">Turn off</button>` : `<button class="btn sm danger" data-act="pe-op-del" data-id="${sel.i}">Delete</button>`}</div>`;
+  if (!u) return `<div class="pe-form">${head}<div>${esc(opText(o))}</div><div class="pe-grid">${hideGen}</div>${actions}</div>`;
+  const P = sel.P, t = u.type, path = t === 'path' || t === 'pocket', made = gen ? [] : q.ops.filter(z => z.user === sel.i);
+  const passes = Math.max(0, ...made.filter(z => z.passes).map(z => z.passes)), tools = peTools();
+  const toolList = t === 'pocket' ? [{ v: 'auto', l: 'Auto (biggest bit that fits)' }, ...tools] : tools;
+  const toolSel = peSel('Tool', P + '.tool', u.tool || peDefTool(), toolList.some(x => x.v === u.tool) || !u.tool ? toolList : [...toolList, { v: u.tool, l: u.tool + ' (not in the tool library)' }]);
+  const fields = t === 'drill' ? peIn('Diameter', P + '.dia', u.dia)
+    : t === 'groove' ? `${peIn('Width', P + '.width', u.width)}${peIn('Length (blank = to point 2)', P + '.len', u.len)}${peCount('Angle°', P + '.angle', u.angle)}`
+    : t === 'linebore' ? `${peCount('Holes', P + '.count', u.count)}${peIn('Spacing', P + '.spacing', u.spacing)}${peCount('Angle°', P + '.angle', u.angle)}${peIn('Second row offset (0 = none)', P + '.row2', u.row2)}${peIn('Diameter', P + '.dia', u.dia)}`
+    : t === 'perimeter' ? `${toolSel}${peIn('Inset from the edge', P + '.inset', u.inset)}${peSel('Cut', P + '.side', u.side || 'center', PE_OFFSETS)}`
+    : t === 'edgebore' ? `${peSel('Edge', P + '.edge', u.edge || 'W1', PE_EDGES)}${peIn('Positions along the edge', P + '.at', u.at, '2, PartW - 2')}${peIn('Diameter', P + '.dia', u.dia)}${peIn('In from the face', P + '.inset', u.inset)}`
+    : t === 'text' ? `${peIn('Text', P + '.text', u.text)}${peIn('Letter height', P + '.height', u.height)}${peCount('Angle°', P + '.angle', u.angle)}${toolSel}`
+    : `${toolSel}${t === 'path' ? `${peSel('Path', P + '.closed', u.closed ? '1' : '', [{ v: '1', l: 'Closed' }, { v: '', l: 'Open' }])}${peSel('Cut', P + '.side', u.side || 'center', PE_OFFSETS)}` : ''}${peIn('Offset (+ bigger, − smaller)', P + '.offset', u.offset)}`;
+  const pocketF = t === 'pocket' ? `${peSel('Pocket pattern', P + '.pStyle', u.pStyle || 'raster', [{ v: 'raster', l: 'Back and forth' }, { v: 'spiral', l: 'Spiral (rings)' }])}${peSel('Order', P + '.pOrder', u.pOrder || 'out-in', [{ v: 'out-in', l: 'Outside in' }, { v: 'in-out', l: 'Inside out (less tear-out)' }])}${peSel('Direction', P + '.pDir', u.pDir || '', [{ v: '', l: 'Machine setting' }, { v: 'cw', l: 'Clockwise' }, { v: 'ccw', l: 'Counter-clockwise' }])}` : '';
+  const cleanF = path && (t === 'pocket' || u.closed) ? `<label class="f chk"><input type="checkbox" class="pe-in" data-path="${P}.clean"${u.clean ? ' checked' : ''}> <span>Clean out sharp inside corners with a V-bit</span></label>${u.clean ? peSel('Clean-out bit', P + '.cleanTool', u.cleanTool || (peVbits()[0] || {}).v || '', peVbits().length ? peVbits() : [{ v: '', l: 'Add a V-bit in CNC tools' }]) : ''}` : '';
+  const offCopy = !gen && (path || t === 'perimeter') ? `<div class="row-actions"><span class="pe-copyoff"><input class="pe-copyoff-v" value="${esc(peShow(ui.peCopyOff ?? 0.125))}" aria-label="Offset for the copy"><button class="btn sm" data-act="pe-op-offcopy" data-id="${sel.i}" title="A copy moved out (+) or in (−) by this much, for a second bit">Copy with offset</button></span></div>` : '';
+  const pills = `${passes > 1 ? ` <span class="pill">${passes} passes</span>` : ''}${made.some(z => z.cleanout) ? ` <span class="pill">${made.filter(z => z.cleanout).length} corner clean-outs</span>` : ''}`;
+  return `<div class="pe-form">${head}${pills ? `<div>${pills}</div>` : ''}
+    <div class="pe-grid">${peSel('Side', P + '.face', flip ? 'back' : 'top', [{ v: 'top', l: 'This face' }, { v: 'back', l: 'Flip side' }])}
+    ${fields}${peIn(t === 'edgebore' ? 'Depth into the edge' : 'Depth (0 = through)', P + '.depth', u.depth)}${pocketF}${gen ? hideGen : peIn('Hide when (formula)', P + '.hideIf', u.hideIf, 'PartW < 12')}${gen ? '' : peIn('Name', P + '.name', u.name)}</div>${cleanF}
+    ${t === 'perimeter' || t === 'edgebore' ? '' : `<div class="eyebrow">Points <span class="muted">drag them in the drawing, or type them</span></div>${pePtsTable(u.pts || [], P + '.pts', s.pt, path)}`}
+    ${offCopy}${actions}</div>`;
 }
 function peShapeTab(c, q, e, s) {
   const pts = e.pts || peStartPts(q), i = s.pt, p = pts[i], n = pts.length, xf = e.xf || {};
@@ -463,7 +485,8 @@ function peDrawing(c, q, e, s) {
 }
 const peViewBar = () => `<div class="seg sm" role="group" aria-label="Units">${[['in', 'Inches'], ['mm', 'mm']].map(([k, l]) => `<button data-act="pe-units" data-id="${k}" aria-pressed="${(ui.peUnits || 'in') === k}">${l}</button>`).join('')}</div>
   <label class="f inl"><span>Grid</span><select class="pe-grid-pick" aria-label="Grid">${[['', 'Off'], [1 / 16, '1/16"'], [1 / 8, '1/8"'], [1 / 4, '1/4"'], [1 / 2, '1/2"'], [1, '1"'], [2, '2"'], [5 / 25.4, '5 mm'], [10 / 25.4, '10 mm']].map(([v, l]) => `<option value="${v}"${String(ui.peGrid || '') === String(v) ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-  <label class="f inl chk"><input type="checkbox" class="pe-snap"${ui.peSnap === false ? '' : ' checked'}> <span>Snap</span></label>`;
+  <label class="f inl chk"><input type="checkbox" class="pe-snap"${ui.peSnap === false ? '' : ' checked'}> <span>Snap</span></label>
+  <span class="grow"></span><button class="btn sm" data-act="pe-sim" title="Runs the bit over every cut, in order">${icon('play')}Simulate</button>`;
 function renderPartEdit() {
   const s = ui.partEdit; let el = $('#partedit');
   if (!s) { if (el) el.remove(); return; }
@@ -474,7 +497,7 @@ function renderPartEdit() {
   const warn = b.warn.filter(w => w.startsWith(q.name + ':'));
   el.innerHTML = `<div class="pe-win" role="dialog" aria-label="Part editor">
     <div class="pe-top"><span class="pill">${esc(LBL[c.id] || '')}</span><b>${esc(q.name)}</b>${q.out || (b.removed || []).includes(q) ? '<span class="pill warn">Left out</span>' : ''}<span class="muted">${fmtLen(q.L, 1)} × ${fmtLen(q.W, 1)} × ${fmtLen(q.T, 1)}</span><span class="grow"></span><button class="btn primary" data-act="pe-close">Done</button></div>
-    <div class="pe-body"><div class="pe-left"><div class="pe-view">${peViewBar()}</div><div id="pe-drawwrap">${peDrawing(c, q, e, s)}</div><div class="note">Origin at the bottom left. Drag a numbered point to move it (that drops its formula), or type its X and Y. Blue values are formulas.</div></div>
+    <div class="pe-body"><div class="pe-left"><div class="pe-view">${peViewBar()}</div><div id="pe-drawwrap">${peDrawing(c, q, e, s)}</div></div>
     <div class="pe-right"><div class="pe-tabs" role="tablist">${T.map(([k, l]) => `<button role="tab" data-act="pe-tab" data-id="${k}" aria-selected="${s.tab === k}">${l}</button>`).join('')}</div>
       ${warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}
       <div class="pe-pane">${s.tab === 'shape' ? peShapeTab(c, q, e, s) : s.tab === 'details' ? peDetailsTab(c, q, e, s) : s.tab === 'band' ? peBandTab(c, q, e) : peOpsTab(c, q, e, s)}</div></div></div></div>`;
@@ -502,6 +525,8 @@ function peChange(path, raw, isSelect) {
   }
   mutate(() => {
     const e = peEdit(c, s.key), r = pePart();
+    if (path.startsWith('gen.')) { path = r && r.q ? peRealPath(e, r.q, s, path) : null; if (!path) return; }
+    if (path.startsWith('ops.') && /\.face$/.test(path)) { peSetPath(e, path, raw === 'back' ? 'back' : 'top'); return; }
     if ((path.startsWith('pts') || path.startsWith('len.')) && !e.pts && r && r.q) e.pts = peStartPts(r.q);
     const q = r && r.q, vars = q && partVars(c, q);
     // Edge length: the far point moves along the edge; it keeps its anchor and becomes a plain number.
@@ -544,47 +569,42 @@ function peAct(a, id) {
   switch (a) {
     case 'pe-close': closePartEdit(); return true;
     case 'pe-tab': s.tab = id; s.pt = -1; renderPartEdit(); return true;
-    case 'pe-op': s.op = +id; s.pt = -1; renderPartEdit(); return true;
+    case 'pe-pick': s.sel = id || ''; s.pt = -1; if (s.tab !== 'ops' && s.sel) s.tab = 'ops'; renderPartEdit(); return true;
+    case 'pe-desel': s.sel = ''; s.pt = -1; renderPartEdit(); return true;
     case 'pe-pt': s.pt = +id; renderPartEdit(); return true;
     case 'pe-op-add': {
-      const type = ($('#partedit .pe-addtype') || {}).value || 'drill', tpl = type.startsWith('tpl:') && OP_TEMPLATES.find(t => t.id === type.slice(4));
-      edit(e => { (e.ops = e.ops || []).push(tpl ? clone(tpl.op) : peNewOp(type, q)); s.op = e.ops.length - 1; }); s.pt = -1; return true;
+      const type = id || 'drill', tpl = type.startsWith('tpl:') && OP_TEMPLATES.find(t => t.id === type.slice(4));
+      edit(e => { (e.ops = e.ops || []).push(tpl ? clone(tpl.op) : peNewOp(type, q)); s.sel = 'u' + (e.ops.length - 1); }); s.pt = -1; return true;
     }
-    case 'pe-op-copy': { const e = (c.partEdits || {})[s.key]; opClip = [clone(e.ops[+id])]; flash('Copied. Open any part and press Paste.'); renderPartEdit(); return true; }
-    case 'pe-op-copyall': { const e = (c.partEdits || {})[s.key]; opClip = clone(e.ops || []); flash(`Copied ${opClip.length} operations.`); renderPartEdit(); return true; }
-    case 'pe-op-paste': if (opClip) edit(e => { (e.ops = e.ops || []).push(...clone(opClip)); s.op = e.ops.length - 1; }); return true;
+    case 'pe-op-copy': { const u = peOpCopy(c, q, id); if (u) { opClip = [u]; flash('Copied. Open any part and press Paste.'); renderPartEdit(); } return true; }
+    case 'pe-op-copyall': { const e = (c.partEdits || {})[s.key]; opClip = clone((e && e.ops) || []); flash(`Copied ${opClip.length} operations.`); renderPartEdit(); return true; }
+    case 'pe-op-paste': if (opClip) edit(e => { (e.ops = e.ops || []).push(...clone(opClip)); s.sel = 'u' + (e.ops.length - 1); }); return true;
     case 'pe-op-offcopy': {
       const v = peValue(($('#partedit .pe-copyoff-v') || {}).value || ''); if (typeof v !== 'number' || !v) { flash('Type how far to move the copy, like 0.125 or -0.25.'); return true; }
       ui.peCopyOff = v;
-      edit(e => { const o = clone(e.ops[+id]), was = o.offset; o.offset = typeof was === 'string' && was ? `(${was}) + ${v}` : r3((+was || 0) + v); if (o.type === 'perimeter') { o.inset = typeof o.inset === 'string' && o.inset ? `(${o.inset}) - ${v}` : r3((+o.inset || 0) - v); delete o.offset; } o.name = (o.name || 'Path') + ' copy'; e.ops.splice(+id + 1, 0, o); s.op = +id + 1; });
+      edit(e => { const o = clone(e.ops[+id]), was = o.offset; o.offset = typeof was === 'string' && was ? `(${was}) + ${v}` : r3((+was || 0) + v); if (o.type === 'perimeter') { o.inset = typeof o.inset === 'string' && o.inset ? `(${o.inset}) - ${v}` : r3((+o.inset || 0) - v); delete o.offset; } o.name = (o.name || 'Path') + ' copy'; e.ops.splice(+id + 1, 0, o); s.sel = 'u' + (+id + 1); });
       return true;
     }
     case 'pe-op-tpl': {
-      const e = (c.partEdits || {})[s.key], u = e && e.ops[+id]; if (!u) return true;
-      const name = u.name || peOpName(u), old = OP_TEMPLATES.findIndex(t => t.name === name), item = { id: old >= 0 ? OP_TEMPLATES[old].id : uid('opt'), name, op: clone(u) };
+      const u = peOpCopy(c, q, id); if (!u) return true;
+      const name = u.name || peOpName(u), old = OP_TEMPLATES.findIndex(t => t.name === name), item = { id: old >= 0 ? OP_TEMPLATES[old].id : uid('opt'), name, op: u };
       if (old >= 0) OP_TEMPLATES[old] = item; else OP_TEMPLATES.push(item);
       saveOpTemplates(); flash(`Saved "${name}" to the operation templates.`); renderPartEdit(); return true;
     }
-    case 'pe-tpl-del': {
-      const v = ($('#partedit .pe-addtype') || {}).value || ''; if (!v.startsWith('tpl:')) { flash('Pick a template in the list first.'); return true; }
-      OP_TEMPLATES = OP_TEMPLATES.filter(t => t.id !== v.slice(4)); saveOpTemplates(); renderPartEdit(); return true;
-    }
+    case 'pe-tpl-del': OP_TEMPLATES = OP_TEMPLATES.filter(t => t.id !== id); saveOpTemplates(); renderPartEdit(); return true;
     case 'pe-sim': peSimulate(); return true;
-    case 'pe-back': ui.peBack = !ui.peBack; renderPartEdit(); return true;
-    case 'pe-op-del': edit(e => { e.ops.splice(+id, 1); s.op = Math.max(0, +id - 1); }); return true;
-    case 'pe-op-dup': edit(e => { e.ops.splice(+id + 1, 0, clone(e.ops[+id])); s.op = +id + 1; }); return true;
-    case 'pe-op-off': edit(e => { e.ops[+id].off = !e.ops[+id].off; }); return true;
-    case 'pe-take': case 'pe-hide': {
-      const gen = q.ops.filter(o => o.user === undefined && o.type !== 'notch'), o = gen[+id]; if (!o) return true;
-      edit(e => { (e.hide = e.hide || []).push(opText(o)); if (a === 'pe-take') { const u = peFromOp(o, q); if (u) { (e.ops = e.ops || []).push(u); s.op = e.ops.length - 1; } } });
-      return true;
-    }
-    case 'pe-unhide': edit(e => { e.hide.splice(+id, 1); }); return true;
+    case 'pe-op-del': edit(e => { e.ops.splice(+id, 1); s.sel = ''; s.pt = -1; }); return true;
+    case 'pe-op-dup': { const u = peOpCopy(c, q, id); if (u) edit(e => { (e.ops = e.ops || []).push(u); s.sel = 'u' + (e.ops.length - 1); }); return true; }
+    case 'pe-op-on': edit(e => { delete e.ops[+id].off; s.sel = 'u' + id; }); return true;
+    case 'pe-hide': { const o = peGen(q)[+id]; if (o) edit(e => { (e.hide = e.hide || []).push(opText(o)); s.sel = ''; s.pt = -1; }); return true; }
+    case 'pe-unhide': edit(e => { e.hide.splice(+id, 1); if (!e.hide.length) delete e.hide; }); return true;
+    case 'pe-unrule': edit(e => { if (e.hideIf) { delete e.hideIf[id]; if (!Object.keys(e.hideIf).length) delete e.hideIf; } }); return true;
     case 'pe-pt-add': case 'pe-pt-del': {
       const [path, i] = id.split(':'), n = +i;
       edit(e => {
         if (path === 'pts' && !e.pts) e.pts = peStartPts(q);
-        const list = peGetPath(e, path); if (!list) return;
+        const real = peRealPath(e, q, s, path); if (!real) return;
+        const list = peGetPath(e, real); if (!list) return;
         if (a === 'pe-pt-del') { if (list.length > 1) list.splice(n, 1); s.pt = -1; return; }
         const vars = partVars(c, q), A = list[n], B = list[(n + 1) % list.length], num = v => peNum(v, vars);
         list.splice(n + 1, 0, { x: r3((num(A.x) + num(B.x)) / 2), y: r3((num(A.y) + num(B.y)) / 2) }); s.pt = n + 1;
@@ -624,10 +644,23 @@ function peAct(a, id) {
 document.addEventListener('click', ev => {
   const s = ui.partEdit, svg = s && s.trace && ev.target.closest && !ev.target.closest('[data-pe-pt]') && ev.target.closest('#partedit svg.pe-draw');
   if (svg) { peTraceClick(svg, ev); ev.stopPropagation(); return; }
+  // Click an operation in the drawing to pick it; click the empty drawing to let it go.
+  const op = s && ev.target.closest && ev.target.closest('#partedit svg.pe-draw [data-pe-op]');
+  if (op && s.tab !== 'band') { peAct('pe-pick', op.dataset.peOp); ev.stopPropagation(); return; }
+  if (s && s.tab === 'ops' && s.sel && ev.target.closest && ev.target.closest('#partedit svg.pe-draw') && !ev.target.closest('[data-pe-pt],[data-act]')) { peAct('pe-desel'); ev.stopPropagation(); return; }
   const b = ev.target.closest && ev.target.closest('#partedit [data-act]'); if (!b) return;
   if (peAct(b.dataset.act, b.dataset.id)) { ev.stopPropagation(); ev.preventDefault(); }
 }, true);
-document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && ui.partEdit && $('#partedit')) { ev.stopPropagation(); closePartEdit(); } }, true);
+document.addEventListener('keydown', ev => {
+  const s = ui.partEdit; if (!s || !$('#partedit')) return;
+  const typing = ev.target && /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName);
+  // Escape lets go of the picked operation first, then closes the editor. Delete removes (or turns off) the picked one.
+  if (ev.key === 'Escape') { ev.stopPropagation(); if (s.sel && s.tab === 'ops') peAct('pe-desel'); else closePartEdit(); }
+  else if ((ev.key === 'Delete' || ev.key === 'Backspace') && !typing && s.tab === 'ops' && s.sel) {
+    ev.stopPropagation(); ev.preventDefault(); const k = s.sel; peAct(k[0] === 'u' ? 'pe-op-del' : 'pe-hide', k.slice(1));
+  }
+}, true);
+document.addEventListener('change', ev => { const t = ev.target; if (t.classList && t.classList.contains('pe-addtype') && t.value) peAct('pe-op-add', t.value); });
 
 // Dragging a numbered point in the drawing; it snaps to 1/16".
 let peDrag = null;
@@ -648,9 +681,10 @@ document.addEventListener('pointerup', () => {
   if (!d.moved) { renderPartEdit(); return; }
   const s = ui.partEdit, r = pePart(); if (!r || !r.q) return;
   const g = ui.peSnap === false ? 0 : (ui.peGrid || 1 / 16), snap = v => g ? Math.round(v / g) * g : v;
-  const path = s.tab === 'shape' ? 'pts' : 'ops.' + s.op + '.pts';
+  const sel = s.tab === 'shape' ? null : peSelOp(r.c, r.q, (r.c.partEdits || {})[s.key] || {}, s); if (s.tab !== 'shape' && !sel) return;
   mutate(() => {
-    const e = peEdit(r.c, s.key); if (path === 'pts' && !e.pts) e.pts = peStartPts(r.q);
+    const e = peEdit(r.c, s.key); if (!sel && !e.pts) e.pts = peStartPts(r.q);
+    const path = sel ? peRealPath(e, r.q, s, sel.P + '.pts') : 'pts'; if (!path) return;
     const list = peGetPath(e, path), z = peView({ x: snap(d.at.x), y: snap(r.q.W - d.at.y) }, r.q, e);
     if (list && list[d.i]) peStore(list[d.i], z.x, z.y, r.q.L, r.q.W);
   });
@@ -783,7 +817,8 @@ function peTraceClick(svg, ev) {
   const p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(m.inverse()), g = ui.peSnap === false ? 0 : (ui.peGrid || 1 / 16), snap = v => g ? Math.round(v / g) * g : v;
   mutate(() => {
     const e = peEdit(r.c, s.key), z = peView({ x: snap(p.x), y: snap(r.q.W - p.y) }, r.q, e), pt = peAnchor({ x: r3(z.x), y: r3(z.y) }, r.q.L, r.q.W);
-    if (s.tab === 'ops' && e.ops && e.ops[s.op]) { (e.ops[s.op].pts = e.ops[s.op].pts || []).push(pt); s.pt = e.ops[s.op].pts.length - 1; }
+    const k = s.tab === 'ops' && /^u\d+$/.test(s.sel || '') ? +s.sel.slice(1) : -1;
+    if (k >= 0 && e.ops && e.ops[k]) { (e.ops[k].pts = e.ops[k].pts || []).push(pt); s.pt = e.ops[k].pts.length - 1; }
     else { if (!e.pts) e.pts = []; e.pts.push(pt); s.pt = e.pts.length - 1; }
   });
   renderPartEdit();
@@ -899,7 +934,7 @@ function peImportDXF(text) {
   const groups = {}; d.circles.forEach(ci => { const key = r3(ci.r * 2 * k) + '|' + (ci.layer || ''); (groups[key] = groups[key] || []).push(ci); });
   Object.entries(groups).forEach(([key, cs]) => { const l = cs[0].layer || ''; ops.push({ type: 'drill', name: l || 'Drill', dia: r3(cs[0].r * 2 * k), depth: layerDepth(l), face: face(l), pts: at(cs.map(ci => ({ x: ci.x * k, y: ci.y * k }))) }); });
   mutate(() => { const e = peEdit(r.c, s.key); e.L = L; e.W = W; e.pts = at(withB); if (ops.length) e.ops = ops; delete e.xf; });
-  s.pt = -1; s.op = 0; renderPartEdit();
+  s.pt = -1; s.sel = ''; renderPartEdit();
   flash(`Opened the DXF: ${fmtLen(L, 1)} × ${fmtLen(W, 1)}, ${ops.length} operation${ops.length === 1 ? '' : 's'}`);
 }
 loadPartShapes();

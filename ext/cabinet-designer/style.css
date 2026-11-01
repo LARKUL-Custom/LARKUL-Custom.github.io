@@ -299,14 +299,6 @@ svg text{font-family:var(--f-label)}
 .ev-sel{fill:none;stroke:var(--sel);stroke-width:2.5}
 .ev-drop{fill:none;stroke:var(--drop);stroke-width:3}
 .ev-hit{fill:transparent;cursor:grab}
-.pp-part{fill:var(--wood);stroke:var(--wood-edge)}
-.pp-bore{fill:var(--panel);stroke:var(--ink)}
-.pp-bore.big{fill:var(--accent-soft);stroke:var(--accent)}
-.pp-bore.pull{fill:var(--ink)}
-.pp-groove{stroke:var(--accent);stroke-opacity:.55;fill:none}
-.pp-pocket{fill:var(--accent);fill-opacity:.12;stroke:var(--accent);stroke-dasharray:4 3}
-.pp-notch{fill:var(--paper);stroke:var(--warn);stroke-dasharray:3 2}
-.pp-hbore{fill:var(--sel)}
 
 .elevarrow{position:absolute;top:50%;transform:translateY(-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 88%,transparent);border-radius:8px;cursor:pointer;color:var(--ink);font:500 11px var(--f-label)}
 .elevarrow svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
@@ -391,7 +383,6 @@ svg text{font-family:var(--f-label)}
 .bd-band{stroke-width:5;stroke-linecap:square}
 .bd-txt{font:600 8px var(--f-mono, monospace);fill:var(--muted)}
 .bd-txt.on{fill:var(--ink)}
-.pp-band{stroke-linecap:square;opacity:.95}
 .ebsw{display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid var(--line);vertical-align:-2px}
 .labelsheet{position:fixed;inset:0;z-index:60;background:var(--bg);overflow:auto;padding:16px}
 .lbbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
@@ -439,10 +430,8 @@ svg text{font-family:var(--f-label)}
 .paintcard .row-actions{flex-wrap:wrap;margin-bottom:10px}
 .paintcard tr.grand td{font-weight:700;border-top:2px solid var(--ink)}
 .bd-band-o{stroke:var(--ink);stroke-width:7.5;stroke-linecap:square}
-.pp-band-o{stroke:var(--ink);stroke-linecap:square}
 .label .bd-band-o{stroke:#111}
 /* Door designer */
-.pp-cutout{fill:var(--paper);stroke:var(--warn);stroke-dasharray:4 2}
 .ev-field{fill:none;stroke:var(--ink);stroke-opacity:.55;stroke-width:1}
 .ev-raise{fill:#fff;fill-opacity:.12;stroke:var(--ink);stroke-opacity:.45;stroke-width:.8}
 .ev-bevel{stroke:var(--ink);stroke-opacity:.3;stroke-width:.6}
@@ -1428,7 +1417,6 @@ circle.lightsym.ghost{opacity:.6;stroke-dasharray:3 2}
 polyline.pe-line{fill:none}
 .pe-h{cursor:grab}.pe-h circle{fill:#fff;stroke:#2563eb;stroke-width:2px}.pe-h.on circle{fill:#2563eb}
 .pe-h text{fill:#1d4ed8;font-weight:700;pointer-events:none}
-.pp-path{fill:none;stroke:rgba(124,58,237,.55);stroke-linejoin:round;stroke-linecap:round}
 .pill.sm{font-size:.7rem;padding:1px 6px}
 .lnk{border:0;background:none;color:#2563eb;font:inherit;cursor:pointer;text-decoration:underline}
 @media (max-width:900px){.pe-body{grid-template-columns:1fr;grid-template-rows:minmax(220px,40%) 1fr}.pe-right{border-left:0;border-top:2px solid var(--line)}}
@@ -1480,9 +1468,6 @@ th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:#2563eb}
 .pe-formhead{font-weight:700;margin-bottom:6px;display:flex;gap:6px;align-items:center}
 .pe-hideif{width:9em}.pe-b{width:4.5em}
 .pe-copyoff{display:inline-flex;gap:4px;align-items:center}.pe-copyoff input{width:5em}
-.pe-backop{fill:rgba(220,38,38,.25);stroke:#dc2626;stroke-linecap:round;stroke-linejoin:round}
-polyline.pe-backop,line.pe-backop{fill:none;stroke:rgba(220,38,38,.6)}
-.pe-backview .pp-part{fill:#efe7da}
 .pe-simtrail{fill:none;stroke:#f97316;stroke-width:2px;opacity:.85}
 .pe-simdot{fill:#f97316;stroke:#fff;stroke-width:.06}.pe-simdot.rapid{fill:#94a3b8}
 .cttab input,.cttab select{width:100%;min-width:5em}.cttab td:first-child input{min-width:8em}
@@ -1794,3 +1779,48 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .roomdock{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
 .roomdock .psec.box{margin:0;min-width:320px}
 .soffitt td{padding:3px 4px}.soffitt input,.soffitt select{width:96px}
+
+/* Part drawings, black and white like Mozaik: the only colour is the operations (grey, green on the flip side, red when picked). */
+.partsvg{background:#fff;border-radius:8px}
+.partsvg .lbl-m{fill:#111}
+.pp-part{fill:#fff;stroke:#111;stroke-width:1.5px}
+.pp-notch{fill:#fff;stroke:#111;stroke-width:1.5px}
+.pp-band{stroke:#111;stroke-width:1.5px;stroke-dasharray:7 4}
+.pp-origin{fill:#111}
+.po{--po:#8a8f98}
+.po.flip{--po:#16a34a}
+.po.sel{--po:#dc2626}
+.po .pp-bore{fill:var(--po);fill-opacity:.35;stroke:var(--po);stroke-width:1.2px}
+.po .pp-groove{stroke:var(--po);stroke-opacity:.55;fill:none}
+.po .pp-path{fill:none;stroke:var(--po);stroke-opacity:.45;stroke-linejoin:round;stroke-linecap:round}
+.po .pp-pocket{fill:var(--po);fill-opacity:.18;stroke:var(--po);stroke-width:1.2px}
+.po .pp-pocket.open{fill:none;stroke-dasharray:4 3}
+.po .pp-cutout{fill:#fff;stroke:var(--po);stroke-width:1.5px;stroke-dasharray:5 3}
+.po .pp-hbore{fill:var(--po)}
+.po.sel .pp-bore{fill-opacity:.6;stroke-width:2px}.po.sel .pp-groove,.po.sel .pp-path{stroke-opacity:.8}
+.pe-hit{fill:transparent;stroke:transparent;stroke-width:14px;vector-effect:non-scaling-stroke;pointer-events:all}
+.pe-draw .po{cursor:pointer}
+.pe-draw .po:not(.sel):hover{--po:#475569}.pe-draw .po.flip:not(.sel):hover{--po:#15803d}
+.pe-left .pe-draw{background:#fff}
+.pe-left .pe-view .grow{flex:1}
+.pe-legend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:.85rem;color:var(--muted)}
+.pe-legend span{display:inline-flex;align-items:center;gap:5px}
+.pe-legend .lg,.pe-dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#8a8f98}
+.pe-legend .lg.flip,.pe-dot.flip{background:#16a34a}.pe-legend .lg.sel{background:#dc2626}
+.pe-dot{box-shadow:0 0 0 3px #8a8f98 inset;background:transparent}.pe-dot.flip{box-shadow:0 0 0 3px #16a34a inset;background:transparent}
+.pe-empty{padding:18px 12px;border:2px dashed var(--line);border-radius:10px;text-align:center;font-weight:600}
+.pe-blind{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pe-blind .btn.on{border-color:#dc2626;color:#dc2626}
+.pe-form{border-color:#dc2626}
+.pe-formhead .grow{flex:1}.pe-form .row-actions .grow{flex:1}
+.pe-x{min-width:30px;font-size:1.1rem;line-height:1}
+.pe-addbar select{font-weight:600}
+.pe-draw .pe-line{fill:none;stroke:#dc2626;stroke-width:1.5px;stroke-dasharray:6 3}
+.pe-draw .pe-h.op circle{fill:#fff;stroke:#dc2626}.pe-draw .pe-h.op.on circle{fill:#dc2626}
+.pe-draw .pe-h.op text{fill:#dc2626}
+.pe-draw .pe-h text{fill:#111}
+#pe-drawwrap{flex:1;min-height:0;display:flex;flex-direction:column}
+#pe-drawwrap .pe-draw{flex:1;min-height:0;width:100%;height:100%}
+.pe-pane .pe-anc{min-width:4.6em;width:4.6em}
+.pe-form .f.chk{flex-direction:row;align-items:center;gap:8px}
+.pe-pane input[type=checkbox]{width:auto;min-height:0}
