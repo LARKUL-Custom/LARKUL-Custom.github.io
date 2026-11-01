@@ -199,7 +199,7 @@ function shapeEditorSVG(d) {
   s += `<rect x="${v.vb[0]}" y="${v.vb[1]}" width="${v.vb[2]}" height="${v.vb[3]}" fill="url(#sgmaj)"/>`;
   if (k < 0.9) s += `<rect x="${v.vb[0]}" y="${v.vb[1]}" width="${v.vb[2]}" height="${v.vb[3]}" fill="url(#sgmin)"/>`;
   // The wall side, for flat shapes (y = 0 is the wall face), and the floor for upright ones.
-  s += `<line class="se-ref nss" x1="${v.vb[0]}" x2="${v.vb[0] + v.vb[2]}" y1="0" y2="0"/><text class="se-reftxt" x="${v.vb[0] + k}" y="${(v.flip ? 2.6 : -1.2) * k}" font-size="${2.2 * k}">${d.forMold ? 'Bottom' : v.flip ? 'Floor' : 'Wall'}</text>`;
+  if (!d.forWalls) s += `<line class="se-ref nss" x1="${v.vb[0]}" x2="${v.vb[0] + v.vb[2]}" y1="0" y2="0"/><text class="se-reftxt" x="${v.vb[0] + k}" y="${(v.flip ? 2.6 : -1.2) * k}" font-size="${2.2 * k}">${d.forMold ? 'Bottom' : v.flip ? 'Floor' : 'Wall'}</text>`;
   // A molding profile stands against the cabinet at x = 0.
   if (d.forMold) s += `<line class="se-ref nss" y1="${v.vb[1]}" y2="${v.vb[1] + v.vb[3]}" x1="0" x2="0"/><text class="se-reftxt" x="${-1.2 * k}" y="${v.vb[1] + 3 * k}" font-size="${2.2 * k}" text-anchor="end">Cabinet</text>`;
   // The cabinet's plain box, dashed, behind a cabinet shape.
@@ -207,15 +207,18 @@ function shapeEditorSVG(d) {
   if (fcab) { const [cw, ch] = cabShapeDims(fcab, d.forCab.view); s += `<rect class="se-cabbox nss" x="0" y="${v.flip ? -ch : 0}" width="${cw}" height="${ch}"/>`; }
   // Side titles, so it is clear which side an edge is on.
   const cx = v.b.x0 + v.b.w / 2, side = (t, y) => `<text class="se-side" x="${r3(cx)}" y="${r3(y)}" font-size="${2.6 * k}" text-anchor="middle" dominant-baseline="middle">${t}</text>`;
-  s += d.forMold ? side('TOP', Y(v.b.y1) - v.m * 0.45) : d.forCab ? '' : v.flip ? side('TOP', Y(v.b.y1) - v.m * 0.45) + side('FRONT FACE · as seen from the room', Y(v.b.y0) + v.m * 0.55)
+  s += d.forMold ? side('TOP', Y(v.b.y1) - v.m * 0.45) : d.forCab || d.forWalls ? '' : v.flip ? side('TOP', Y(v.b.y1) - v.m * 0.45) + side('FRONT FACE · as seen from the room', Y(v.b.y0) + v.m * 0.55)
     : side('BACK · wall side', v.b.y0 - v.m * 0.5) + side('FRONT', v.b.y1 + v.m * 0.5);
   const m = mat(d.mat);
   const outPts = o.map(p => `${r3(p.x)},${r3(Y(p.y))}`).join(' ');
-  s += `<polygon class="se-shape nss" style="fill:${esc((m && m.color) || '#d6b07c')}" points="${outPts}"/><polygon class="se-line nss" points="${outPts}"/>`;
+  s += `<polygon class="se-shape nss" style="fill:${esc((m && m.color) || '#d6b07c')}" points="${outPts}"/>${d.forWalls && !d.forWalls.closed ? `<polyline class="se-line se-walls nss" points="${pts.map(p => `${r3(p.x)},${r3(Y(p.y))}`).join(' ')}"/>` : `<polygon class="se-line nss" points="${outPts}"/>`}`;
   // Lines across the drawing where a dragged point lines up with another point (Shift).
   (ui.seGuides || []).forEach(gd => { s += gd.x !== undefined ? `<line class="se-guide nss" x1="${r3(gd.x)}" x2="${r3(gd.x)}" y1="${v.vb[1]}" y2="${v.vb[1] + v.vb[3]}"/>` : `<line class="se-guide nss" x1="${v.vb[0]}" x2="${v.vb[0] + v.vb[2]}" y1="${r3(Y(gd.y))}" y2="${r3(Y(gd.y))}"/>`; });
+  const openRoom = d.forWalls && !d.forWalls.closed;
   for (let i = 0; i < n; i++) {
     const a = pts[i], b = pts[(i + 1) % n], on = sel.kind === 'edge' && sel.i === i, nrm = edgeOut(a, b, ccw), L = edgeLen(pts, i);
+    // An open room's last edge is the open side, not a wall: dashed and unlabeled.
+    if (openRoom && i === n - 1) { s += `<line class="se-open nss" x1="${r3(a.x)}" y1="${r3(Y(a.y))}" x2="${r3(b.x)}" y2="${r3(Y(b.y))}"/>`; continue; }
     const mx = (a.x + b.x) / 2 + nrm.x * (a.b || 0), my = (a.y + b.y) / 2 + nrm.y * (a.b || 0);
     const path = a.b ? [a, ...bulgeArc(a, b, a.b, ccw), b] : [a, b];
     s += `<polyline class="se-edge nss${on ? ' on' : ''}" data-edge="${i}" points="${path.map(p => `${r3(p.x)},${r3(Y(p.y))}`).join(' ')}"/>`;
@@ -241,6 +244,7 @@ function renderShapeDesigner() {
   const rows = d.pts.map((p, i) => `<tr class="${sel.i === i ? 'on' : ''}"><td><button class="linkbtn" data-act="se-sel" data-id="pt:${i}">${i + 1}</button></td><td>${calcWrap(ctl(P(i), 'x', p.x, 'len', { label: `Point ${i + 1} x` }), P(i), 'x')}</td><td>${calcWrap(ctl(P(i), 'y', p.y, 'len', { label: `Point ${i + 1} y` }), P(i), 'y')}</td><td>${ctl(P(i), 'r', p.r || 0, 'len', { label: `Point ${i + 1} corner radius` })}</td>
     <td><button class="linkbtn" data-act="se-sel" data-id="edge:${i}">${i + 1}→${(i + 1) % n + 1}</button></td><td>${calcWrap(ctl(P(i), 'len', r3(edgeLen(d.pts, i)), 'len', { label: `Edge ${i + 1} length` }), P(i), 'len')}</td><td>${ctl(P(i), 'b', p.b || 0, 'len', { label: `Edge ${i + 1} bulge` })}</td><td><button class="btn sm" data-act="se-del" data-id="${i}" aria-label="Remove point ${i + 1}"${n <= 3 ? ' disabled' : ''}>×</button></td></tr>`).join('');
   const fm = d.forMold && molding(d.forMold), fc = d.forCab && cab(d.forCab.id);
+  if (d.forWalls && typeof wallShapePage === 'function') { $('#tab-designer').innerHTML = wallShapePage(d, selBox, rows, b); initShapeEditor(); return; }
   if (fc) {
     const vl = (CAB_VIEWS.find(x => x[0] === d.forCab.view) || [])[2] || '', [cw, ch] = cabShapeDims(fc, d.forCab.view);
     $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="se-cab-cancel">${icon('back')}Back to the room</button><h2>${esc(LBL[fc.id] || '')} ${esc(fc.name)}: ${d.forCab.view} shape</h2><p>${vl}. The dashed box is the cabinet, ${fmtLen(cw)} × ${fmtLen(ch)}. Cut it in where the cabinet should be cut away, like a U for a farm sink.</p></div>

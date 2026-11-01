@@ -150,8 +150,8 @@ function renderPricing() {
       <button data-act="ps-new">${icon('plus')}New sheet</button><button data-act="ps-dup">${icon('copy')}Copy this sheet</button>
       <button data-act="ps-export">${icon('download')}Save sheet as file</button><label>${icon('upload')}Open sheet file<input type="file" accept=".json,application/json" data-ps-import hidden></label>
       ${PRICES.length > 1 ? `<button class="danger" data-act="ps-del">${icon('trash')}${ui.psConfirm ? 'Click again to delete' : 'Delete this sheet'}</button>` : ''}</div></details></div></div>
-    <div class="subtabs" role="tablist">${[['quote', 'Quote', 'list'], ['edit', 'Edit prices', 'sliders']].map(([k, l, ic]) => `<button role="tab" data-act="price-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
-  $('#tab-pricing').innerHTML = head + (view === 'edit' ? priceEditor(ps) : priceQuote(ps));
+    <div class="subtabs" role="tablist">${[['quote', 'Quote', 'list'], ['edit', 'Edit prices', 'sliders'], ['order', 'Order', 'export']].map(([k, l, ic]) => `<button role="tab" data-act="price-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
+  $('#tab-pricing').innerHTML = head + (view === 'edit' ? priceEditor(ps) : view === 'order' ? buyList() + exportHTML(false) : priceQuote(ps));
 }
 function toggleBtn(act, on, label, id) { return `<button class="btn toggle${on ? ' on' : ''}" data-act="${act}"${id ? ` data-id="${id}"` : ''} aria-pressed="${!!on}">${icon(on ? 'check' : 'plus')}${label}</button>`; }
 function priceQuote(ps) {

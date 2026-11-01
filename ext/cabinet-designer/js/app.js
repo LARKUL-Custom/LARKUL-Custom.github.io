@@ -9,10 +9,10 @@ const ui = {
 };
 // Main toolbar, in Mozaik's order, then the libraries that sit behind the Libraries menu.
 // Shop order, left to right: set up the job, draw it, dress it, then order, price and cut it.
-const MAIN_TABS = [['job', 'Job'], ['settings', 'Settings'], ['room', 'Room'], ['countertops', 'Tops'], ['moldings', 'Molding'], ['export', 'Order'], ['pricing', 'Pricing'], ['cutlist', 'Cutlist']];
+const MAIN_TABS = [['job', 'Job'], ['settings', 'Settings'], ['room', 'Room'], ['countertops', 'Tops'], ['moldings', 'Molding'], ['pricing', 'Pricing'], ['cutlist', 'Cutlist']];
 const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['panels', 'Applied panels'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['rules', 'Rules'], ['remnants', 'Remnants']];
 // The Designer opens from Products (and from a cabinet); it has no button of its own.
-const HIDDEN_TABS = [['designer', 'Designer'], ['shop', 'Shop view']];
+const HIDDEN_TABS = [['designer', 'Designer'], ['shop', 'Shop view'], ['export', 'Order']];
 const TABS = [...MAIN_TABS, ...LIB_TABS, ...HIDDEN_TABS];
 const TAB_ICONS = {
   job: '<rect x="3" y="7" width="14" height="10" rx="1.5"/><path d="M7.5 7V5h5v2M3 11h14"/>',
@@ -39,6 +39,8 @@ function fixSel() {
   if (ui.placing && !libItem(ui.placing) && !shapeLibItem(String(ui.placing).replace(/^shape:/, ''))) ui.placing = null;
 }
 function render() {
+  // Order lives on the Pricing page now (what to buy and the files to send).
+  if (ui.tab === 'export') { ui.tab = 'pricing'; ui.priceView = 'order'; }
   LBL = labels(); fixSel();
   const libOn = LIB_TABS.some(([k]) => k === ui.tab) || ui.tab === 'designer';
   document.body.classList.toggle('room-on', ui.tab === 'room');
@@ -281,7 +283,7 @@ function renderPropsBody() {
   <div class="psec">${fld('Room name', 'room:' + rm.id, 'name', rm.name, 'text')}
     <div class="note">Click a cabinet or a wall to edit it. Room settings are on the Settings tab, under Job dashboard.</div><button class="btn" data-act="set-dash">${icon('home')}Job dashboard</button>
     ${S.job.labelStyle !== 'type' ? `<div class="note">Cabinets here are numbered #${rm.block || ''}01 and up. They keep their numbers as you edit; renumber to put them back in wall order.</div><button class="btn" data-act="renumber">${icon('list')}Renumber cabinets</button>` : ''}</div>
-  ${roomTopsMoldBoxes(rm)}${typeof ceilingBox === 'function' ? ceilingBox(rm) : ''}${typeof dynBox === 'function' ? dynBox(rm) : ''}
+  ${roomTopsMoldBoxes(rm)}${typeof dynBox === 'function' ? dynBox(rm) : ''}
   <div class="psec how">${secHead('hint', 'How to', 'blue')}
     <p><b>Walls:</b> press <kbd>W</kbd> or Draw walls, click each corner, click the first corner to close the room.</p>
     <p><b>Cabinets:</b> drag one from the left onto a wall, or click it in the list and click a wall.</p>
@@ -363,12 +365,10 @@ function cabProps(c) {
   const lib = libItem(c.libId), id = c.id, R = 'cab:' + id;
   const b = buildParts(c);
   return `<div class="psec"><div class="pshead"><div class="cabtitle"><span class="chip cab">${LBL[id]}</span> <b>${esc(c.name)}</b></div></div>
-    <div class="row-actions">${openable(c) ? `<button class="btn${ui.open[id] ? ' primary' : ''}" data-act="open-toggle" data-id="${id}" title="Open or close the doors and drawers (O)">${icon('open')}${ui.open[id] ? 'Close' : 'Open'}</button>` : ''}<button class="btn" data-act="cab-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn" data-act="cab-flip" data-id="${id}">${icon('flip')}Flip</button><button class="btn danger" data-act="cab-del" data-id="${id}">${icon('trash')}Delete</button></div>
     <div class="note">${lib ? esc(lib.name) : 'Custom'} · ${wallName(wall(c.wall))}, ${fmtLen(c.off, 1)} from its start</div>
     ${b.warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}${conflicts(c) ? '<div class="warnbox">This cabinet runs into a wall or another cabinet. Drag it, or change its width, to clear it.</div>' : ''}
   </div>
-  <div class="psec"><div class="note">Size, fillers and position are in the panel under the drawing.</div></div>
-  <div class="psec"><button class="btn primary wide" data-act="ed-open" data-id="${id}">${icon('sliders')}Cabinet editor</button></div>`;
+  <div class="psec"><div class="note">Size, position, Edit, Open, Duplicate, Flip and Delete are in the panel under the drawing.</div></div>`;
 }
 /* ---------- Quick edit (double-click a cabinet) ---------- */
 // Opens a room shape in the shape editor; Apply sends the edits back.
@@ -470,7 +470,7 @@ function renderQuick() {
 function dockTabs() {
   const c = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id);
   // The item bar (size and position of the selected item) comes first, then the cabinet's ends, then room-wide tops, molding, lights and layout.
-  return [['item', 'Item', 'ruler'], ...(c && multiIds().length < 2 ? [['ends', 'Ends', 'ends']] : []), ['tops', 'Tops', 'stack'], ['molding', 'Molding', 'stack'], ['lights', 'Lights', 'sun'], ['layout', 'Layout', 'magnet']];
+  return [['item', 'Item', 'ruler'], ...(c && multiIds().length < 2 ? [['ends', 'Ends', 'ends']] : []), ['tops', 'Tops', 'stack'], ['molding', 'Molding', 'stack'], ['room', 'Room', 'home'], ['lights', 'Lights', 'sun'], ['layout', 'Layout', 'magnet']];
 }
 function renderDock() {
   const el = $('#dock'); if (!el) return;
@@ -494,9 +494,10 @@ function renderDock() {
 }
 function dockBody(k) {
   const rm = curRoom(), c = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id);
-  if (k === 'tops') return `${autoTopsCard(countertopRuns(), opts(S.countertops))}${genTopsCard(opts(S.countertops))}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="countertops">Countertop styles</button></div>`;
+  if (k === 'tops') return `${typeof topOpRow === 'function' ? topOpRow() : ''}${autoTopsCard(countertopRuns(), opts(S.countertops))}${genTopsCard(opts(S.countertops))}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="countertops">Countertop styles</button></div>`;
   if (k === 'lights') return lightsCard();
   if (k === 'molding') return `<div class="card cardbody">${autoMoldBox(moldingRuns())}</div>${genMoldsCard()}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="moldings">Molding library and totals</button></div>`;
+  if (k === 'room') return roomDockBody();
   if (k === 'item') return itemBar(multiIds().length < 2 ? c : null);
   if (k === 'layout') {
     const L = lay();

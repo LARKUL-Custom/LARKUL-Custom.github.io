@@ -18,16 +18,17 @@ function renderPlan() {
   const order = [...S.cabinets].sort((a, b) => ((a.cat === 'Wall') - (b.cat === 'Wall')) || (hot(a) - hot(b)));
   order.filter(c => c.cat !== 'Wall' && !hot(c)).forEach(c => { s += cabPlanSVG(c); });
   // Countertops: solid, in their own color, over the base cabinets, so you can see which tops there are and where.
-  countertopRuns().filter(r => r.on).forEach(r => {
+  if (topOp() > 0) countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), g = wg(w), f = w.thick / 2;
     const poly = [wallPt(w, g, r.side, r.start - r.ovS, f), wallPt(w, g, r.side, r.end + r.ovE, f), wallPt(w, g, r.side, r.end + r.ovE, f + r.depth), wallPt(w, g, r.side, r.start - r.ovS, f + r.depth)];
     const mx = poly.reduce((a, p) => a + p.x, 0) / 4, my = poly.reduce((a, p) => a + p.y, 0) / 4;
     let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;
-    s += `<polygon class="ct-solid nss" points="${polyPts(poly)}"/>`;
+    s += `<polygon class="ct-solid nss" style="fill-opacity:${topOp()}" points="${polyPts(poly)}"/>`;
     if (r.len > 8) s += `<text class="lbl ct-lbl" x="${mx}" y="${my}" font-size="${fs * 0.9}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${mx} ${my})">${esc(r.generic ? r.name : (r.tpl && r.tpl.name) || 'Top')} · ${fmtLen(r.len, 1)}</text>`;
   });
   order.filter(c => c.cat === 'Wall' || hot(c)).forEach(c => { s += cabPlanSVG(c); });
   s += shapesPlanSVG();
+  if (typeof soffitsPlanSVG === 'function') s += soffitsPlanSVG();
   s += lightsPlanSVG(px);
   // walls
   S.walls.forEach(w => {
@@ -683,6 +684,7 @@ function renderElev() {
   const gl = ui.ghost && ui.ghost.wall === w.id && ui.ghost.side === side && libItem(ui.ghostLib);
   if (gl) { const gw = ui.ghost.w || gl.w, gx = elevX({ ...gl, w: gw, side, off: ui.ghost.off }, L); body += `<rect class="ghost nss" x="${gx}" y="${-gl.elev - gl.h}" width="${gw}" height="${gl.h}"/>`; }
   body += shapesElevSVG(w, side, L, mats);
+  if (typeof soffitsElevSVG === 'function') body += soffitsElevSVG(w, side, L);
   // end caps that stick out toward the viewer
   capsOf(w).filter(cp => cp.side === side).forEach(cp => {
     const a = side === 1 ? cp.a0 : L - cp.a1;

@@ -133,9 +133,12 @@ function doorLimit(c, f) {
       obs.push([P(o, ow, og, d.x0, 0, of), P(o, ow, og, d.x1, 0, of), P(o, ow, og, d.x1, tr, of), P(o, ow, og, d.x0, tr, of)]);
     });
   });
-  S.walls.forEach(ww => { if (ww === w) return; const gg = wg(ww), t = ww.thick / 2; obs.push([wallPt(ww, gg, 1, 0, -t), wallPt(ww, gg, 1, gg.L, -t), wallPt(ww, gg, 1, gg.L, t), wallPt(ww, gg, 1, 0, t)]); });
+  S.walls.forEach(ww => { if (ww !== w) { const gg = wg(ww), t = ww.thick / 2; obs.push([wallPt(ww, gg, 1, 0, -t), wallPt(ww, gg, 1, gg.L, -t), wallPt(ww, gg, 1, gg.L, t), wallPt(ww, gg, 1, 0, t)]); }
+    // End caps are short walls too, on any wall, including the one this cabinet hangs on.
+    capsOf(ww).forEach(cp => { if (cp.height === undefined || over(0, cp.height)) obs.push(capPoly(ww, cp)); }); });
   const R = f.hinge === 'R', hx = R ? f.x1 : f.x0, fw = f.x1 - f.x0, dir = R ? -1 : 1, h = P(c, w, g, hx, 0, fb);
-  const hits = a => { const e = P(c, w, g, hx + dir * fw * Math.cos(a), fw * Math.sin(a), fb); return obs.some(poly => inPoly(e, poly) || poly.some((q, i) => segHit(h, e, q, poly[(i + 1) % poly.length]))); };
+  // The door's back face and its outer face (3/4" thick) both have to stay clear.
+  const T = 0.75, hits = a => [0, T].some(t => { const hh = P(c, w, g, hx + dir * t * Math.sin(a), -t * Math.cos(a), fb), e = P(c, w, g, hx + dir * (fw * Math.cos(a) + t * Math.sin(a)), fw * Math.sin(a) - t * Math.cos(a), fb); return obs.some(poly => inPoly(e, poly) || poly.some((q, i) => segHit(hh, e, q, poly[(i + 1) % poly.length]))); });
   let lim = MAX;
   for (let a = 0.04; a <= MAX + 1e-9; a += 0.02) if (hits(a)) { lim = Math.max(0, a - 0.06); break; }
   return (doorLimCache[key] = lim);

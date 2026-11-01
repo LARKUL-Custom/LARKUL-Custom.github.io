@@ -49,8 +49,9 @@ function itemBar(c) {
     </div>
     <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}<span class="ib-gap"></span>${sz('Depth', 'd')}${sz('Outset', 'outset')}</div>
     <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}</div>
-    <div class="ib-more">${c ? `<div class="ib-name"><b>${esc(LBL[c.id] || '')}</b> ${esc(c.name)}</div>${typeof growSeg === 'function' && onWall ? growSeg() : ''}<button class="btn sm" data-act="ed-open" data-id="${id}">${icon('edit')}Cabinet editor</button>`
-      : `<div class="ib-name muted">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size and place it here.'}</div>`}</div>
+    <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
+      <div class="ib-small">${openable(c) ? `<button data-act="open-toggle" data-id="${id}" aria-pressed="${!!ui.open[id]}" title="Open or close its doors and drawers (O)">${icon('open')}${ui.open[id] ? 'Close' : 'Open'}</button>` : ''}<button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-flip" data-id="${id}" title="Flip left and right">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
+      : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
   </div>`;
 }
 
@@ -133,3 +134,125 @@ document.addEventListener('dblclick', e => {
   try { localStorage.removeItem(DOCK_KEY()); } catch (_) {} applyDockH(); fitDock(); if (typeof redrawView === 'function') redrawView();
 });
 addEventListener('resize', () => requestAnimationFrame(fitDock));
+
+// How solid the countertops look in the plan: 0 hides them, 100 covers the cabinets (remembered on this computer).
+function topOp() { if (ui.topOp === undefined) { let v = 30; try { const s = localStorage.getItem((typeof KEY === 'string' ? KEY : 'cd') + '.topop'); if (s !== null) v = +s; } catch (_) {} ui.topOp = v; } return ui.topOp / 100; }
+const topOpRow = () => `<label class="topop">Tops in the plan <input type="range" id="topop" min="0" max="100" step="5" value="${Math.round(topOp() * 100)}" aria-label="How solid tops look in the plan"><b id="topopv">${topOp() ? Math.round(topOp() * 100) + '%' : 'Hidden'}</b></label>`;
+document.addEventListener('input', e => {
+  if (e.target.id !== 'topop') return;
+  ui.topOp = +e.target.value; try { localStorage.setItem((typeof KEY === 'string' ? KEY : 'cd') + '.topop', String(ui.topOp)); } catch (_) {}
+  $('#topopv').textContent = ui.topOp ? ui.topOp + '%' : 'Hidden'; if (ui.viewMode === 'plan') renderPlan();
+});
+
+/* ----- Soffits: a boxed-in drop from the ceiling along a wall. Shown in plan, elevation and 3D. ----- */
+// room.soffits: [{ id, wall, side, from, len (0 = to the end of the wall), drop, depth }]; from is measured from the viewer's left.
+const soffitsOf = () => (curRoom().soffits || []);
+function soffitSpan(s) {
+  const w = wall(s.wall); if (!w) return null;
+  const L = wg(w).L, from = Math.max(0, Math.min(L, +s.from || 0)), len = +s.len > 0 ? Math.min(+s.len, L - from) : L - from;
+  return { w, L, from, len, a0: elevSide(w) === 1 ? from : L - from - len, drop: +s.drop > 0 ? +s.drop : 12, depth: +s.depth > 0 ? +s.depth : 14, top: w.height || 96 };
+}
+function soffitsPlanSVG() {
+  return soffitsOf().map(s => { const k = soffitSpan(s); if (!k) return ''; const g = wg(k.w), f = k.w.thick / 2, sd = s.side || elevSide(k.w);
+    return `<polygon class="p-soffit nss" points="${polyPts([wallPt(k.w, g, sd, k.a0, f), wallPt(k.w, g, sd, k.a0 + k.len, f), wallPt(k.w, g, sd, k.a0 + k.len, f + k.depth), wallPt(k.w, g, sd, k.a0, f + k.depth)])}"/>`; }).join('');
+}
+function soffitsElevSVG(w, side, L) {
+  return soffitsOf().filter(s => s.wall === w.id && (s.side || elevSide(w)) === side).map(s => { const k = soffitSpan(s); if (!k) return '';
+    return `<rect class="ev-soffit nss" x="${k.from}" y="${-k.top}" width="${k.len}" height="${k.drop}"/>`; }).join('');
+}
+function soffits3d(v, material) {
+  soffitsOf().forEach(s => { const k = soffitSpan(s); if (!k) return; const g = wg(k.w), f = k.w.thick / 2, sd = s.side || elevSide(k.w);
+    const a = wallPt(k.w, g, sd, k.a0 + k.len / 2, f + k.depth / 2);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(k.len, k.drop, k.depth), material);
+    m.position.set(a.x, k.top - k.drop / 2, a.y); m.rotation.y = -Math.atan2(g.u.y, g.u.x); m.userData.noBounds = true; m.userData.wall = true; v.root.add(m); });
+}
+// Bottom panel Room tab: the ceiling (height, slope) and the soffits, in one place.
+function roomDockBody() {
+  const rm = curRoom(), ws = S.walls, cur = wall(ui.elevWall) || ws[0];
+  const rows = soffitsOf().map(s => { const R = 'soffit:' + s.id;
+    return `<tr><td>${ctl(R, 'wall', s.wall, 'select', { label: 'Wall', options: ws.map(w => ({ v: w.id, l: wallName(w) })) })}</td><td>${ctl(R, 'from', s.from || 0, 'len', { label: 'From left' })}</td><td>${ctl(R, 'len', s.len || '', 'len', { label: 'Length', ph: 'Whole wall', blank: true })}</td><td>${ctl(R, 'drop', s.drop ?? 12, 'len', { label: 'Drop from ceiling' })}</td><td>${ctl(R, 'depth', s.depth ?? 14, 'len', { label: 'Depth off the wall' })}</td><td><button class="btn sm danger" data-act="soffit-del" data-id="${s.id}" aria-label="Delete soffit">${icon('trash')}</button></td></tr>`; }).join('');
+  return `<div class="roomdock">${typeof ceilingBox === 'function' ? ceilingBox(rm) : ''}
+    <div class="psec box">${secHead('wall', 'Soffits', 'slate')}
+      <table class="t soffitt"><thead><tr><th>Wall</th><th>From left</th><th>Length</th><th>Drop</th><th>Depth</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="muted">None yet.</td></tr>'}</tbody></table>
+      <div class="row-actions"><button class="btn sm" data-act="soffit-add"${cur ? '' : ' disabled'}>${icon('plus')}Add soffit${cur ? ' on ' + esc(wallName(cur)) : ''}</button></div></div>
+    <div class="psec box">${secHead('wall', 'Walls', 'teal')}<div class="note show">Change the room's corners and wall lengths point by point.</div><div class="row-actions"><button class="btn sm" data-act="walls-shape"${ws.length ? '' : ' disabled'}>${icon('edit')}Edit walls in the shape editor</button></div></div></div>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-act="soffit-add"],[data-act="soffit-del"]'); if (!b) return;
+  e.stopPropagation();
+  if (b.dataset.act === 'soffit-add') { const w = wall(ui.elevWall) || S.walls[0]; if (!w) return; mutate(() => { const r = curRoom(); (r.soffits = r.soffits || []).push({ id: uid('sf'), wall: w.id, side: elevSide(w), from: 0, len: 0, drop: 12, depth: 14 }); }); }
+  else mutate(() => { const r = curRoom(); r.soffits = (r.soffits || []).filter(s => s.id !== b.dataset.id); });
+}, true);
+
+/* ----- Edit the room's walls in the shape editor: each point is a corner, each edge a wall. ----- */
+// Walls are put in order corner to corner. Each point remembers the wall that starts at it (w) and whether that wall
+// runs the other way (rev), so walls keep their cabinets. A point added on an edge makes a new wall.
+function wallChain() {
+  const ws = S.walls.slice(); if (!ws.length) return null;
+  const same = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 0.5, ends = w => [{ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }];
+  // Start at a wall end no other wall touches (an open room), else anywhere (a closed room).
+  const free = (w, i) => !ws.some(k => k !== w && ends(k).some(p => same(p, ends(w)[i])));
+  let start = ws.find(w => free(w, 0)), at;
+  if (start) at = ends(start)[0]; else { start = ws.find(w => free(w, 1)); at = start ? ends(start)[1] : null; }
+  if (!start) { start = ws[0]; at = ends(start)[0]; }
+  const pts = [], used = new Set(); let cur = start;
+  while (cur && !used.has(cur)) {
+    used.add(cur); const e = ends(cur), r = !same(e[0], at); pts.push({ x: r3(at.x), y: r3(at.y), w: cur.id, rev: r });
+    at = r ? e[0] : e[1];
+    cur = ws.find(k => !used.has(k) && ends(k).some(p => same(p, at)));
+  }
+  if (used.size !== ws.length) return null; // walls that do not join up in one run
+  const closed = same(at, pts[0]);
+  if (!closed) pts.push({ x: r3(at.x), y: r3(at.y) });
+  return { pts, closed };
+}
+function editWallsShape() {
+  const ch = wallChain(); if (!ch) { flash('The walls need to join up corner to corner in one run to edit them as a shape.'); return; }
+  ui.desMode = 'shape'; ui.shapeSel = null;
+  mutate(() => { S.shapeDesign = { sourceLib: null, editShape: null, forWalls: { room: S.roomId, closed: ch.closed }, name: curRoom().name + ' walls', plane: 'flat', pts: ch.pts, thick: 0.75, mat: S.materials[0].id }; });
+  goTab('designer');
+}
+function wallShapePage(d, selBox, rows, b) {
+  const open = !d.forWalls.closed;
+  return `<div class="pagehead"><div><button class="linkbtn back" data-act="se-walls-cancel">${icon('back')}Back to the room</button><h2>Walls of ${esc(curRoom().name)}</h2><p>Each point is a corner and each edge is a wall, seen from above. Drag corners or type exact wall lengths. A point added on an edge splits that wall in two.${open ? ` The edge from the last point back to point 1 is the open side of the room, not a wall.` : ''} Round corners and bulges are ignored.</p></div>
+    <div class="row-actions"><button class="btn" data-act="se-walls-cancel">Cancel</button><button class="btn primary" data-act="se-walls-save">${icon('check')}Save walls</button></div></div>
+  <div class="designer shapedes">
+    <div class="card stack cardbody des-form">${selBox}
+      <div class="eyebrow">Corners and walls</div>
+      <div class="tscroll"><table class="t setable"><thead><tr><th>Pt</th><th>x</th><th>y</th><th>Round</th><th>Edge</th><th>Length</th><th>Bulge</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="row-actions"><button class="btn sm" data-act="se-split" data-id="${d.pts.length - 1}">${icon('plus')}Add a corner</button></div>
+    </div>
+    <div class="stack"><div class="card cardbody stack"><div class="se-stage">${shapeEditorSVG(d)}</div><div class="note">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} overall</div></div></div>
+  </div>`;
+}
+function saveWallsShape() {
+  const d = S.shapeDesign, fw = d && d.forWalls; if (!fw) return;
+  const rm = S.rooms.find(r => r.id === fw.room); if (!rm) return;
+  if (rm.id !== S.roomId) switchRoom(rm.id);
+  const P = d.pts, n = P.length, edges = fw.closed ? n : n - 1;
+  mutate(() => {
+    const keep = new Set(), touched = [];
+    for (let i = 0; i < edges; i++) {
+      const a = P[i], b = P[(i + 1) % n]; if (Math.hypot(a.x - b.x, a.y - b.y) < 0.25) continue;
+      let w = a.w && !keep.has(a.w) && wall(a.w);
+      if (!w) { const like = S.walls[0] || {}; w = { id: uid('w'), x1: 0, y1: 0, x2: 0, y2: 0, thick: like.thick ?? (curRoom().wallThick ?? S.job.wallThick), height: like.height ?? (curRoom().wallHeight ?? 96) }; S.walls.push(w); }
+      // A wall keeps its own direction, so its cabinets stay on the same side and the same distance from its start.
+      const [p, q] = a.rev && a.w === w.id ? [b, a] : [a, b];
+      w.x1 = r3(p.x); w.y1 = r3(p.y); w.x2 = r3(q.x); w.y2 = r3(q.y); keep.add(w.id); touched.push(w.id);
+    }
+    // Walls whose corners were taken out go, with what was on them.
+    const gone = S.walls.filter(w => !keep.has(w.id)).map(w => w.id);
+    if (gone.length) { S.walls = S.walls.filter(w => keep.has(w.id)); S.cabinets = S.cabinets.filter(c => !gone.includes(c.wall)); }
+    S.cabinets.filter(c => touched.includes(c.wall)).forEach(c => { if (typeof settle === 'function') settle(c); });
+    S.shapeDesign = blankShapeDesign();
+  });
+  goTab('room'); requestAnimationFrame(() => { if (typeof fitView === 'function') fitView(); });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-act="walls-shape"],[data-act="se-walls-save"],[data-act="se-walls-cancel"]'); if (!b) return;
+  e.stopPropagation();
+  const a = b.dataset.act;
+  if (a === 'walls-shape') editWallsShape();
+  else if (a === 'se-walls-save') saveWallsShape();
+  else { mutate(() => { S.shapeDesign = blankShapeDesign(); }); goTab('room'); }
+}, true);

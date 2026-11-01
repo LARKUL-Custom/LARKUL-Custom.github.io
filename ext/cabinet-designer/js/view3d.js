@@ -551,6 +551,7 @@ function buildRoomScene(v) {
     else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), R3 ? realWall3() : flat3(cssVar('--wall3d')));
       cl.rotation.x = Math.PI / 2; cl.position.set((x0 + x1) / 2, hgt, (y0 + y1) / 2); cl.userData.noBounds = true; cl.userData.wall = true; v.root.add(cl); }
   }
+  if (pts.length && L.walls && typeof soffits3d === 'function') soffits3d(v, R3 ? realWall3() : flat3(cssVar('--wall3d')));
   if (pts.length && L.floor) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     // Well past the walls, so open sides and wide views never run off the edge of the floor.

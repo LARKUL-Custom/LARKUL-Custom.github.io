@@ -933,9 +933,22 @@ function scheduleSummary() {
   return { format: 'larkul.schedule-job', version: 1, sent: new Date().toISOString(), from: 'cabinet-designer', designerJob: jobs.path || '',
     job: { name: S.job.name, customer: S.job.customer || '', notes: S.job.notes || '' }, rooms, totals };
 }
+// What to buy for the whole job: sheets of each material, countertop area and the hardware list.
+function buyList() {
+  const { use, bom } = materialUsage();
+  const mats = S.materials.map(m => { const u = use[m.id]; if (!u || !u.area) return null; const top = m.kind === 'top';
+    return `<tr><td>${swatch(m, 18)} ${esc(m.name)}</td><td class="n">${top ? (u.area / 144).toFixed(1) + ' sq ft' : Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) + ' sheet' + (Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) === 1 ? '' : 's')}</td><td class="n">${u.edge ? Math.ceil(u.edge / 12) + ' ft' : ''}</td></tr>`; }).filter(Boolean).join('');
+  const hw = Object.entries(bom).sort((a, b) => a[0].localeCompare(b[0])).map(([k, q]) => `<tr><td>${esc(k)}</td><td class="n">${q}</td></tr>`).join('');
+  return `<div class="split2"><div class="card"><div class="cardhead"><h3>${icon('palette')}Materials to buy</h3></div><div class="tscroll"><table class="t"><thead><tr><th>Material</th><th class="r">Amount</th><th class="r">Edge</th></tr></thead><tbody>${mats || '<tr><td colspan="3" class="muted">Nothing yet.</td></tr>'}</tbody></table></div><div class="note show" style="padding:0 12px 10px">Sheets include 15% for waste. Edge is the banding on those parts.</div></div>
+    <div class="card"><div class="cardhead"><h3>${icon('sliders')}Hardware to buy</h3></div><div class="tscroll"><table class="t"><thead><tr><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${hw || '<tr><td colspan="2" class="muted">Nothing yet.</td></tr>'}</tbody></table></div></div></div>`;
+}
 function renderExport() {
+  if (ui.tab === 'pricing') return renderPricing();
+  $('#tab-export').innerHTML = exportHTML(true);
+}
+function exportHTML(withHead) {
   const txt = exportText();
-  $('#tab-export').innerHTML = `<div class="pagehead"><div><h2>Order and export</h2><p>CNC Cutlist parts is the file CNC Cutlist opens to nest the job and write the Rover programs. It is always in millimeters. The other formats are a neutral job file, the cut list, labels and machining.</p></div></div>
+  return `${withHead ? '' : '<h3 class="ordh">Files to send</h3>'}<div class="pagehead"${withHead ? '' : ' hidden'}><div><h2>Order and export</h2><p>CNC Cutlist parts is the file CNC Cutlist opens to nest the job and write the Rover programs. It is always in millimeters. The other formats are a neutral job file, the cut list, labels and machining.</p></div></div>
   <div class="card cardbody">
     <div class="row-actions">
       <div class="seg" role="group" aria-label="Format">${[['cnc', 'CNC Cutlist parts'], ['json', 'Job JSON'], ['cut', 'Cut list CSV'], ['labels', 'Labels CSV'], ['ops', 'Machining CSV'], ['doors', 'Door order CSV'], ['buyout', 'Buyout doors CSV']].map(([k, l]) => `<button data-act="exp-fmt" data-id="${k}" aria-pressed="${ui.exportFmt === k}">${l}</button>`).join('')}</div>
