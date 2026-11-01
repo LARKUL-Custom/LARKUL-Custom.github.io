@@ -138,36 +138,40 @@ async function updatesDialog() {
 
 // ---- extensions made for a computer screen ----------------------------------------------
 // Cabinet Designer looks and works like it does on the PC only in a window at least about 1100 wide
-// and 600 tall. On the phone its page is laid out at that size and scaled down to fit, so it is the
-// same designer as on the PC (turn the phone sideways for a bigger view).
+// and 600 tall. While it is open, the phone shows the page at a computer's width (the browser's own
+// zoom, as "desktop site" does), so it is the same designer as on the PC; turn the phone sideways for
+// a bigger view. The browser's own zoom keeps touches and pinches reliable, which scaling the frame
+// with CSS did not on iPhone. The hub's menu folds away to the ☰ tab on the left edge meanwhile.
 const DESKTOP_SIZED = new Set(['cabinet-designer']);
 const DESK_W = 1100;
 const DESK_H = 600;
-function fitDesktopFrame(iframe) {
-  const box = iframe.parentElement;
-  const id = (iframe.getAttribute('src') || '').match(/\/ext\/([^/]+)\//)?.[1];
-  if (!box || !DESKTOP_SIZED.has(id)) return;
-  const bar = box.querySelector('.ext-bar');
-  const w = box.clientWidth;
-  const h = box.clientHeight - (bar && bar.offsetParent ? bar.offsetHeight : 0);
-  if (!w || !h) return;
-  const scale = Math.min(1, w / DESK_W, h / DESK_H);
-  box.style.overflow = 'hidden';
-  Object.assign(iframe.style, scale < 1
-    ? { flex: 'none', width: `${w / scale}px`, height: `${h / scale}px`, transform: `scale(${scale})`, transformOrigin: '0 0' }
-    : { flex: '', width: '', height: '', transform: '', transformOrigin: '' });
-}
-const frameSizes = new ResizeObserver((entries) => {
-  for (const e of entries) e.target.querySelectorAll(':scope > iframe').forEach(fitDesktopFrame);
-});
-new MutationObserver(() => {
-  for (const iframe of document.querySelectorAll('.ext-frame > iframe')) {
-    if (iframe.dataset.fitted) continue;
-    iframe.dataset.fitted = '1';
-    fitDesktopFrame(iframe);
-    frameSizes.observe(iframe.parentElement);
+const viewportMeta = document.querySelector('meta[name="viewport"]');
+const phoneViewport = viewportMeta?.getAttribute('content') || 'width=device-width, initial-scale=1';
+let deskView = false;
+let menuWasHidden = false;
+function applyDeskView() {
+  const id = location.hash.match(/^#\/ext\/([^/?]+)/)?.[1];
+  const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
+  const [sw, sh] = matchMedia('(orientation: landscape)').matches ? [long, short] : [short, long];
+  const want = DESKTOP_SIZED.has(id) && (sw < DESK_W || sh - 60 < DESK_H);
+  if (want) {
+    // Wide enough that the frame is also tall enough for that layout (the hub's bar takes about 60).
+    const w = Math.ceil(Math.max(DESK_W, (DESK_H + 60) * sw / sh));
+    viewportMeta?.setAttribute('content', `width=${w}, viewport-fit=cover`);
+    if (!deskView) {
+      menuWasHidden = document.body.classList.contains('nav-hidden');
+      document.body.classList.add('nav-hidden', 'desk-view');
+    }
+  } else if (deskView) {
+    viewportMeta?.setAttribute('content', phoneViewport);
+    document.body.classList.remove('desk-view');
+    document.body.classList.toggle('nav-hidden', menuWasHidden);
   }
-}).observe(document.body, { childList: true, subtree: true });
+  deskView = want;
+}
+addEventListener('hashchange', applyDeskView);
+addEventListener('orientationchange', () => setTimeout(applyDeskView, 200));
+applyDeskView();
 
 // ---- the phone's menu: backup and storage ------------------------------------------------
 
