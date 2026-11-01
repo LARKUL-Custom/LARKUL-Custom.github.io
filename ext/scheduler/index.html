@@ -1,0 +1,2101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Larkul Scheduler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" media="print" onload="this.media='all'">
+<script src="/hub-sdk.js"></script>
+<style>
+/* Layout: Larkul charcoal header band with spaced wordmark, "needs attention" list, then a wall-calendar grid. Palette: white oak, charcoal, brass hardware */
+:root{
+  --bg:#f6f4f0; --surface:#ffffff; --sunk:#eeeae3; --ink:#26241f; --muted:#6c665c; --line:#ddd7cc;
+  --accent:#2b2925; --accent-ink:#ffffff; --accent-soft:#f1e8d6; --brass:#a6814a;
+  --head-bg:#1f1e1b; --head-ink:#f4efe6; --head-muted:#b9ad98;
+  --ok:#3d7650; --warn:#9a6410; --bad:#a93b2c; --ok-soft:#e1eee3; --warn-soft:#f5e9cf; --bad-soft:#f6dfd9;
+  --s-cnc:#45698c; --s-edge:#94683c; --s-paint:#9a4d6d; --s-assembly:#557a45; --s-delivery:#b0812c; --s-install:#5d4f86; --s-finish:#3d7c78; --s-fixup:#b4462f;
+  --chip-ink:#ffffff;
+  --f-display:"Marcellus","Palatino Linotype","Times New Roman",serif;
+  --f-body:"Nunito Sans","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#161513; --surface:#1f1e1b; --sunk:#292723; --ink:#eee9e0; --muted:#a69e90; --line:#3a3732;
+  --accent:#d6b47a; --accent-ink:#1a1814; --accent-soft:#3a3122; --brass:#d6b47a;
+  --head-bg:#0f0e0d; --head-ink:#f4efe6; --head-muted:#b9ad98;
+  --ok:#6cc08a; --warn:#e0a640; --bad:#ec7a68; --ok-soft:#1e3426; --warn-soft:#3a2f17; --bad-soft:#3e211c;
+  --s-cnc:#4f77a0; --s-edge:#a2733f; --s-paint:#ad5a7c; --s-assembly:#5f8a4c; --s-delivery:#b8862f; --s-install:#6f60a0; --s-finish:#4c958f; --s-fixup:#c65438;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161513; --surface:#1f1e1b; --sunk:#292723; --ink:#eee9e0; --muted:#a69e90; --line:#3a3732;
+  --accent:#d6b47a; --accent-ink:#1a1814; --accent-soft:#3a3122; --brass:#d6b47a;
+  --head-bg:#0f0e0d; --head-ink:#f4efe6; --head-muted:#b9ad98;
+  --ok:#6cc08a; --warn:#e0a640; --bad:#ec7a68; --ok-soft:#1e3426; --warn-soft:#3a2f17; --bad-soft:#3e211c;
+  --s-cnc:#4f77a0; --s-edge:#a2733f; --s-paint:#ad5a7c; --s-assembly:#5f8a4c; --s-delivery:#b8862f; --s-install:#6f60a0; --s-finish:#4c958f; --s-fixup:#c65438;
+  color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+ul.files{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.frow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.frow a{color:var(--ink);font-weight:700;overflow-wrap:anywhere;flex:1 1 180px}
+.frow .small{margin-left:auto}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--head-bg)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1300px;margin:0 auto}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--head-bg);color:var(--head-ink);border-bottom:3px solid var(--brass)}
+.bar{display:flex;align-items:center;gap:8px 20px;flex-wrap:wrap;padding-block:10px}
+.brand{margin-right:auto;display:flex;flex-direction:column;line-height:1.1}
+.brand .word{font-family:var(--f-display);font-size:28px;letter-spacing:.32em;margin-right:-.32em}
+.brand .tag{font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--head-muted);margin-top:4px}
+nav{display:flex;gap:2px;flex-wrap:wrap}
+nav button{font:700 13px var(--f-body);letter-spacing:.14em;text-transform:uppercase;border:0;border-bottom:2px solid transparent;background:none;color:var(--head-muted);padding:10px 12px;cursor:pointer}
+nav button:hover{color:var(--head-ink)}
+nav button[aria-selected="true"]{color:var(--head-ink);border-bottom-color:var(--brass)}
+.hstat{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--head-muted)}
+.hstat .err{color:#ff9d8c;font-weight:700}
+.hbtn{font:700 12px var(--f-body);letter-spacing:.1em;text-transform:uppercase;background:none;color:var(--head-ink);border:1px solid var(--head-muted);border-radius:3px;padding:5px 10px;cursor:pointer}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+main{padding-block:20px 80px;display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+h2{font-family:var(--f-display);font-weight:400;font-size:24px;letter-spacing:.12em;text-transform:uppercase;margin:0;text-wrap:balance}
+h3{font-family:var(--f-body);font-weight:800;font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin:0;color:var(--brass)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:18px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{justify-content:space-between}
+.muted{color:var(--muted)} .small{font-size:14px}
+.note{font-size:14px;color:var(--muted);margin:0}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 16px;border-radius:3px;cursor:pointer;font-weight:700}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.big{padding:12px 22px;font-size:14px;letter-spacing:.12em;text-transform:uppercase}
+.btn.sm{padding:3px 10px;font-size:14px}
+.btn.danger{color:var(--bad)} .btn.danger.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--brass)}
+.pill{display:inline-block;font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.done{background:var(--sunk);color:var(--muted)} .pill.size{background:var(--accent-soft);color:var(--ink)}
+.dot{display:inline-block;width:12px;height:12px;border-radius:3px;flex:none}
+.banner{background:var(--accent-soft);border-radius:4px;padding:12px 14px;display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+/* attention list */
+.alerts{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.alerts li{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:8px 12px;border-radius:4px;background:var(--sunk);font-size:15px}
+.alerts li.bad{background:var(--bad-soft)} .alerts li.warn{background:var(--warn-soft)} .alerts li.ok{background:var(--ok-soft)}
+.alerts .pill{background:var(--surface)}
+.alerts li>span:nth-child(2){flex:1 1 240px;min-width:0}
+/* calendar */
+.calhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0;flex:1 1 260px}
+.calhead h2{min-width:0;text-align:center}
+.legend{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.legend span{display:flex;gap:6px;align-items:center}
+.cal{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.cal .dow{font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--sunk)}
+.day{min-height:100px;padding:6px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:4px;min-width:0}
+.day.out,.day.off{background:var(--sunk)} .day.out .num{opacity:.5}
+.day .num{font-weight:700;font-size:15px;padding:0 4px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.day .closed{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.day.today{box-shadow:inset 0 0 0 2px var(--accent)}
+.day.today .num b{background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:0 8px}
+.chip{display:flex;gap:6px;align-items:center;width:100%;text-align:left;border:0;border-radius:4px;padding:3px 7px;font-size:13px;font-weight:700;line-height:1.25;color:var(--chip-ink);cursor:pointer;min-width:0;text-shadow:0 1px 1px rgba(0,0,0,.25)}
+.chip[data-drag]{cursor:grab;touch-action:pan-y;-webkit-touch-callout:none;user-select:none}
+.chip .pin{flex:none;font-size:11px;opacity:.9}
+.dragging,.dragging *{cursor:grabbing!important;user-select:none!important}
+.dragghost{position:fixed;z-index:50;pointer-events:none;max-width:220px;opacity:.92;box-shadow:0 6px 18px rgba(0,0,0,.28);transform:rotate(-2deg)}
+.chip.lifted,.jcard.lifted{opacity:.35}
+.day.dropto{background:var(--accent-soft,rgba(0,0,0,.06));box-shadow:inset 0 0 0 2px var(--accent)}
+.jcard.dropto{box-shadow:0 -3px 0 0 var(--accent)}
+.jcard.dropto.below{box-shadow:0 3px 0 0 var(--accent)}
+.jcard .grip{cursor:grab;color:var(--muted);font-size:18px;line-height:1;padding:0 2px;touch-action:none;user-select:none}
+.chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip em{font-style:normal;font-weight:400;opacity:.92;margin-left:auto;padding-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+.chip.due{background:none;color:var(--ok);padding:1px 4px;font-size:12px;text-shadow:none;border-top:1px dashed currentColor;border-radius:0}
+.chip.due.late{color:var(--bad);border-color:var(--bad)}
+.cal.focus .chip:not(.sel){opacity:.22}
+.dname{display:none}
+@media (max-width:700px){
+  .cal{display:block;border:0}
+  .cal .dow{display:none}
+  .day{min-height:0;border:1px solid var(--line);border-radius:4px;margin-bottom:8px}
+  .day.empty,.day.out{display:none}
+  .calwrap .day{min-height:0}
+  .dname{display:inline;font-weight:400;color:var(--muted);margin-left:6px}
+}
+/* jobs */
+.jobs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:20px;align-items:start}
+@media (max-width:900px){.jobs{grid-template-columns:minmax(0,1fr)}}
+.jlist{display:grid;gap:8px}
+.jcard{display:grid;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:12px 14px;cursor:pointer;text-align:left;width:100%}
+.jcard[aria-current="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.jcard .nm{font-weight:800;font-size:16px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.steps{display:flex;gap:4px;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.step.done{background:var(--sunk);text-decoration:line-through}
+.step.next{color:var(--ink);border-color:var(--ink)}
+.mini{display:flex;gap:3px}
+.mini i{flex:1;height:6px;border-radius:3px;background:var(--line)}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.form .wide{grid-column:1/-1}
+label.f{display:grid;gap:4px;font-size:14px;font-weight:700;color:var(--muted);align-content:start}
+input[type=text],input[type=number],input[type=date],input[type=search],select,textarea{border:1px solid var(--line);background:var(--bg);border-radius:3px;padding:8px 10px;color:var(--ink);width:100%;min-width:0}
+textarea{min-height:70px;resize:vertical}
+label.chk{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-weight:700}
+label.chk input[type=checkbox]{width:20px;height:20px}
+label.chk input[type=number]{width:80px}
+.quick{display:flex;gap:6px;flex-wrap:wrap}
+.parts{display:grid;gap:8px}
+.counts{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.aibox{border:1px dashed var(--brass);border-radius:8px;padding:14px;display:grid;gap:10px;background:var(--surface)}
+.aibox ul{margin:0;padding-left:20px}
+.note.err{color:var(--bad)}
+.proposal{border:1px solid var(--brass);background:var(--accent-soft);border-radius:8px;padding:12px 14px;display:grid;gap:8px}
+.proposal ul{margin:0;padding-left:20px}
+.msgs{display:grid;gap:10px;max-height:min(60vh,560px);overflow:auto;padding:4px}
+.msg{padding:10px 12px;border-radius:10px;max-width:85%;overflow-wrap:anywhere}
+.msg .t{white-space:pre-wrap}
+.msg.me{justify-self:end;background:var(--accent);color:var(--accent-ink)}
+.msg.cl{justify-self:start;background:var(--sunk);color:var(--ink)}
+.msg .changes{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:4px;white-space:normal}
+.msg .changes label{display:flex;gap:8px;align-items:flex-start}
+.chatin{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
+.chatin textarea{min-height:56px}
+.part{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,.7fr) auto;gap:6px 10px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+@media (max-width:600px){.part{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+details summary{cursor:pointer;font-weight:700;color:var(--muted)}
+details[open] summary{margin-bottom:8px}
+.scroll{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:13px;color:var(--muted);font-weight:700}
+td input[type=number]{width:90px}
+tr.isdone td{color:var(--muted)}
+.fixbox{background:var(--accent-soft);border-radius:4px;padding:12px 14px}
+.fixups select{min-width:110px}
+.typegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.typebtn{display:grid;gap:2px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:4px;background:var(--surface);cursor:pointer}
+.typebtn b{font-size:15px}
+.typebtn span{font-size:13px;color:var(--muted)}
+.typebtn[aria-pressed="true"]{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass);background:var(--accent-soft)}
+.preview{background:var(--sunk);border-radius:4px;padding:12px 14px;display:grid;gap:6px}
+.preview ul{margin:0;padding-left:20px}
+/* materials */
+.mats{display:grid;gap:8px}
+.mat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.mat.bad{border-left:5px solid var(--bad)} .mat.warn{border-left:5px solid var(--warn)} .mat.ok{border-left:5px solid var(--ok)}
+.mat .nm{font-weight:800;font-size:16px}
+.recv{display:flex;gap:6px;flex-wrap:wrap} .recv input{width:90px}
+@media (max-width:600px){.mat{grid-template-columns:minmax(0,1fr)}}
+.daysoff{display:flex;gap:6px;flex-wrap:wrap}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--head-bg);color:var(--head-ink);border:1px solid var(--brass);border-radius:4px;padding:10px 14px;display:flex;gap:14px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:calc(100% - 32px);pointer-events:none}
+.toast button{background:none;border:0;color:var(--brass);font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:.1em;font-size:13px;pointer-events:auto}
+@media (prefers-reduced-motion:no-preference){.chip,.btn,.jcard,.typebtn{transition:opacity .15s,border-color .15s}}
+/* calendar + job list side by side */
+.calwrap{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px;align-items:start}
+.calwrap>.panel{gap:12px}
+.side{position:sticky;top:96px;max-height:calc(100vh - 110px);overflow:auto;padding:14px}
+.side h2{font-size:18px}
+.jside{display:grid;gap:6px}
+.idays{display:flex;align-items:center;gap:6px;margin:-2px 0 4px 30px}
+.idays .ibtn{width:26px;height:26px;padding:0}
+.awaybox{margin-top:14px;border-top:1px solid var(--line);padding-top:10px;border-radius:4px}
+.awaybox h3{margin:0 0 4px}
+.awaybox.dropto{background:var(--accent-soft,rgba(0,0,0,.06));box-shadow:inset 0 0 0 2px var(--accent)}
+body.dragging .awaybox{outline:2px dashed var(--line);outline-offset:4px}
+.jrow.held{border-style:dashed}
+.jrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--line);border-left-width:1px;background:var(--surface);border-radius:4px;padding:8px 10px;cursor:grab;touch-action:pan-y;-webkit-touch-callout:none;user-select:none}
+.jrow:hover{border-color:var(--muted)}
+.jrow.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.jrow .jt{display:grid;min-width:0;flex:1}
+.jrow .jt b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jrow .jt .small{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jrow.lifted{opacity:.35}
+.calwrap .day{min-height:80px;padding:4px}
+.calwrap .chip{font-size:12px;padding:2px 6px}
+.calwrap .day .num{font-size:13px}
+.calwrap .cal .dow{padding:6px 8px;font-size:12px}
+.calwrap .legend{font-size:13px}
+.calwrap .calhead h2{font-size:20px;flex:0 1 auto}
+.day.other{background:var(--sunk)} .day.other .num{opacity:.45}
+@media (max-width:980px){.calwrap{grid-template-columns:minmax(0,1fr)}.side{position:static;max-height:none}}
+/* bills */
+.sidecol{display:grid;gap:16px;align-content:start;position:sticky;top:96px;max-height:calc(100vh - 110px);overflow:auto}
+.sidecol .side{position:static;max-height:none;overflow:visible}
+.seg{display:flex;gap:0}
+.seg .btn{border-radius:0;margin-left:-1px}
+.seg .btn:first-child{border-radius:3px 0 0 3px;margin-left:0}
+.seg .btn:last-child{border-radius:0 3px 3px 0}
+.chip.bill{background:var(--surface);color:var(--ink);border:1px solid var(--brass);text-shadow:none}
+.chip.bill em{font-style:normal;font-weight:700;color:var(--brass);margin-left:auto;padding-left:4px;white-space:nowrap}
+.chip.bill.paid{opacity:.55;text-decoration:line-through}
+.chip.bill.late{border-color:var(--bad)} .chip.bill.late em{color:var(--bad)}
+.chip.bill.sel{box-shadow:0 0 0 2px var(--brass)}
+.billdot{background:var(--surface);border:1px solid var(--brass)}
+.btotal{display:flex;justify-content:space-between;align-items:baseline;background:var(--sunk);border-radius:4px;padding:8px 10px;font-size:14px}
+.btotal b{font-size:18px}
+.brow{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:4px;padding:6px 8px;background:var(--surface)}
+.brow input{width:18px;height:18px;flex:none}
+.brow .bt{display:grid;flex:1;min-width:0;text-align:left;background:none;border:0;padding:0;cursor:pointer;color:inherit}
+.brow .bt b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow .bt .small{font-size:12px}
+.brow .amt{font-weight:800;font-size:14px;white-space:nowrap}
+.brow.paid{opacity:.6} .brow.paid .bt b{text-decoration:line-through}
+.brow.late{border-color:var(--bad)} .brow.late .amt{color:var(--bad)}
+.billedit{display:grid;gap:8px;border:1px solid var(--brass);border-radius:4px;padding:10px;background:var(--accent-soft)}
+.billedit .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:8px}
+@media (max-width:980px){.sidecol{position:static;max-height:none}}
+@media (min-width:981px){.billedit .two{grid-template-columns:minmax(0,1fr)}}
+/* jobs from Cabinet Designer */
+.cdbox{display:grid;gap:8px;border:1px solid var(--brass);border-radius:4px;padding:10px;background:var(--accent-soft)}
+.cdbox h3{margin:0;font-size:15px}
+.cdrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+/* calendar titles and step labels on chips */
+.ctitle{font-size:15px;letter-spacing:.12em;color:var(--muted);margin:0}
+.calwrap .chip em{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;opacity:.95}
+.calwrap .day{min-height:92px}
+/* name on the first line, the step under it, so nothing gets cut off */
+.calwrap .chip:not(.due):not(.bill){flex-wrap:wrap;row-gap:0;padding:3px 7px 4px}
+.calwrap .chip:not(.due):not(.bill) span{flex:1 1 auto;min-width:0}
+.calwrap .chip:not(.due):not(.bill) em{flex:1 0 100%;margin:0;padding:0;max-width:none;font-size:10.5px;line-height:1.2}
+/* paste a list */
+.bulk textarea{width:100%;min-height:140px;font:inherit}
+.bulkt td,.bulkt th{vertical-align:middle}
+.bulkt select{min-width:110px;max-width:170px}
+.bulkt tr.off td{opacity:.5}
+.bulkt input[type=checkbox]{width:18px;height:18px}
+.warnc{color:var(--warn)}
+/* tidy-up pass */
+.lbl{font-size:14px;font-weight:700;color:var(--muted)}
+.hint{font-size:12px;font-weight:400;color:var(--muted)}
+.inl{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:flex-end}
+.inl label.f{flex:0 0 auto}
+input.n{width:110px}
+.form h3{margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
+.form h3:first-child{margin-top:0;padding-top:0;border-top:0}
+.checks{display:grid;gap:8px;align-content:end;padding-bottom:6px}
+select.addpart{width:100%;max-width:340px}
+.inl{min-width:0}
+details.sub{border:1px solid var(--line);border-radius:4px;padding:8px 12px}
+details.sub[open]{padding-bottom:12px}
+details.fold{padding:0;gap:0}
+details.fold>summary{list-style:none;display:flex;align-items:center;gap:12px;padding:16px 18px;cursor:pointer;color:inherit}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary .ft{display:grid;gap:2px;flex:1;min-width:0}
+details.fold>summary::after{content:"";width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin:-4px 4px 0 0;flex:none}
+details.fold[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
+details.fold[open]>summary{margin-bottom:0;border-bottom:1px solid var(--line)}
+details.fold>.fbody{padding:16px 18px 18px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.ibtn{border:1px solid var(--line);background:var(--surface);border-radius:3px;width:28px;height:26px;line-height:1;cursor:pointer;color:var(--muted);font-weight:800}
+.ibtn:hover{color:var(--ink);border-color:var(--muted)}
+.more{background:none;border:0;padding:4px 0;color:var(--muted);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.mat .facts{font-size:15px}
+details summary .note,details summary .small{font-weight:400}
+.recv .btn{padding:6px 12px;font-size:14px}
+@media (max-width:640px){
+  .bar{gap:2px 12px;padding-block:8px 0}
+  .brand .word{font-size:22px}
+  nav{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  nav button{padding:10px 7px;white-space:nowrap;font-size:12px;letter-spacing:.08em}
+  #saveState{display:none}
+  .calhead .btn.sm{order:5}
+  .calhead h2{font-size:17px;letter-spacing:.08em}
+  .panel{padding:14px}
+}
+</style>
+</head>
+<body>
+
+
+<header><div class="wrap bar">
+  <div class="brand"><span class="word">LARKUL</span><span class="tag">Custom Cabinets · Scheduler</span></div>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="calendar">Calendar</button>
+    <button role="tab" data-tab="shop">Manufacturing</button>
+    <button role="tab" data-tab="jobs">Jobs</button>
+    <button role="tab" data-tab="materials">Materials</button>
+    <button role="tab" data-tab="claude" hidden>Ask Claude</button>
+    <button role="tab" data-tab="settings">Settings</button>
+  </nav>
+  <div class="hstat"><button id="undoBtn" class="hbtn" data-act="undo" hidden>Undo</button><span id="saveState"></span></div>
+</div></header>
+<div class="wrap"><main id="app"><p class="note">Loading your schedule…</p></main></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script>
+'use strict';
+const STEPS=['cnc','edge','paint','assembly','delivery','install','finish'];
+const SHOP_STEPS=['cnc','edge','paint','assembly','delivery','finish'];
+const STEP_NAME={cnc:'CNC',edge:'Edgebanding',paint:'Paint',assembly:'Assembly',delivery:'Delivery',install:'Install',finish:'Finish',fixup:'Fix-up'};
+
+/* ---------- dates (local, YYYY-MM-DD) ---------- */
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const addDays=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return iso(d)};
+let OFF=new Set();
+const isWork=s=>{const g=parse(s).getDay();return g!==0&&(g!==6||state.settings.saturdays)&&!OFF.has(s)};
+const nextWork=s=>{let g=0;while(!isWork(s)&&g++<400)s=addDays(s,1);return s};
+const prevWork=s=>{let g=0;while(!isWork(s)&&g++<400)s=addDays(s,-1);return s};
+const addWork=(s,n)=>{if(n>=0){s=nextWork(s);for(;n>0;n--)s=nextWork(addDays(s,1))}else{s=prevWork(s);for(;n<0;n++)s=prevWork(addDays(s,-1))}return s};
+const workBetween=(a,b)=>{if(a===b)return 0;let sign=1;if(a>b){[a,b]=[b,a];sign=-1}let n=0;while(a<b){a=addDays(a,1);if(isWork(a))n++}return n*sign};
+const fmt=s=>s?parse(s).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}):'—';
+const fmtS=s=>parse(s).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+const TODAY=iso(new Date());
+const isDate=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s);
+const r1=x=>Math.round(x*10)/10;
+const num=(x,d=0)=>{const n=+x;return Number.isFinite(n)?n:d};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function plural(n,u){
+  if(n===1||['ft','gal','each','lbs','qt'].includes(u))return `${n} ${u}`;
+  if(u==='shelf')return `${n} shelves`;
+  return `${n} ${/(s|x|ch|sh)$/.test(u)?u+'es':u+'s'}`;
+}
+const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+
+/* ---------- defaults ---------- */
+function defaultStations(){return [
+  {id:'cnc',name:'CNC router',hoursPerDay:10},{id:'edge',name:'Edgebander',hoursPerDay:8},
+  {id:'paint',name:'Paint booth',hoursPerDay:8},{id:'assembly',name:'Assembly',hoursPerDay:8},
+  {id:'delivery',name:'Delivery truck',hoursPerDay:8},{id:'finish',name:'Finish crew',hoursPerDay:8}]}
+function defaultMaterials(){return [
+  {id:'m1',name:'3/4" prefinished maple ply',unit:'sheet',onHand:100,reorder:15,lead:5,step:'cnc'},
+  {id:'m2',name:'1/4" maple ply (backs)',unit:'sheet',onHand:30,reorder:6,lead:5,step:'cnc'},
+  {id:'m3',name:'3/4" MDF (paint-grade doors)',unit:'sheet',onHand:30,reorder:6,lead:3,step:'cnc'},
+  {id:'m4',name:'Maple edgebanding 15/16"',unit:'ft',onHand:5000,reorder:600,lead:7,step:'edge'},
+  {id:'m5',name:'Primer',unit:'gal',onHand:8,reorder:2,lead:4,step:'paint'},
+  {id:'m6',name:'Paint (white conversion varnish)',unit:'gal',onHand:6,reorder:3,lead:4,step:'paint'},
+  {id:'m7',name:'Soft-close hinges',unit:'hinge',onHand:300,reorder:60,lead:5,step:'assembly'},
+  {id:'m8',name:'Drawer slides',unit:'pair',onHand:100,reorder:20,lead:7,step:'assembly'},
+  {id:'m9',name:'Floating shelf brackets',unit:'bracket',onHand:30,reorder:10,lead:10,step:'assembly'}]}
+const CAB_MATS=()=>({m1:{u:0.9},m2:{u:0.25},m3:{p:0.4},m4:{u:28},m5:{p:0.12},m6:{p:0.2},m7:{u:2.5},m8:{u:0.8}});
+/* Ayden's numbers (Oct 2026): CNC 10 h/day (small kitchen 1 day, larger 2-3), edgebander 8 h/day (most jobs half a day to a day),
+   paint 8 h/day (usually 2 days), assembly 8 h/day (small jobs about 2 days to be safe). Each size sets days per step.
+   Kitchen size comes from the total cabinet count: up to about 15 small, 17-25 medium, more is large (16 counts as small). */
+const Z=(id,name,typical,cnc,edge,paint,assembly,installDays,max=9999)=>({id,name,max,typical,days:{cnc,edge,paint,assembly},installDays});
+const T=(id,name,unit,deliveryHours,install,mats,sizes)=>({id,name,unit,hours:{delivery:deliveryHours},deliver:true,install,mats,sizes});
+/* Finish (Oct 2026): trim, crown, scribe and touch-ups on site after install. A first guess of about half the install time. */
+const finishGuess=(t,z)=>t.install&&num(z.installDays)>0?Math.max(0.5,Math.round(num(z.installDays))/2):0;
+const withFinish=ts=>ts.map(t=>{t.sizes.forEach(z=>{z.days.finish=finishGuess(t,z)});return t});
+function defaultTypes(){return withFinish([
+  T('kitchen','Kitchen','cabinet',3,true,CAB_MATS(),[Z('s','Small',12,1,0.5,2,2,2,16),Z('m','Medium',21,2,1,2,3,2.5,25),Z('l','Large',32,3,1,3,4,3)]),
+  T('bath','Bathroom / vanity','cabinet',2,true,CAB_MATS(),[Z('one','',4,0.5,0.5,1,1,1)]),
+  T('laundry','Laundry / mudroom','cabinet',2,true,CAB_MATS(),[Z('one','',8,1,0.5,1.5,1.5,1)]),
+  T('builtin','Built-in / entertainment','cabinet',2,true,CAB_MATS(),[Z('one','',6,1,0.5,1.5,2,1.5)]),
+  T('shelves','Floating shelves','shelf',1.5,false,{m1:{u:0.35},m4:{u:12},m5:{p:0.05},m6:{p:0.1},m9:{u:2}},[Z('one','',6,0.5,0.5,1,1,0.5)]),
+  T('hood','Range hood','hood',1.5,true,{m1:{u:1.5},m3:{p:1},m4:{u:40},m5:{p:0.3},m6:{p:0.5}},[Z('one','',1,0.5,0.25,1,1,0.5)]),
+  T('mantel','Mantel','mantel',1.5,true,{m1:{u:0.75},m4:{u:20},m5:{p:0.2},m6:{p:0.3}},[Z('one','',1,0.25,0.25,1,0.5,0.5)]),
+  T('other','Other / custom','piece',2,false,{m1:{u:0.5},m4:{u:15}},[Z('one','',1,0.5,0.5,1,1,1)]),
+  ...newTypes()])}
+/* rev 5: the job types Ayden uses for real jobs (Oct 2026). Days are a first guess to change in Settings. */
+function newTypes(){return [
+  T('house','Whole house','cabinet',4,true,CAB_MATS(),[Z('xs','Very small',15,1,0.5,2,2,2,20),Z('s','Small',25,2,1,2,3,3,30),Z('m','Medium',40,3,1.5,3,4,4,50),Z('l','Large',60,4,2,4,6,5)]),
+  T('finish','Finish','piece',1.5,true,{m1:{u:0.5},m4:{u:15},m5:{p:0.1},m6:{p:0.15}},[Z('xs','Very small',2,0.25,0.25,1,0.5,0.5,3),Z('s','Small',5,0.5,0.5,1,1,1,8),Z('m','Medium',10,1,0.5,2,2,1.5,15),Z('l','Large',20,1.5,1,2,3,2)]),
+  T('parts','Parts only','part',1,false,{m1:{u:0.1},m4:{u:4}},[Z('xs','Very small',10,0.25,0.25,0,0,0,20),Z('s','Small',30,0.5,0.5,0,0,0,50),Z('m','Medium',80,1,1,0,0,0,120),Z('l','Large',150,2,1.5,0,0,0)]),
+  T('custom','Custom','piece',2,true,{m1:{u:0.5},m4:{u:15},m5:{p:0.1},m6:{p:0.15}},[Z('xs','Very small',1,0.25,0.25,1,0.5,0.5,1),Z('s','Small',2,0.5,0.5,1,1,1,3),Z('m','Medium',5,1,0.5,2,2,1.5,8),Z('l','Large',10,1.5,1,2,3,2)]),
+  T('room','Room','cabinet',2,true,CAB_MATS(),[Z('xs','Very small',4,0.5,0.5,1,1,1,5),Z('s','Small',8,1,0.5,1.5,2,1.5,10),Z('m','Medium',15,1.5,1,2,3,2,20),Z('l','Large',25,2,1,3,4,3)])]}
+const COUNT_KEYS=['cabinets','fillers','panels','doors','drawerFronts','drawers'];
+const COUNT_NAME={cabinets:'Cabinets',fillers:'Fillers',panels:'Panels',doors:'Doors',drawerFronts:'Drawer fronts',drawers:'Drawers'};
+const defaultComplexity=()=>[{id:'low',name:'Low',pct:0},{id:'med',name:'Medium',pct:25},{id:'high',name:'High',pct:50}];
+function freshState(){return {v:4,settings:{saturdays:false,paintDryDays:1,installCrews:1,daysOff:[],defaultsRev:6,installGap:2,deliverWithInstall:true,hubReminders:true,complexity:defaultComplexity()},stations:defaultStations(),materials:defaultMaterials(),types:defaultTypes(),jobs:[]}}
+function exampleJobs(){
+  const due=n=>addWork(TODAY,n);
+  const J=(o)=>({id:uid('j'),customer:'',painted:0,deliver:true,install:true,done:{},hours:{},fixups:[],notes:'',example:true,...o});
+  return [
+    J({name:'Henderson kitchen',customer:'Mark & Lisa Henderson',type:'kitchen',size:'m',count:24,painted:8,due:due(9),done:{cnc:true}}),
+    J({name:'Lakeview floating shelves',customer:'Lakeview Builders',type:'shelves',count:6,due:due(5),install:false}),
+    J({name:'Ortiz bathroom vanities',customer:'Ortiz family',type:'bath',count:5,painted:5,due:due(7)}),
+    J({name:'Patel kitchen + island',customer:'Raj Patel',type:'kitchen',size:'l',count:34,painted:34,due:due(13)}),
+    J({name:'Brookside laundry cabinets',customer:'Brookside Remodeling',type:'laundry',count:9,due:due(12),install:false}),
+    J({name:'Reyes range hood',customer:'Carmen Reyes',type:'hood',count:1,painted:1,due:due(10)}),
+    J({name:'Nguyen kitchen',customer:'Anh Nguyen',type:'kitchen',size:'s',count:14,due:due(20)}),
+    J({name:'Miller kitchen',customer:'Dana Miller',type:'kitchen',size:'m',count:22,painted:22,due:due(-3),done:{cnc:true,edge:true,paint:true,assembly:true,delivery:true,install:true,finish:true},
+      fixups:[{id:uid('f'),note:'Replace scratched pantry door, adjust 2 drawer fronts',days:0.5,date:'',done:false}]})];
+}
+
+/* ---------- state + saving ---------- */
+const KEY='larkul-schedule-v4';
+const APP=typeof window.Neutralino!=='undefined'&&typeof window.NL_PORT!=='undefined';
+/* inside the Extension Hub (http://localhost:4321): data in Hub.storage, documents in the Files library under Schedules/, dates as hub reminders */
+const HUB=!APP&&typeof window.Hub!=='undefined';
+const LIB='Schedules';
+let state=freshState(),tab='calendar',selJob=null,focusJob=null,armed=null,weekOff=0,monthOff=null,calShow='jobs',selBill=null,q='',jf='active',selType='kitchen',draft=null;
+let undoStack=[],lastJSON='',dataDir=null,saveTimer=null,savePending=false,backupDay=null;
+const WEEKS=4;
+
+function normalize(st){
+  const f=freshState();
+  st=st&&typeof st==='object'?st:{};
+  st.v=4;
+  const rev=num(st.settings&&st.settings.defaultsRev);
+  st.settings={...f.settings,...(st.settings||{})};
+  if(!Array.isArray(st.settings.daysOff))st.settings.daysOff=[];
+  st.settings.daysOff=st.settings.daysOff.filter(isDate);
+  if(!Array.isArray(st.settings.complexity)||!st.settings.complexity.length)st.settings.complexity=defaultComplexity();
+  st.settings.complexity=st.settings.complexity.filter(x=>x&&typeof x==='object').map(x=>({id:x.id||uid('c'),name:String(x.name??''),pct:Math.max(0,num(x.pct))}));
+  st.stations=f.stations.map(d=>({...d,...((st.stations||[]).find(x=>x&&x.id===d.id)||{})}));
+  st.materials=Array.isArray(st.materials)&&st.materials.length?st.materials:f.materials;
+  st.types=Array.isArray(st.types)&&st.types.length?st.types:f.types;
+  /* switch saved data to Ayden's real shop numbers, but only where the old starting guess was never changed */
+  if(rev<2){
+    const swap=(o,k,from,to)=>{if(o&&num(o[k],-1)===from)o[k]=to};
+    swap(st.stations.find(x=>x.id==='cnc'),'hoursPerDay',8,10);
+    swap(st.stations.find(x=>x.id==='assembly'),'hoursPerDay',16,8);
+    for(const t of st.types)if(['kitchen','bath','laundry','builtin'].includes(t.id)&&t.hours){swap(t.hours,'cnc',0.3,0.75);swap(t.hours,'paint',0.75,0.7)}
+    st.settings.defaultsRev=2;
+  }
+  /* rev 3: job time comes from days per step for each size instead of hours per cabinet */
+  const oldTier=(t,count)=>{
+    if(!t.sizes.some(x=>x.max!=null))return [...t.sizes].sort((a,b)=>Math.abs(num(a.typical)-count)-Math.abs(num(b.typical)-count))[0];
+    const z=[...t.sizes].sort((a,b)=>num(a.max,9999)-num(b.max,9999));return z.find(x=>count<=num(x.max,9999))||z[z.length-1]};
+  if(rev<3){
+    const defs=defaultTypes();
+    for(const t of st.types){
+      if(!Array.isArray(t.sizes)||!t.sizes.length)t.sizes=[{name:'',max:9999,typical:1,installDays:1}];
+      const d=defs.find(x=>x.id===t.id);
+      t.sizes.forEach((z,k)=>{
+        const dz=d&&(d.sizes.find(x=>x.name.toLowerCase()===String(z.name||'').toLowerCase())||d.sizes[Math.min(k,d.sizes.length-1)]);
+        if(!z.id)z.id=dz&&!t.sizes.some(x=>x.id===dz.id)?dz.id:uid('z');
+        if(!z.days){
+          if(dz)z.days={...dz.days};
+          else{const h=t.hours||{},n=num(z.typical,1),day=s=>Math.max(0,Math.round(num(h[s])*n/num((st.stations.find(x=>x.id===s)||{}).hoursPerDay,8)*2)/2);
+            z.days={cnc:Math.max(day('cnc'),num(h.cnc)>0?0.5:0),edge:day('edge'),paint:day('paint'),assembly:day('assembly')}}
+        }
+      });
+    }
+    for(const j of Array.isArray(st.jobs)?st.jobs:[]){
+      if(!j||typeof j!=='object')continue;
+      const t=st.types.find(x=>x.id===j.type);
+      if(j.hours&&typeof j.hours==='object'){j.days=j.days||{};
+        for(const s of ['cnc','edge','paint','assembly'])if(j.hours[s]!=null&&j.hours[s]!==''){j.days[s]=Math.max(0.25,Math.round(num(j.hours[s])/num((st.stations.find(x=>x.id===s)||{}).hoursPerDay,8)*4)/4);delete j.hours[s]}}
+    }
+    st.settings.defaultsRev=3;
+  }
+  if(rev<4){
+    const k=st.types.find(x=>x.id==='kitchen');
+    if(k&&Array.isArray(k.sizes)){
+      const set=(id,max,from,typical)=>{const z=k.sizes.find(x=>x.id===id);if(z){if(z.max==null||num(z.max)===from)z.max=max;if(num(z.typical)===({s:12,m:22,l:35})[id])z.typical=typical}};
+      set('s',16,15,12);set('m',25,28,21);set('l',9999,9999,32);
+    }
+    st.settings.defaultsRev=4;
+  }
+  if(rev<5){for(const t of newTypes())if(!st.types.some(x=>x&&x.id===t.id))st.types.push(t);st.settings.defaultsRev=5}
+  if(rev<6){/* rev 6 adds the Finish step: a Finish crew, and finish days for every size of job type that's installed */
+    if(Array.isArray(st.stations)&&!st.stations.some(x=>x&&x.id==='finish'))st.stations.push({id:'finish',name:'Finish crew',hoursPerDay:8});
+    for(const t of st.types)if(t&&Array.isArray(t.sizes))for(const z of t.sizes)if(z&&(!z.days||z.days.finish==null))z.days={...(z.days||{}),finish:finishGuess(t,z)};
+    st.settings.defaultsRev=6}
+  for(const t of st.types){
+    t.hours={delivery:num((t.hours||{}).delivery,2)};t.mats=t.mats||{};t.unit=t.unit||'piece';
+    if(!Array.isArray(t.sizes)||!t.sizes.length)t.sizes=[{id:'one',name:'',typical:1,days:{cnc:0.5,edge:0.5,paint:1,assembly:1},installDays:1}];
+    const d=defaultTypes().find(x=>x.id===t.id);
+    t.sizes.forEach((z,k)=>{if(!z.id)z.id=uid('z');z.days={cnc:0,edge:0,paint:0,assembly:0,finish:0,...(z.days||{})};
+      if(z.max==null||z.max===''){const dz=d&&d.sizes.find(x=>x.id===z.id);z.max=dz?dz.max:9999}});
+  }
+  st.bills=(Array.isArray(st.bills)?st.bills:[]).filter(b=>b&&typeof b==='object').map(b=>({id:b.id||uid('b'),name:String(b.name??''),amount:Math.max(0,num(b.amount)),
+    due:isDate(b.due)?b.due:TODAY,repeat:REPEATS.some(r=>r[0]===b.repeat)?b.repeat:'none',paid:Array.isArray(b.paid)?b.paid.filter(isDate):[],notes:String(b.notes||'')}));
+  st.jobs=(Array.isArray(st.jobs)?st.jobs:[]).filter(j=>j&&typeof j==='object').map(j=>({customer:'',painted:0,deliver:true,install:true,notes:'',...j,
+    id:j.id||uid('j'),name:j.name||'Untitled job',type:st.types.some(t=>t.id===j.type)?j.type:st.types[st.types.length-1].id,
+    count:Math.max(0,num(j.count,1)),painted:Math.max(0,num(j.painted)),done:j.done&&typeof j.done==='object'?j.done:{},hours:j.hours&&typeof j.hours==='object'?j.hours:{},days:j.days&&typeof j.days==='object'?j.days:{},
+    extra:Array.isArray(j.extra)?j.extra.filter(x=>x&&typeof x==='object').map(x=>{const c=Math.max(0,Math.round(num(x.count,1)));return {id:x.id||uid('p'),type:st.types.some(t=>t.id===x.type)?x.type:st.types[st.types.length-1].id,count:c,painted:Math.min(c,Math.max(0,Math.round(num(x.painted))))}}):[],
+    complexity:typeof j.complexity==='string'?j.complexity:'low',start:isDate(j.start)?j.start:'',
+    pins:j.pins&&typeof j.pins==='object'?Object.fromEntries(Object.entries(j.pins).filter(([k,v])=>STEPS.includes(k)&&k!=='install'&&isDate(v))):{},
+    counts:j.counts&&typeof j.counts==='object'?Object.fromEntries(COUNT_KEYS.filter(k=>j.counts[k]!=null&&j.counts[k]!=='').map(k=>[k,Math.max(0,Math.round(num(j.counts[k])))])):{},
+    links:Array.isArray(j.links)?j.links.filter(x=>x&&x.path).map(x=>({name:String(x.name||x.path.split('/').pop()),path:String(x.path)})):[],
+    fixups:Array.isArray(j.fixups)?j.fixups.map(x=>({id:x.id||uid('f'),note:x.note||'',days:num(x.days,1)||1,date:isDate(x.date)?x.date:'',done:!!x.done})):[]}));
+  return st;
+}
+/* data from the earlier test version (one hours-per-cabinet rate for every job) */
+function migrateV3(old){
+  const st=freshState();
+  Object.assign(st.settings,{defaultsRev:0,saturdays:!!old.settings?.saturdays,paintDryDays:num(old.settings?.paintDryDays,1),installCrews:num(old.settings?.installCrews,1)});
+  for(const s of st.stations){const o=(old.stations||[]).find(x=>x.id===s.id);if(o)s.hoursPerDay=num(o.hoursPerDay,s.hoursPerDay)}
+  for(const m of st.materials){const o=(old.materials||[]).find(x=>x.id===m.id);if(o)Object.assign(m,{name:o.name||m.name,unit:o.unit||m.unit,onHand:num(o.onHand,m.onHand),reorder:num(o.reorder,m.reorder),lead:num(o.lead,m.lead)})}
+  const ex=['Henderson kitchen','Lakeview floating shelves','Ortiz bathroom vanities','Patel kitchen + island','Brookside laundry cabinets','Nguyen kitchen','Miller kitchen'];
+  st.jobs=(old.jobs||[]).map(j=>{
+    const k=(j.kind||'').toLowerCase(),n=(j.name||'').toLowerCase();
+    const type=k.startsWith('kitchen')?'kitchen':k.startsWith('bath')?'bath':k.startsWith('built')?'builtin':/shel/.test(n)?'shelves':/laundry|mud/.test(n)?'laundry':/hood/.test(n)?'hood':/mantel/.test(n)?'mantel':'other';
+    const o={...j,type,count:num(j.boxes,1),example:ex.includes(j.name)};
+    if(j.installDays!==''&&j.installDays!=null)o.installDays=num(j.installDays);
+    delete o.kind;delete o.boxes;delete o.mats;return o;});
+  return normalize(st);
+}
+function refreshOff(){OFF=new Set(state.settings.daysOff||[])}
+
+function setSaved(text,err){const el=document.getElementById('saveState');el.textContent=text;el.className=err?'err':''}
+const dataPath=()=>dataDir+'/larkul-data.json';
+const fileText=()=>JSON.stringify({app:'larkul-schedule',version:4,saved:new Date().toISOString(),state},null,1);
+async function writeAppFile(){
+  const txt=fileText();
+  await Neutralino.filesystem.writeFile(dataPath(),txt);
+  if(backupDay!==TODAY){
+    await Neutralino.filesystem.writeFile(`${dataDir}/backups/larkul-${TODAY}.json`,txt);
+    backupDay=TODAY;
+    try{const list=(await Neutralino.filesystem.readDirectory(dataDir+'/backups')).map(e=>e.entry).filter(n=>/^larkul-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort();
+      for(const n of list.slice(0,Math.max(0,list.length-30)))await Neutralino.filesystem.remove(`${dataDir}/backups/${n}`)}catch(e){}
+  }
+}
+async function hubWrite(){
+  await Hub.storage.set('state',{app:'larkul-schedule',version:4,saved:new Date().toISOString(),state});
+  if(backupDay!==TODAY){backupDay=TODAY;hubBackup().catch(e=>console.warn('backup',e))}
+  syncReminders();
+}
+/* one copy a day in Files > Schedules > Backups, last 30 kept */
+async function hubBackup(){
+  const dir=LIB+'/Backups',name=`larkul-${TODAY}.json`;
+  let list=[];try{list=await Hub.files.list(dir)}catch(e){try{await Hub.files.mkdir(LIB)}catch(_){}try{await Hub.files.mkdir(dir)}catch(_){}}
+  const names=(list||[]).filter(f=>f.type!=='dir'&&f.type!=='folder').map(f=>f.name);
+  if(!names.includes(name))await Hub.files.upload(fileList([new File([fileText()],name,{type:'application/json'})]),dir);
+  const old=[...new Set([...names,name])].filter(n=>/^larkul-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort();
+  for(const n of old.slice(0,Math.max(0,old.length-30)))await Hub.files.delete(`${dir}/${n}`);
+}
+function fileList(files){try{const dt=new DataTransfer();files.forEach(f=>dt.items.add(f));return dt.files}catch(e){return files}}
+async function flushSave(){
+  if(!(APP||HUB)||!savePending)return;
+  clearTimeout(saveTimer);savePending=false;
+  try{if(HUB)await hubWrite();else await writeAppFile();setSaved('Saved')}catch(e){console.error(e);savePending=true;setSaved(HUB?'Could not save to the hub. Is it still running?':'Could not save. Check the Documents folder.',true)}
+}
+/* the planned end of every step not yet done, kept so the next day can tick off the ones whose day has passed */
+function rememberPlan(){
+  try{const sch=schedule(),plan={};
+    for(const j of state.jobs){const r=sch[j.id];if(!r)continue;const m={};for(const st of r.stages)if(!st.done&&st.end)m[st.s]=st.end;if(Object.keys(m).length)plan[j.id]=m}
+    state.plan={day:TODAY,jobs:plan};
+  }catch(e){console.error(e)}
+}
+/* steps whose planned day has passed are marked done, in order, the way the shop usually runs; click a step to reopen it */
+function autoAdvance(){
+  if(state.settings.autoDone===false||!state.plan||!state.plan.jobs||!(state.plan.day<TODAY))return [];
+  const out=[];
+  for(const j of state.jobs){
+    const m=state.plan.jobs[j.id];if(!m)continue;
+    for(const s of STEPS){
+      if(!applies(j,s)||j.done[s]||j.hold)continue;
+      if(!(isDate(m[s])&&m[s]<TODAY)){if(s==='paint')continue;break}
+      if(s==='install'&&isDate(j.installStart)&&j.installStart>=TODAY)break;
+      toggleStage(j,s);(j.autoDone=j.autoDone||{})[s]=TODAY;out.push(`${STEP_NAME[s]} for ${j.name}`);
+    }
+  }
+  return out;
+}
+function save(){
+  rememberPlan();lastJSON=JSON.stringify(state); /* the plan isn't an edit of its own, so it never makes an undo step */
+  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
+  if(APP||HUB){savePending=true;setSaved('Saving…');clearTimeout(saveTimer);saveTimer=setTimeout(flushSave,150)}
+  else setSaved('Saved in this browser');
+}
+function commit(msg){
+  const now=JSON.stringify(state);
+  if(now===lastJSON)return;
+  undoStack.push(lastJSON);if(undoStack.length>50)undoStack.shift();
+  lastJSON=now;refreshOff();save();
+  document.getElementById('undoBtn').hidden=false;
+  if(msg)toast(msg,true);
+}
+let toastTimer=null;
+function toast(msg,withUndo){
+  const t=document.getElementById('toast');
+  t.innerHTML=`<span>${msg}</span>${withUndo?'<button data-act="undo">Undo</button>':''}`;t.hidden=false;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true},5000);
+}
+function undo(){
+  if(!undoStack.length)return;
+  state=normalize(JSON.parse(undoStack.pop()));lastJSON=JSON.stringify(state);refreshOff();save();
+  document.getElementById('undoBtn').hidden=!undoStack.length;
+  toast('Undone');
+}
+
+/* ---------- job math ---------- */
+const station=id=>state.stations.find(s=>s.id===id);
+const typeOf=j=>state.types.find(t=>t.id===j.type)||state.types[0];
+const midSize=t=>t.sizes[Math.floor((t.sizes.length-1)/2)];
+/* the size comes from how many cabinets (or pieces) the job has */
+const tierOf=j=>{const z=[...typeOf(j).sizes].sort((a,b)=>num(a.max,9999)-num(b.max,9999));return z.find(x=>j.count<=num(x.max,9999))||z[z.length-1]};
+const sizeLabel=j=>parts(j).map(partLabel).join(' + ');
+/* a job can hold several parts (a kitchen plus baths, a hood, a mantel); the first part is the job's own type and count */
+const parts=j=>[j,...(j.extra||[])];
+const partLabel=p=>{const t=typeOf(p);return t.sizes.length>1&&tierOf(p).name?`${tierOf(p).name} ${t.name.toLowerCase()}`:t.name};
+const unitsText=j=>{const by=new Map();for(const p of parts(j)){const u=typeOf(p).unit;by.set(u,(by.get(u)||0)+num(p.count))}return [...by].map(([u,n])=>plural(n,u)).join(', ')};
+const paintedTotal=j=>parts(j).reduce((a,p)=>a+num(p.painted),0);
+/* paint or stain (Ayden, Oct 2026): set on the job; older jobs count as painted when any of it is */
+const COATS=[['','No paint or stain'],['paint','Paint'],['stain','Stain']];
+const coatOf=j=>['','paint','stain'].includes(j.coat)?j.coat:(paintedTotal(j)>0?'paint':'');
+const coatName=j=>coatOf(j)==='stain'?'Stain':'Paint';
+const levelOf=j=>{const L=state.settings.complexity||[];return L.find(x=>x.id===j.complexity)||L[0]||{id:'low',name:'Low',pct:0}};
+/* higher complexity stretches the usual days, rounded up to a quarter day */
+const stretch=(j,d)=>{const f=1+num(levelOf(j).pct)/100;return d>0&&f!==1?Math.ceil(d*f*4-1e-9)/4:d};
+const installDaysAuto=j=>stretch(j,parts(j).reduce((a,p)=>a+num(tierOf(p).installDays,1),0));
+const installDays=j=>j.installDays!=null&&j.installDays!==''?num(j.installDays,1):installDaysAuto(j);
+/* days for a shop step: set by the job's size; paint shrinks when only part of the job is painted */
+function partDays(p,s,whole){
+  const d=num(tierOf(p).days[s]);
+  if(s!=='paint')return d;
+  if(whole)return d; /* painted or stained, with no count of which pieces: the whole job */
+  if(num(p.painted)<=0||d<=0)return 0;
+  const share=p.count>0?Math.min(1,p.painted/p.count):1;
+  return Math.max(0.5,Math.ceil(d*share*2)/2);
+}
+function autoDays(j,s){const whole=s==='paint'&&paintedTotal(j)===0;return stretch(j,Math.round(parts(j).reduce((a,p)=>a+partDays(p,s,whole),0)*100)/100)}
+const hasDays=(j,s)=>j.days&&j.days[s]!=null&&j.days[s]!=='';
+const stepDays=(j,s)=>hasDays(j,s)?num(j.days[s]):autoDays(j,s);
+/* one trip for the whole job, so the longest part's delivery time */
+const deliveryAuto=j=>Math.max(...parts(j).map(p=>num(typeOf(p).hours.delivery)));
+function stageHours(j,s){
+  if(s==='delivery')return j.hours&&j.hours.delivery!=null&&j.hours.delivery!==''?num(j.hours.delivery):deliveryAuto(j);
+  return r1(stepDays(j,s)*num(station(s).hoursPerDay,8));
+}
+const daysText=d=>`${d} ${d===1?'day':'days'}`;
+function applies(j,s){
+  if(s==='install')return !!j.install;
+  if(s==='delivery')return !!j.deliver;
+  if(s==='finish')return !!j.install&&stageHours(j,s)>0;
+  if(s==='paint')return !!coatOf(j)&&stageHours(j,s)>0;
+  return stageHours(j,s)>0;
+}
+function matQty(j,m){
+  const x=parts(j).reduce((a,p)=>{const u=typeOf(p).mats[m.id]||{};return a+num(u.u)*num(p.count)+num(u.p)*num(p.painted)},0);
+  if(x<=0)return 0;
+  return m.unit==='gal'?Math.ceil(x*2)/2:Math.ceil(x);
+}
+
+/* ---------- scheduler: forward, finite capacity, jobs in priority order ---------- */
+/* install crews: each crew handles one job a day; a half-day visit uses half a crew-day */
+/* installs (Ayden, Oct 2026): leave a gap before the last day, since something always needs recutting or repainting after
+   the first day or two. Days dragged one by one on the calendar (dates) are used as they are. */
+function bookCrew(used,from,days,pinned,gap=0,dates=null){
+  const crews=Math.max(1,Math.floor(num(state.settings.installCrews,1))),left=d=>crews-(used['install|'+d]||0);
+  days=Math.max(0.5,days);
+  const hs=[];for(let r=days;r>0.001;r-=1)hs.push(Math.min(1,r));
+  const fits=(x,h)=>left(x)>=h-0.001,take=(x,h)=>{used['install|'+x]=(used['install|'+x]||0)+h;return {d:x,h}};
+  if(Array.isArray(dates)&&dates.length===hs.length&&dates.every(isDate)){const ds=[...dates].sort();return {start:ds[0],end:ds[ds.length-1],segs:ds.map((x,k)=>take(x,hs[k])),byHand:true}}
+  const split=gap>0&&hs.length>1,head=split?hs.slice(0,-1):hs;
+  let d=nextWork(pinned||from);
+  if(!pinned){let g=0;while(g++<500){let ok=true,x=d;for(const h of head){if(!fits(x,h)){ok=false;break}x=nextWork(addDays(x,1))}if(ok)break;d=nextWork(addDays(d,1))}}
+  const segs=[];let x=d;
+  head.forEach((h,k)=>{segs.push(take(x,h));if(k<head.length-1)x=nextWork(addDays(x,1))});
+  if(split){const h=hs[hs.length-1];let y=addWork(x,gap+1),g=0;if(!pinned)while(!fits(y,h)&&g++<500)y=nextWork(addDays(y,1));segs.push(take(y,h));x=y}
+  return {start:d,end:x,segs};
+}
+/* deliver on the first install day: the shop's setting, or the job's own choice */
+const sameDay=j=>j.sameDay!=null?!!j.sameDay:state.settings.deliverWithInstall!==false;
+function installDay(j,used,from,cap,hours){
+  if(Array.isArray(j.installDates)&&j.installDates.length)return nextWork([...j.installDates].sort()[0]);
+  if(isDate(j.installStart))return nextWork(j.installStart);
+  const gap=Math.max(0,Math.round(num(state.settings.installGap)));let c=from;
+  for(let g=0;g<60;g++){
+    const d=bookCrew({...used},c,installDays(j),null,gap,null).start;
+    if(cap-(used['delivery|'+d]||0)>=hours-0.001)return d;
+    c=nextWork(addDays(d,1));
+  }
+  return from;
+}
+function schedule(jobs=state.jobs){
+  const used={},out={};
+  /* Ayden, Oct 31 2026: a job placed by hand stays exactly where it was put (j.fixed holds its days for each step) */
+  const order=[...jobs.filter(j=>j.fixed&&!j.hold),...jobs.filter(j=>!(j.fixed&&!j.hold))];
+  for(const j of order){
+    let cursor=nextWork(isDate(j.start)&&j.start>TODAY?j.start:TODAY),conflict=null,afterCnc=cursor,paintReady=null;const stages=[];
+    if(j.hold){out[j.id]={stages:[],finish:null,key:null,slack:null,status:'hold',next:null,fixes:[],conflict:null,install:null};continue}
+    for(const s of STEPS){
+      if(!applies(j,s))continue;
+      if(['delivery','install','finish'].includes(s)&&paintReady){if(paintReady>cursor)cursor=paintReady;paintReady=null}
+      if(j.done[s]){stages.push({s,done:true});continue}
+      const fx=j.fixed&&Array.isArray(j.fixed[s])&&j.fixed[s].length?j.fixed[s].filter(g=>g&&isDate(g.d)).sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0):null;
+      if(fx&&fx.length){
+        for(const g of fx){const k=(s==='install'?'install':s)+'|'+g.d;used[k]=(used[k]||0)+num(g.h,1)}
+        const st={s,start:fx[0].d,end:fx[fx.length-1].d,segs:fx.map(g=>({d:g.d,h:num(g.h,1)})),pinned:true,fixed:true};stages.push(st);
+        if(s==='paint')paintReady=addWork(st.end,num(state.settings.paintDryDays));else{cursor=st.end;if(s==='cnc')afterCnc=st.end}
+        continue;
+      }
+      if(s==='install'){
+        const pin=isDate(j.installStart)?nextWork(j.installStart):null;
+        if(pin&&pin<cursor)conflict={pinned:pin,ready:cursor};
+        const b=bookCrew(used,cursor,installDays(j),pin,Math.max(0,Math.round(num(state.settings.installGap))),j.installDates);
+        stages.push({s,...b,pinned:!!pin});cursor=b.end;continue;
+      }
+      const cap=Math.max(0.5,num(station(s).hoursPerDay,8));
+      /* a date set by hand (dragged on the calendar) means "not before"; the step after still waits for this one */
+      let from=s==='paint'?afterCnc:cursor;
+      /* delivery waits for the day the install crew can start, when the truck is free that day too */
+      if(s==='delivery'&&sameDay(j)&&applies(j,'install')&&!j.done.install&&!(j.pins&&isDate(j.pins.delivery))&&stageHours(j,s)<=cap)
+        {const iday=installDay(j,used,from,cap,stageHours(j,s));if(iday<from&&!conflict)conflict={pinned:iday,ready:from};from=iday}
+      const pin=j.pins&&isDate(j.pins[s])&&j.pins[s]>from?j.pins[s]:null;
+      let d=nextWork(pin||from),rem=stageHours(j,s),start=null,guard=0;const segs=[];
+      while(rem>0.001&&guard++<2000){
+        const k=s+'|'+d,u=used[k]||0,avail=j._force?cap:cap-u; /* placing by hand: the day you pick, even if the station is busy */
+        if(avail>0.01){const take=Math.min(avail,rem);used[k]=u+take;rem-=take;segs.push({d,h:take});if(!start)start=d}
+        if(rem>0.001)d=nextWork(addDays(d,1));
+      }
+      stages.push({s,start:start||d,end:d,segs,pinned:!!(j.pins&&isDate(j.pins[s]))});
+      if(s==='paint')paintReady=addWork(d,num(state.settings.paintDryDays));
+      else{cursor=d;if(s==='cnc')afterCnc=d}
+    }
+    const live=stages.filter(x=>!x.done);
+    const finish=live.length?live.reduce((a,x)=>x.end>a?x.end:a,live[0].end):null;
+    const inst=live.find(x=>x.s==='install');
+    const key=inst?inst.start:finish;
+    let fc=finish?addDays(finish,1):TODAY;if(fc<TODAY)fc=TODAY;
+    const fixes=[];
+    for(const f of j.fixups||[]){if(f.done)continue;const b=bookCrew(used,fc,num(f.days,1),isDate(f.date)?f.date:null);fixes.push({f,...b});fc=addDays(b.end,1)}
+    const slack=key&&isDate(j.due)?workBetween(key,j.due):null;
+    const status=!live.length?(fixes.length?'fixup':'done'):slack==null?'ok':slack<0?'late':slack===0?'risk':'ok';
+    out[j.id]={stages,finish,key,slack,status,next:live[0],fixes,conflict,install:inst};
+  }
+  return out;
+}
+function projectMaterials(sch){
+  return state.materials.map(m=>{
+    const ev=[];
+    for(const j of state.jobs){
+      const q=matQty(j,m);if(!q||!applies(j,m.step)||j.done[m.step])continue;
+      const st=sch[j.id]?.stages.find(x=>x.s===m.step);if(st&&!st.done)ev.push({d:st.start,q,job:j});
+    }
+    ev.sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0);
+    let bal=num(m.onHand),low=bal,firstShort=null,firstLow=null;
+    for(const e of ev){bal-=e.q;low=Math.min(low,bal);if(bal<0&&!firstShort)firstShort=e.d;if(bal<num(m.reorder)&&!firstLow)firstLow=e.d}
+    let orderBy=(firstShort||firstLow)?addDays(firstShort||firstLow,-num(m.lead)):null;
+    if(orderBy)orderBy=prevWork(orderBy);
+    if(orderBy&&orderBy<TODAY)orderBy=TODAY;
+    const status=firstShort?'short':firstLow?'low':'ok';
+    return {m,ev,need:r1(ev.reduce((a,e)=>a+e.q,0)),bal:r1(bal),status,orderBy,orderQty:status==='ok'?0:Math.ceil(num(m.reorder)-low)};
+  });
+}
+
+/* ---------- shared bits ---------- */
+const sv=s=>`var(--s-${s})`;
+const PILL={hold:['done','Put away'],late:['bad','Late'],risk:['warn','Tight'],ok:['ok','On time'],done:['done','Finished'],fixup:['warn','Fix-up']};
+const pill=s=>`<span class="pill ${PILL[s][0]}">${PILL[s][1]}</span>`;
+const when=d=>d===TODAY?'today':fmt(d);
+function nextStepText(j,r){
+  if(j.hold)return 'Put away: not on the schedule. Drag it from Put away onto a day to place it.';
+  if(!r.next&&r.fixes.length)return `Next up: fix-up visit ${when(r.fixes[0].start)}.`;
+  if(!r.next)return 'All steps are finished.';
+  const n=r.next;
+  if(n.s==='install')return `Next up: install, ${when(n.start)}${n.end!==n.start?' to '+fmt(n.end):''}.`;
+  return `Next up: ${STEP_NAME[n.s]}, ${when(n.start)}. ${r.install?`Install starts ${fmt(r.install.start)}`:`Ready ${fmt(r.finish)}`}.`;
+}
+const doneBtn=(j,r,cls)=>j.hold?`<button class="btn primary ${cls}" data-act="unhold" data-id="${j.id}">Put back on the schedule</button>`:r.next?`<button class="btn primary ${cls}" data-act="advance" data-id="${j.id}">${STEP_NAME[r.next.s]} is done</button>`:r.fixes.length?`<button class="btn primary ${cls}" data-act="advance" data-id="${j.id}">Fix-up is done</button>`:'';
+
+function attention(sch,mats){
+  const items=[];
+  for(const j of state.jobs){const r=sch[j.id];
+    if(r.conflict)items.push({c:'bad',p:'Check date',t:`Install for <b>${esc(j.name)}</b> is set for ${fmt(r.conflict.pinned)}, but the cabinets won't be ready until ${fmt(r.conflict.ready)}.`,job:j.id});
+    if(r.status==='late')items.push({c:'bad',p:'Late',t:r.install?`<b>${esc(j.name)}</b> can't start install until ${fmt(r.key)}, ${plural(-r.slack,'workday')} after the date you promised (${fmt(j.due)}).`:`<b>${esc(j.name)}</b> will be ready ${fmt(r.key)}, ${plural(-r.slack,'workday')} after the date you promised (${fmt(j.due)}).`,job:j.id});
+    else if(r.status==='risk')items.push({c:'warn',p:'Tight',t:`<b>${esc(j.name)}</b> is ready right on the promised day (${fmt(j.due)}). Any delay makes it late.`,job:j.id});
+    for(const [a,b] of orderIssues(j,r)){const A=r.stages.find(x=>x.s===a),B=r.stages.find(x=>x.s===b);
+      items.push({c:'warn',p:'Check date',t:`<b>${esc(j.name)}</b>: ${a==='paint'?coatName(j):STEP_NAME[a]} is set for ${fmt(A.start)}, before ${b==='paint'?coatName(j).toLowerCase():STEP_NAME[b].toLowerCase()} is done (${fmt(B.end)}). Drag one of them, or leave it if that's right.`,job:j.id})}
+    for(const x of r.fixes)items.push({c:'warn',p:'Fix-up',t:`<b>${esc(j.name)}</b>: ${esc(x.f.note||'fix-up visit')}, ${when(x.start)}.`,job:j.id});
+  }
+  items.push(...billAlerts());
+  for(const x of cdPending())items.push({c:'warn',p:'New job',t:`Cabinet Designer sent <b>${esc(x.d.job.name||'a job')}</b>: ${cdText(x)}.`,cd:x.path});
+  const ord=mats.filter(x=>x.status!=='ok').sort((a,b)=>a.orderBy<b.orderBy?-1:1);
+  if(ord.length){const now=ord.filter(x=>x.orderBy===TODAY);
+    items.push({c:ord.some(x=>x.status==='short')?'bad':'warn',p:'Order',mat:1,t:now.length?`Order <b>${plural(now.length,'material')} today</b>: ${now.map(x=>esc(x.m.name)).join(', ')}.${ord.length>now.length?` ${ord.length-now.length} more soon.`:''}`:`Order ${esc(ord[0].m.name)} by <b>${fmt(ord[0].orderBy)}</b>.${ord.length>1?` ${ord.length-1} more soon.`:''}`});}
+  if(!items.length)return `<ul class="alerts"><li class="ok"><span class="pill ok">All good</span><span>Every job is on time and you have the materials you need.</span></li></ul>`;
+  const shown=allAlerts?items:items.slice(0,3);
+  return `<ul class="alerts">${shown.map(i=>`<li class="${i.c}"><span class="pill ${i.c}">${i.p}</span><span>${i.t}</span>${i.job?`<button class="btn sm" data-act="open" data-id="${i.job}">Open</button>`:i.bill?`<button class="btn sm" data-act="calshow" data-id="bills">Bills</button>`:i.cd?`<button class="btn sm" data-act="cdadd" data-id="${esc(i.cd)}">${cdMatch(cdInbox.find(x=>x.path===i.cd)||{d:{job:{}}})?'Update counts':'Add to schedule'}</button>`:`<button class="btn sm" data-act="tab" data-id="materials">Materials</button>`}</li>`).join('')}</ul>
+    ${items.length>3?`<button class="more" data-act="allalerts">${allAlerts?'Show fewer':`Show ${items.length-3} more`}</button>`:''}`;
+}
+function exampleBanner(){
+  if(!state.jobs.some(j=>j.example))return '';
+  return `<div class="banner"><span>Showing <b>example jobs</b> so you can see how it works.</span><button class="btn sm" data-act="clearex">Remove examples</button></div>`;
+}
+
+/* ---------- bills ---------- */
+/* Bills sit on the calendar next to (or instead of) the jobs so work can be planned around them.
+   A bill has one due date and can repeat; "paid" is kept per date so each month is ticked off on its own. */
+const REPEATS=[['none','Once'],['weekly','Every week'],['biweekly','Every 2 weeks'],['monthly','Every month'],['yearly','Every year']];
+const money=n=>'$'+num(n).toLocaleString(undefined,{minimumFractionDigits:num(n)%1?2:0,maximumFractionDigits:2});
+function billDates(b,from,to){
+  const out=[];if(!isDate(b.due))return out;
+  if(b.repeat==='none'){if(b.due>=from&&b.due<=to)out.push(b.due);return out}
+  const a=parse(b.due),day=a.getDate();
+  const at=k=>{
+    if(b.repeat==='weekly')return addDays(b.due,7*k);
+    if(b.repeat==='biweekly')return addDays(b.due,14*k);
+    const y=a.getFullYear()+(b.repeat==='yearly'?k:0),m=a.getMonth()+(b.repeat==='monthly'?k:0);
+    const last=new Date(y,m+1,0).getDate();return iso(new Date(y,m,Math.min(day,last)));
+  };
+  /* start near "from" instead of walking from the first due date */
+  const per=b.repeat==='weekly'?7:b.repeat==='biweekly'?14:b.repeat==='monthly'?30.4:365.25;
+  let k=Math.max(0,Math.floor((parse(from)-a)/864e5/per)-1),g=0;
+  for(let d=at(k);d<=to&&g++<800;d=at(++k))if(d>=from)out.push(d);
+  return out;
+}
+const billPaid=(b,d)=>(b.paid||[]).includes(d);
+/* every unpaid bill from 60 days back, and everything coming up in the next "ahead" days */
+function billList(ahead){
+  const from=addDays(TODAY,-60),to=addDays(TODAY,ahead),out=[];
+  for(const b of state.bills||[])for(const d of billDates(b,from,to))if(d>=TODAY||!billPaid(b,d))out.push({b,d,paid:billPaid(b,d)});
+  return out.sort((x,y)=>x.d<y.d?-1:x.d>y.d?1:0);
+}
+/* a bill due on a day the calendar doesn't show (Sunday, or Saturday when the shop is closed) shows on the day before */
+function billShowDay(d){let x=d,g=0;const sat=state.settings.saturdays;while(g++<3){const w=parse(x).getDay();if(w===0||(w===6&&!sat))x=addDays(x,-1);else break}return x}
+function billSide(){
+  const list=billList(45),due30=list.filter(x=>!x.paid&&x.d<=addDays(TODAY,30)).reduce((a,x)=>a+num(x.b.amount),0);
+  const over=list.filter(x=>!x.paid&&x.d<TODAY);
+  const b=selBill&&(state.bills||[]).find(x=>x.id===selBill);
+  const P=b?`bills.${b.id}`:'';
+  const editor=b?`<div class="billedit">
+      <label class="f">Bill<input type="text" id="bill-name" data-path="${P}.name" value="${esc(b.name)}" placeholder="e.g. Shop rent"></label>
+      <div class="two"><label class="f">Amount<input type="number" id="bill-amt" min="0" step="0.01" data-path="${P}.amount" data-kind="num" value="${num(b.amount)||''}" placeholder="0"></label>
+      <label class="f">Due<input type="date" id="bill-due" data-path="${P}.due" value="${esc(b.due)}"></label></div>
+      <label class="f">Repeats<select id="bill-rep" data-path="${P}.repeat">${REPEATS.map(([v,l])=>`<option value="${v}" ${b.repeat===v?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label class="f">Notes<input type="text" id="bill-notes" data-path="${P}.notes" value="${esc(b.notes||'')}" placeholder="Account, how it's paid…"></label>
+      <div class="row"><button class="btn sm primary" data-act="billdone">Done</button><button class="btn sm danger${armed==='b'+b.id?' armed':''}" data-act="delbill" data-id="${b.id}">${armed==='b'+b.id?'Click again to delete':'Delete bill'}</button></div></div>`:'';
+  const rows=list.map(x=>`<div class="brow${x.paid?' paid':''}${!x.paid&&x.d<TODAY?' late':''}">
+      <input type="checkbox" ${x.paid?'checked':''} data-ui="billpaid" data-id="${x.b.id}" data-date="${x.d}" aria-label="Paid: ${esc(x.b.name)} ${fmt(x.d)}">
+      <button class="bt" data-act="billpick" data-id="${x.b.id}"><b>${esc(x.b.name)}</b><span class="small muted">${x.d===TODAY?'Today':fmt(x.d)}${!x.paid&&x.d<TODAY?' · overdue':''}</span></button>
+      <span class="amt">${money(x.b.amount)}</span></div>`).join('');
+  return `<aside class="panel side"><div class="row spread"><h2>Bills</h2><button class="btn primary sm" data-act="addbill">+ Add bill</button></div>
+    <div class="btotal"><span>Unpaid through ${fmtS(addDays(TODAY,30))}${over.length?', including overdue':''}</span><b>${money(due30)}</b></div>
+    ${over.length?`<p class="note err">${plural(over.length,'bill')} overdue.</p>`:''}
+    ${editor}
+    <div class="jside">${rows||'<p class="note">No bills yet. Add rent, payroll, loans or supplier accounts to see them on the calendar.</p>'}</div>
+    <p class="note">Tick a bill when it's paid. Drag a bill on the calendar to move its date.</p></aside>`;
+}
+function billAlerts(){
+  const out=[];
+  for(const x of billList(3))if(!x.paid){
+    if(x.d<TODAY)out.push({c:'bad',p:'Bill',t:`<b>${esc(x.b.name)}</b> (${money(x.b.amount)}) was due ${fmt(x.d)} and isn't marked paid.`,bill:1});
+    else out.push({c:'warn',p:'Bill',t:`<b>${esc(x.b.name)}</b> (${money(x.b.amount)}) is due ${when(x.d)}.`,bill:1});
+  }
+  return out;
+}
+
+/* ---------- calendar ---------- */
+/* The Calendar tab shows what happens at the customer's: delivery, install, fix-ups and promised dates (and bills).
+   The Manufacturing tab is the same calendar with the shop steps: CNC, edgebanding, paint and assembly. */
+const SITE_STEPS=['delivery','install','finish','fixup'],MFG_STEPS=['cnc','edge','paint','assembly'];
+const STEP_SHORT={cnc:'CNC',edge:'Edgeband',paint:'Paint',assembly:'Assembly',delivery:'Delivery',install:'Install',finish:'Finish',fixup:'Fix-up'};
+function viewCalendar(sch,mats,mode='site'){
+  const shop=mode==='shop',keep=shop?MFG_STEPS:SITE_STEPS;
+  const cols=state.settings.saturdays?6:5;
+  const monday=x=>{while(parse(x).getDay()!==1)x=addDays(x,-1);return x};
+  let d,end,mFirst=null,mLast=null;
+  if(monthOff!=null){const t=parse(TODAY),a=new Date(t.getFullYear(),t.getMonth()+monthOff,1),b=new Date(t.getFullYear(),t.getMonth()+monthOff+1,0);
+    mFirst=iso(a);mLast=iso(b);d=monday(mFirst);end=addDays(monday(mLast),6)}
+  else{d=addDays(monday(TODAY),weekOff*7);end=addDays(d,WEEKS*7-1)}
+  const first=d;
+  const byDay={},showJobs=shop||calShow!=='bills',showBills=!shop&&calShow!=='jobs';
+  if(showBills)for(const b of state.bills||[])for(const x of billDates(b,addDays(first,-2),addDays(end,2))){const k=billShowDay(x);(byDay[k]=byDay[k]||[]).push({bill:b,date:x,paid:billPaid(b,x),pri:2000})}
+  if(showJobs)state.jobs.forEach((j,pri)=>{const r=sch[j.id];
+    const per={};
+    const part={};
+    for(const st of r.stages)if(!st.done&&keep.includes(st.s))st.segs.forEach((g,k)=>{(per[g.d]=per[g.d]||[]).push(st.s);if(st.s==='install'&&st.segs.length>1)part[g.d]=` ${k+1}/${st.segs.length}`});
+    const pinned=new Set(r.stages.filter(st=>!st.done&&st.segs.length&&(st.pinned||(st.s==='install'&&isDate(j.installStart)))).map(st=>st.start+'|'+st.s));
+    if(!shop)for(const x of r.fixes)for(const g of x.segs)(per[g.d]=per[g.d]||[]).push('fixup');
+    for(const k in per){const ss=[...new Set(per[k])];(byDay[k]=byDay[k]||[]).push({j,ss,pri:shop?pri:(ss.includes('install')?0:ss.includes('delivery')?100:200)*1000+pri,pin:ss.some(s=>pinned.has(k+'|'+s)),part:part[k]||''})}
+    if(!shop&&isDate(j.due)&&r.status!=='done'&&r.status!=='fixup')(byDay[j.due]=byDay[j.due]||[]).push({j,due:true,late:r.status==='late',pri:1000+pri});
+  });
+  const dows=['Mon','Tue','Wed','Thu','Fri','Sat'].slice(0,cols).map(x=>`<div class="dow">${x}</div>`).join('');
+  let cells='';
+  while(d<=end){
+    const dow=parse(d).getDay();
+    if(dow!==0&&(dow!==6||cols===6)){
+      const items=(byDay[d]||[]).sort((a,b)=>a.pri-b.pri),off=OFF.has(d);
+      const chips=items.map(it=>it.bill
+        ?`<button class="chip bill${it.paid?' paid':''}${!it.paid&&it.date<TODAY?' late':''}${selBill===it.bill.id?' sel':''}" data-act="billpick" data-id="${it.bill.id}" data-drag="bill" data-day="${d}" title="${esc(it.bill.name||'Bill')}: ${money(it.bill.amount)} due ${fmt(it.date)}${it.paid?' (paid)':''}. Drag to move it."><span>${esc(it.bill.name||'Bill')}</span><em>${money(it.bill.amount)}</em></button>`
+        :it.due
+        ?`<button class="chip due${it.late?' late':''}${focusJob===it.j.id?' sel':''}" data-act="focus" data-id="${it.j.id}" data-drag="due" data-day="${d}" title="${esc(it.j.name)}: promised ${it.j.install?'install':'ready'} date${it.late?' (late)':''}. Drag to change it. Double-click to open the job."><span>⚑ ${esc(it.j.name)}</span></button>`
+        :`<button class="chip${focusJob===it.j.id?' sel':''}" style="background:${sv(it.ss[0])}" data-act="focus" data-id="${it.j.id}" data-drag="step" data-stage="${it.ss[0]}" data-stages="${it.ss.join(',')}" data-day="${d}" title="${esc(it.j.name)}: ${it.ss.map(s=>STEP_NAME[s]).join(', ')}${it.pin?' (date set by hand)':''}. Drag to move it. Double-click to open the job."><span>${esc(it.j.name)}</span>${it.pin?'<i class="pin" aria-label="Date set by hand">📌</i>':''}<em>${it.ss.map(s=>s==='paint'?coatName(it.j):STEP_SHORT[s]).join(' + ')}${it.part}</em></button>`).join('');
+      cells+=`<div data-drop="${d}" class="day${d<TODAY?' out':''}${mFirst&&(d<mFirst||d>mLast)?' other':''}${d===TODAY?' today':''}${off?' off':''}${items.length||off?'':' empty'}"><div class="num"><span><b>${parse(d).getDate()}</b><span class="dname">${fmt(d)}</span></span>${off?'<span class="closed">Closed</span>':''}</div>${chips}</div>`;
+    }
+    d=addDays(d,1);
+  }
+  const title=mFirst?parse(mFirst).toLocaleDateString(undefined,{month:'long',year:'numeric'}):`${fmtS(first)} – ${fmtS(addDays(end,cols===6?-1:-2))}`;
+  const nav=monthOff!=null
+    ?`<button class="btn" data-act="week" data-id="-1" aria-label="Previous month">‹</button><h2>${title}</h2><button class="btn" data-act="week" data-id="1" aria-label="Next month">›</button><button class="btn sm" data-act="week" data-id="0">This week</button>`
+    :`<button class="btn" data-act="week" data-id="-1" aria-label="Earlier weeks">‹</button><h2>${title}</h2><button class="btn" data-act="week" data-id="1" aria-label="Later weeks">›</button>${weekOff?'<button class="btn sm" data-act="week" data-id="0">This week</button>':''}<button class="btn sm" data-act="nextmonth">Next month</button>`;
+  const fj=focusJob&&state.jobs.find(j=>j.id===focusJob);
+  const focusBar=fj?`<div class="banner"><span>Showing only <b>${esc(fj.name)}</b>. ${nextStepText(fj,sch[fj.id])}</span><span class="row">${doneBtn(fj,sch[fj.id],'')}${handSet(fj)?`<button class="btn" data-act="clearpins" data-id="${fj.id}">Clear dates set by hand</button>`:''}<button class="btn" data-act="open" data-id="${fj.id}">Open job</button><button class="btn" data-act="focus" data-id="${fj.id}">Show all jobs</button></span></div>`:'';
+  return `${shop?'':exampleBanner()}
+  ${shop?'':`<section class="panel"><h2>Needs attention</h2><div style="display:grid;gap:6px">${attention(sch,mats)}</div></section>`}
+  <div class="calwrap"><section class="panel">
+    ${shop?'<h2 class="ctitle">Manufacturing</h2>':'<h2 class="ctitle">Deliveries and installs</h2>'}
+    <div class="row spread"><div class="calhead">${nav}${clearBtn(sch)}</div>
+      ${shop?'':`<div class="seg" role="group" aria-label="Show on the calendar">${[['jobs','Jobs'],['bills','Bills'],['both','Both']].map(([v,l])=>`<button class="btn sm" data-act="calshow" data-id="${v}" aria-pressed="${calShow===v}">${l}</button>`).join('')}</div>`}</div>
+    <div class="legend">${showJobs?(shop?MFG_STEPS:SITE_STEPS).map(s=>`<span><i class="dot" style="background:${sv(s)}"></i>${STEP_NAME[s]}</span>`).join('')+(shop?'':'<span style="color:var(--ok);font-weight:700">⚑ Promised date</span>'):''}${showBills?'<span><i class="dot billdot"></i>Bill</span>':''}</div>
+    ${focusBar}
+    <div class="cal${fj?' focus':''}" style="--cols:${cols}">${dows}${cells}</div>
+    <p class="note">${shop?'CNC, edgebanding, paint and assembly. Deliveries and installs are on the Calendar tab.':'Deliveries, installs and fix-ups. CNC, edgebanding, paint and assembly are on the Manufacturing tab.'} Drag a job to move it (📌 = date you set)${shop?'':'; drag one install day to move just that day'}. Double-click a job to open it.</p>
+  </section><div class="sidecol">${showJobs?jobSide(sch,mode):''}${showBills?billSide():''}</div></div>`;
+}
+/* the current jobs beside the calendar: drag one onto a day to start it there */
+/* beside the month, so it's easy to find: puts every scheduled job away to start the month empty */
+function clearBtn(sch){
+  const n=state.jobs.filter(j=>!['done','hold'].includes(sch[j.id].status)).length;if(!n)return '';
+  return `<button class="btn sm${armed==='clearall'?' danger armed':''}" data-act="clearall" title="Take every job off the calendar so you can place them yourself">${armed==='clearall'?`Click again to put all ${n} away`:'Clear the schedule'}</button>`;
+}
+/* change a job's install days right from the Calendar tab */
+function idaysCtl(j){const d=installDays(j);
+  return `<div class="idays"><span class="small muted">Install</span><button class="ibtn" data-act="idays" data-id="${j.id}" data-n="-0.5" aria-label="One half day less for ${esc(j.name)}" ${d<=0.5?'disabled':''}>−</button><b class="small">${daysText(d)}</b><button class="ibtn" data-act="idays" data-id="${j.id}" data-n="0.5" aria-label="One half day more for ${esc(j.name)}">+</button></div>`}
+function jobSide(sch,mode='shop'){
+  const live=state.jobs.filter(j=>!['done','hold'].includes(sch[j.id].status)),held=state.jobs.filter(j=>j.hold);
+  const away=held.map(j=>`<button class="jrow held${focusJob===j.id?' sel':''}" data-act="open" data-id="${j.id}" data-drag="job" data-mode="${mode}" title="Drag onto a day to place ${esc(j.name)} there"><i class="dot" style="background:var(--line)"></i><span class="jt"><b>${esc(j.name)}</b><span class="small muted">${esc(typeOf(j).name)}${j.customer?' · '+esc(j.customer):''}</span></span></button>`).join('');
+  const rows=live.map(j=>{const r=sch[j.id],n=r.next,fx=!n&&r.fixes[0];
+    const dl=r.stages.find(x=>x.s==='delivery'&&!x.done);
+    const what=mode==='site'?[dl?`Delivery ${fmtS(dl.start)}`:'',r.install?`Install ${fmtS(r.install.start)}`:'',!r.install&&fx?`Fix-up ${when(fx.start)}`:''].filter(Boolean).join(' · ')||(n?`${STEP_NAME[n.s]} ${when(n.start)}`:'')
+      :n?`${STEP_NAME[n.s]} ${when(n.start)}`:fx?`Fix-up ${when(fx.start)}`:'';
+    return `<button class="jrow${focusJob===j.id?' sel':''}" data-act="focus" data-id="${j.id}" data-drag="job" data-mode="${mode}" title="${mode==='site'?`Drag onto a day to install ${esc(j.name)} then`:`Drag onto a day to start ${esc(j.name)} there`}. Double-click to open it.">
+      <i class="dot" style="background:${sv(mode==='site'?(r.install?'install':'delivery'):n?n.s:'fixup')}"></i><span class="jt"><b>${esc(j.name)}</b><span class="small muted">${what}${mode!=='site'&&r.install&&n&&n.s!=='install'?` · install ${fmtS(r.install.start)}`:''}</span></span>
+      ${r.status==='late'||r.status==='risk'?pill(r.status):''}</button>${mode==='site'&&r.install?idaysCtl(j):''}`}).join('');
+  return `<aside class="panel side"><div class="row spread"><h2>Current jobs</h2><button class="btn primary sm" data-act="new" data-drag="new" title="Click to add a job, or drag onto a day to start it there">+ New job</button></div>
+    <p class="note">${mode==='site'?'Drag a job onto a day to set its install date. Use − and + to change how many days the install takes.':'Drag a job onto a day to start it there. Jobs higher up get the shop first.'}</p>
+    <div class="jside">${rows||(held.length?'<p class="note">Nothing on the schedule. Drag jobs from Put away onto the days you want.</p>':'<p class="note">No jobs yet. Press New job, or drag it onto a day.</p>')}</div>
+    <div class="awaybox" data-drop-away="1"><h3>Put away${held.length?` (${held.length})`:''}</h3><p class="note awayhint">Drop a job here to take it off the calendar.</p>${away?`<div class="jside">${away}</div>`:''}</div></aside>`;
+}
+
+/* ---------- shared job form fields ---------- */
+function jobFields(j,root){
+  const t=typeOf(j),P=f=>`${root}.${f}`,id=f=>`${root.replace(/\W/g,'-')}-${f}`,isNew=root==='draft';
+  const units=esc(plural(2,t.unit).replace(/^2 /,'')),pct=num(levelOf(j).pct);
+  const sizeBtns=t.sizes.length>1?`<div class="quick" role="group" aria-label="Size">${t.sizes.map(z=>`<button class="btn sm" data-act="setsize" data-root="${root}" data-n="${esc(z.id)}" aria-pressed="${tierOf(j)===z}">${esc(z.name||'Standard')}</button>`).join('')}</div>`:'';
+  const counted=COUNT_KEYS.some(k=>j.counts?.[k]!=null);
+  return `
+    <h3 class="wide">The job</h3>
+    <label class="f">Job name<input type="text" id="${id('name')}" data-path="${P('name')}" value="${esc(j.name)}" placeholder="e.g. Smith kitchen"></label>
+    <label class="f">Customer<input type="text" id="${id('customer')}" data-path="${P('customer')}" value="${esc(j.customer)}"></label>
+    ${isNew?'':`<label class="f">Type of job<select id="${id('type')}" data-path="${P('type')}">${state.types.map(x=>`<option value="${esc(x.id)}" ${x.id===t.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`}
+    <div class="inl wide">
+      <label class="f">How many ${units}?<input type="number" class="n" id="${id('count')}" min="0" step="1" data-path="${P('count')}" data-kind="num" value="${j.count}"></label>${sizeBtns}</div>
+    <div class="inl wide">
+      <label class="f">Paint or stain<select id="${id('coat')}" data-path="${P('coat')}">${COATS.map(([v,n])=>`<option value="${v}" ${coatOf(j)===v?'selected':''}>${n}</option>`).join('')}</select></label>
+      <label class="f">How many ${coatOf(j)==='stain'?'stained':'painted'}?<input type="number" class="n" id="${id('painted')}" min="0" step="1" data-path="${P('painted')}" data-kind="num" value="${j.painted}"></label>
+      <div class="quick"><button class="btn sm" data-act="paint" data-root="${root}" data-n="0">None</button><button class="btn sm" data-act="paint" data-root="${root}" data-n="all">All</button></div></div>
+    <div class="inl wide"><div class="f"><span class="lbl">Complexity</span>
+      <div class="quick" role="group" aria-label="Complexity">${(state.settings.complexity||[]).map(x=>`<button class="btn sm" data-act="setcx" data-root="${root}" data-n="${esc(x.id)}" aria-pressed="${levelOf(j).id===x.id}">${esc(x.name||'Level')}${num(x.pct)?` +${num(x.pct)}%`:''}</button>`).join('')}</div></div>
+      <span class="small muted">${pct?`Adds ${pct}% to each step's usual days.`:'Usual days.'}</span></div>
+    ${partsHTML(j,root)}
+    <details class="wide sub" data-fold="counts-${root}"${counted||folds['counts-'+root]?' open':''}><summary>Order sheet totals <span class="small muted">optional, Claude fills these in</span></summary>
+      <div class="counts">${COUNT_KEYS.map(k=>`<label class="f">${COUNT_NAME[k]}<input type="number" min="0" step="1" id="${id('n-'+k)}" data-path="${P('counts.'+k)}" data-kind="opt" value="${j.counts?.[k]??''}"></label>`).join('')}</div></details>
+    <h3 class="wide">Dates</h3>
+    <label class="f">${j.install?'Promised install date':'Promised ready date'}<input type="date" id="${id('due')}" data-path="${P('due')}" value="${esc(j.due||'')}"></label>
+    <label class="f">First day in the shop<input type="date" id="${id('start')}" data-path="${P('start')}" value="${esc(j.start||'')}" aria-describedby="${id('start-h')}"><span class="hint" id="${id('start-h')}">Blank = as soon as there's room</span></label>
+    <div class="checks">
+      <label class="chk"><input type="checkbox" id="${id('deliver')}" data-path="${P('deliver')}" data-kind="bool" ${j.deliver?'checked':''}>We deliver it</label>
+      <label class="chk"><input type="checkbox" id="${id('install')}" data-path="${P('install')}" data-kind="bool" ${j.install?'checked':''}>We install it</label>
+      ${j.install&&j.deliver?`<label class="chk"><input type="checkbox" id="${id('sameDay')}" data-path="${P('sameDay')}" data-kind="bool" ${sameDay(j)?'checked':''}>Deliver the same day the install starts</label>`:''}</div>
+    ${j.install?`<label class="f">Install takes<select id="${id('installDays')}" data-path="${P('installDays')}" data-kind="opt"><option value="">${daysText(installDaysAuto(j))} (usual)</option>${[...new Set([0.5,1,1.5,2,2.5,3,4,5,6,...(j.installDays!==''&&j.installDays!=null?[num(j.installDays)]:[])])].sort((a,b)=>a-b).map(n=>`<option value="${n}" ${j.installDays!==''&&j.installDays!=null&&num(j.installDays)===n?'selected':''}>${daysText(n)}</option>`).join('')}</select></label>
+    <label class="f">Install starts<input type="date" id="${id('installStart')}" data-path="${P('installStart')}" value="${esc(j.installStart||'')}" aria-describedby="${id('is-h')}"><span class="hint" id="${id('is-h')}">Blank = automatic</span></label>`:''}
+    <label class="f wide">Notes<textarea id="${id('notes')}" data-path="${P('notes')}" placeholder="Colors, door style, hardware, site details…">${esc(j.notes)}</textarea></label>`;
+}
+
+function partsHTML(j,root){
+  const rows=(j.extra||[]).map(p=>{const t=typeOf(p),R=`${root}.extra.${p.id}`,id=f=>`${R.replace(/\W/g,'-')}-${f}`,u=esc(plural(2,t.unit).replace(/^2 /,''));
+    return `<div class="part">
+      <label class="f">Part<select id="${id('type')}" data-path="${R}.type">${state.types.map(x=>`<option value="${esc(x.id)}" ${x.id===p.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+      <label class="f">How many ${u}?<input type="number" id="${id('count')}" min="0" step="1" data-path="${R}.count" data-kind="num" value="${p.count}" aria-describedby="${id('size')}"></label>
+      <label class="f">Painted<input type="number" id="${id('painted')}" min="0" step="1" data-path="${R}.painted" data-kind="num" value="${p.painted}"></label>
+      <button class="btn sm" data-act="delpart" data-root="${root}" data-n="${p.id}" aria-label="Remove ${esc(t.name)}">Remove</button>
+      <span class="small muted" id="${id('size')}" style="grid-column:1/-1">${esc(partLabel(p))}: ${['cnc','edge','paint','assembly'].map(st=>`${STEP_NAME[st]} ${partDays(p,st)}`).join(', ')} days, install ${num(tierOf(p).installDays,1)}${partDays(p,'finish')?`, finish ${partDays(p,'finish')}`:''}</span></div>`}).join('');
+  return `<div class="wide parts">${rows?`<span class="lbl">Also in this job</span>${rows}`:''}
+    <div class="inl"><select class="addpart" data-ui="addpart" data-root="${root}" aria-label="Add another part to this job"><option value="">+ Add another part</option>${state.types.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select>
+    <span class="small muted">A bath, hood or mantel in the same house. Each part adds its own days.</span></div></div>`;
+}
+
+/* ---------- new job ---------- */
+function newDraft(typeId){
+  const t=state.types.find(x=>x.id===typeId)||state.types[0];
+  const z=midSize(t);
+  return {id:uid('j'),name:'',customer:'',type:t.id,count:num(z.typical,1),painted:0,extra:[],complexity:(state.settings.complexity||[])[0]?.id||'low',due:'',deliver:!!t.deliver,install:!!t.install,done:{},hours:{},days:{},fixups:[],notes:'',rush:false};
+}
+function previewHTML(){
+  if(!draft)return '';
+  const j={...draft,name:draft.name||'This job'};
+  const list=draft.rush?[j,...state.jobs]:[...state.jobs,j];
+  const r=schedule(list)[j.id];
+  const lines=r.stages.map(x=>`<li><i class="dot" style="background:${sv(x.s)};margin-right:6px"></i>${STEP_NAME[x.s]}: ${x.s==='install'?daysText(installDays(j)):x.s==='delivery'?`about ${stageHours(j,x.s)} hours`:daysText(stepDays(j,x.s))}, ${x.start===x.end?fmt(x.start):fmt(x.start)+' to '+fmt(x.end)}</li>`).join('');
+  const verdict=!isDate(draft.due)?'':r.status==='late'?`<span class="pill bad">Late</span> That's ${plural(-r.slack,'workday')} after the promised date. Try a later date or check "Rush job".`:r.status==='risk'?`<span class="pill warn">Tight</span> Ready right on the promised date.`:`<span class="pill ok">On time</span> ${plural(r.slack,'workday')} to spare.`;
+  return `<div><b>${esc(sizeLabel(j))}, ${esc(unitsText(j))}.</b> ${r.install?`Install would start <b>${fmt(r.install.start)}</b>.`:r.finish?`Ready <b>${fmt(r.finish)}</b>.`:''} ${verdict}</div><ul>${lines||'<li>No steps. Set the days for this size in Settings, or turn on delivery or install.</li>'}</ul>`;
+}
+function viewNew(){
+  const types=state.types.map(t=>`<button class="typebtn" data-act="pickType" data-id="${esc(t.id)}" aria-pressed="${draft&&draft.type===t.id}"><b>${esc(t.name)}</b><span>${t.sizes.length>1?t.sizes.map(z=>esc(z.name)).join(' · '):'Counted in '+esc(plural(2,t.unit).replace(/^2 /,''))}</span></button>`).join('');
+  return `<section class="panel"><div class="row spread"><h2>New job</h2><button class="btn" data-act="tab" data-id="calendar">Cancel</button></div>
+    ${HUB?draftDocsHTML():''}
+    <h3>What kind of job?</h3><div class="typegrid">${types}</div>
+    ${draft?`<div class="form">${jobFields(draft,'draft')}</div>
+    <label class="chk"><input type="checkbox" id="draft-rush" data-path="draft.rush" data-kind="bool" ${draft.rush?'checked':''}>Rush job: put it at the front of the line</label>
+    <div class="preview" id="preview">${previewHTML()}</div>
+    <div class="row"><button class="btn primary big" data-act="addjob">Add job</button><button class="btn" data-act="tab" data-id="calendar">Cancel</button></div>`:'<p class="note">Pick one to get started. You can change everything later.</p>'}
+  </section>`;
+}
+
+/* ---------- jobs ---------- */
+function viewJobs(sch){
+  const ql=q.trim().toLowerCase();
+  const shown=state.jobs.filter(j=>{const r=sch[j.id],fin=r.status==='done';
+    if(jf==='active'&&fin)return false;if(jf==='finished'&&!fin)return false;
+    return !ql||[j.name,j.customer,j.notes,sizeLabel(j)].join(' ').toLowerCase().includes(ql)});
+  if(!selJob||!state.jobs.find(j=>j.id===selJob))selJob=shown[0]?.id||state.jobs[0]?.id;
+  const list=shown.map(j=>{const r=sch[j.id],i=state.jobs.indexOf(j);const st=STEPS.filter(s=>applies(j,s));
+    return `<div class="jcard" role="button" tabindex="0" data-act="pick" data-id="${j.id}" data-drop-job="${j.id}" aria-current="${j.id===selJob}">
+      <div class="row spread" style="flex-wrap:nowrap"><span class="nm">${esc(j.name)}</span><span class="row" style="flex-wrap:nowrap;gap:6px">${pill(r.status)}</span></div>
+      <div class="small muted">${esc(sizeLabel(j))} · ${esc(unitsText(j))}${j.customer?' · '+esc(j.customer):''}</div>
+      <div class="mini">${st.map(s=>`<i style="${j.done[s]?`background:${sv(s)}`:''}" title="${STEP_NAME[s]}"></i>`).join('')}</div>
+      <div class="small muted">${nextStepText(j,r)}${isDate(j.due)?` Promised ${fmt(j.due)}.`:''}</div>
+      ${r.status==='done'?'':`<div class="row small"><span class="grip" data-drag="order" data-id="${j.id}" title="Drag to change the order" aria-hidden="true">⠿</span><span class="muted">#${i+1} in line</span><span class="row" style="gap:4px;margin-left:auto"><button class="ibtn" data-act="up" data-id="${j.id}" aria-label="Move ${esc(j.name)} up" title="Move up">↑</button><button class="ibtn" data-act="down" data-id="${j.id}" aria-label="Move ${esc(j.name)} down" title="Move down">↓</button></span></div>`}</div>`}).join('');
+  const j=state.jobs.find(x=>x.id===selJob);
+  let detail=`<div class="panel"><p class="note">No jobs yet. Press "New job" to add one, or "Paste a list" to add many at once.</p></div>`;
+  if(j){const r=sch[j.id],P=`jobs.${j.id}`;
+    const steps=STEPS.filter(s=>applies(j,s)).map(s=>`<button class="step${j.done[s]?' done':''}${r.next&&r.next.s===s?' next':''}" data-act="toggle" data-id="${j.id}" data-stage="${s}" title="${j.done[s]?(j.autoDone&&j.autoDone[s]?'Marked done automatically when its day passed. Click to reopen':'Click to undo'):'Click to mark done'}"><i class="dot" style="background:${sv(s)}"></i>${s==='paint'?coatName(j):STEP_NAME[s]}</button>`).join('');
+    const stageRows=STEPS.filter(s=>s!=='install'&&(applies(j,s)||hasDays(j,s)||(s==='paint'&&!!coatOf(j)))).map(s=>{const x=r.stages.find(y=>y.s===s),del=s==='delivery';
+      return `<tr><td><i class="dot" style="background:${sv(s)};margin-right:8px"></i>${STEP_NAME[s]}</td><td>${j.done[s]?'Done':x?fmt(x.start)+(x.end!==x.start?' to '+fmt(x.end):''):'—'}</td>
+      <td><input type="date" id="jp-${s}" value="${esc(j.pins?.[s]||'')}" data-path="${P}.pins.${s}" aria-label="${STEP_NAME[s]} not before"></td>
+      <td>${del?`<input type="number" id="jh-${s}" step="0.5" min="0" placeholder="${deliveryAuto(j)}" value="${j.hours?.delivery??''}" data-path="${P}.hours.delivery" data-kind="opt" aria-label="Delivery hours"> <span class="small muted">hours</span>`
+        :`<input type="number" id="jd-${s}" step="0.25" min="0" placeholder="${autoDays(j,s)}" value="${j.days?.[s]??''}" data-path="${P}.days.${s}" data-kind="opt" aria-label="${STEP_NAME[s]} days"> <span class="small muted">days</span>`}</td></tr>`}).join('');
+    const mats=state.materials.map(m=>{const n=matQty(j,m);return n?`<li>${plural(n,m.unit)} of ${esc(m.name)}${j.done[m.step]?' <span class="muted">(used)</span>':''}</li>`:''}).join('');
+    const fx=j.fixups||[];
+    detail=`<div class="panel">
+      <div class="row spread"><h2>${esc(j.name)}</h2><span class="row">${j.example?'<span class="pill done">Example</span>':''}${pill(r.status)}</span></div>
+      <div class="row">${doneBtn(j,r,'big')}<span class="muted">${nextStepText(j,r)}</span>${!j.hold&&r.status!=='done'?`<button class="btn sm" data-act="putaway" data-id="${j.id}" style="margin-left:auto" title="Take it off the calendar until you place it again">Put away</button>`:''}</div>
+      ${!r.next?`<div class="fixbox"><b>Something not right after install?</b> Add a fix-up visit below and it goes on the install crew's calendar. To redo a step, click it under Steps to undo it.${j.install&&j.done.install?` <button class="btn sm" data-act="reopen" data-id="${j.id}">Reopen install</button>`:''}</div>`:''}
+      <div><h3 style="margin-bottom:8px">Steps (click to mark done or undo)</h3>${state.settings.autoDone!==false?'<p class="note" style="margin:-4px 0 8px">Steps mark themselves done once their day on the schedule has passed. If one isn\'t really finished, click it to reopen it.</p>':''}<div class="steps">${steps||'<span class="note">No steps for this job.</span>'}</div></div>
+      <div class="form">${jobFields(j,P)}</div>
+      <div style="display:grid;gap:8px"><div class="row spread"><h3>Fix-up visits</h3><button class="btn sm" data-act="addfix" data-id="${j.id}">+ Add fix-up visit</button></div>
+        ${fx.length?`<div class="scroll fixups"><table><thead><tr><th>What needs fixing</th><th>Time</th><th>Date (blank = next open day)</th><th>Done</th><th></th></tr></thead><tbody>${fx.map((f,k)=>{const x=r.fixes.find(y=>y.f.id===f.id);return `<tr class="${f.done?'isdone':''}">
+          <td><input type="text" id="fx-${f.id}-note" value="${esc(f.note)}" placeholder="e.g. adjust doors, replace panel" data-path="${P}.fixups.${f.id}.note" style="min-width:220px"></td>
+          <td><select id="fx-${f.id}-days" data-path="${P}.fixups.${f.id}.days" data-kind="num">${[[0.5,'Half day'],[1,'1 day'],[2,'2 days'],[3,'3 days']].map(([v,l])=>`<option value="${v}" ${num(f.days)===v?'selected':''}>${l}</option>`).join('')}</select></td>
+          <td><input type="date" id="fx-${f.id}-date" value="${esc(f.date||'')}" data-path="${P}.fixups.${f.id}.date">${x&&!f.date?`<div class="small muted">Planned ${fmt(x.start)}</div>`:''}</td>
+          <td><input type="checkbox" id="fx-${f.id}-done" ${f.done?'checked':''} data-path="${P}.fixups.${f.id}.done" data-kind="bool" aria-label="Fix-up done" style="width:20px;height:20px"></td>
+          <td><button class="btn sm" data-act="delfix" data-id="${j.id}" data-fx="${f.id}">Remove</button></td></tr>`}).join('')}</tbody></table></div>`:'<p class="note">None.</p>'}
+      </div>
+      ${HUB?jobFilesHTML(j):''}
+      <details class="sub" data-fold="jmats"${folds.jmats?' open':''}><summary>Materials this job uses</summary><ul style="margin:0;padding-left:20px">${mats||'<li class="muted">None estimated</li>'}</ul></details>
+      ${handSet(j)?`<div class="row"><span class="small muted">📌 ${esc(handSetText(j))}</span><button class="btn sm" data-act="clearpins" data-id="${j.id}">Let the schedule place it</button></div>`:''}
+      <details class="sub" data-fold="jdays"${folds.jdays?' open':''}><summary>Change the days and dates for each step</summary>
+        <p class="note">The grey number is the usual time for this size of job. Type your own number to change it for this job only, or clear the box to go back to the usual time. "Not before" holds a step until that day; dragging on the calendar fills it in.</p>
+        <div class="scroll"><table><thead><tr><th>Step</th><th>When</th><th>Not before</th><th>Time</th></tr></thead><tbody>${stageRows}</tbody></table></div></details>
+      <div class="row"><button class="btn danger${armed===j.id?' armed':''}" data-act="del" data-id="${j.id}">${armed===j.id?'Click again to delete':'Delete job'}</button></div>
+    </div>`;}
+  const fbtn=(v,l)=>`<button class="btn sm" data-act="filter" data-id="${v}" aria-pressed="${jf===v}">${l}</button>`;
+  return `<div class="jobs"><div class="jlist">
+    <div class="row spread"><h2>Jobs</h2><div class="row"><button class="btn" data-act="sortdue">Sort by promised date</button><button class="btn" data-act="bulk">Paste a list</button><button class="btn primary" data-act="new">+ New job</button></div></div>
+    ${cdBox()}
+    <input type="search" id="jobsearch" placeholder="Search jobs or customers" value="${esc(q)}" aria-label="Search jobs">
+    <div class="row">${fbtn('active','In progress')}${fbtn('finished','Finished')}${fbtn('all','All')}</div>
+    ${list?'<p class="small muted" style="margin:0">Jobs higher up get the shop first. Drag ⠿ to reorder.</p>':''}
+    ${list||'<p class="note">No jobs match.</p>'}</div>${bulkOpen?bulkHTML():detail}</div>`;
+}
+
+/* ---------- add many jobs at once ---------- */
+/* Paste a list, one job per line: name - client - type - size ("Dalton - ServPro - Finish - Small").
+   Type and size are matched by their words, so the parts can come in any order after the name. */
+let bulkOpen=false,bulkText='',bulkFix={},bulkDropEx=true;
+const SIZE_WORDS=[[/\b(very|extra|x)[\s-]*small\b|\bxs\b|\btiny\b/i,'xs',0],[/\b(very|extra|x)[\s-]*large\b|\bxl\b|\bhuge\b/i,'l',3],[/\bsmall\b|\bsm\b/i,'s',1],[/\bmed(ium)?\b|\bmid\b/i,'m',2],[/\blarge\b|\bbig\b|\blg\b/i,'l',3]];
+const TYPE_WORDS=[[/\bhouse|\bhome|whole/i,'house'],[/\bfinish/i,'finish'],[/\bparts?\b/i,'parts'],[/\bcustom/i,'custom'],[/\broom\b/i,'room'],[/\bkitchen/i,'kitchen'],
+  [/\bbath|vanit/i,'bath'],[/laundry|mud/i,'laundry'],[/built|entertain/i,'builtin'],[/shel/i,'shelves'],[/\bhood/i,'hood'],[/mantel/i,'mantel'],[/\bother\b/i,'other']];
+function sizeWord(s){for(const [re,id,rank] of SIZE_WORDS)if(re.test(s)&&s.trim().split(/\s+/).length<=3)return {id,rank};return null}
+function typeWord(s){
+  const w=s.trim().toLowerCase();if(!w)return null;
+  const exact=state.types.find(t=>t.name.toLowerCase()===w);if(exact)return exact.id;
+  for(const [re,id] of TYPE_WORDS)if(re.test(w)&&state.types.some(t=>t.id===id))return id;
+  return null;
+}
+/* the type's size closest to the word: same id or name first, otherwise by rank (very small, small, medium, large) */
+function sizeFor(t,sw){
+  if(!sw)return midSize(t);
+  const nm={xs:'very small',s:'small',m:'medium',l:'large'}[sw.id];
+  const hit=t.sizes.find(z=>z.id===sw.id)||t.sizes.find(z=>String(z.name||'').toLowerCase()===nm);if(hit)return hit;
+  const z=[...t.sizes].sort((a,b)=>num(a.max,9999)-num(b.max,9999));
+  return z[Math.min(z.length-1,Math.round(sw.rank/3*(z.length-1)))];
+}
+function parseJobList(text){
+  const rows=[],seen=new Set();
+  for(const line of String(text||'').split(/\r?\n/))for(let frag of line.split(/[.;,](?=\s|$)/)){
+    frag=frag.replace(/^\s*(\d+[.)]|[-*•])\s+/,'').trim();if(!frag)continue;
+    const f=frag.split(/\s+[-–—]\s+|\t+|\s*\|\s*/).map(x=>x.trim()).filter(Boolean);
+    if(f.length<2&&!typeWord(f[0]||''))continue;
+    let sw=null,si=-1;for(let k=f.length-1;k>0;k--){const s=sizeWord(f[k]);if(s){sw=s;si=k;break}}
+    let ty=null,ti=-1;for(let k=f.length-1;k>0;k--){if(k===si)continue;const t=typeWord(f[k]);if(t){ty=t;ti=k;break}}
+    const rest=f.filter((_,k)=>k!==si&&k!==ti);
+    const key=frag.toLowerCase();if(seen.has(key))continue;seen.add(key);
+    const fix=bulkFix[key]||{};
+    const type=state.types.some(t=>t.id===fix.type)?fix.type:ty||(state.types.find(t=>t.id==='custom')||state.types[state.types.length-1]).id;
+    const t=state.types.find(x=>x.id===type);
+    const size=t.sizes.some(z=>z.id===fix.size)?fix.size:sizeFor(t,sw).id;
+    const name=rest[0]||'Untitled job',client=rest[1]||'',extra=rest.slice(2).join(' - ');
+    const dup=state.jobs.some(j=>!j.example&&j.name.trim().toLowerCase()===name.toLowerCase());
+    rows.push({key,name,client,extra,type,size,guessType:!ty&&!fix.type,guessSize:!sw&&!fix.size,dup,
+      on:fix.on!=null?fix.on:!dup,painted:fix.painted!=null?fix.painted:false});
+  }
+  return rows;
+}
+function bulkPreview(){
+  const rows=parseJobList(bulkText),n=rows.filter(r=>r.on).length;
+  if(!rows.length)return `<p class="note">Your jobs will show here as you paste or type them.</p>`;
+  const tr=rows.map((r,i)=>{const t=state.types.find(x=>x.id===r.type);
+    const why=[r.dup?'Already on the schedule':'',r.guessType?'Type not recognised, check it':'',r.guessSize?'No size given, using the usual size':''].filter(Boolean).join('. ');
+    return `<tr class="${r.on?'':'off'}"><td><input type="checkbox" ${r.on?'checked':''} data-ui="bulk" data-key="${esc(r.key)}" data-k="on" aria-label="Add ${esc(r.name)}"></td>
+      <td><b>${esc(r.name)}</b>${r.extra?`<div class="small muted">${esc(r.extra)}</div>`:''}</td><td>${esc(r.client)}</td>
+      <td><select data-ui="bulk" data-key="${esc(r.key)}" data-k="type" aria-label="Type for ${esc(r.name)}">${state.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></td>
+      <td>${t.sizes.length>1?`<select data-ui="bulk" data-key="${esc(r.key)}" data-k="size" aria-label="Size for ${esc(r.name)}">${t.sizes.map(z=>`<option value="${z.id}" ${z.id===r.size?'selected':''}>${esc(z.name||'Usual')}</option>`).join('')}</select>`:'<span class="muted">One size</span>'}</td>
+      <td><input type="checkbox" ${r.painted?'checked':''} data-ui="bulk" data-key="${esc(r.key)}" data-k="painted" aria-label="${esc(r.name)} is painted"></td>
+      <td class="small ${why?'warnc':'muted'}">${why}</td></tr>`}).join('');
+  const ex=state.jobs.filter(j=>j.example).length;
+  return `<div class="scroll"><table class="bulkt"><thead><tr><th>Add</th><th>Job</th><th>Client</th><th>Type</th><th>Size</th><th>Painted</th><th></th></tr></thead><tbody>${tr}</tbody></table></div>
+    ${ex?`<label class="row small"><input type="checkbox" data-ui="bulkex" ${bulkDropEx?'checked':''} style="width:18px;height:18px"> Remove the ${plural(ex,'example job')} at the same time</label>`:''}
+    <div class="row"><button class="btn primary" data-act="bulkadd" ${n?'':'disabled'}>Add ${plural(n,'job')} to the schedule</button><span class="small muted">They go to the end of the line, in this order. Drag them on the calendar afterwards to set dates.</span></div>`;
+}
+function bulkHTML(){
+  return `<div class="panel bulk"><div class="row spread"><h2>Add many jobs at once</h2><button class="btn sm" data-act="bulkclose">Close</button></div>
+    <p class="note">Paste your list, one job per line: <b>name - client - type - size</b>. For example "Dalton - ServPro - Finish - Small". Types can be ${state.types.map(t=>esc(t.name)).join(', ')}. Sizes are very small, small, medium or large. Check the table, then add them.</p>
+    <textarea id="bulkbox" rows="7" placeholder="Dalton - ServPro - Finish - Small&#10;Nicole Adams - LARKUL - House - Medium">${esc(bulkText)}</textarea>
+    <div id="bulkprev" style="display:grid;gap:10px">${bulkPreview()}</div></div>`;
+}
+function bulkAdd(){
+  const rows=parseJobList(bulkText).filter(r=>r.on);if(!rows.length)return;
+  if(bulkDropEx)state.jobs=state.jobs.filter(j=>!j.example);
+  for(const r of rows){const t=state.types.find(x=>x.id===r.type),z=t.sizes.find(x=>x.id===r.size)||midSize(t);
+    const j=newDraft(t.id);j.name=r.name;j.customer=r.client;j.count=Math.max(1,Math.round(num(z.typical,1)));j.painted=r.painted?j.count:0;
+    if(r.extra)j.notes=r.extra;if(state.settings.autoPlace===false)j.hold=true;state.jobs.push(j)}
+  bulkOpen=false;bulkText='';bulkFix={};jf='active';selJob=null;
+  commit(`Added ${plural(rows.length,'job')}`);
+}
+
+/* Ayden's jobs as of Oct 30 2026, added once on the first start after this update so the schedule isn't empty.
+   Jobs already on the schedule (same name) are skipped, and Undo takes them all back out. */
+const STARTER_JOBS=`Dalton - ServPro - Finish - Small
+Aroche - ServPro - Finish - Small
+Nicole Adams - LARKUL - House - Medium
+Bird - HandyPro - House - Large
+Briggs - AWA - Finish - Small
+Walker - LARKUL - Finish - Small
+Waste Management - ServPro - Kitchen - Small
+Custom Vainty - ServPro - Room - Small
+Tyler Brooks - AWA - House - Large
+Jensen - AWA - Custom - Small
+Jamie Zogmaister - AWA - Custom - Small
+Stevens DWRS - AWA - Parts - Very small
+Harmony Harold - AWA - Parts - Very small
+Rod & Julie Rivers - AWA - Parts - Very small
+Belt Extra - WoodHaven/Justin - Parts - Small`;
+/* Ayden, Oct 28 2026: Jensen, Jamie Zogmaister and Harold Harmony (AWA) finish on Oct 30.
+   Their shop work is done; delivery and install land on Oct 30, or the whole job is done if that day has passed. */
+const FINISH_OCT30=['jensen','jamie zogmaister','harmony harold','harold harmony'],OCT30='2026-10-30';
+function applyOct30(){
+  if(state.settings.oct30||window.LARKUL_TEST)return [];
+  state.settings.oct30=TODAY;
+  const out=[];
+  for(const j of state.jobs){
+    if(j.example||!FINISH_OCT30.includes(j.name.trim().toLowerCase()))continue;
+    const site=['delivery','install']; /* Finish came after Ayden's note, so it counts as part of finishing that day */
+    for(const s of STEPS)if(applies(j,s)&&!j.done[s]&&(TODAY>OCT30||!site.includes(s)))toggleStage(j,s);
+    if(TODAY<=OCT30){j.pins={...(j.pins||{})};if(applies(j,'delivery'))j.pins.delivery=OCT30;if(j.install)j.installStart=OCT30}
+    out.push(j.name);
+  }
+  return out;
+}
+function addStarterJobs(){
+  if(state.settings.starterJobs||window.LARKUL_TEST)return 0; /* the app's own tests start from the example jobs */
+  state.settings.starterJobs=TODAY;
+  const rows=parseJobList(STARTER_JOBS).filter(r=>!r.dup);if(!rows.length)return 0;
+  lastJSON=JSON.stringify(state);
+  bulkText=STARTER_JOBS;bulkDropEx=true;bulkAdd();bulkText='';
+  return rows.length;
+}
+
+/* ---------- jobs sent from Cabinet Designer (hub only) ---------- */
+/* Cabinet Designer's "Send to Scheduler" writes a small file per job to Files > Schedules > From Cabinet Designer:
+   counts by room. Each new or re-sent file is offered here once; adding it makes a job with one part per room. */
+const CD_DIR='Schedules/From Cabinet Designer';
+let cdInbox=[],cdSeen=null,cdBusy=false,cdAt=0;
+async function loadInbox(){
+  if(!HUB||cdBusy||Date.now()-cdAt<3000)return;cdBusy=true;cdAt=Date.now();
+  try{
+    if(!cdSeen){try{cdSeen=(await Hub.storage.get('cdSeen'))||{}}catch(e){cdSeen={}}if(typeof cdSeen!=='object')cdSeen={}}
+    let list=[];try{list=(await Hub.files.list(CD_DIR))||[]}catch(e){list=[]}
+    const out=[];
+    for(const f of list.filter(f=>f.type!=='dir'&&f.type!=='folder'&&/\.json$/i.test(f.path||f.name||''))){
+      try{/* no-store: a re-sent job keeps its file name, so a cached copy would hide the new counts */
+        const d=JSON.parse(await (await fetch(Hub.files.url(f.path)+'&_='+Date.now(),{cache:'no-store'})).text());if(d&&d.format==='larkul.schedule-job'&&d.job&&Array.isArray(d.rooms))out.push({path:f.path,d})}catch(e){}
+    }
+    const before=JSON.stringify(cdPending().map(x=>x.path+x.d.sent));
+    cdInbox=out;
+    if(state.settings.cdAuto!==false&&cdPending().length){
+      const done=cdPending().map(x=>cdApply(x,true));
+      commit(`${esc(done.join(', '))} from Cabinet Designer`);render();
+    }else if(JSON.stringify(cdPending().map(x=>x.path+x.d.sent))!==before)render();
+  }finally{cdBusy=false}
+}
+const cdPending=()=>cdInbox.filter(x=>cdSeen&&cdSeen[x.path]!==x.d.sent);
+const cdMatch=x=>state.jobs.find(j=>j.cd===x.path)||state.jobs.find(j=>!j.example&&j.name.trim().toLowerCase()===String(x.d.job.name||'').trim().toLowerCase());
+function cdSeenSet(x){cdSeen[x.path]=x.d.sent;try{Hub.storage.set('cdSeen',cdSeen)}catch(e){}}
+/* one part per room that has cabinets; the room's name picks the type (Kitchen, Master bath...), otherwise Room */
+function cdParts(d){
+  const rooms=d.rooms.filter(r=>num(r.cabinets)>0);
+  return (rooms.length?rooms:[{name:'',cabinets:1,painted:0}]).map(r=>{const t=typeWord(r.name||'')||(state.types.some(x=>x.id==='room')?'room':state.types[state.types.length-1].id);
+    const c=Math.max(1,Math.round(num(r.cabinets)));return {type:t,count:c,painted:Math.min(c,Math.max(0,Math.round(num(r.painted))))}});
+}
+function cdApply(x,quiet){
+  const d=x.d,ps=cdParts(d),old=cdMatch(x),j=old||newDraft(ps[0].type);
+  const counts=Object.fromEntries(COUNT_KEYS.filter(k=>d.totals&&d.totals[k]!=null).map(k=>[k,Math.max(0,Math.round(num(d.totals[k])))]));
+  Object.assign(j,{type:ps[0].type,count:ps[0].count,painted:ps[0].painted,extra:ps.slice(1).map(p=>({id:uid('p'),...p})),counts,cd:x.path});
+  if(!old){j.name=d.job.name||'Untitled job';j.customer=d.job.customer||'';const t=typeOf(j);j.deliver=!!t.deliver;j.install=!!t.install;
+    j.notes=[d.job.notes,'From Cabinet Designer'].filter(Boolean).join('. ');if(state.settings.autoPlace===false)j.hold=true;state.jobs.push(j)}
+  cdSeenSet(x);if(quiet)return (old?'Updated ':'Added ')+j.name;selJob=j.id;
+  commit(old?`Updated ${esc(j.name)} from Cabinet Designer`:`Added ${esc(j.name)} from Cabinet Designer`);
+}
+function cdText(x){const t=x.d.totals||{},rooms=x.d.rooms.filter(r=>num(r.cabinets)>0).map(r=>esc(r.name)).join(', ');
+  return `${plural(num(t.cabinets),'cabinet')}${num(t.doors)?`, ${plural(num(t.doors),'door')}`:''}${num(t.drawers)?`, ${plural(num(t.drawers),'drawer')}`:''}${rooms?` (${rooms})`:''}`}
+function cdBox(){
+  const p=cdPending();if(!p.length)return '';
+  return `<div class="cdbox"><h3>From Cabinet Designer</h3>${p.map(x=>{const old=cdMatch(x);return `<div class="cdrow"><div><b>${esc(x.d.job.name||'Untitled job')}</b>${x.d.job.customer?` · ${esc(x.d.job.customer)}`:''}<div class="small muted">${cdText(x)}${old?'. Already on the schedule.':''}</div></div>
+    <span class="row" style="gap:6px"><button class="btn sm primary" data-act="cdadd" data-id="${esc(x.path)}">${old?'Update counts':'Add to schedule'}</button><button class="btn sm" data-act="cdskip" data-id="${esc(x.path)}">Dismiss</button></span></div>`}).join('')}</div>`;
+}
+
+/* ---------- job files (hub only) ---------- */
+let filesCache={},upState={};
+const safeName=s=>String(s||'Job').replace(/[\\/:*?"<>|#%]+/g,' ').replace(/\s+/g,' ').trim().slice(0,60)||'Job';
+function jobFolder(j){
+  if(j.folder)return j.folder;
+  const base=`${LIB}/${safeName(j.name)}`,taken=new Set(state.jobs.map(x=>x.folder).filter(Boolean));
+  let f=base,n=2;while(taken.has(f))f=`${base} ${n++}`;
+  return f;
+}
+const kb=n=>n>=1e9?(n/1e9).toFixed(1)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':Math.max(1,Math.round(n/1e3))+' KB';
+async function loadFiles(folder){
+  filesCache[folder]={loading:true,list:filesCache[folder]?.list||[]};
+  try{const list=await Hub.files.list(folder,{recursive:true});filesCache[folder]={list:(list||[]).filter(f=>f.type!=='dir'&&f.type!=='folder')}}
+  catch(e){filesCache[folder]={list:[]}}
+  render();
+}
+function jobFilesHTML(j){
+  const folder=j.folder,c=folder?filesCache[folder]:null;
+  if(folder&&!c)setTimeout(()=>loadFiles(folder),0);
+  const up=upState[j.id];
+  const rows=[...(c?c.list:[]).map(f=>({name:f.name,path:f.path,size:f.size,own:true})),...(j.links||[]).map(f=>({...f,own:false}))];
+  const list=rows.map(f=>`<li class="frow"><a href="${esc(Hub.files.url(f.path))}" target="_blank" rel="noopener">${esc(f.name)}</a>
+    <span class="small muted">${f.own?(f.size!=null?kb(num(f.size)):''):'linked from '+esc(f.path.split('/').slice(0,-1).join('/')||'Files')}</span>
+    <button class="btn sm${armed==='f'+f.path?' danger armed':''}" data-act="${f.own?'delfile':'unlink'}" data-id="${j.id}" data-path="${esc(f.path)}">${f.own?(armed==='f'+f.path?'Click again to delete':'Delete'):'Unlink'}</button></li>`).join('');
+  return `<div style="display:grid;gap:8px"><div class="row spread"><h3>Drawings and files</h3><span class="row">
+      <label class="btn sm" role="button" tabindex="0">+ Add files<input type="file" multiple hidden data-ui="jobfiles" data-id="${j.id}"></label>
+      <button class="btn sm" data-act="linkfile" data-id="${j.id}">Pick from Files</button>
+      ${rows.length?`<button class="btn sm primary" data-act="jobread" data-id="${j.id}" ${aiBusy?'disabled':''}>${aiBusy==='job:'+j.id?'Claude is reading…':'Read with Claude'}</button>`:''}</span></div>
+    ${aiErr['job:'+j.id]?`<p class="note err">${esc(aiErr['job:'+j.id])}</p>`:''}
+    ${jobProposal[j.id]?proposalHTML(j,jobProposal[j.id]):''}
+    ${up?`<p class="note" id="up-${j.id}">Uploading ${esc(up.name)}… ${Math.round(up.p*100)}%</p>`:''}
+    ${rows.length?`<ul class="files">${list}</ul>`:c&&c.loading?'<p class="note">Loading files…</p>':'<p class="note">Drawings, photos, quotes and anything else for this job. They go in the hub\'s Files tab under '+esc(folder||jobFolder(j))+'.</p>'}</div>`;
+}
+async function uploadJobFiles(j,files){
+  if(!files||!files.length)return;
+  if(!j.folder){j.folder=jobFolder(j);commit()}
+  const folder=j.folder,names=[...files].map(f=>f.name);
+  upState[j.id]={name:names.length>1?plural(names.length,'file'):names[0],p:0};render();
+  try{
+    try{await Hub.files.mkdir(LIB)}catch(_){}try{await Hub.files.mkdir(folder)}catch(_){}
+    await Hub.files.upload(files,folder,p=>{const u=upState[j.id];if(!u)return;u.p=p;const el=document.getElementById('up-'+j.id);if(el)el.textContent=`Uploading ${u.name}… ${Math.round(p*100)}%`});
+    toast(`Added ${upState[j.id].name} to ${esc(j.name)}`);
+  }catch(e){console.error(e);toast('Upload failed. Is the hub still running?')}
+  delete upState[j.id];
+  await loadFiles(folder);
+}
+
+/* ---------- hub reminders ---------- */
+/* each date the schedule cares about gets one reminder; when a date moves the old reminder is completed and a new one added */
+let remMap=null,remTimer=null,remBusy=Promise.resolve();
+const at=(d,h)=>{const x=parse(d);x.setHours(h,0,0,0);return x.toISOString()};
+function wantedReminders(){
+  const out={};if(!state.settings.hubReminders)return out;
+  const sch=schedule(),all=state.jobs;
+  /* example jobs never make reminders, so leave them out of the material count too */
+  let mats;try{state.jobs=all.filter(j=>!j.example);mats=projectMaterials(schedule())}finally{state.jobs=all}
+  for(const j of state.jobs){
+    if(j.example)continue;const r=sch[j.id];if(!r||r.status==='done')continue;
+    const who=j.customer?` for ${j.customer}`:'';
+    if(r.install&&!j.done.install)out['install:'+j.id]={title:`Install starts: ${j.name}`,due:at(r.install.start,7),notes:`Install${who}, ${fmt(r.install.start)}${r.install.end!==r.install.start?' to '+fmt(r.install.end):''}. From the shop schedule.`};
+    if(isDate(j.due)&&r.next)out['due:'+j.id]={title:`Promised ${j.install?'install':'ready'} date: ${j.name}`,due:at(j.due,8),notes:`${r.status==='late'?'Running late on the schedule. ':''}Promised${who}. From the shop schedule.`};
+    for(const x of r.fixes)out['fix:'+x.f.id]={title:`Fix-up visit: ${j.name}`,due:at(x.start,7),notes:`${x.f.note||'Fix-up'}${who}. From the shop schedule.`};
+  }
+  for(const b of state.bills||[]){const x=billDates(b,addDays(TODAY,-30),addDays(TODAY,45)).find(d=>!billPaid(b,d));
+    if(x)out['bill:'+b.id]={title:`Bill due: ${b.name||'Bill'} ${money(b.amount)}`,due:at(x,8),notes:`${b.notes?b.notes+'. ':''}From the shop schedule.`}}
+  for(const x of mats)if(x.status!=='ok'&&x.orderBy)out['mat:'+x.m.id]={title:`Order ${plural(x.orderQty,x.m.unit)} of ${x.m.name}`,due:at(x.orderBy,8),notes:`${x.status==='short'?'Not enough for scheduled jobs':'Running low'}. Takes ${plural(num(x.m.lead),'day')} to arrive. From the shop schedule.`};
+  return out;
+}
+function syncReminders(){if(!HUB)return;clearTimeout(remTimer);remTimer=setTimeout(()=>{remBusy=remBusy.then(doSync).catch(e=>console.warn('reminders',e))},1500)}
+async function doSync(){
+  if(!remMap){try{remMap=(await Hub.storage.get('reminders'))||{}}catch(e){remMap={}}if(typeof remMap!=='object')remMap={}}
+  const want=wantedReminders();let changed=false,listed=null;
+  const idOf=async(old)=>{if(old.id)return old.id;listed=listed||await Hub.reminders.list();const m=(listed||[]).find(x=>x.title===old.title&&x.due===old.due&&!x.done&&!x.completed);return m&&m.id};
+  const drop=async k=>{const old=remMap[k];try{const id=await idOf(old);if(id)await Hub.reminders.complete(id)}catch(e){}delete remMap[k];changed=true};
+  for(const k of Object.keys(remMap))if(!want[k]||want[k].due!==remMap[k].due||want[k].title!==remMap[k].title)await drop(k);
+  for(const [k,w] of Object.entries(want)){
+    if(remMap[k])continue;
+    const r=await Hub.reminders.add(w);
+    remMap[k]={id:r&&(r.id||(r.reminder&&r.reminder.id))||null,due:w.due,title:w.title};changed=true;
+  }
+  if(changed)await Hub.storage.set('reminders',remMap);
+}
+async function pickBackup(){
+  const f=await Hub.pickFile();if(!f)return;
+  try{importText=await Hub.files.read(f.path,'text');armed=null;render(true);toast(`Loaded ${esc(f.name)}. Press "Bring in pasted data" to use it.`)}catch(e){toast('Could not read that file.')}
+}
+
+/* ---------- Claude (hub only): reading documents and the "Ask Claude" chat ---------- */
+let aiBusy=null,aiErr={},jobProposal={},draftDocs=[],draftUp=null,aiStatus=null,aiSettings={engine:'subscription',claudePath:'',notes:''};
+let chat=[],chatText='';
+const saveAi=()=>Hub.storage.set('ai',aiSettings).catch(()=>{});
+const saveChat=()=>Hub.storage.set('chat',chat.slice(-40)).catch(()=>{});
+async function loadAiStatus(recheck){
+  try{aiStatus=await Hub.api('/ai/status'+(recheck?'?recheck=1':''))}catch(e){aiStatus={configured:false,problem:'The Schedule backend is not running. Press Rescan in Manage extensions, or restart the hub.'}}
+  render();
+}
+const typesForAi=()=>state.types.map(t=>({id:t.id,name:t.name,unit:t.unit,sizes:t.sizes.map(z=>`${z.name||'one size'} up to ${num(z.max,9999)>=9999?'any number':num(z.max)}`).join(', ')}));
+const levelsForAi=()=>(state.settings.complexity||[]).map(x=>({id:x.id,name:x.name,pct:num(x.pct)}));
+
+/* a Claude reading turned into job fields; fill=true for a new job, where everything comes from the documents */
+function applyRead(j,r,fill){
+  const ok=(r.parts||[]).filter(p=>state.types.some(t=>t.id===p.type)&&num(p.count)>0);
+  if(ok.length){const [m,...rest]=ok;j.type=m.type;j.count=Math.round(num(m.count));j.painted=Math.min(j.count,Math.round(num(m.painted)));
+    j.extra=rest.map(p=>({id:uid('p'),type:p.type,count:Math.round(num(p.count)),painted:Math.min(Math.round(num(p.count)),Math.round(num(p.painted)))}))}
+  if(r.counts)j.counts=Object.fromEntries(COUNT_KEYS.map(k=>[k,Math.max(0,Math.round(num(r.counts[k])))]));
+  if((state.settings.complexity||[]).some(x=>x.id===r.complexity))j.complexity=r.complexity;
+  if(fill||!j.name)j.name=j.name||r.name||'';
+  if(fill||!j.customer)j.customer=j.customer||r.customer||'';
+  if(isDate(r.due)&&(fill||!j.due))j.due=r.due;
+  if(fill){j.deliver=r.deliver!==false;j.install=r.install!==false}
+  const add=[r.notes,r.complexityReason?`Complexity: ${r.complexityReason}`:''].filter(Boolean).join('\n');
+  if(add&&!String(j.notes||'').includes(add))j.notes=[j.notes,add].filter(Boolean).join('\n');
+}
+function readList(r){
+  const parts=(r.parts||[]).map(p=>{const t=state.types.find(x=>x.id===p.type);return `<li>${esc(t?t.name:p.type)}: ${esc(plural(num(p.count),t?t.unit:'piece'))}${num(p.painted)?`, ${num(p.painted)} painted`:''}${p.note?` <span class="muted">(${esc(p.note)})</span>`:''}</li>`}).join('');
+  const c=r.counts||{},lv=(state.settings.complexity||[]).find(x=>x.id===r.complexity);
+  return `${r.summary?`<div>${esc(r.summary)}</div>`:''}<ul>${parts}</ul>
+    <div class="small">${COUNT_KEYS.map(k=>`${COUNT_NAME[k]} <b>${num(c[k])}</b>`).join(' · ')}</div>
+    <div class="small">Complexity: <b>${esc(lv?lv.name:r.complexity)}</b>${r.complexityReason?` (${esc(r.complexityReason)})`:''}${isDate(r.due)?` · Promised ${fmt(r.due)}`:''}</div>
+    ${(r.questions||[]).length?`<div class="small"><b>Claude's questions</b><ul>${r.questions.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}`;
+}
+function proposalHTML(j,r){
+  return `<div class="proposal"><b>What Claude found</b>${readList(r)}
+    <div class="row"><button class="btn sm primary" data-act="jobapply" data-id="${j.id}">Use this for the job</button><button class="btn sm" data-act="jobdismiss" data-id="${j.id}">Dismiss</button>
+    <span class="small muted">Replaces the job's parts, totals and complexity. You can undo it.</span></div></div>`;
+}
+async function aiRead(paths,job){
+  return Hub.api('/ai/read',{method:'POST',json:{paths,types:typesForAi(),levels:levelsForAi(),today:TODAY,job}});
+}
+async function readJob(j){
+  if(aiBusy)return;
+  const own=(filesCache[j.folder]?.list||[]).map(f=>f.path),paths=[...own,...(j.links||[]).map(f=>f.path)];
+  if(!paths.length){toast('Add a document to this job first.');return}
+  aiBusy='job:'+j.id;delete aiErr[aiBusy];delete jobProposal[j.id];render();
+  try{jobProposal[j.id]=await aiRead(paths,{name:j.name,customer:j.customer,notes:j.notes})}catch(e){aiErr['job:'+j.id]=e.message}
+  aiBusy=null;render();
+}
+
+function draftDocsHTML(){
+  const k='draft',list=draftDocs.map(d=>`<li>${esc(d.name)} <button class="btn sm" data-act="draftdoc" data-path="${esc(d.path)}" aria-label="Remove ${esc(d.name)}">Remove</button></li>`).join('');
+  return `<div class="aibox"><div><h3 style="margin:0">Start from documents</h3>
+    <p class="note" style="margin:4px 0 0">Add an order sheet, quote, drawings or photos. Claude reads them, fills in the job below and the schedule shows when it can be done. You can change anything after.</p></div>
+    <div class="row"><label class="btn" role="button" tabindex="0">+ Add files<input type="file" multiple hidden data-ui="draftfiles"></label>
+      <button class="btn" data-act="draftpick">Pick from Files</button>
+      <button class="btn primary" data-act="draftread" ${!draftDocs.length||aiBusy||draftUp?'disabled':''}>${aiBusy===k?'Claude is reading…':'Read with Claude'}</button></div>
+    ${draftUp?`<p class="note" id="up-draft">Uploading ${esc(draftUp.name)}… ${Math.round(draftUp.p*100)}%</p>`:''}
+    ${list?`<ul>${list}</ul>`:''}
+    ${aiErr[k]?`<p class="note err">${esc(aiErr[k])}</p>`:''}
+    ${draft&&draft.aiSummary?`<div class="proposal"><b>Claude filled in the job below.</b>${readList(draft.aiSummary)}</div>`:''}</div>`;
+}
+let draftFolder=null;
+async function uploadDraftDocs(files){
+  draftFolder=draftFolder||`${LIB}/Incoming/${new Date().toISOString().slice(0,16).replace(/[T:]/g,'-')}`;
+  const names=[...files].map(f=>f.name);
+  draftUp={name:names.length>1?plural(names.length,'file'):names[0],p:0};render();
+  try{
+    for(const d of [LIB,LIB+'/Incoming',draftFolder])try{await Hub.files.mkdir(d)}catch(_){}
+    await Hub.files.upload(files,draftFolder,p=>{if(!draftUp)return;draftUp.p=p;const el=document.getElementById('up-draft');if(el)el.textContent=`Uploading ${draftUp.name}… ${Math.round(p*100)}%`});
+    const listed=await Hub.files.list(draftFolder);
+    for(const f of listed||[])if(f.type!=='folder'&&f.type!=='dir'&&!draftDocs.some(x=>x.path===f.path))draftDocs.push({name:f.name,path:f.path,own:true});
+  }catch(e){console.error(e);toast('Upload failed. Is the hub still running?')}
+  draftUp=null;render();
+}
+async function readDraft(){
+  if(aiBusy||!draftDocs.length)return;
+  aiBusy='draft';delete aiErr.draft;render();
+  try{
+    const r=await aiRead(draftDocs.map(d=>d.path),draft?{name:draft.name,customer:draft.customer,notes:draft.notes}:null);
+    if(!draft){const t=(r.parts||[]).find(p=>state.types.some(x=>x.id===p.type));draft=newDraft(t?t.type:state.types[0].id)}
+    applyRead(draft,r,true);draft.aiSummary=r;
+  }catch(e){aiErr.draft=e.message}
+  aiBusy=null;render();
+}
+/* documents read for a new job move into that job's folder; linked ones stay where they are */
+async function attachDraftDocs(j,docs){
+  const linked=docs.filter(d=>!d.own),own=docs.filter(d=>d.own);
+  if(linked.length)j.links=[...(j.links||[]),...linked.map(d=>({name:d.name,path:d.path}))];
+  if(own.length&&draftFolder){
+    const target=jobFolder(j);
+    try{await Hub.files.rename(draftFolder,target);j.folder=target}catch(e){j.folder=draftFolder}
+  }
+  draftFolder=null;commit();if(j.folder)loadFiles(j.folder);else render();
+}
+
+/* the schedule as Claude sees it in the chat */
+function scheduleForAi(){
+  const sch=schedule(),span=x=>x.done?'done':`${x.start} to ${x.end}`;
+  return {today:TODAY,saturdaysAreWorkdays:!!state.settings.saturdays,installCrews:num(state.settings.installCrews,1),paintDryDays:num(state.settings.paintDryDays),
+    stations:state.stations.map(s=>({id:s.id,name:s.name,hoursPerDay:num(s.hoursPerDay)})),
+    complexityLevels:levelsForAi(),
+    jobTypes:state.types.map(t=>({id:t.id,name:t.name,unit:t.unit,sizes:t.sizes.map(z=>({name:z.name,upTo:num(z.max,9999),days:z.days,installDays:z.installDays}))})),
+    daysClosed:(state.settings.daysOff||[]).filter(d=>d>=TODAY),
+    jobs:state.jobs.map((j,i)=>{const r=sch[j.id];return {id:j.id,placeInLine:i+1,name:j.name,customer:j.customer,example:!!j.example,status:r.status,
+      parts:parts(j).map(p=>({type:p.type,count:p.count,painted:p.painted})),totals:j.counts||{},complexity:levelOf(j).id,
+      promisedDate:j.due||'',deliver:!!j.deliver,install:!!j.install,installStartSetByHand:j.installStart||'',firstDaySetByHand:j.start||'',stepNotBeforeSetByHand:j.pins||{},installDaysSetByHand:j.installDays??'',stepDaysSetByHand:j.days||{},
+      done:STEPS.filter(s=>j.done[s]),plan:Object.fromEntries(r.stages.map(x=>[x.s,span(x)])),
+      daysPerStep:Object.fromEntries(['cnc','edge','paint','assembly'].map(s=>[s,stepDays(j,s)])),
+      fixups:(j.fixups||[]).map(f=>{const x=r.fixes.find(y=>y.f.id===f.id);return {note:f.note,days:f.days,date:f.date,done:f.done,planned:x?x.start:''}}),
+      notes:String(j.notes||'').slice(0,400)}})};
+}
+async function sendChat(){
+  const text=chatText.trim();if(!text||aiBusy)return;
+  chat.push({role:'user',text});chatText='';aiBusy='chat';render(true);scrollChat();
+  try{
+    const r=await Hub.api('/ai/chat',{method:'POST',json:{messages:chat.filter(m=>!m.error).map(m=>({role:m.role,text:m.text+(m.applied?'\n(The owner applied these changes.)':'')})),schedule:scheduleForAi()}});
+    chat.push({role:'assistant',text:r.reply||'',changes:(r.changes||[]).map(c=>({...c,on:true}))});
+  }catch(e){chat.push({role:'assistant',text:e.message,error:true})}
+  aiBusy=null;saveChat();render(true);scrollChat();
+}
+function scrollChat(){const m=document.querySelector('.msgs');if(m)m.scrollTop=m.scrollHeight;const b=document.getElementById('chatbox');if(b&&tab==='claude')b.focus({preventScroll:true})}
+function viewClaude(){
+  const tries=['Beckstead is done with assembly','Push Jensen\'s install to next Tuesday','We\'re closed this Friday','Add a 2-day fix-up for the Miller kitchen','What\'s installing next week?'];
+  const msgs=chat.map((m,i)=>m.role==='user'?`<div class="msg me"><div class="t">${esc(m.text)}</div></div>`
+    :`<div class="msg cl"${m.error?' style="color:var(--bad)"':''}><div class="t">${esc(m.text)}</div>${(m.changes||[]).length?`<ul class="changes">${m.changes.map((c,k)=>`<li><label><input type="checkbox" data-ui="chg" data-n="${i}" data-k="${k}" ${c.on?'checked':''} ${m.applied?'disabled':''}>${esc(c.label||c.op)}</label></li>`).join('')}</ul>
+      <div class="row" style="margin-top:8px">${m.applied?`<span class="pill ok">Applied</span>${m.skipped?` <span class="small muted">${esc(m.skipped)}</span>`:''}`:`<button class="btn sm primary" data-act="chatapply" data-n="${i}">Apply checked changes</button>`}</div>`:''}</div>`).join('');
+  const status=aiStatus&&!aiStatus.configured?`<p class="note err">${esc(aiStatus.problem||'Claude is not set up yet.')} See Settings &gt; Claude.</p>`:'';
+  if(!aiStatus)setTimeout(()=>loadAiStatus(false),0);
+  return `<section class="panel"><div class="row spread"><h2>Ask Claude</h2>${chat.length?'<button class="btn sm" data-act="chatclear">Start over</button>':''}</div>
+    <p class="note">Tell Claude what changed in plain words. It suggests the changes, and nothing happens until you press Apply. Undo works on them too.</p>${status}
+    <div class="msgs" aria-live="polite">${msgs||`<div class="row">${tries.map(t=>`<button class="btn sm" data-act="chattry" data-text="${esc(t)}">${esc(t)}</button>`).join('')}</div>`}
+      ${aiBusy==='chat'?'<div class="msg cl muted">Claude is thinking…</div>':''}</div>
+    <div class="chatin"><textarea id="chatbox" placeholder="e.g. Beckstead finishes on the 28th" aria-label="Message to Claude">${esc(chatText)}</textarea>
+      <button class="btn primary" data-act="chatsend" ${aiBusy?'disabled':''}>Send</button></div></section>`;
+}
+document.addEventListener('change',e=>{const el=e.target;if(el.dataset.ui!=='chg')return;const m=chat[+el.dataset.n];if(m&&m.changes[+el.dataset.k])m.changes[+el.dataset.k].on=el.checked;saveChat()});
+/* one proposed change from the chat; returns an error message when it can't be done */
+function applyChange(c,ctx){
+  const J=state.jobs,n=num(c.number);
+  const job=c.job==='new'?ctx.newJob:J.find(j=>j.id===c.job);
+  const needJob=!['add_job','add_day_off','remove_day_off','set_station_hours'].includes(c.op);
+  if(needJob&&!job)return `no job ${c.job}`;
+  const partOf=t=>job.type===t?job:(job.extra||[]).find(p=>p.type===t);
+  switch(c.op){
+    case 'set_step_days':if(!['cnc','edge','paint','assembly','finish'].includes(c.step))return 'unknown step';job.days=job.days||{};if(n<0)delete job.days[c.step];else job.days[c.step]=n;return;
+    case 'set_delivery_hours':job.hours=job.hours||{};if(n<0)delete job.hours.delivery;else job.hours.delivery=n;return;
+    case 'set_install_days':job.installDays=n<0?'':n;return;
+    case 'set_install_start':job.installStart=isDate(c.date)?c.date:'';delete job.installDates;return;
+    case 'set_step_start':{if(c.step==='install'){job.installStart=isDate(c.date)?c.date:'';delete job.installDates;return}
+      if(!c.step){job.start=isDate(c.date)?c.date:'';return}
+      if(!['cnc','edge','paint','assembly','delivery','finish'].includes(c.step))return 'unknown step';
+      job.pins=job.pins||{};if(isDate(c.date))job.pins[c.step]=c.date;else delete job.pins[c.step];return}
+    case 'set_promised_date':job.due=isDate(c.date)?c.date:'';return;
+    case 'set_complexity':if(!(state.settings.complexity||[]).some(x=>x.id===c.text))return 'unknown complexity';job.complexity=c.text;return;
+    case 'mark_step':if(!STEPS.includes(c.step))return 'unknown step';if(!!job.done[c.step]!==!!c.flag)toggleStage(job,c.step);return;
+    case 'move_job':{const i=J.indexOf(job);J.splice(i,1);J.splice(Math.max(0,Math.min(J.length,Math.round(n)-1)),0,job);return}
+    case 'set_part':{if(!state.types.some(t=>t.id===c.text))return 'unknown job type';const p=partOf(c.text),cnt=Math.max(0,Math.round(n));
+      if(p===job){if(cnt>0){job.count=cnt;job.painted=Math.min(job.painted,cnt)}return}
+      if(p){if(cnt>0){p.count=cnt;p.painted=Math.min(p.painted,cnt)}else job.extra=job.extra.filter(x=>x!==p);return}
+      if(cnt>0)(job.extra=job.extra||[]).push({id:uid('p'),type:c.text,count:cnt,painted:0});return}
+    case 'set_painted':{const p=partOf(c.text);if(!p)return 'no such part';p.painted=Math.max(0,Math.min(p.count,Math.round(n)));return}
+    case 'set_flag':if(c.step!=='deliver'&&c.step!=='install')return 'unknown setting';job[c.step]=!!c.flag;return;
+    case 'add_job':{const first=ctx.batch.find(x=>x.op==='set_part'&&x.job==='new'&&state.types.some(t=>t.id===x.text));
+      const j=newDraft(first?first.text:state.types[0].id);delete j.rush;j.name=c.text||'New job';if(isDate(c.date))j.due=c.date;
+      if(first&&num(first.number)>0)j.count=Math.round(num(first.number));J.push(j);ctx.newJob=j;return}
+    case 'rename_job':if(c.text)job.name=c.text;return;
+    case 'add_note':if(c.text)job.notes=[job.notes,c.text].filter(Boolean).join('\n');return;
+    case 'add_fixup':(job.fixups=job.fixups||[]).push({id:uid('f'),note:c.text||'',days:[0.5,1,2,3].includes(n)?n:Math.max(0.5,n||1),date:isDate(c.date)?c.date:'',done:false});return;
+    case 'add_day_off':if(!isDate(c.date))return 'bad date';if(!state.settings.daysOff.includes(c.date))state.settings.daysOff.push(c.date);return;
+    case 'remove_day_off':state.settings.daysOff=state.settings.daysOff.filter(d=>d!==c.date);return;
+    case 'set_station_hours':{const s=station(c.step);if(!s||n<=0)return 'unknown station';s.hoursPerDay=n;return}
+  }
+  return 'unknown change';
+}
+function applyChat(i){
+  const m=chat[i];if(!m||m.applied)return;
+  const batch=(m.changes||[]).filter(c=>c.on),ctx={batch,newJob:null},bad=[];
+  for(const c of batch){const err=applyChange(c,ctx);if(err)bad.push(`${c.label||c.op} (${err})`)}
+  m.applied=true;m.skipped=bad.length?`Skipped: ${bad.join('; ')}`:'';
+  saveChat();commit(`Applied ${plural(batch.length-bad.length,'change')} from Claude`);
+}
+
+function claudeSettingsHTML(){
+  if(!aiStatus)setTimeout(()=>loadAiStatus(false),0);
+  const s=aiStatus,api=aiSettings.engine==='api';
+  const line=!s?'Checking…':s.configured?`✓ Ready${s.engine==='api'?' (API key)':` (Claude Code ${esc(s.cli?.version||'')})`}`:esc(s.problem||'Not set up');
+  return `${foldStart('claude','Claude',s&&s.configured?'Ready':'Set up how Claude reads documents')}
+    <p class="note">Claude reads job documents and answers in Ask Claude. It works the same way as Bid Reader: by default through Claude Code on this PC, signed in with your Claude plan, so there's no API key and no charge per document.</p>
+    <p class="${s&&!s.configured?'note err':'note'}"><b>${line}</b> <button class="btn sm" data-act="aicheck">Check again</button></p>
+    <div class="form">
+      <label class="f">Use<select data-ui="ai" data-k="engine"><option value="subscription" ${api?'':'selected'}>Claude Code on this PC (your Claude plan)</option><option value="api" ${api?'selected':''}>Anthropic API key</option></select></label>
+      ${api?`<label class="f">API key<input type="password" id="aikey" placeholder="${s&&s.api&&s.api.key?'Saved. Type a new one to replace it':'sk-ant-…'}" autocomplete="off"></label>
+        <div class="f" style="align-content:end"><button class="btn" data-act="aikey">Save key</button></div>`
+      :`<label class="f wide">Where claude.exe is <span class="small muted">(leave blank unless it isn't found)</span><input type="text" data-ui="ai" data-k="claudePath" value="${esc(aiSettings.claudePath||'')}" placeholder="C:\\Users\\you\\.local\\bin\\claude.exe"></label>`}
+      <label class="f wide">Notes for Claude <span class="small muted">(how your shop counts, door styles that take longer…)</span><textarea data-ui="ai" data-k="notes">${esc(aiSettings.notes||'')}</textarea></label>
+    </div>
+    ${!api?`<p class="small muted">Setup, if Bid Reader isn't already set up: open PowerShell, run <code>irm https://claude.ai/install.ps1 | iex</code>, then run <code>claude</code> once and sign in. Restart the hub and press Check again.</p>`:''}${FOLD_END}`;
+}
+
+/* ---------- materials ---------- */
+function viewMaterials(mats){
+  const rank={short:0,low:1,ok:2};
+  const rows=[...mats].sort((a,b)=>rank[a.status]-rank[b.status]).map(x=>{const m=x.m;
+    const c=x.status==='short'?'bad':x.status==='low'?'warn':'ok';
+    const by=x.orderBy===TODAY?'<b>today</b>':'by '+fmt(x.orderBy);
+    const order=x.status==='ok'?'':` · <b>Order ${plural(x.orderQty,m.unit)} ${by}</b>`;
+    const uses=x.ev.map(e=>`${e.job.name} (${e.q})`).join(', ');
+    return `<div class="mat ${c}"${uses?` title="Used by ${esc(uses)}"`:''}><div style="display:grid;gap:2px"><div class="row" style="gap:8px"><span class="nm">${esc(m.name)}</span>${x.status==='ok'?'':`<span class="pill ${c}">${x.status==='short'?'Short':'Low'}</span>`}</div>
+      <div class="facts"><b>${plural(r1(num(m.onHand)),m.unit)}</b> on hand · ${r1(x.need)} needed${order}</div></div>
+      <div class="recv"><input type="number" id="rcv-${m.id}" min="0" placeholder="Qty" aria-label="Quantity for ${esc(m.name)}"><button class="btn" data-act="receive" data-id="${m.id}">Add</button><button class="btn" data-act="setcount2" data-id="${m.id}" title="Use after counting what's on the shelf">Set count</button></div></div>`}).join('');
+  return `<section class="panel"><div class="row spread"><h2>Materials</h2></div>
+    <p class="note">Stock goes down on its own as steps are marked done. Type a number, then <b>Add</b> for a delivery or <b>Set count</b> after counting the shelf.</p>
+    <div class="mats">${rows||'<p class="note">No materials yet. Add them in Settings.</p>'}</div></section>`;
+}
+
+/* ---------- settings ---------- */
+function viewSettings(){
+  const N=(path,v,step='0.05',w)=>`<input type="number" id="s-${path.replace(/\W/g,'-')}" step="${step}" min="0" value="${v}" data-path="${path}" data-kind="num"${w?` style="width:${w}px"`:''}>`;
+  const st=state.stations.map(s=>`<tr><td><i class="dot" style="background:${sv(s.id)};margin-right:8px"></i><b>${esc(s.name)}</b></td><td>${N(`stations.${s.id}.hoursPerDay`,s.hoursPerDay,'1')}</td></tr>`).join('');
+  if(!state.types.find(t=>t.id===selType))selType=state.types[0].id;
+  const t=state.types.find(x=>x.id===selType),TP=`types.${t.id}`,inUse=state.jobs.some(j=>parts(j).some(p=>p.type===t.id));
+  const tiers=t.sizes.map((z,k)=>`<tr><td><input type="text" id="tz-${k}-name" value="${esc(z.name)}" data-path="${TP}.sizes.${k}.name" placeholder="(one size)" style="min-width:100px"></td>
+    ${['cnc','edge','paint','assembly'].map(s=>`<td>${N(`${TP}.sizes.${k}.days.${s}`,z.days[s],'0.25',80)}</td>`).join('')}
+    <td>${N(`${TP}.sizes.${k}.installDays`,z.installDays,'0.5',80)}</td><td>${N(`${TP}.sizes.${k}.days.finish`,z.days.finish,'0.25',80)}</td><td>${k===t.sizes.length-1&&num(z.max)>=9999?'<span class="small muted">and up</span>':N(`${TP}.sizes.${k}.max`,z.max,'1',80)}</td><td>${N(`${TP}.sizes.${k}.typical`,z.typical,'1',80)}</td>
+    <td>${t.sizes.length>1?`<button class="btn sm" data-act="deltier" data-n="${k}">Remove</button>`:''}</td></tr>`).join('');
+  const u=esc(t.unit);
+  const tm=state.materials.map(m=>{const x=t.mats[m.id]||{};return `<tr><td>${esc(m.name)}</td><td>${N(`${TP}.mats.${m.id}.u`,x.u??0)} <span class="small muted">${esc(m.unit)}</span></td><td>${N(`${TP}.mats.${m.id}.p`,x.p??0)}</td></tr>`}).join('');
+  const ms=state.materials.map(m=>`<tr><td><input type="text" id="mn-${m.id}" value="${esc(m.name)}" data-path="materials.${m.id}.name" style="min-width:200px"></td>
+    <td><input type="text" id="mu-${m.id}" value="${esc(m.unit)}" data-path="materials.${m.id}.unit" style="width:90px"></td>
+    <td><select id="ms-${m.id}" data-path="materials.${m.id}.step">${SHOP_STEPS.map(s=>`<option value="${s}" ${s===m.step?'selected':''}>${STEP_NAME[s]}</option>`).join('')}</select></td>
+    <td>${N(`materials.${m.id}.reorder`,m.reorder,'1')}</td><td>${N(`materials.${m.id}.lead`,m.lead,'1')}</td>
+    <td><button class="btn sm${armed==='m'+m.id?' danger armed':''}" data-act="delmat" data-id="${m.id}">${armed==='m'+m.id?'Click again':'Remove'}</button></td></tr>`).join('');
+  const days=(state.settings.daysOff||[]).filter(x=>x>=addDays(TODAY,-30)).sort().map(x=>`<span class="pill size">${fmt(x)} <button class="btn sm" style="padding:0 6px;border:0;background:none" data-act="deloff" data-id="${x}" aria-label="Remove ${fmt(x)}">×</button></span>`).join('');
+  return `<section class="panel"><h2>Your shop</h2>
+    <div class="row" style="gap:16px 28px">
+      <label class="chk"><input type="checkbox" id="set-sat" data-path="settings.saturdays" data-kind="bool" ${state.settings.saturdays?'checked':''}>We work Saturdays</label>
+      <label class="chk">Paint needs ${N('settings.paintDryDays',state.settings.paintDryDays,'1',70)} day(s) to dry</label>
+      <label class="chk">Install crews ${N('settings.installCrews',state.settings.installCrews,'1',70)}</label>
+      <label class="chk">Leave ${N('settings.installGap',state.settings.installGap,'1',70)} work day(s) before the last install day, for recuts and touch-ups</label></div>
+    <label class="chk"><input type="checkbox" id="set-sameday" data-path="settings.deliverWithInstall" data-kind="bool" ${state.settings.deliverWithInstall!==false?'checked':''}>Deliver on the first install day (each job can change this)</label>
+    <label class="chk"><input type="checkbox" id="set-autoplace" data-path="settings.autoPlace" data-kind="bool" ${state.settings.autoPlace!==false?'checked':''}>Put new jobs on the schedule on their own (turn off to keep them in Put away until you drag them onto a day)</label>
+    <label class="chk"><input type="checkbox" id="set-autodone" data-path="settings.autoDone" data-kind="bool" ${state.settings.autoDone!==false?'checked':''}>Mark steps done on their own once their day on the schedule has passed</label>
+    ${HUB?`<label class="chk"><input type="checkbox" id="set-cdauto" data-path="settings.cdAuto" data-kind="bool" ${state.settings.cdAuto!==false?'checked':''}>Put jobs sent from Cabinet Designer on the schedule right away</label>`:''}
+    <div class="scroll"><table><thead><tr><th>Station</th><th>Work hours per day (all people added up)</th></tr></thead><tbody>${st}</tbody></table></div>
+    <div style="display:grid;gap:8px"><h3>Days the shop is closed</h3><p class="note">Holidays and days off. Nothing gets scheduled on these days.</p>
+      <div class="row"><input type="date" id="newoff" style="max-width:200px" aria-label="Day off"><button class="btn" data-act="addoff">Add day off</button></div>
+      <div class="daysoff">${days||'<span class="note">None added.</span>'}</div></div></section>
+  ${foldStart('cx','Complexity',(state.settings.complexity||[]).map(x=>esc(x.name)+(num(x.pct)?` +${num(x.pct)}%`:'')).join(' · '))}<div><button class="btn sm" data-act="addcx">+ Add level</button></div>
+    <p class="note">Each job picks a level. The first one is the usual. Higher levels add a share to every step's usual days (CNC, edgebanding, paint, assembly and install), rounded up to a quarter day. Days you type in for one job stay as you typed them.</p>
+    <div class="scroll"><table><thead><tr><th>Level</th><th>Extra time</th><th></th></tr></thead><tbody>${(state.settings.complexity||[]).map(x=>`<tr>
+      <td><input type="text" id="cx-${x.id}-name" value="${esc(x.name)}" data-path="settings.complexity.${x.id}.name" style="min-width:140px"></td>
+      <td><input type="number" id="cx-${x.id}-pct" min="0" step="5" value="${num(x.pct)}" data-path="settings.complexity.${x.id}.pct" data-kind="num" style="max-width:90px"> <span class="small muted">%</span></td>
+      <td>${state.settings.complexity.length>1?`<button class="btn sm" data-act="delcx" data-n="${x.id}">Remove</button>`:''}</td></tr>`).join('')}</tbody></table></div>${FOLD_END}
+  ${foldStart('types','Job types and sizes',`${state.types.length} types: days per step, install days and materials for each size`)}<div><button class="btn sm" data-act="addtype">+ Add job type</button></div>
+    <p class="note">Each job type has its own sizes, times and materials, so a large kitchen, a vanity and a set of floating shelves are each planned right. Change a number here and every job of that type updates.</p>
+    <label class="f" style="max-width:320px">Job type<select id="seltype" data-ui="seltype">${state.types.map(x=>`<option value="${esc(x.id)}" ${x.id===t.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+    <div class="form"><label class="f">Name<input type="text" id="tname" value="${esc(t.name)}" data-path="${TP}.name"></label>
+      <label class="f">Counted in (e.g. cabinet, shelf)<input type="text" id="tunit" value="${esc(t.unit)}" data-path="${TP}.unit"></label>
+      <div style="display:grid;gap:8px;align-content:center"><label class="chk"><input type="checkbox" id="tdel" data-path="${TP}.deliver" data-kind="bool" ${t.deliver?'checked':''}>Usually delivered</label>
+      <label class="chk"><input type="checkbox" id="tins" data-path="${TP}.install" data-kind="bool" ${t.install?'checked':''}>Usually installed</label></div></div>
+    <h3>Days for each step, by size</h3>
+    <p class="note">The size is picked from how many ${u}s a job has. How many working days each step takes for this size of job. Paint is for a fully painted job; when only part of a job is painted, paint time shrinks to match. A station can work on more than one job in a day when the days add up to less than a full day.</p>
+    <div class="scroll"><table><thead><tr><th>Size</th>${['cnc','edge','paint','assembly'].map(s=>`<th><i class="dot" style="background:${sv(s)};margin-right:6px"></i>${STEP_NAME[s]}</th>`).join('')}<th><i class="dot" style="background:${sv('install')};margin-right:6px"></i>Install</th><th><i class="dot" style="background:${sv('finish')};margin-right:6px"></i>Finish</th><th>Up to how many ${u}s</th><th>Typical</th><th></th></tr></thead><tbody>${tiers}</tbody></table></div>
+    <div class="row"><button class="btn sm" data-act="addtier">+ Add size</button><label class="chk" style="margin-left:auto">Delivery takes ${N(`${TP}.hours.delivery`,t.hours.delivery,'0.5',80)} hours</label></div>
+    <h3>Materials</h3>
+    <div class="scroll"><table><thead><tr><th>Material</th><th>Per ${u}</th><th>Extra per painted ${u}</th></tr></thead><tbody>${tm}</tbody></table></div>
+    <div><button class="btn sm danger${armed==='t'+t.id?' armed':''}" data-act="deltype" ${inUse?'disabled title="Jobs use this type"':''}>${inUse?'In use by jobs':armed==='t'+t.id?'Click again to remove':'Remove this job type'}</button></div>${FOLD_END}
+  ${foldStart('mats','Materials you stock',`${state.materials.length} materials: reorder points and delivery times`)}<div><button class="btn sm" data-act="addmat">+ Add material</button></div>
+    <div class="scroll"><table><thead><tr><th>Material</th><th>Counted in</th><th>Used at</th><th>Reorder when below</th><th>Days to arrive</th><th></th></tr></thead><tbody>${ms}</tbody></table></div>${FOLD_END}
+  ${HUB?claudeSettingsHTML():''}
+  ${foldStart('data','Your data',HUB?'Backups, copying to another computer':'Copy or bring in your data')}
+    ${HUB?`<p class="note">Everything saves on its own in the hub. A backup copy goes to <b>Files &gt; ${LIB} &gt; Backups</b> each day (the last 30 days are kept), and each job's drawings and files go in its own folder under <b>${LIB}</b>.</p>
+    <label class="chk"><input type="checkbox" id="hubrem" data-path="settings.hubReminders" data-kind="bool" ${state.settings.hubReminders?'checked':''}>Put install dates, promised dates, fix-up visits and material order dates on the hub's home page as reminders</label>
+    <div class="row"><button class="btn" data-act="hubfiles">Open Files</button><button class="btn" data-act="pickbackup">Bring in a backup file</button><button class="btn" data-act="copydata">Copy all my data</button></div>`:`<p class="note">${APP?`Everything saves on its own to <b>${esc((dataDir||'').replace(/\//g,'\\'))}\\larkul-data.json</b>, with a backup copy each day in the backups folder (the last 30 days are kept).`:'In this test version your data saves in this web browser only. Use "Copy all my data" to move it into the Windows app.'}</p>
+    <div class="row">${APP?'<button class="btn" data-act="openfolder">Open data folder</button>':''}<button class="btn" data-act="copydata">Copy all my data</button></div>`}
+    <label class="f">Bring in data (paste what you copied, then press the button)<textarea id="importbox" placeholder="Paste here">${esc(importText)}</textarea></label>
+    <div class="row"><button class="btn${armed==='import'?' danger armed':''}" data-act="import">${armed==='import'?'Click again to replace everything with the pasted data':'Bring in pasted data'}</button></div>${FOLD_END}
+  ${foldStart('reset','Start over','Erase every job and setting')}<div class="row spread"><p class="note">Erases every job and setting and puts the examples back.</p>
+    <button class="btn danger${armed==='reset'?' armed':''}" data-act="reset">${armed==='reset'?'Click again to erase everything':'Erase everything'}</button></div>${FOLD_END}`;
+}
+
+/* ---------- render ---------- */
+let rendering=false,importText='';
+/* sections and boxes that fold remember whether they're open across re-renders */
+const folds={},FOLD_END='</div></details>';let allAlerts=false;
+const foldStart=(key,title,sub)=>`<details class="panel fold" data-fold="${key}"${folds[key]?' open':''}><summary><span class="ft"><h2>${title}</h2>${sub?`<span class="note">${sub}</span>`:''}</span></summary><div class="fbody">`;
+document.addEventListener('toggle',e=>{const k=e.target.dataset&&e.target.dataset.fold;if(k)folds[k]=e.target.open},true);
+/* while someone is typing in a form field, wait to redraw until they leave the fields, so the page never redraws under their cursor */
+let deferred=false;
+const typingIn=el=>el&&el.closest&&el.closest('#app')&&el.id!=='jobsearch'&&(el.tagName==='TEXTAREA'||(el.tagName==='INPUT'&&/^(text|number|date|search)$/.test(el.type)));
+document.addEventListener('focusout',()=>setTimeout(()=>{if(deferred&&!typingIn(document.activeElement)){deferred=false;render(true)}},0));
+function render(force){
+  if(!force&&typingIn(document.activeElement)){deferred=true;return}
+  deferred=false;
+  if(rendering){setTimeout(()=>render(true),0);return}
+  rendering=true;
+  try{renderNow()}finally{rendering=false}
+}
+const focusKey=el=>!el||el===document.body?null:el.id?'#'+el.id:el.dataset&&el.dataset.act?['act','id','n','stage','fx','root'].map(k=>el.dataset[k]||'').join('|'):null;
+function findKey(k){
+  if(!k)return null;if(k[0]==='#')return document.getElementById(k.slice(1));
+  return [...document.querySelectorAll('[data-act]')].find(el=>focusKey(el)===k)||null;
+}
+function renderNow(){
+  const ae=document.activeElement,aid=focusKey(ae);
+  let sel=null;try{if(aid&&typeof ae.selectionStart==='number')sel=[ae.selectionStart,ae.selectionEnd]}catch(_){}
+  const sch=schedule(),mats=projectMaterials(sch);
+  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab||(tab==='new'&&b.dataset.tab==='calendar')));
+  const app=document.getElementById('app');
+  const sy=window.scrollY;
+  app.innerHTML=tab==='jobs'?viewJobs(sch):tab==='materials'?viewMaterials(mats):tab==='settings'?viewSettings():tab==='claude'&&HUB?viewClaude():tab==='new'?viewNew():tab==='shop'?viewCalendar(sch,mats,'shop'):viewCalendar(sch,mats,'site');
+  window.scrollTo(0,sy);
+  if(aid){const el=findKey(aid);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(sel)el.setSelectionRange(sel[0],sel[1]);else if(el.select&&/^(number|text|search|date)$/.test(el.type))el.select()}catch(_){}}}
+}
+function setTab(t){tab=t;armed=null;loadInbox();try{localStorage.setItem(KEY+'-tab',t==='new'?'calendar':t)}catch(_){}window.scrollTo(0,0)}
+
+/* ---------- drag and drop ---------- */
+/* Calendar: drag a step to another day (it becomes that step's "not before" date, and later steps
+   follow), drag a promised date, or drag "+ New job" onto a day. Jobs list: drag the grip to reorder.
+   Pointer events, so it works with a mouse right away and on touch after a short press. */
+const handSet=j=>!!j.fixed||isDate(j.start)||isDate(j.installStart)||Object.values(j.pins||{}).some(isDate)||Array.isArray(j.installDates);
+function handSetText(j){
+  if(j.fixed)return 'Placed by hand: its days stay where you put them. Drag a step on the calendar to move it.';
+  const a=[];if(isDate(j.start))a.push(`First day ${fmt(j.start)}`);
+  for(const s of STEPS)if(isDate(j.pins?.[s]))a.push(`${STEP_NAME[s]} not before ${fmt(j.pins[s])}`);
+  if(Array.isArray(j.installDates))a.push(`Install days ${j.installDates.map(fmtS).join(', ')}`);
+  else if(isDate(j.installStart))a.push(`Install starts ${fmt(j.installStart)}`);
+  return a.join(', ');
+}
+const stageStart=(j,s)=>{const st=schedule()[j.id]?.stages.find(x=>x.s===s&&!x.done);return st?st.start:null};
+/* moves a job up the line until step s can start by the target day (other jobs were holding the station);
+   returns the job it now goes ahead of, or null if moving up didn't help */
+function bringForward(j,s,target){
+  const J=state.jobs,from=J.indexOf(j);let best=from,bestStart=stageStart(j,s);
+  if(!bestStart||bestStart<=target)return null;
+  for(let k=from-1;k>=0;k--){
+    J.splice(J.indexOf(j),1);J.splice(k,0,j);
+    const st=stageStart(j,s);if(st&&st<bestStart){best=k;bestStart=st}
+    if(st&&st<=target)break;
+  }
+  J.splice(J.indexOf(j),1);J.splice(best,0,j);
+  return best<from?J[best+1]:null;
+}
+/* a new job with a first day set by hand goes far enough up the line to start that day */
+/* take a job off the calendar; its dates set by hand go too, so placing it again starts fresh */
+function putAway(j){j.hold=true;delete j.fixed;delete j.pins;delete j.installDates;j.start='';j.installStart=''}
+/* keep a job's days as they are now: from here on it only moves when it's dragged */
+function freeze(j,r){
+  r=r||schedule()[j.id];
+  j.fixed=Object.fromEntries(r.stages.filter(x=>!x.done&&x.segs&&x.segs.length).map(x=>[x.s,x.segs.map(g=>({d:g.d,h:g.h}))]));
+  delete j.pins;delete j.installDates;j.start='';j.installStart='';
+}
+/* place a job from a day (first day in the shop, or install day), ahead of the jobs the schedule places, then keep it there */
+function placeJob(j,set){
+  const J=state.jobs,i=J.indexOf(j);delete j.fixed;delete j.hold;delete j.pins;delete j.installDates;j.start='';j.installStart='';set(j);
+  J.splice(i,1);J.unshift(j);j._force=true;let r;try{r=schedule()[j.id]}finally{delete j._force;J.splice(0,1);J.splice(i,0,j)}
+  freeze(j,r);
+}
+/* steps of a job placed by hand that are out of order (say, install before the cabinets are built) */
+function orderIssues(j,r){
+  if(!j.fixed||!r)return [];
+  const live=r.stages.filter(x=>!x.done&&x.segs&&x.segs.length),by=s=>live.find(x=>x.s===s),out=[];
+  let prev=null;
+  for(const st of live){
+    if(st.s==='paint'){const c=by('cnc');if(c&&st.start<c.end)out.push(['paint','cnc']);continue}
+    if(prev&&st.start<prev.end)out.push([st.s,prev.s]);
+    const pt=by('paint');if(pt&&['delivery','install'].includes(st.s)&&st.start<=pt.end&&!out.some(x=>x[1]==='paint'))out.push([st.s,'paint']);
+    prev=st;
+  }
+  return out;
+}
+function placeByStart(j){
+  const s=STEPS.find(x=>applies(j,x)&&!j.done[x]);
+  if(s&&s!=='install')bringForward(j,s,nextWork(j.start>TODAY?j.start:TODAY));
+}
+function dropOn(src,day){
+  if(src.drag==='new'){
+    const t=state.types.some(x=>x.id===selType)?selType:state.types[0].id;
+    draft=newDraft(t);draft.start=day<TODAY?TODAY:day;setTab('new');render(true);
+    toast(`New job starting ${fmt(nextWork(draft.start))}. Fill in the rest and press Add job.`);return;
+  }
+  if(src.drag==='bill'){
+    const b=(state.bills||[]).find(x=>x.id===src.id),n=Math.round((parse(day)-parse(src.day))/864e5);if(!b||!n)return;
+    b.due=addDays(b.due,n);b.paid=b.paid.map(x=>addDays(x,n));
+    commit(`${esc(b.name||'Bill')} moved ${n>0?'later':'earlier'} by ${plural(Math.abs(n),'day')}${b.repeat!=='none'?', every time it repeats':''}`);return;
+  }
+  const j=state.jobs.find(x=>x.id===src.id);if(!j)return;
+  /* a job from the list (or Put away): on the Calendar tab the day is its install day, on Manufacturing its first day in the shop */
+  if(src.drag==='job'){
+    const d=day<TODAY?nextWork(TODAY):nextWork(day),site=src.mode==='site'&&j.install&&!j.done.install;
+    const shopLeft=STEPS.some(x=>applies(j,x)&&!j.done[x]&&!['delivery','install','finish'].includes(x));
+    if(!site&&!shopLeft&&!STEPS.some(x=>applies(j,x)&&!j.done[x])){const r0=schedule()[j.id];if(r0.fixes.length)src={...src,drag:'step',stage:'fixup',day:r0.fixes[0].start};else return}
+    else{
+      placeJob(j,x=>{if(site)x.installStart=d;else x.start=d});
+      const r=schedule()[j.id],bad=orderIssues(j,r).length;
+      commit(`${esc(j.name)} placed: ${site?`install ${fmt(d)}`:shopLeft?`starts in the shop ${fmt(d)}`:`goes out ${fmt(d)}`}. It stays where you put it.${bad?' Some steps are out of order; see Needs attention.':''}`);return;
+    }
+  }
+  if(src.drag==='due'){if(j.due!==day){j.due=day;commit(`Promised date for ${esc(j.name)} is now ${fmt(day)}`)}return}
+  const r=schedule()[j.id],s=src.stage,shift=workBetween(src.day,day);
+  if(!shift)return;
+  const clampDay=d=>d<TODAY?nextWork(TODAY):d;
+  if(s==='fixup'){
+    const x=r.fixes.find(f=>f.segs.some(g=>g.d===src.day)),f=x&&j.fixups.find(y=>y.id===x.f.id);if(!f)return;
+    f.date=clampDay(addWork(x.start,shift));commit(`Fix-up for ${esc(j.name)} moved to ${fmt(f.date)}`);return;
+  }
+  const st=r.stages.find(x=>x.s===s&&!x.done);if(!st)return;
+  /* moving a step by hand moves just that step (the steps in the same box go with it); nothing else is moved for it */
+  if(!j.fixed)freeze(j,r);
+  const to=clampDay(nextWork(day)),moved=[];
+  for(const x of String(src.stages||s).split(',')){
+    const segs=j.fixed[x];if(!Array.isArray(segs)||!segs.length)continue;
+    if(x==='install'&&segs.length>1){
+      /* an install over several days: each day moves on its own */
+      const k=segs.findIndex(g=>g.d===src.day);if(k<0||to===src.day)continue;
+      if(segs.some(g=>g.d===to)){toast(`${esc(j.name)} already installs that day.`);return}
+      segs[k].d=to;segs.sort((a,b)=>a.d<b.d?-1:1);moved.push(`install day ${segs.findIndex(g=>g.d===to)+1} of ${segs.length}`);continue;
+    }
+    const n=workBetween(segs[0].d,src.day),start=clampDay(addWork(to,-n)),delta=workBetween(segs[0].d,start);if(!delta)continue;
+    for(const g of segs)g.d=clampDay(addWork(g.d,delta));moved.push(x==='cnc'?'CNC':x==='paint'?coatName(j).toLowerCase():STEP_NAME[x].toLowerCase());
+  }
+  if(!moved.length)return;
+  const bad=orderIssues(j,schedule()[j.id]).length;
+  commit(`${esc(j.name)}: ${moved.join(' and ')} moved to ${fmt(to)}.${bad?' Some steps are now out of order; see Needs attention.':''}`);return;
+  /* (the "not before" dates below are from earlier versions and no longer set) */
+  const target=clampDay(addWork(st.start,shift)),delta=workBetween(st.start,target);if(!delta)return;
+  /* dates already set by hand on the later steps keep their distance */
+  const later=STEPS.slice(STEPS.indexOf(s)+1);
+  for(const x of later)if(x!=='install'&&isDate(j.pins?.[x]))j.pins[x]=clampDay(addWork(j.pins[x],delta));
+  if(s!=='install'&&later.includes('install')&&isDate(j.installStart))j.installStart=clampDay(addWork(j.installStart,delta));
+  if(Array.isArray(j.installDates))j.installDates=j.installDates.map(x=>clampDay(addWork(x,delta)));
+  if(s==='install'){
+    j.installStart=target;const c=schedule()[j.id].conflict;
+    commit(c?`Install for ${esc(j.name)} set to ${fmt(target)}, but the cabinets won't be ready until ${fmt(c.ready)}.`:`Install for ${esc(j.name)} moved to ${fmt(target)}`);return;
+  }
+  j.pins={...(j.pins||{}),[s]:target};
+  if(isDate(j.start)&&j.start>target)j.start='';
+  const ahead=delta<0?bringForward(j,s,target):null,now=stageStart(j,s),name=`${STEP_NAME[s]} for ${esc(j.name)}`;
+  let msg=now===target?`${name} moved to ${fmt(target)}.`:`${name} can start ${fmt(now)} at the earliest${STEPS.indexOf(s)>0?', once the step before it is done':''}.`;
+  if(ahead)msg+=` It now goes ahead of ${esc(ahead.name)} in line.`;
+  commit(msg);
+}
+function dropOrder(id,targetId,below){
+  const J=state.jobs,j=J.find(x=>x.id===id);if(!j||id===targetId)return;
+  const from=J.indexOf(j);J.splice(from,1);
+  let k=J.findIndex(x=>x.id===targetId);if(k<0){J.splice(from,0,j);return}
+  if(below)k++;J.splice(k,0,j);
+  if(J.indexOf(j)!==from)commit(`${esc(j.name)} is now #${J.indexOf(j)+1} in line`);
+}
+/* ‹ › page 4 weeks at a time, or a month at a time in month view; 0 goes back to this week */
+function calMove(n){if(!n){weekOff=0;monthOff=null}else if(monthOff!=null)monthOff+=n;else weekOff+=n*WEEKS}
+let drag=null,swallowClick=false;
+function dragTarget(x,y){
+  const el=document.elementFromPoint(x,y);if(!el)return null;
+  if(drag.src.drag==='order'){const c=el.closest('[data-drop-job]');if(!c)return null;const b=c.getBoundingClientRect();return {el:c,id:c.dataset.dropJob,below:y>b.top+b.height/2}}
+  const w=el.closest('[data-act="week"]');if(w)return {el:w,week:+w.dataset.id};
+  const a=el.closest('[data-drop-away]');if(a&&['job','step'].includes(drag.src.drag))return {el:a,away:true};
+  const c=el.closest('[data-drop]');return c?{el:c,day:c.dataset.drop}:null;
+}
+function markTarget(t){
+  document.querySelectorAll('.dropto').forEach(x=>{if(!t||x!==t.el)x.classList.remove('dropto','below')});
+  if(t&&!t.week){t.el.classList.add('dropto');t.el.classList.toggle('below',!!t.below)}
+}
+function startDrag(){
+  drag.on=true;clearTimeout(drag.hold);
+  const card=drag.src.drag==='order'?drag.el.closest('.jcard'):drag.el;
+  const g=card.cloneNode(true);g.removeAttribute('data-act');g.removeAttribute('id');g.classList.add('dragghost');g.classList.remove('sel');
+  g.style.width=Math.min(card.getBoundingClientRect().width,220)+'px';
+  document.body.appendChild(g);drag.ghost=g;drag.card=card;card.classList.add('lifted');
+  document.body.classList.add('dragging');
+  try{drag.el.setPointerCapture(drag.pid)}catch(_){}
+}
+function endDrag(){
+  if(!drag)return;
+  clearTimeout(drag.hold);clearTimeout(drag.flip);
+  if(drag.ghost)drag.ghost.remove();
+  document.querySelectorAll('.lifted').forEach(x=>x.classList.remove('lifted'));
+  markTarget(null);document.body.classList.remove('dragging');
+  drag=null;
+}
+function moveDrag(x,y){
+  drag.lastX=x;drag.lastY=y;
+  drag.ghost.style.left=(x+10)+'px';drag.ghost.style.top=(y+8)+'px';
+  const t=dragTarget(x,y);markTarget(t);
+  /* hold over the week arrows to page the calendar */
+  const wk=t&&t.week?t.week:null;
+  if(wk!==drag.flipFor){clearTimeout(drag.flip);drag.flipFor=wk;
+    if(wk)drag.flip=setTimeout(function flip(){if(!drag)return;calMove(wk);render(true);document.querySelectorAll(`[data-id="${drag.src.id}"][data-drag]`).forEach(x=>x.classList.add('lifted'));if(wk)drag.flip=setTimeout(flip,900)},650)}
+  if(y<40)scrollBy(0,-14);else if(y>innerHeight-40)scrollBy(0,14);
+}
+document.addEventListener('pointerdown',e=>{
+  swallowClick=false;if(drag)endDrag();
+  const el=e.target.closest('[data-drag]');if(!el||e.button>0||tab==='new')return;
+  drag={el,src:{...el.dataset},x:e.clientX,y:e.clientY,pid:e.pointerId,on:false,touch:e.pointerType!=='mouse'};
+  if(!drag.touch)e.preventDefault();
+  /* touch: a short press picks it up, so a quick swipe still scrolls; the grip picks up right away */
+  else if(drag.src.drag!=='order')drag.hold=setTimeout(()=>{if(drag&&!drag.on){startDrag();moveDrag(drag.x,drag.y);try{navigator.vibrate&&navigator.vibrate(15)}catch(_){}}},350);
+});
+document.addEventListener('pointermove',e=>{
+  if(!drag||e.pointerId!==drag.pid)return;
+  if(!drag.on){
+    if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<6)return;
+    if(drag.touch&&drag.src.drag!=='order'){endDrag();return}
+    startDrag();
+  }
+  e.preventDefault();moveDrag(e.clientX,e.clientY);
+},{passive:false});
+document.addEventListener('touchmove',e=>{if(drag&&drag.on)e.preventDefault()},{passive:false});
+document.addEventListener('contextmenu',e=>{if(drag&&(drag.on||drag.hold))e.preventDefault()});
+document.addEventListener('pointerup',e=>{
+  if(!drag||e.pointerId!==drag.pid)return;
+  if(!drag.on){endDrag();return}
+  const t=dragTarget(e.clientX,e.clientY),src=drag.src;endDrag();
+  swallowClick=true;setTimeout(()=>{swallowClick=false},400);
+  if(t&&t.day)dropOn(src,t.day);else if(t&&t.id)dropOrder(src.id,t.id,t.below);
+  else if(t&&t.away){const j=state.jobs.find(x=>x.id===src.id);if(j&&!j.hold){putAway(j);commit(`${esc(j.name)} put away. Drag it back onto a day when you're ready.`)}}
+  render(true);
+});
+document.addEventListener('pointercancel',e=>{if(drag&&e.pointerId===drag.pid)endDrag()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drag){endDrag();swallowClick=true;setTimeout(()=>{swallowClick=false},400)}});
+document.addEventListener('dblclick',e=>{const el=e.target.closest('[data-act="focus"][data-id]');if(!el||drag)return;const j=state.jobs.find(x=>x.id===el.dataset.id);if(!j)return;
+  selJob=j.id;jf=schedule()[j.id]?.status==='done'?'all':jf;setTab('jobs');render(true)});
+/* the click that ends a drag isn't a click on the chip */
+document.addEventListener('click',e=>{if(swallowClick){swallowClick=false;e.stopPropagation();e.preventDefault()}},true);
+
+/* ---------- editing ---------- */
+function resolve(path){
+  const segs=path.split('.');let o=segs[0]==='draft'?draft:state;
+  for(const s of segs.slice(segs[0]==='draft'?1:0,-1)){
+    if(o==null)return null;
+    if(Array.isArray(o))o=o.find(x=>x&&x.id===s)??o[+s];
+    else{if(o[s]==null)o[s]={};o=o[s]}
+  }
+  return o==null?null:[o,segs[segs.length-1]];
+}
+function valueOf(el){
+  const k=el.dataset.kind;
+  if(k==='bool')return el.checked;
+  if(k==='num')return Math.max(0,num(el.value));
+  if(k==='opt')return el.value===''?undefined:Math.max(0,num(el.value));
+  return el.value;
+}
+function applyField(el){
+  const r=resolve(el.dataset.path);if(!r)return;
+  const [o,f]=r,v=valueOf(el);
+  if(v===undefined)delete o[f];else o[f]=v;
+  if(/(^|\.)count$/.test(el.dataset.path)||/(^|\.)painted$/.test(el.dataset.path)){const j=o;j.count=Math.round(j.count);j.painted=Math.min(Math.round(j.painted),j.count);if(/painted$/.test(el.dataset.path)&&j.painted>0&&!coatOf(j)&&!/\.extra\./.test(el.dataset.path))j.coat='paint'}
+  if(/\.extra\.[^.]+\.type$/.test(el.dataset.path)){const t=state.types.find(x=>x.id===v);if(t){o.count=num(midSize(t).typical,1);o.painted=0}return}
+  if(/\.type$/.test(el.dataset.path)){const t=state.types.find(x=>x.id===v);if(t&&el.dataset.path==='draft.type'){draft.deliver=!!t.deliver;draft.install=!!t.install;const z=midSize(t);draft.count=num(z.typical,1);draft.painted=Math.min(draft.painted,draft.count)}}
+}
+let pointerDown=false,pendingRender=false;
+document.addEventListener('pointerdown',()=>{pointerDown=true});
+document.addEventListener('pointerup',()=>setTimeout(()=>{pointerDown=false;if(pendingRender){pendingRender=false;render()}},0));
+document.addEventListener('input',e=>{
+  const el=e.target;
+  if(el.id==='jobsearch'){q=el.value;render(true);return}
+  if(el.id==='importbox'){importText=el.value;return}
+  if(el.id==='bulkbox'){bulkText=el.value;const p=document.getElementById('bulkprev');if(p)p.innerHTML=bulkPreview();return}
+  if(el.id==='chatbox'){chatText=el.value;return}
+  if(el.dataset.path&&el.type!=='checkbox'&&el.tagName!=='SELECT'){
+    if(el.dataset.kind==='num'&&el.value==='')return;
+    applyField(el);
+    if(el.dataset.path.startsWith('draft.')){const p=document.getElementById('preview');if(p)p.innerHTML=previewHTML()}
+  }
+});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.dataset.ui==='seltype'){selType=el.value;render();return}
+  if(el.dataset.ui==='bulk'){const f=bulkFix[el.dataset.key]=bulkFix[el.dataset.key]||{};f[el.dataset.k]=el.type==='checkbox'?el.checked:el.value;if(el.dataset.k==='type')delete f.size;
+    const p=document.getElementById('bulkprev');if(p)p.innerHTML=bulkPreview();return}
+  if(el.dataset.ui==='bulkex'){bulkDropEx=el.checked;return}
+  if(el.dataset.ui==='billpaid'){const b=(state.bills||[]).find(x=>x.id===el.dataset.id),d=el.dataset.date;if(b){b.paid=b.paid.filter(x=>x!==d);if(el.checked)b.paid.push(d);commit(el.checked?`${esc(b.name||'Bill')} marked paid`:'')}render();return}
+  if(el.dataset.ui==='addpart'){const root=el.dataset.root,o=root==='draft'?draft:resolve(root+'.x')?.[0],t=state.types.find(x=>x.id===el.value);
+    if(o&&t){(o.extra=o.extra||[]).push({id:uid('p'),type:t.id,count:num(midSize(t).typical,1),painted:0});if(o!==draft)commit(`Added ${esc(t.name)} to ${esc(o.name)}`);
+      else{const pv=document.getElementById('preview');if(pv)pv.innerHTML=previewHTML()}}
+    render(true);return}
+  if(el.dataset.ui==='draftfiles'){const files=[...el.files];if(files.length)uploadDraftDocs(fileList(files));return}
+  if(el.dataset.ui==='ai'){aiSettings[el.dataset.k]=el.type==='checkbox'?el.checked:el.value;saveAi();if(el.dataset.k==='engine'||el.dataset.k==='claudePath'){aiStatus=null;loadAiStatus(true)}return}
+  if(el.dataset.ui==='jobfiles'){const j=state.jobs.find(x=>x.id===el.dataset.id);const files=[...el.files];if(j&&files.length)uploadJobFiles(j,fileList(files));return}
+  if(!el.dataset.path)return;
+  applyField(el);
+  if(!el.dataset.path.startsWith('draft.'))commit();
+  /* a field removed by a re-render also fires change; its value is saved, but re-rendering again would fight the user's typing */
+  if(!el.isConnected)return;
+  if(pointerDown)pendingRender=true;else setTimeout(render,0);
+});
+function toggleStage(j,s){
+  const sign=j.done[s]?1:-1;
+  for(const m of state.materials)if(m.step===s)m.onHand=r1(num(m.onHand)+sign*matQty(j,m));
+  if(j.done[s])delete j.done[s];else j.done[s]=true;
+  if(j.autoDone&&!j.done[s])delete j.autoDone[s];
+}
+async function copyText(text){
+  try{await navigator.clipboard.writeText(text);return true}catch(e){}
+  if(APP){try{await Neutralino.clipboard.writeText(text);return true}catch(e){}}
+  importText=text;render(true);
+  const box=document.getElementById('importbox');if(box){box.focus();box.select()}
+  return false;
+}
+function importData(text){
+  let obj;try{obj=JSON.parse(text)}catch(e){toast("That doesn't look like copied schedule data. Copy it again and paste the whole thing.");return false}
+  const st=obj&&obj.state?obj.state:obj;
+  if(!st||!Array.isArray(st.jobs)){toast("That doesn't look like copied schedule data.");return false}
+  state=st.v===4||st.types?normalize(st):migrateV3(st);
+  return true;
+}
+
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-act]');if(!el)return;
+  const act=el.dataset.act,id=el.dataset.id,J=state.jobs,i=J.findIndex(j=>j.id===id),job=J[i];
+  if(!['del','reset','import','deltype','delmat','delfile','delbill','clearall'].includes(act))armed=null;
+  e.stopPropagation();
+  let msg='';
+  switch(act){
+    case 'undo':undo();break;
+    case 'tab':setTab(id);break;
+    case 'pick':selJob=id;break;
+    case 'focus':if(!focusJob)return;focusJob=null;break; /* no re-render, so a double-click lands on the same chip */
+    case 'open':selJob=id;jf=state.jobs.length&&schedule()[id]?.status==='done'?'all':jf;setTab('jobs');break;
+    case 'filter':jf=id;break;
+    case 'week':calMove(+id);break;
+    case 'nextmonth':monthOff=1;break;
+    case 'new':draft=null;setTab('new');break;
+    case 'bulk':bulkOpen=true;if(tab!=='jobs')setTab('jobs');setTimeout(()=>{const b=document.getElementById('bulkbox');if(b){b.focus();b.scrollIntoView({block:'center'})}},0);break;
+    case 'bulkclose':bulkOpen=false;break;
+    case 'cdadd':{const x=cdInbox.find(y=>y.path===id);if(x)cdApply(x);break}
+    case 'cdskip':{const x=cdInbox.find(y=>y.path===id);if(x)cdSeenSet(x);break}
+    case 'bulkadd':bulkAdd();break;
+    case 'pickType':{const old=draft;draft=newDraft(id);if(old){draft.name=old.name;draft.customer=old.customer;draft.extra=old.extra||[];draft.complexity=old.complexity;draft.due=old.due;draft.start=old.start;draft.notes=old.notes;draft.rush=old.rush}break}
+    case 'setsize':{const o=el.dataset.root==='draft'?draft:resolve(el.dataset.root+'.x')[0];const z=typeOf(o).sizes.find(x=>x.id===el.dataset.n);if(!z)break;
+      const allPainted=o.painted>0&&o.painted>=o.count;o.count=num(z.typical,1);o.painted=allPainted?o.count:Math.min(o.painted,o.count);if(o!==draft)commit(`Size set to ${esc(z.name)}`);break}
+    case 'addpart':{const o=el.dataset.root==='draft'?draft:resolve(el.dataset.root+'.x')[0];const t=state.types.find(x=>x.id===el.dataset.n);if(!o||!t)break;
+      (o.extra=o.extra||[]).push({id:uid('p'),type:t.id,count:num(midSize(t).typical,1),painted:0});if(o!==draft)commit(`Added ${esc(t.name)} to ${esc(o.name)}`);break}
+    case 'delpart':{const o=el.dataset.root==='draft'?draft:resolve(el.dataset.root+'.x')[0];if(!o)break;o.extra=(o.extra||[]).filter(x=>x.id!==el.dataset.n);if(o!==draft)commit('Removed part');break}
+    case 'setcx':{const o=el.dataset.root==='draft'?draft:resolve(el.dataset.root+'.x')[0];if(!o)break;o.complexity=el.dataset.n;if(o!==draft)commit(`Complexity set to ${esc(levelOf(o).name)}`);break}
+    case 'addcx':state.settings.complexity.push({id:uid('c'),name:'New level',pct:num(state.settings.complexity.at(-1)?.pct)+25});commit();break;
+    case 'delcx':if(state.settings.complexity.length>1){state.settings.complexity=state.settings.complexity.filter(x=>x.id!==el.dataset.n);commit('Removed complexity level')}break;
+    case 'paint':{const o=el.dataset.root==='draft'?draft:resolve(el.dataset.root+'.x')[0];o.painted=el.dataset.n==='all'?o.count:0;if(o!==draft)commit();break}
+    case 'addjob':{
+      if(!draft)break;
+      const j={...draft};delete j.rush;j.name=j.name.trim()||`${j.customer.trim()||'New'} ${typeOf(j).name.toLowerCase()}`;
+      delete j.aiSummary;delete j.aiQuestions;
+      if(draft.rush)J.unshift(j);else J.push(j);
+      if(state.settings.autoPlace===false&&!isDate(j.start))j.hold=true;
+      if(isDate(j.start))placeByStart(j);
+      const docs=draftDocs;draftDocs=[];
+      selJob=j.id;draft=null;setTab('jobs');commit(`Added ${esc(j.name)}`);
+      if(HUB&&docs.length)attachDraftDocs(j,docs);
+      break}
+    case 'idays':if(job){const d=Math.max(0.5,Math.min(30,installDays(job)+num(el.dataset.n)));job.installDays=d;delete job.installDates;
+      if(job.fixed&&job.fixed.install&&job.fixed.install.length){const first=job.fixed.install.map(g=>g.d).sort()[0];delete job.fixed.install;job.installStart=first;const r=schedule()[job.id];if(r.install)job.fixed.install=r.install.segs.map(g=>({d:g.d,h:g.h}));job.installStart=''}commit(`Install for ${esc(job.name)} is now ${daysText(d)}`)}break;
+    case 'putaway':if(job){putAway(job);commit(`${esc(job.name)} put away. Drag it from Put away onto a day to place it.`)}break;
+    case 'unhold':if(job){delete job.hold;commit(`${esc(job.name)} is back on the schedule`)}break;
+    case 'clearall':{if(armed!=='clearall'){armed='clearall';break}armed=null;const sch=schedule(),L=state.jobs.filter(j=>!j.hold&&!['done'].includes(sch[j.id].status));
+      L.forEach(putAway);commit(`${plural(L.length,'job')} put away. Drag them onto the days you want.`);break}
+    case 'clearpins':if(job){delete job.fixed;delete job.pins;delete job.installDates;job.start='';job.installStart='';commit(`Dates set by hand cleared for ${esc(job.name)}`)}break;
+    case 'allalerts':allAlerts=!allAlerts;break;
+    case 'calshow':calShow=id;if(tab!=='calendar')setTab('calendar');try{localStorage.setItem(KEY+'-show',id)}catch(_){}break;
+    case 'addbill':{const b={id:uid('b'),name:'',amount:0,due:TODAY,repeat:'monthly',paid:[],notes:''};(state.bills=state.bills||[]).push(b);selBill=b.id;if(calShow==='jobs')calShow='both';commit('Bill added');
+      setTimeout(()=>{const n=document.getElementById('bill-name');if(n)n.focus()},0);break}
+    case 'billpick':selBill=selBill===id?null:id;if(calShow==='jobs')calShow='both';break;
+    case 'billdone':selBill=null;break;
+    case 'delbill':if(armed==='b'+id){const b=state.bills.find(x=>x.id===id);state.bills=state.bills.filter(x=>x.id!==id);selBill=null;armed=null;commit(`Deleted ${esc(b&&b.name||'bill')}`)}else armed='b'+id;break;
+    case 'up':if(i>0){[J[i-1],J[i]]=[J[i],J[i-1]];commit()}break;
+    case 'down':if(i>=0&&i<J.length-1){[J[i+1],J[i]]=[J[i],J[i+1]];commit()}break;
+    case 'sortdue':J.sort((a,b)=>(isDate(a.due)?a.due:'9')<(isDate(b.due)?b.due:'9')?-1:1);commit('Sorted by promised date');break;
+    case 'toggle':{const s=el.dataset.stage;msg=`${job.done[s]?'Reopened':'Marked done'}: ${STEP_NAME[s]} for ${esc(job.name)}`;toggleStage(job,s);commit(msg);break}
+    case 'advance':{const r=schedule()[id];
+      if(r.next){toggleStage(job,r.next.s);msg=`${STEP_NAME[r.next.s]} done for ${esc(job.name)}`}
+      else if(r.fixes.length){const f=job.fixups.find(x=>x.id===r.fixes[0].f.id);if(f)f.done=true;msg=`Fix-up done for ${esc(job.name)}`}
+      commit(msg);break}
+    case 'reopen':if(job.done.install){toggleStage(job,'install');commit(`Reopened install for ${esc(job.name)}`)}break;
+    case 'addfix':job.fixups.push({id:uid('f'),note:'',days:1,date:'',done:false});commit();break;
+    case 'delfix':job.fixups=job.fixups.filter(f=>f.id!==el.dataset.fx);commit('Removed fix-up visit');break;
+    case 'del':if(armed===id){J.splice(i,1);armed=null;if(focusJob===id)focusJob=null;commit(`Deleted ${esc(job.name)}`)}else armed=id;break;
+    case 'clearex':{const n=J.filter(j=>j.example).length;state.jobs=J.filter(j=>!j.example);commit(`Removed ${plural(n,'example job')}`);break}
+    case 'receive':case 'setcount2':{const inp=document.getElementById('rcv-'+id),n=num(inp.value,-1);const m=state.materials.find(x=>x.id===id);
+      if(inp.value===''||n<0){toast('Type a quantity first.');break}
+      if(act==='receive'){if(n>0){m.onHand=r1(num(m.onHand)+n);commit(`Added ${plural(n,m.unit)} of ${esc(m.name)}`)}}
+      else{m.onHand=r1(n);commit(`${esc(m.name)} set to ${plural(n,m.unit)}`)}break}
+    case 'addoff':{const v=document.getElementById('newoff').value;if(isDate(v)&&!state.settings.daysOff.includes(v)){state.settings.daysOff.push(v);commit(`Shop closed ${fmt(v)}`)}break}
+    case 'deloff':state.settings.daysOff=state.settings.daysOff.filter(x=>x!==id);commit();break;
+    case 'addtier':{const t=state.types.find(x=>x.id===selType),last=t.sizes[t.sizes.length-1];const prev=t.sizes.length>1?num(t.sizes[t.sizes.length-2].max,0):0;last.max=Math.max(prev+1,num(last.typical,1));t.sizes.push({id:uid('z'),name:'New size',max:9999,typical:num(last.typical,1)+5,days:{...last.days},installDays:num(last.installDays,1)});commit();break}
+    case 'deltier':{const t=state.types.find(x=>x.id===selType);if(t.sizes.length>1){const z=t.sizes[+el.dataset.n];t.sizes.splice(+el.dataset.n,1);
+      commit(`Removed size ${esc(z.name)}`)}break}
+    case 'addtype':{const t={id:uid('t'),name:'New job type',unit:'piece',hours:{delivery:2},deliver:true,install:false,mats:{},sizes:[{id:uid('z'),name:'',typical:1,max:9999,days:{cnc:0.5,edge:0.5,paint:1,assembly:1,finish:0},installDays:1}]};state.types.push(t);selType=t.id;commit();break}
+    case 'deltype':{const t=state.types.find(x=>x.id===selType);if(state.types.length<2||J.some(j=>parts(j).some(p=>p.type===t.id)))break;
+      if(armed==='t'+t.id){state.types=state.types.filter(x=>x!==t);armed=null;commit(`Removed ${esc(t.name)}`)}else armed='t'+t.id;break}
+    case 'addmat':state.materials.push({id:uid('m'),name:'New material',unit:'each',onHand:0,reorder:0,lead:5,step:'assembly'});commit();break;
+    case 'delmat':if(armed==='m'+id){const m=state.materials.find(x=>x.id===id);state.materials=state.materials.filter(x=>x.id!==id);armed=null;commit(`Removed ${esc(m.name)}`)}else armed='m'+id;break;
+    case 'copydata':{const ok=await copyText(fileText());toast(ok?'Copied. Paste it into "Bring in data" in the other copy of the app.':'Your data is in the box below. Press Ctrl+C to copy it.');break}
+    case 'import':{const box=document.getElementById('importbox'),text=box?box.value.trim():'';if(!text){toast('Paste your copied data into the box first.');armed=null;break}
+      if(armed==='import'){armed=null;if(importData(text)){importText='';commit('Data brought in')}}else armed='import';break}
+    case 'draftpick':{const f=await Hub.pickFile();if(f&&!draftDocs.some(x=>x.path===f.path))draftDocs.push({name:f.name,path:f.path,own:false});break}
+    case 'draftdoc':draftDocs=draftDocs.filter(x=>x.path!==el.dataset.path);break;
+    case 'draftread':readDraft();break;
+    case 'jobread':{const jj=state.jobs.find(x=>x.id===id);if(jj)readJob(jj);break}
+    case 'jobapply':{const jj=state.jobs.find(x=>x.id===id),r=jobProposal[id];if(jj&&r){applyRead(jj,r,false);delete jobProposal[id];commit(`Updated ${esc(jj.name)} from its documents`)}break}
+    case 'jobdismiss':delete jobProposal[id];break;
+    case 'chatsend':sendChat();break;
+    case 'chatclear':chat=[];chatText='';saveChat();break;
+    case 'chatapply':applyChat(+el.dataset.n);break;
+    case 'chattry':chatText=el.dataset.text;render(true);{const b=document.getElementById('chatbox');if(b){b.focus()}}return;
+    case 'aicheck':aiStatus=null;loadAiStatus(true);break;
+    case 'aikey':{const k=document.getElementById('aikey');try{await Hub.api('/ai/key',{method:'POST',json:{key:k?k.value:''}});toast(k&&k.value?'API key saved on this PC':'API key removed')}catch(err){toast(err.message)}aiStatus=null;loadAiStatus(true);break}
+    case 'hubfiles':Hub.navigate('#/files');break;
+    case 'pickbackup':await pickBackup();return;
+    case 'linkfile':{const f=await Hub.pickFile();const jj=state.jobs.find(x=>x.id===id);if(f&&jj){jj.links=(jj.links||[]).filter(x=>x.path!==f.path);jj.links.push({name:f.name,path:f.path});commit(`Linked ${esc(f.name)}`)}break}
+    case 'unlink':job.links=(job.links||[]).filter(x=>x.path!==el.dataset.path);commit('Unlinked file');break;
+    case 'delfile':{const p=el.dataset.path;if(armed==='f'+p){armed=null;try{await Hub.files.delete(p);toast('File deleted')}catch(err){toast('Could not delete that file.')}await loadFiles(job.folder)}else armed='f'+p;break}
+    case 'openfolder':if(APP){try{await Neutralino.os.execCommand(`explorer "${dataDir.replace(/\//g,'\\')}"`)}catch(err){toast('Could not open the folder.')}}break;
+    case 'reset':if(armed==='reset'){state=freshState();state.jobs=exampleJobs();state=normalize(state);armed=null;selJob=null;focusJob=null;commit('Erased everything')}else armed='reset';break;
+    default:return;
+  }
+  if(pointerDown)pendingRender=false;
+  render(true);
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target.classList?.contains('jcard')){selJob=e.target.dataset.id;render(true)}
+  if((e.key==='Enter'||e.key===' ')&&e.target.tagName==='LABEL'&&e.target.querySelector('input[type=file]')){e.preventDefault();e.target.querySelector('input[type=file]').click()}
+  if(e.key==='Enter'&&typingIn(e.target)&&e.target.tagName==='INPUT'){e.target.dispatchEvent(new Event('change',{bubbles:true}));render(true)}
+  if(e.target.id==='chatbox'&&e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();return}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)){e.preventDefault();undo();render(true)}
+});
+document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;e.stopPropagation();setTab(b.dataset.tab);render(true)});
+
+/* ---------- start ---------- */
+async function appLoad(){
+  Neutralino.init();
+  Neutralino.events.on('windowClose',async()=>{await flushSave();Neutralino.app.exit()});
+  const docs=(await Neutralino.os.getPath('documents')).replace(/\\/g,'/');
+  dataDir=docs+'/Larkul Schedule';
+  for(const d of [dataDir,dataDir+'/backups'])try{await Neutralino.filesystem.createDirectory(d)}catch(e){}
+  try{return JSON.parse(await Neutralino.filesystem.readFile(dataPath()))}catch(e){return null}
+}
+async function boot(){
+  let loaded=null;
+  if(APP){try{loaded=await appLoad()}catch(e){console.error(e)}}
+  if(HUB){try{loaded=await Hub.storage.get('state')}catch(e){console.error(e);setSaved('Could not reach the hub.',true)}
+    document.querySelector('#tabs [data-tab="claude"]').hidden=false;
+    try{aiSettings={...aiSettings,...((await Hub.storage.get('ai'))||{})};chat=(await Hub.storage.get('chat'))||[]}catch(e){}
+    addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSave();else loadInbox()});setInterval(loadInbox,60000);addEventListener('focus',()=>loadInbox());
+    /* the hub hides other tabs instead of closing them; this notices when the Scheduler tab is shown again */
+    try{new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting))loadInbox()}).observe(document.getElementById('app'))}catch(e){}addEventListener('pagehide',()=>flushSave())}
+  if(!loaded){try{loaded=JSON.parse(localStorage.getItem(KEY))}catch(e){}}
+  if(loaded&&loaded.state)loaded=loaded.state;
+  if(loaded&&Array.isArray(loaded.jobs))state=normalize(loaded);
+  else{
+    let old=null;try{old=JSON.parse(localStorage.getItem('larkul-schedule-v3'))}catch(e){}
+    if(old&&Array.isArray(old.jobs))state=migrateV3(old);
+    else{state=freshState();state.jobs=exampleJobs();state=normalize(state)}
+  }
+  refreshOff();lastJSON=JSON.stringify(state);
+  try{const v=localStorage.getItem(KEY+'-show');if(['jobs','bills','both'].includes(v))calShow=v}catch(e){}
+  try{const t=localStorage.getItem(KEY+'-tab');if(['calendar','shop','jobs','materials','settings','claude'].includes(t))tab=t}catch(e){}
+  if(['calendar','shop','jobs','materials','settings','claude'].includes(location.hash.slice(1)))tab=location.hash.slice(1);
+  if(tab==='claude'&&!HUB)tab='calendar';
+  const added=addStarterJobs();
+  const before=JSON.stringify(state),oct30=applyOct30(),ticked=autoAdvance();
+  /* on a first run, Undo already takes the starter jobs back out in one step */
+  if((ticked.length||oct30.length)&&!added){undoStack.push(before);document.getElementById('undoBtn').hidden=false}
+  save();render(true);loadInbox();
+  if(oct30.length)setTimeout(()=>toast(`${esc(oct30.join(', '))}: shop work marked done, finishing ${TODAY>OCT30?'done':'today'} (Oct 30). Undo puts them back.`,true),added?4500:300);
+  else if(ticked.length)setTimeout(()=>toast(`Marked done since last time: ${esc(ticked.slice(0,4).join(', '))}${ticked.length>4?` and ${ticked.length-4} more`:''}. Click a step on the job to reopen it.`,true),added?4500:300);
+  /* left open overnight: start the new day fresh, once nothing is waiting to save */
+  setInterval(()=>{if(iso(new Date())!==TODAY&&!savePending&&!pointerDown&&!document.querySelector('input:focus,textarea:focus,select:focus'))location.reload()},10*60000);
+  if(added)setTimeout(()=>toast(`Added your ${plural(added,'job')} from Oct 30. Undo takes them back out.`,true),300);
+}
+boot();
+</script>
+
+</body>
+</html>

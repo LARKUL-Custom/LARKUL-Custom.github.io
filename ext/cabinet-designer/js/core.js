@@ -1,0 +1,520 @@
+// Core: units, registries, the sample job, state, persistence and undo.
+// Every script in this extension is a classic script, so top-level names are shared.
+'use strict';
+const MM = 1 / 25.4;
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const uid = p => (p || 'x') + '-' + Math.random().toString(36).slice(2, 8);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const r3 = v => Math.round(v * 1000) / 1000;
+const clone = o => JSON.parse(JSON.stringify(o));
+const has = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+
+/* ---------- Units: inches inside, fractions on screen ---------- */
+function fmtLen(x, q) {
+  if (x === '' || x === undefined || x === null || !isFinite(x)) return '';
+  const neg = x < 0; const n = Math.round(Math.abs(x) * 32);
+  const whole = Math.floor(n / 32); let f = n % 32, d = 32;
+  while (f && f % 2 === 0) { f /= 2; d /= 2; }
+  const s = f ? (whole ? whole + ' ' : '') + f + '/' + d : String(whole);
+  return (neg ? '-' : '') + s + (q ? '"' : '');
+}
+function parseLen(str) {
+  if (typeof str === 'number') return str;
+  str = String(str).trim().toLowerCase().replace(/["”]/g, '').trim();
+  if (!str) return NaN;
+  let mm = false;
+  if (/mm$/.test(str)) { mm = true; str = str.replace(/mm$/, '').trim(); }
+  let m, v;
+  if ((m = str.match(/^(-?\d+)[\s-]+(\d+)\/(\d+)$/))) v = (+m[1] < 0 ? -1 : 1) * (Math.abs(+m[1]) + m[2] / m[3]);
+  else if ((m = str.match(/^(\d+)\/(\d+)$/))) v = m[1] / m[2];
+  else if (/^-?\d*\.?\d+$/.test(str)) v = parseFloat(str);
+  else v = NaN;
+  return mm ? v * MM : v;
+}
+
+/* ---------- Registries ---------- */
+const PARAM_DEFS = [
+  { k: 'baseType', g: 'base', label: 'Cabinet base', type: 'select', cats: ['Base', 'Tall'], options: [{ v: 'feet', l: 'Feet (leveler legs)' }, { v: 'notch', l: 'Toe kick notch in the sides' }] },
+  { k: 'toeSkin', g: 'base', label: 'Toe skin', type: 'select', cats: ['Base', 'Tall'], options: [{ v: 'on', l: 'Add automatically' }, { v: 'off', l: 'Leave off' }] },
+  { k: 'toeKickHeight', g: 'base', label: 'Toe kick / feet height', type: 'len', cats: ['Base', 'Tall'] },
+  { k: 'toeKickSetback', g: 'base', label: 'Toe kick / toe skin setback', type: 'len', cats: ['Base', 'Tall'] },
+  { k: 'toeSkinMaxL', g: 'base', label: 'Toe skin stock length (longer ones split)', type: 'len', cats: ['Base', 'Tall'] },
+  { k: 'feetCount', g: 'base', label: 'Feet per cabinet (0 = automatic)', type: 'int', cats: ['Base', 'Tall'] },
+  { k: 'stretcherWidth', g: 'box', label: 'Top stretcher width', type: 'len', cats: ['Base'] },
+  { k: 'nailers', g: 'box', label: 'Wall nailers', type: 'select', options: [{ v: 'none', l: 'None' }, { v: 'top', l: 'Top, at the back' }, { v: 'bottom', l: 'Bottom, at the back' }, { v: 'both', l: 'Top and bottom' }] },
+  { k: 'nailerWidth', g: 'box', label: 'Nailer width', type: 'len' },
+  { k: 'backInset', g: 'box', label: 'Back inset from rear', type: 'len' },
+  { k: 'dadoDepth', g: 'box', label: 'Back dado depth', type: 'len' },
+  { k: 'shelfCount', g: 'shelves', label: 'Adjustable shelves', type: 'int' },
+  { k: 'shelfMinSep', g: 'shelves', label: 'Fill with shelves, at least this apart (0 = use the count)', type: 'len' },
+  { k: 'backLBMinW', g: 'shelves', label: 'Rear line bore on cabinets wider than (0 = off)', type: 'len' },
+  { k: 'backLBThru', g: 'shelves', label: 'Rear line bore holes', type: 'select', options: [{ v: 'blind', l: 'Blind (pin depth)' }, { v: 'thru', l: 'Through the side' }] },
+  { k: 'shelfFrontSetback', g: 'shelves', label: 'Shelf front setback', type: 'len' },
+  { k: 'pinZoneInset', g: 'shelves', label: 'Shelf pin zone inset', type: 'len' },
+  { k: 'shelfDrill', g: 'shelves', label: 'Adjustable shelf holes', type: 'select', options: [{ v: 'set', l: 'A set of holes at each shelf' }, { v: 'line', l: 'Line bore the whole opening' }] },
+  { k: 'shelfHoles', g: 'shelves', label: 'Holes per set (each row)', type: 'int' },
+  { k: 'frontGap', g: 'fronts', label: 'Gap between fronts', type: 'len' },
+  { k: 'frontSideReveal', g: 'fronts', label: 'Front side reveal', type: 'len' },
+  { k: 'frontTopReveal', g: 'fronts', label: 'Front top reveal', type: 'len' },
+  { k: 'frontBottomReveal', g: 'fronts', label: 'Front bottom reveal', type: 'len' },
+  { k: 'hingeSide', g: 'fronts', label: 'Single door hinge side', type: 'select', options: ['L', 'R'] },
+  { k: 'hingeInset', g: 'fronts', label: 'Hinge from door end', type: 'len' },
+  { k: 'drawerBox', g: 'drawers', label: 'Drawer box joints', type: 'select', options: [{ v: 'butt', l: 'Sides overlap the front and back' }, { v: 'dovetail', l: 'Dovetail (sides between front and back)' }, { v: 'nofront', l: 'No box front (face screws to the bottom)' }] },
+  { k: 'dovetailPin', g: 'drawers', label: 'Dovetail pin depth', type: 'len' },
+  { k: 'drawerBottomDado', g: 'drawers', label: 'Drawer bottom dado', type: 'len' },
+];
+// Parameter groups, by what they are for.
+const PARAM_GROUPS = [['base', 'Feet and toe kick'], ['box', 'Box construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
+const SHOP_PARAMS = {
+  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'none', nailerWidth: 3.5, backInset: 0.75, dadoDepth: 0.375,
+  shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
+  frontTopReveal: 0, frontBottomReveal: 0, hingeSide: 'L', hingeInset: 3.5, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'butt', dovetailPin: 0.5,
+};
+const R = (type, h, count = 1) => ({ type, h, count });
+const FACE_PRESETS = [
+  { id: '1door', name: '1 Door', rows: [R('door', '*')] },
+  { id: '2door', name: '2 Door', rows: [R('door', '*', 2)] },
+  { id: '1dr1d', name: '1 Drawer, 1 Door', rows: [R('drawer', 6), R('door', '*')] },
+  { id: '1dr2d', name: '1 Drawer, 2 Door', rows: [R('drawer', 6), R('door', '*', 2)] },
+  { id: '2drw', name: '2 Drawer', rows: [R('drawer', '*'), R('drawer', '*')] },
+  { id: '3drw', name: '3 Drawer', rows: [R('drawer', 6), R('drawer', '*'), R('drawer', '*')] },
+  { id: '4drw', name: '4 Drawer', rows: [R('drawer', 5), R('drawer', 6), R('drawer', '*'), R('drawer', '*')] },
+  { id: 'sink', name: 'False front, 2 Door', rows: [R('false', 6), R('door', '*', 2)] },
+  { id: 'open', name: 'Open (no fronts)', rows: [R('open', '*')] },
+  { id: '2over2', name: '2 Door over 2 Door', rows: [R('door', 36, 2), R('door', '*', 2)] },
+  { id: 'door3dr', name: '2 Door over 3 Drawer', rows: [R('door', '*', 2), R('drawer', 10), R('drawer', 10), R('drawer', 10)] },
+];
+// Interior inserts a cabinet can hold. Roll-outs, dividers and tray dividers make parts; the rest go on the hardware list.
+const INSERT_TYPES = [
+  { id: 'rollout', name: 'Roll-out shelves', fields: ['n', 'h'], def: { n: 2, h: 4 }, hint: 'Drawer boxes on slides behind the doors, spaced evenly in the bottom door opening.' },
+  { id: 'divider', name: 'Vertical divider', fields: ['x'], def: { x: '*' }, hint: 'Full-height partition. Adjustable shelves are split in two.' },
+  { id: 'traydiv', name: 'Tray dividers', fields: ['n'], def: { n: 3 }, hint: 'Upright slats for baking sheets and trays.' },
+  { id: 'trash', name: 'Pull-out waste bin', fields: ['name'], def: { name: 'Double 35 qt pull-out waste bin' } },
+  { id: 'lazy', name: 'Lazy susan', fields: ['name'], def: { name: 'Lazy susan, 2 shelf' } },
+  { id: 'rotray', name: 'Roll-out trays', fields: ['n', 'h'], def: { n: 1, h: 2.5 }, hint: 'Low-sided roll-outs on slides behind the doors.' },
+  { id: 'roshelf', name: 'Roll-out shelves (lip only)', fields: ['n', 'h'], def: { n: 1, h: 1.5 }, hint: 'A shelf on slides with a small lip all round.' },
+  { id: 'rod', name: 'Closet rod', fields: ['name'], def: { name: 'Closet rod' }, hint: 'A rod across the opening, with a pair of flanges. Goes on the hardware list with its length.' },
+  { id: 'separator', name: 'Separator', fields: ['x'], def: { x: '*' }, hint: 'An upright panel splitting this one opening.' },
+  { id: 'other', name: 'Other insert', fields: ['name'], def: { name: 'Insert' }, hint: 'Goes on the hardware list only.' },
+];
+// Part kinds for edgebanding. Edges follow the part's machining coordinates:
+// L1 runs along the length at y = 0, L2 along the length at y = width, W1 across the width at x = 0, W2 at x = length.
+const EDGE_KEYS = ['L1', 'L2', 'W1', 'W2'];
+const PART_KINDS = [
+  { id: 'side', name: 'Cabinet sides', edges: { L1: 'Front', L2: 'Back', W1: 'Bottom', W2: 'Top' } },
+  { id: 'topbot', name: 'Top and bottom', edges: { L1: 'Front', L2: 'Back', W1: 'Left end', W2: 'Right end' } },
+  { id: 'stretcher', name: 'Front stretcher', edges: { L1: 'Front', L2: 'Back', W1: 'Left end', W2: 'Right end' } },
+  { id: 'rearStretcher', name: 'Rear stretcher', edges: { L1: 'Front', L2: 'Back', W1: 'Left end', W2: 'Right end' } },
+  { id: 'back', name: 'Back', edges: { L1: 'Left', L2: 'Right', W1: 'Bottom', W2: 'Top' } },
+  { id: 'toekick', name: 'Toe kick', edges: { L1: 'Bottom', L2: 'Top', W1: 'Left end', W2: 'Right end' } },
+  { id: 'shelf', name: 'Adjustable shelves', edges: { L1: 'Front', L2: 'Back', W1: 'Left end', W2: 'Right end' } },
+  { id: 'divider', name: 'Dividers', edges: { L1: 'Front', L2: 'Back', W1: 'Bottom', W2: 'Top' } },
+  { id: 'door', name: 'Doors and false fronts', edges: { L1: 'Left', L2: 'Right', W1: 'Bottom', W2: 'Top' } },
+  { id: 'drawerFront', name: 'Drawer fronts', edges: { L1: 'Left', L2: 'Right', W1: 'Bottom', W2: 'Top' } },
+  { id: 'frame', name: '5-piece stiles, rails and panels', edges: { L1: 'Long edge 1', L2: 'Long edge 2', W1: 'End 1', W2: 'End 2' } },
+  { id: 'drawerBox', name: 'Drawer and roll-out box sides, fronts, backs', edges: { L1: 'Bottom', L2: 'Top', W1: 'Front end', W2: 'Back end' } },
+  { id: 'drawerBottom', name: 'Drawer bottoms', edges: { L1: 'Long edge 1', L2: 'Long edge 2', W1: 'End 1', W2: 'End 2' } },
+  { id: 'spacer', name: 'Roll-out spacers', edges: { L1: 'Bottom', L2: 'Top', W1: 'Front end', W2: 'Back end' } },
+  { id: 'applied', name: 'Applied end panels', edges: { L1: 'Long edge 1', L2: 'Long edge 2', W1: 'Bottom', W2: 'Top' } },
+  { id: 'filler', name: 'Fillers', edges: { L1: 'Long edge 1', L2: 'Long edge 2', W1: 'Bottom', W2: 'Top' } },
+];
+const partKind = id => PART_KINDS.find(k => k.id === id) || PART_KINDS[0];
+function defaultEdgebands() {
+  return [
+    { id: 'eb-maple', name: 'Maple veneer 0.5 mm', thickMM: 0.5, width: 0.875, color: '#e2c896' },
+    { id: 'eb-oak', name: 'White oak veneer 0.5 mm', thickMM: 0.5, width: 0.875, color: '#c9a77a' },
+    { id: 'eb-pvc', name: 'PVC 1 mm, match fronts', thickMM: 1, width: 0.875, color: '#f1f0ec' },
+    { id: 'eb-birch', name: 'Birch veneer 0.5 mm', thickMM: 0.5, width: 0.75, color: '#e6d3ad' },
+  ];
+}
+function defaultPartTemplates() {
+  const e = (L1 = '', L2 = '', W1 = '', W2 = '') => ({ L1, L2, W1, W2 }), all = b => e(b, b, b, b);
+  return [
+    { id: 'pt-std', name: 'Standard: front edges', rules: {
+      side: e('eb-maple'), topbot: e('eb-maple'), stretcher: e('eb-maple'), shelf: e('eb-maple'), divider: e('eb-maple'), spacer: e('', '', 'eb-maple'),
+      door: all('eb-pvc'), drawerFront: all('eb-pvc'), applied: all('eb-pvc'), drawerBox: e('', 'eb-birch') } },
+    { id: 'pt-exposed', name: 'Exposed: fronts plus top and bottom ends', rules: {
+      side: e('eb-maple', '', 'eb-maple', 'eb-maple'), topbot: e('eb-maple'), stretcher: e('eb-maple'), shelf: e('eb-maple'), divider: e('eb-maple', '', '', 'eb-maple'), spacer: e('', '', 'eb-maple'),
+      door: all('eb-pvc'), drawerFront: all('eb-pvc'), applied: all('eb-pvc'), drawerBox: e('', 'eb-birch'), toekick: e('', '', 'eb-maple', 'eb-maple') } },
+    { id: 'pt-none', name: 'No edgebanding', rules: {} },
+  ];
+}
+// Older saves get the edgebanding library and a job default.
+function ensureEdgeLibs(s) {
+  if (!Array.isArray(s.edgebands)) s.edgebands = defaultEdgebands();
+  if (!Array.isArray(s.partTemplates) || !s.partTemplates.length) s.partTemplates = defaultPartTemplates();
+  if (s.job && s.job.defaults && !s.job.defaults.partT) s.job.defaults.partT = s.partTemplates[0].id;
+  return s;
+}
+// Door designer: frame, panel and panel design options. Older door styles get these defaults.
+const DOOR_DEFAULTS = {
+  stile: 2.25, rail: 2.25, midRails: 0, midRailW: 0, midStiles: 0, midStileW: 0, pocketDepth: 0.25, tenon: 0.375,
+  panelType: 'flat', raiseW: 1.5, design: 'none', grooveSpacing: 3, grooveW: 0.25, grooveDepth: 0.125, edgeProfile: 'square', insideProfile: 'square',
+  // Made in the shop (cut list and CNC) or bought from a door maker (door order only).
+  source: 'make', vHinge: 'none',
+  // Split doors: opening sizes top to bottom (splitH) and left to right (splitW); a number, a formula of W and H, or blank to share.
+  splitH: [], splitW: [], fieldPanels: [], cat: '', costFactor: 1, matCost: '',
+  // Size rules: a front outside these (blank = no limit) takes the swap style instead, e.g. a short shaker drawer front becomes a slab.
+  minW: '', maxW: '', minH: '', maxH: '', swap: '',
+  // Two-piece doors: the rabbet the panel drops into from the back, and the play around the panel.
+  recessW: 0.375, recessD: 0.375, panelGap: 0.0625,
+};
+// Gallery groups in the door designer. A style with no category is placed by its shape.
+const DOOR_CATS = [{ v: 'slab', l: 'Slab' }, { v: 'shaker', l: 'Shaker styles' }, { v: 'specialty', l: 'Specialty styles' }, { v: 'split', l: 'Split styles' }];
+function doorCat(d) {
+  if (d.cat && DOOR_CATS.some(c => c.v === d.cat)) return d.cat;
+  if (d.type !== 'slab' && (d.midRails || d.midStiles || d.midRailsF || d.midStilesF)) return 'split';
+  if (d.type === 'slab') return d.design === 'none' ? 'slab' : 'specialty';
+  return d.panelType === 'flat' && d.design === 'none' && d.insideProfile === 'square' ? 'shaker' : 'specialty';
+}
+const DOOR_SOURCES = [{ v: 'make', l: 'Made in shop (cut list and CNC)' }, { v: 'buyout', l: 'Buyout (ordered from a door maker)' }];
+const VENDOR_HINGE = [{ v: 'none', l: 'None' }, { v: 'bored', l: 'Door maker bores the cups' }];
+const DOOR_TYPES = [{ v: 'slab', l: 'Slab (one flat piece)' }, { v: 'routed', l: 'One-piece routed (CNC carves the frame look)' }, { v: 'twopiece', l: 'Two-piece (CNC cuts the 3/4 frame, separate recessed panel)' }, { v: 'fivepiece', l: 'Stiles and rails with a separate panel' }];
+// Doors whose frame is cut from one sheet on the CNC.
+const cncFramed = ds => ds.type === 'routed' || ds.type === 'twopiece';
+const PANEL_TYPES = [{ v: 'flat', l: 'Flat panel' }, { v: 'raised', l: 'Raised panel' }, { v: 'insert', l: 'Separate panel (set in from the back)' }, { v: 'glass', l: 'Glass' }, { v: 'open', l: 'Open (no panel)' }];
+const PANEL_DESIGNS = [{ v: 'none', l: 'Plain' }, { v: 'vgroove', l: 'Vertical V-grooves' }, { v: 'hgroove', l: 'Horizontal V-grooves' }, { v: 'beadboard', l: 'Beadboard' }, { v: 'xbrace', l: 'X brace (farmhouse)' }];
+const EDGE_PROFILES = [{ v: 'square', l: 'Square' }, { v: 'eased', l: 'Eased' }, { v: 'bevel', l: 'Bevel' }, { v: 'roundover', l: 'Roundover' }, { v: 'ogee', l: 'Ogee' }];
+const DOOR_PRESETS = [
+  { id: 'shaker', name: 'Shaker', type: 'routed', stile: 2.25, rail: 2.25, panelType: 'flat', design: 'none' },
+  { id: 'raised', name: 'Raised panel', type: 'fivepiece', stile: 2.5, rail: 2.5, panelType: 'raised', raiseW: 1.75, insideProfile: 'ogee', edgeProfile: 'roundover' },
+  { id: 'glass', name: 'Glass shaker', type: 'fivepiece', stile: 2.25, rail: 2.25, panelType: 'glass' },
+  { id: 'vslab', name: 'V-groove slab', type: 'slab', design: 'vgroove', grooveSpacing: 3 },
+  { id: 'bead', name: 'Beadboard shaker', type: 'routed', stile: 2.5, rail: 2.5, panelType: 'flat', design: 'beadboard', grooveSpacing: 1.5 },
+  { id: 'twopanel', name: 'Two-panel shaker', type: 'routed', stile: 2.25, rail: 2.25, midRails: 1, panelType: 'flat' },
+  { id: 'threepanel', name: 'Three-panel shaker', type: 'routed', stile: 2.25, rail: 2.25, midRails: 2, panelType: 'flat' },
+  { id: 'toplite', name: 'Short top panel shaker', type: 'routed', stile: 2.25, rail: 2.25, midRails: 1, panelType: 'flat', splitH: ['H/4', ''] },
+  { id: 'twopc', name: 'Two-piece shaker (3/8 HDF panel)', type: 'twopiece', stile: 2.25, rail: 2.25, panelType: 'flat', panelMat: 'm-hdf38' },
+  { id: 'pair', name: 'Two-wide shaker', type: 'routed', stile: 2.25, rail: 2.25, midStiles: 1, panelType: 'flat' },
+  { id: 'farm', name: 'Farmhouse X', type: 'fivepiece', stile: 3, rail: 3, panelType: 'flat', design: 'xbrace', grooveW: 2 },
+];
+const insertType = id => INSERT_TYPES.find(t => t.id === id) || INSERT_TYPES[INSERT_TYPES.length - 1];
+const HW_KINDS = [['slide', 'Drawer slides'], ['hinge', 'Hinges'], ['pull', 'Pulls and knobs'], ['shelfpin', 'Shelf pins'], ['joint', 'Joint templates'], ['leg', 'Legs'], ['other', 'Other hardware']];
+// Joint templates: how the box is fastened together. Female holes go in the face of the side (or the panel a divider lands on),
+// male holes in the end of the panel that butts into it. A depth of 0 drills through. Sizes are inches.
+const JOINT_LOC = { front: 2, back: 2, maxGap: 8 };
+function defaultJoints() {
+  return [
+    { id: 'jt-confirmat', kind: 'joint', name: 'Confirmat', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true },
+      female: { dia: 0.1969, depth: 0 }, male: { dia: 0.1969, depth: 1.75, center: true }, breakDado: 0,
+      ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 } },
+    { id: 'jt-dowel', kind: 'joint', name: 'Dowels', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false },
+      female: { dia: 0.315, depth: 0.5003 }, male: { dia: 0.315, depth: 1, center: true }, breakDado: 1,
+      ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 }, stretchers: { n: 2 } },
+  ];
+}
+// Leg layout like Mozaik's Legs tab. Insets are from the outside of the cabinet: toe (front), finished end, unfinished end, back.
+const LEG_DEF = { inToe: 3.9685, inFin: 2.1969, inUnfin: 1.4094, inBack: 3.9685, maxSep: 0, noBack: false, holeDia: 0.3937, holeDepth: 0.4724, width: 2.2441, depth: 2.5827 };
+// Older saves get the joint templates, real legs and the job's picks.
+function ensureJoinery(s) {
+  if (!Array.isArray(s.hardware)) return s;
+  if (!s.hardware.some(h => h.kind === 'joint')) s.hardware.push(...defaultJoints());
+  s.hardware.forEach(h => { if (h.feet && h.kind !== 'leg') { h.kind = 'leg'; } if (h.kind === 'leg') { h.feet = true; Object.entries(LEG_DEF).forEach(([k, v]) => { if (!(k in h)) h[k] = v; }); } });
+  if (!s.hardware.some(h => h.kind === 'leg')) s.hardware.push({ id: 'hw-leg', kind: 'leg', feet: true, name: 'Adjustable cabinet leg', ...LEG_DEF });
+  const d = s.job && s.job.defaults; if (d) {
+    const js = s.hardware.filter(h => h.kind === 'joint');
+    if (!d.jointU) d.jointU = (js.find(h => h.applies && h.applies.unfin) || js[0]).id;
+    if (!d.jointF) d.jointF = (js.find(h => h.applies && h.applies.fin) || js[0]).id;
+    if (!d.leg) d.leg = s.hardware.find(h => h.kind === 'leg').id;
+  }
+  return s;
+}
+
+/* ---------- Sample job ---------- */
+function seed() {
+  const lib = (id, name, cat, w, h, d, elev, rows, params, construction) => ({ id, name, cat, w, h, d, elev, rows, params, construction: construction || defaultConstruction(cat) });
+  const S = {
+    v: 3,
+    job: {
+      name: 'Sample house', customer: '', notes: '', wallThick: 4.5, wallHeight: 96,
+      params: { ...SHOP_PARAMS },
+      defaults: { cabMatT: 'mt-maple', drawerMatT: 'dt-bb58', doorT: 'door-shaker', pull: '', slide: 'hw-563h', hinge: 'hw-cliptop', shelfpin: 'hw-pin5', panelStyle: 'p-routed', countertop: 'top-quartz', molding: 'mo-crown', partT: 'pt-std' },
+    },
+    materials: [
+      { id: 'm-ply', name: '3/4 Prefinished Maple Ply', kind: 'sheet', thick: 0.71875, sheetW: 49, sheetL: 97, grain: true, cost: 118, color: '#e6d3b3', texture: null, procedural: 'maple', texScale: 24 },
+      { id: 'm-back', name: '1/4 Maple Ply (backs)', kind: 'sheet', thick: 0.25, sheetW: 49, sheetL: 97, grain: true, cost: 52, color: '#e9d8bb', texture: null, procedural: 'maple', texScale: 24 },
+      { id: 'm-bb', name: '5/8 Baltic Birch', kind: 'sheet', thick: 0.625, sheetW: 49, sheetL: 96, grain: false, cost: 74, color: '#eadcc0', texture: null, procedural: 'birch', texScale: 18 },
+      { id: 'm-bb12', name: '1/2 Baltic Birch', kind: 'sheet', thick: 0.5, sheetW: 49, sheetL: 96, grain: false, cost: 62, color: '#eadcc0', texture: null, procedural: 'birch', texScale: 18 },
+      { id: 'm-bot', name: '1/4 Baltic Birch', kind: 'sheet', thick: 0.25, sheetW: 49, sheetL: 96, grain: false, cost: 36, color: '#eadcc0', texture: null, procedural: 'birch', texScale: 18 },
+      { id: 'm-mdf', name: '3/4 MDF (paint grade)', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 46, color: '#f1f0ec', texture: null, procedural: null, texScale: 24 },
+      { id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 },
+      { id: 'm-mdf-sage', name: '3/4 MDF painted sage', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 46, color: '#8f9f86', texture: null, procedural: null, texScale: 24 },
+      { id: 'm-wo', name: '3/4 Rift White Oak Ply', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: true, cost: 168, color: '#c9a77a', texture: null, procedural: 'oak', texScale: 30 },
+      { id: 'm-quartz', name: '3 cm Quartz, white', kind: 'top', thick: 1.1875, sheetW: 63, sheetL: 120, grain: false, cost: 1400, color: '#f2f1ee', texture: null, procedural: 'stone', texScale: 40 },
+      { id: 'm-lam', name: 'Laminate top', kind: 'top', thick: 1.5, sheetW: 25.5, sheetL: 144, grain: false, cost: 190, color: '#7c7468', texture: null, procedural: null, texScale: 24 },
+      { id: 'm-butcher', name: 'Maple butcher block', kind: 'top', thick: 1.5, sheetW: 25, sheetL: 120, grain: true, cost: 420, color: '#d6b07c', texture: null, procedural: 'maple', texScale: 24 },
+    ],
+    matTemplates: {
+      cabinet: [
+        { id: 'mt-maple', name: 'Prefinished maple box', carcass: 'm-ply', back: 'm-back', shelf: 'm-ply', toeKick: 'm-ply' },
+        { id: 'mt-oak', name: 'White oak box (furniture grade)', carcass: 'm-wo', back: 'm-back', shelf: 'm-wo', toeKick: 'm-wo' },
+      ],
+      drawer: [
+        { id: 'dt-bb58', name: '5/8 Baltic birch boxes', sides: 'm-bb', bottom: 'm-bot' },
+        { id: 'dt-bb12', name: '1/2 Baltic birch boxes', sides: 'm-bb12', bottom: 'm-bot' },
+      ],
+    },
+    doorStyles: [
+      { id: 'd-slab-wo', name: 'Slab, white oak', type: 'slab', mat: 'm-wo', stile: 0, rail: 0, pocketDepth: 0, tenon: 0, panelMat: 'm-back' },
+      { id: 'd-slab-mdf', name: 'Slab, paint grade', type: 'slab', mat: 'm-mdf', stile: 0, rail: 0, pocketDepth: 0, tenon: 0, panelMat: 'm-back' },
+      { id: 'd-rshaker', name: 'Routed shaker (one-piece MDF)', type: 'routed', mat: 'm-mdf', stile: 2.25, rail: 2.25, pocketDepth: 0.25, tenon: 0, panelMat: 'm-back' },
+      { id: 'd-rshaker-sage', name: 'Routed shaker, sage', type: 'routed', mat: 'm-mdf-sage', stile: 2.25, rail: 2.25, pocketDepth: 0.25, tenon: 0, panelMat: 'm-back' },
+      { id: 'd-5pc', name: '5-piece shaker, white oak', type: 'fivepiece', mat: 'm-wo', stile: 2.25, rail: 2.25, pocketDepth: 0, tenon: 0.375, panelMat: 'm-back' },
+      { id: 'd-raised', name: 'Raised panel, white oak', type: 'fivepiece', mat: 'm-wo', stile: 2.5, rail: 2.5, pocketDepth: 0, tenon: 0.375, panelMat: 'm-wo', panelType: 'raised', raiseW: 1.75, insideProfile: 'ogee', edgeProfile: 'roundover' },
+      { id: 'd-vslab', name: 'V-groove slab, paint grade', type: 'slab', mat: 'm-mdf', stile: 0, rail: 0, pocketDepth: 0, tenon: 0, panelMat: 'm-back', design: 'vgroove', grooveSpacing: 3, grooveW: 0.25, grooveDepth: 0.125 },
+    ],
+    doorTemplates: [
+      { id: 'door-shaker', name: 'Shaker, paint grade', door: 'd-rshaker', drawer: 'd-rshaker', falseFront: 'd-slab-mdf', minFrameHeight: 7, pull: 'hw-pull128', drawerPull: 'hw-pull128', pullFromEdge: 2, pullFromEnd: 3, drawerPullFromTop: 0 },
+      { id: 'door-sage', name: 'Shaker, sage', door: 'd-rshaker-sage', drawer: 'd-rshaker-sage', falseFront: 'd-rshaker-sage', minFrameHeight: 7, pull: 'hw-pull128', drawerPull: 'hw-pull128', pullFromEdge: 2, pullFromEnd: 3, drawerPullFromTop: 0 },
+      { id: 'door-oak', name: 'Rift oak slab', door: 'd-slab-wo', drawer: 'd-slab-wo', falseFront: 'd-slab-wo', minFrameHeight: 99, pull: 'hw-pull96', drawerPull: 'hw-pull96', pullFromEdge: 2, pullFromEnd: 3, drawerPullFromTop: 2 },
+      { id: 'door-5pc', name: '5-piece oak, slab drawers', door: 'd-5pc', drawer: 'd-slab-wo', falseFront: 'd-slab-wo', minFrameHeight: 99, pull: 'hw-knob', drawerPull: 'hw-pull128', pullFromEdge: 2, pullFromEnd: 3, drawerPullFromTop: 0 },
+    ],
+    panels: [
+      { id: 'p-flat', name: 'Flat end panel, oak', type: 'flat', mat: 'm-wo', frontOverhang: 0.75, scribe: 0.5, toFloor: true, frame: 0, pocketDepth: 0 },
+      { id: 'p-routed', name: 'Routed shaker end', type: 'routed', mat: 'm-mdf', frontOverhang: 0.75, scribe: 0.5, toFloor: true, frame: 3, pocketDepth: 0.25 },
+    ],
+    hardware: [
+      { id: 'hw-563h', ...clone(TANDEM_563H) },
+      { id: 'hw-ball', kind: 'slide', name: 'Full-ext ball bearing side mount', notes: '1/2" clearance per side, for 1/2" drawer sides.', lengths: [12, 14, 16, 18, 20, 22],
+        sideThickMM: 12.7, widthDeductMM: 25.4, bottomRecessMM: 6.35, bottomClearMM: 6, topClearMM: 20, rearClearMM: 10,
+        cabHoles: [{ ref: 'front', y: 37, z: 22, dia: 5, depth: 12 }, { ref: 'rear32', y: 0, z: 22, dia: 5, depth: 12 }],
+        boxOps: [{ part: 'side', type: 'bore', edge: '', x: 37, y: 22, inset: 0, dia: 3, depth: 8 }], bomExtra: '' },
+      { id: 'hw-cliptop', kind: 'hinge', name: 'Blum Clip Top Blumotion 110° full overlay', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 5,
+        cupExtra: [], plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12 }, { dz: 16, y: 37, dia: 5, depth: 12 }], max2: 40, max3: 60 },
+      { id: 'hw-inserta', kind: 'hinge', name: 'Blum Clip Top Inserta 110° (press-in dowels)', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 5,
+        cupExtra: [{ dx: -22.5, dy: 9.5, dia: 8, depth: 11.5 }, { dx: 22.5, dy: 9.5, dia: 8, depth: 11.5 }], plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12 }, { dz: 16, y: 37, dia: 5, depth: 12 }], max2: 40, max3: 60 },
+      { id: 'hw-pull128', kind: 'pull', name: 'Bar pull 128 mm, matte black', ccMM: 128, lengthMM: 168, holeDiaMM: 5, finish: '#2b2b2b' },
+      { id: 'hw-pull96', kind: 'pull', name: 'Bar pull 96 mm, brass', ccMM: 96, lengthMM: 136, holeDiaMM: 5, finish: '#b08d4f' },
+      { id: 'hw-knob', kind: 'pull', name: 'Round knob 32 mm', ccMM: 0, lengthMM: 32, holeDiaMM: 5, finish: '#b08d4f' },
+      { id: 'hw-pin5', kind: 'shelfpin', name: '5 mm shelf pin, System 32', pinDiaMM: 5, pinDepthMM: 10, pinSetbackMM: 37, pitchMM: 32 },
+      { id: 'hw-leg', kind: 'leg', name: 'Hafele Axilo 48 round press fit', feet: true, ...LEG_DEF },
+      ...defaultJoints(),
+    ],
+    countertops: [
+      { id: 'top-quartz', name: '3 cm quartz', mat: 'm-quartz', thick: 1.1875, frontOverhang: 1.5, endOverhang: 1, backsplash: 4 },
+      { id: 'top-lam', name: 'Post-form laminate', mat: 'm-lam', thick: 1.5, frontOverhang: 1, endOverhang: 0.75, backsplash: 0 },
+      { id: 'top-butcher', name: 'Maple butcher block', mat: 'm-butcher', thick: 1.5, frontOverhang: 1.25, endOverhang: 1, backsplash: 0 },
+    ],
+    moldings: [
+      { id: 'mo-crown', name: '3 1/2" crown', profile: 'crown', h: 3.5, d: 2.25, fill: false, mat: 'm-mdf' },
+      { id: 'mo-cove', name: '2" cove', profile: 'cove', h: 2, d: 1.25, fill: false, mat: 'm-mdf' },
+      { id: 'mo-fill', name: 'Flat batten to ceiling', profile: 'flat', h: 6, d: 0.75, fill: true, mat: 'm-mdf' },
+      { id: 'mo-light', name: 'Light rail 1 1/2"', profile: 'flat', h: 1.5, d: 0.75, fill: false, mat: 'm-mdf', bottom: true },
+    ],
+    library: [
+      lib('b-1d1dr', 'Base 1 Door 1 Drawer', 'Base', 18, 34.5, 24, 0, FACE_PRESETS[2].rows, { shelfCount: 1 }),
+      lib('b-2d1dr', 'Base 2 Door 1 Drawer', 'Base', 30, 34.5, 24, 0, FACE_PRESETS[3].rows, { shelfCount: 1 }),
+      lib('b-3dr', 'Base 3 Drawer', 'Base', 18, 34.5, 24, 0, FACE_PRESETS[5].rows, { shelfCount: 0 }),
+      lib('b-sink', 'Sink Base', 'Base', 36, 34.5, 24, 0, FACE_PRESETS[7].rows, { shelfCount: 0 }),
+      lib('w-1d', 'Wall 1 Door', 'Wall', 18, 36, 12, 54, FACE_PRESETS[0].rows, { shelfCount: 2 }),
+      lib('w-2d', 'Wall 2 Door', 'Wall', 30, 36, 12, 54, FACE_PRESETS[1].rows, { shelfCount: 2 }),
+      lib('w-hood', 'Wall Hood Cabinet', 'Wall', 30, 18, 24, 66, FACE_PRESETS[1].rows, { shelfCount: 0 }),
+      lib('t-pantry', 'Tall Pantry', 'Tall', 24, 90, 24, 0, FACE_PRESETS[9].rows, { shelfCount: 4 }),
+    ],
+    rooms: [
+      newRoom('r1', 'Kitchen', [
+        { id: 'w1', x1: 0, y1: 96, x2: 0, y2: 0, thick: 4.5, height: 96 },
+        { id: 'w2', x1: 0, y1: 0, x2: 150, y2: 0, thick: 4.5, height: 96 },
+        { id: 'w3', x1: 150, y1: 0, x2: 150, y2: 120, thick: 4.5, height: 96 },
+      ]),
+      newRoom('r2', 'Laundry', [
+        { id: 'w4', x1: 0, y1: 72, x2: 0, y2: 0, thick: 4.5, height: 96 },
+        { id: 'w5', x1: 0, y1: 0, x2: 96, y2: 0, thick: 4.5, height: 96 },
+      ], { doorT: 'door-sage', countertop: 'top-butcher' }),
+    ],
+    roomId: 'r1',
+    designer: null,
+  };
+  // The sample shows its tops already built.
+  S.rooms.forEach(r => { r.autoTops = true; });
+  ensureEdgeLibs(S); ensureJoinery(S); attachRoom(S);
+  S.shapeLib = defaultShapeLib(S); S.formulas = {}; S.job.vars = [];
+  const put = (libId, wall, off, o = {}) => S.cabinets.push(Object.assign(newCab(S, S.library.find(l => l.id === libId), wall, 1, off), o));
+  // Runs start a filler's width off the wall (see LAYOUT_DEFAULTS); open ends get panels automatically.
+  put('b-3dr', 'w2', 3.75);
+  put('b-1d1dr', 'w2', 21.75, { w: 21 });
+  put('b-sink', 'w2', 42.75);
+  put('b-2d1dr', 'w2', 78.75);
+  put('b-2d1dr', 'w2', 108.75, { w: 36 });
+  put('w-1d', 'w2', 3.75, { molding: 'mo-crown' });
+  put('w-1d', 'w2', 21.75, { w: 21, params: { hingeSide: 'R' }, molding: 'mo-crown' });
+  put('w-2d', 'w2', 78.75, { molding: 'mo-crown' });
+  put('w-2d', 'w2', 108.75, { w: 36, molding: 'mo-crown' });
+  put('b-2d1dr', 'w3', 26.25);
+  put('b-3dr', 'w3', 56.25, { w: 24 });
+  put('t-pantry', 'w3', 93.75, { molding: 'mo-crown' });
+  S.roomId = 'r2';
+  put('b-sink', 'w5', 3.75, { w: 30 });
+  put('b-3dr', 'w5', 33.75, { w: 24 });
+  put('w-2d', 'w5', 3.75, { w: 30, h: 30, elev: 60 });
+  put('w-1d', 'w5', 33.75, { w: 24, h: 30, elev: 60 });
+  S.roomId = 'r1';
+  return S;
+}
+// New rooms start with no countertops; Auto build countertops on the Tops tab lays them. Rooms saved before that keep theirs.
+function newRoom(id, name, walls, settings) {
+  return { id, name, walls: walls || [], cabinets: [], shapes: [], ctRuns: {}, genTops: [], genMolds: [], lights: [], autoTops: false, settings: settings || {}, params: {}, wallThick: 4.5, wallHeight: 96 };
+}
+function defaultConstruction(cat) { return { toeKick: cat !== 'Wall', top: cat === 'Base' ? 'stretchers' : 'full' }; }
+function newCab(S, lib, wallId, side, off) {
+  // Blank template and hardware fields follow the room's settings (see cabSet()).
+  return {
+    id: uid('c'), libId: lib.id, name: lib.name, cat: lib.cat, w: lib.w, h: lib.h, d: lib.d, elev: lib.elev,
+    wall: wallId, side, off,
+    cabMatT: lib.cabMatT || '', drawerMatT: lib.drawerMatT || '', doorT: lib.doorT || '',
+    slide: lib.slide || '', hinge: lib.hinge || '', pull: '', panelStyle: lib.panelStyle || '', partT: lib.partT || '',
+    panelL: lib.appliedL ? 'on' : '', panelR: lib.appliedR ? 'on' : '', molding: null,
+    construction: clone(lib.construction || defaultConstruction(lib.cat)),
+    rows: clone(lib.rows), libParams: { ...(lib.params || {}) }, params: {}, custom: clone(lib.custom || []), vars: clone(lib.vars || []), inserts: clone(lib.inserts || []),
+  };
+}
+
+/* ---------- State, persistence, undo ---------- */
+const KEY = 'cabinet-designer.v2';
+const inHub = () => !!(window.Hub && window.Hub.id);
+let S = null;
+let undoStack = [], redoStack = [];
+let saveTimer = null, saveNote = '';
+// Walls, cabinets and countertop overrides live in each room; S.walls and friends point at the open room.
+const ROOM_KEYS = ['walls', 'cabinets', 'shapes', 'ctRuns', 'genTops', 'genMolds', 'lights'];
+function attachRoom(st) {
+  ROOM_KEYS.forEach(k => {
+    if ((Object.getOwnPropertyDescriptor(st, k) || {}).get) return;
+    const r = () => st.rooms.find(x => x.id === st.roomId) || st.rooms[0];
+    Object.defineProperty(st, k, { get: () => r()[k], set: v => { r()[k] = v; }, enumerable: false, configurable: true });
+  });
+  return st;
+}
+const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'doorT', 'pull', 'slide', 'hinge', 'panelStyle', 'partT', 'jointU', 'jointF'];
+// Older saves had one room and stored the job default on every cabinet. Blank those so cabinets follow room settings.
+// Blum TANDEM plus BLUMOTION 563H, frameless, from Blum's 563H/563 installation sheet (2016).
+// Runner screws: top row 37 mm above the runner bottom (the opening bottom), the box sits 14 mm above it, so 23 mm above the box bottom.
+const TANDEM_563H = {
+  kind: 'slide', name: 'Blum TANDEM plus BLUMOTION 563H',
+  notes: 'Full extension concealed runners, soft close, for 16 mm (5/8") drawer sides. Drawer width = opening - 10 mm; inside drawer width must be opening - 42 mm. Max drawer height = opening - 20 mm. Locking devices: T51.1901 R/L (side-to-side adjust), T51.1801 R/L (no side-to-side), T51.1901.PS (depth adjust). Screws 606N/606P or 662.1150.HG system screws. Drill rear hooks and locking device pilots with template T65.1600.01.',
+  lengths: [12, 15, 18, 21],
+  partNos: { 12: '563H3050B', 15: '563H3810B', 18: '563H4570B', 21: '563H5330B' },
+  runnerMM: { 12: 319, 15: 395, 18: 471, 21: 548 },
+  minDepthMM: { 12: 328, 15: 404, 18: 480, 21: 557 },
+  holeSets: { 12: [37, 165, 261], 15: [37, 165, 357], 18: [37, 261, 453], 21: [37, 261, 517] },
+  sideThickMM: 16, widthDeductMM: 10, bottomRecessMM: 13, bottomClearMM: 14, topClearMM: 6, rearClearMM: 23,
+  cabHoles: [{ ref: 'set', i: 1, y: 0, z: 23, dia: 5, depth: 12 }, { ref: 'set', i: 2, y: 0, z: 23, dia: 5, depth: 12 }, { ref: 'set', i: 3, y: 0, z: 23, dia: 5, depth: 12 }],
+  boxOps: [{ part: 'side', type: 'hbore', edge: 'rear', x: 0, y: 11, inset: 7, dia: 6, depth: 10 }],
+  bomExtra: 'Blum TANDEM locking devices T51.1901R + T51.1901L (pair)',
+};
+function migrate(s) {
+  if (!s || typeof s !== 'object') return null;
+  if (s.v === 2 && Array.isArray(s.cabinets)) {
+    const d = s.job.defaults, strip = o => SETTING_FIELDS.forEach(k => { if (o && o[k] === d[k]) o[k] = ''; });
+    s.cabinets.forEach(strip); (s.library || []).forEach(strip); strip(s.designer);
+    d.pull = d.pull || '';
+    s.rooms = [{ ...newRoom('r1', 'Room 1', s.walls), cabinets: s.cabinets, ctRuns: s.ctRuns || {}, wallThick: s.job.wallThick || 4.5, wallHeight: s.job.wallHeight || 96 }];
+    s.roomId = 'r1'; delete s.walls; delete s.cabinets; delete s.ctRuns; s.v = 3;
+  }
+  if (s.v !== 3 || !Array.isArray(s.rooms) || !s.rooms.length) return null;
+  // Applied panels were yes or no; now each end is automatic, always or never.
+  s.rooms.forEach(r => r.cabinets.forEach(c => {
+    ['L', 'R'].forEach(e => { if (!('panel' + e in c)) c['panel' + e] = c['applied' + e] ? 'on' : ''; delete c['applied' + e]; });
+  }));
+  // Feet and toe skin came later: older jobs pick up the shop defaults.
+  (s.hardware || []).forEach(h => { if (h.id === 'hw-leg' && !('feet' in h)) { h.feet = true; delete h.perCabinet; } });
+  // The 563H runner had placeholder sizes until 0.32.0; jobs pick up the real ones from Blum's sheet.
+  (s.hardware || []).forEach(h => { if (h.id === 'hw-563h' && !h.holeSets) Object.assign(h, clone(TANDEM_563H)); });
+  if (s.job && s.job.params) Object.entries(SHOP_PARAMS).forEach(([k, v]) => { if (!(k in s.job.params)) s.job.params[k] = v; });
+  // Formulas and job variables came later.
+  s.formulas = s.formulas || {}; if (s.job) s.job.vars = s.job.vars || [];
+  // Hand-placed tops and molding runs came with 0.13.1.
+  s.rooms.forEach(r => { r.shapes = r.shapes || []; r.genTops = r.genTops || []; r.genMolds = r.genMolds || []; r.lights = r.lights || []; });
+  if (!s.shapeLib) s.shapeLib = defaultShapeLib(s);
+  // Molding profiles live on the molding (0.21.2); 3/8 HDF for two-piece door panels came with 0.21.0.
+  (s.moldings || []).forEach(m => { if (m.profile === 'shape' && !(m.pts || []).length) { const l = s.shapeLib.find(x => x.id === m.shape); m.pts = l ? clone(l.pts) : moldStartPts(); } delete m.shape; });
+  s.shapeLib = s.shapeLib.filter(l => l.id !== 'sh-crown');
+  if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
+  return attachRoom(ensureJoinery(ensureEdgeLibs(s)));
+}
+function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
+// The open job lives in its own file (see jobs.js); browser storage keeps a working copy too.
+const loadState = () => bootJobs();
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* the job file is the real copy */ }
+  }, 400);
+  saveJobSoon();
+}
+function snapshot() { undoStack.push(JSON.stringify(S)); if (undoStack.length > 80) undoStack.shift(); redoStack = []; }
+function mutate(fn, defer) {
+  snapshot(); fn(); attachRoom(S); if (typeof recalcFormulas === 'function') recalcFormulas(); save();
+  if (defer) setTimeout(() => { const id = document.activeElement && document.activeElement.id; render(); if (id) { const el = document.getElementById(id); if (el) el.focus(); } }, 0);
+  else render();
+}
+function undoRedo(dir) {
+  const from = dir < 0 ? undoStack : redoStack, to = dir < 0 ? redoStack : undoStack;
+  if (!from.length) return;
+  const keepRoom = S.roomId;
+  to.push(JSON.stringify(S)); S = attachRoom(JSON.parse(from.pop()));
+  if (S.rooms.some(r => r.id === keepRoom)) S.roomId = keepRoom;
+  fixSel(); save(); render();
+}
+
+/* ---------- Lookups ---------- */
+// '_designer' is the cabinet open in the Designer, so the cabinet editor's face and interior tools work there too.
+const cab = id => id === '_designer' ? desCabLive() : S.cabinets.find(c => c.id === id);
+const wall = id => S.walls.find(w => w.id === id);
+const mat = id => S.materials.find(m => m.id === id);
+const libItem = id => S.library.find(l => l.id === id);
+const doorStyle = id => ({ ...DOOR_DEFAULTS, ...(S.doorStyles.find(d => d.id === id) || S.doorStyles[0]) });
+const doorTpl = id => S.doorTemplates.find(d => d.id === id) || S.doorTemplates[0];
+const cabMatT = id => S.matTemplates.cabinet.find(t => t.id === id) || S.matTemplates.cabinet[0];
+const drawerMatT = id => S.matTemplates.drawer.find(t => t.id === id) || S.matTemplates.drawer[0];
+const panelStyle = id => S.panels.find(p => p.id === id) || S.panels[0];
+const hw = id => S.hardware.find(h => h.id === id);
+const hwOf = kind => S.hardware.filter(h => h.kind === kind);
+const hwPick = (id, kind) => { const h = hw(id); return h && h.kind === kind ? h : hwOf(kind)[0]; };
+const countertop = id => S.countertops.find(t => t.id === id) || S.countertops[0];
+const molding = id => S.moldings.find(m => m.id === id);
+const partTpl = id => S.partTemplates.find(t => t.id === id) || S.partTemplates[0];
+const edgeband = id => S.edgebands.find(b => b.id === id);
+// Base and tall cabinets sit on feet with a separate toe skin, or have a toe kick notched into the sides.
+const onFeet = (c, p) => hasToe(c) && (p || effParams(c)).baseType !== 'notch';
+const feetCount = (c, p) => { const n = (p || effParams(c)).feetCount | 0; return n > 0 ? n : c.w > 36 ? 6 : 4; };
+const hasToe = c => c.construction ? !!c.construction.toeKick : (c.cat === 'Base' || c.cat === 'Tall');
+const effParams = c => Object.assign({}, SHOP_PARAMS, S.job.params, curRoom().params || {}, c.libParams || c.params0 || {}, c.params || {});
+/* ---------- Rooms and settings ---------- */
+const curRoom = () => S.rooms.find(r => r.id === S.roomId) || S.rooms[0];
+const roomById = id => S.rooms.find(r => r.id === id);
+// Job setting, overridden by the room, overridden by the cabinet. A blank value means "follow the level above".
+const roomSet = (k, r = curRoom()) => ((r && r.settings) || {})[k] || S.job.defaults[k] || '';
+const cabSet = (c, k) => (c && c[k]) || roomSet(k);
+// Runs fn with another room open, so S.walls and S.cabinets point at it.
+function withRoom(r, fn) { const prev = S.roomId; S.roomId = r.id; try { return fn(); } finally { S.roomId = prev; } }
+const allCabs = () => S.rooms.flatMap(r => r.cabinets);
+const wallName = w => w ? 'Wall ' + (S.walls.indexOf(w) + 1) : 'No wall';
+let LBL = {};
+// Cabinet labels: job numbers by default (room 6 is #601, #602 ...), or type letters (B1, W1) if the job asks for them.
+function labels() {
+  const out = {}, nums = S.job.labelStyle !== 'type';
+  if (nums) ensureNums();
+  S.rooms.forEach(r => { const n = {}; r.cabinets.forEach(c => { n[c.cat] = (n[c.cat] || 0) + 1; out[c.id] = nums ? '#' + c.num : c.cat[0] + n[c.cat]; }); });
+  return out;
+}
+// Each room owns a block of 100 numbers. A cabinet keeps its number once it has one, so numbers sent out stay put;
+// new cabinets take the next free one. Copies of rooms or cabinets get fresh numbers.
+const wallOrder = (r, c) => { const i = r.walls.findIndex(w => w.id === c.wall); return i < 0 ? 999 : i; };
+function numOrder(r) { return r.cabinets.slice().sort((a, b) => wallOrder(r, a) - wallOrder(r, b) || (a.cat === 'Wall') - (b.cat === 'Wall') || a.off - b.off); }
+function ensureNums() {
+  const all = S.rooms.map(r => r.block), seen = new Set();
+  S.rooms.forEach((r, i) => {
+    if (!(r.block > 0) || seen.has(r.block)) {
+      const had = r.block > 0; let b = 1; while (seen.has(b) || all.includes(b)) b++;
+      r.block = all[i] = b; if (had) r.cabinets.forEach(c => { c.num = null; });
+    }
+    seen.add(r.block);
+    const used = new Set(), base = r.block * 100;
+    r.cabinets.forEach(c => { if (c.num > base && c.num < base + 100 && !used.has(c.num)) used.add(c.num); else c.num = null; });
+    numOrder(r).forEach(c => { if (c.num) return; let n = base + 1; while (used.has(n)) n++; c.num = n; used.add(n); });
+  });
+}
+// Numbers in wall order, left to right, bases before uppers.
+function renumberRoom(r) { r.cabinets.forEach(c => { c.num = null; }); ensureNums(); }

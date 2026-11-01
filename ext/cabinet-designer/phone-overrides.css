@@ -1,0 +1,84 @@
+/* Cabinet Designer on a phone (phone app only; the PC uses the designer's own layout).
+   The drawing gets most of the screen, the library slides up as a sheet, and the cabinet's
+   details scroll under the drawing (or beside it with the phone turned sideways). */
+@media (max-width: 960px), (max-height: 560px) and (pointer: coarse) {
+  html, body { height: 100%; overflow: hidden; }
+  .app { height: 100%; min-height: 0; }
+  main { padding: 6px max(8px, env(safe-area-inset-left, 0px)) 6px max(8px, env(safe-area-inset-right, 0px)); }
+  main.is-room { overflow: hidden; }
+
+  /* One slim header row, and the section tabs as one scrolling row. */
+  .top { padding: 4px max(8px, env(safe-area-inset-left, 0px)) 0; gap: 2px; }
+  .topline { flex-wrap: nowrap; gap: 6px; }
+  .jobsbtn { padding: 6px 10px; font-size: 14px; }
+  .jobsbtn span { display: none; }
+  .brand { flex: 1 1 auto; min-width: 0; }
+  .brand .crumb, .brand .crumbsep { display: none; }
+  .brand input { display: block; width: 100%; min-width: 0; font-size: 15px; }
+  .savestate { font-size: 11px; padding: 1px 6px; }
+  .roompick > span { display: none; }
+  .roompick select { min-width: 0; max-width: 140px; font-size: 15px; padding: 4px 6px; }
+  .hdr-actions { gap: 4px; }
+  .hdr-actions .btn { padding: 7px; font-size: 0; gap: 0; }
+  .hdr-actions .btn .ic { width: 18px; height: 18px; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; gap: 2px; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+  .tabs button { padding: 4px 8px; font-size: 13px; gap: 6px; }
+  .tabs .tabic { width: 24px; height: 24px; }
+
+  /* Room: drawing first, details below it. */
+  #tab-room.room { display: flex !important; flex-direction: column; gap: 6px; height: 100%; min-height: 0; position: relative; grid-template-columns: none; }
+  #tab-room .views { flex: 1 1 58%; min-height: 0; position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; }
+  #tab-room .pane { height: auto !important; min-height: 0; }
+  #tab-room .viewbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; padding: 1px 1px 3px; -webkit-overflow-scrolling: touch; }
+  #tab-room .viewbar::-webkit-scrollbar { display: none; }
+  #tab-room .viewbar > * { flex: none; }
+  #tab-room .viewbar .seg { flex-wrap: nowrap; }
+  #tab-room .viewbar .seg button { padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+  #tab-room .viewbar .row-actions { flex-wrap: nowrap; }
+  #tab-room .viewbar .btn.sm { white-space: nowrap; }
+  #tab-room .hint { top: 6px; bottom: auto; left: 6px; right: auto; max-width: calc(100% - 175px); font-size: 11.5px; line-height: 1.35; padding: 3px 6px; opacity: .92; }
+  #tab-room .viewctl .btn { padding: 8px 10px; }
+
+  .phonepanel { order: 2; flex: 1 1 42%; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+  .phonepanel .props { overflow: visible; flex: none; min-height: 0; }
+  .phonepanel .dock { max-height: none; flex: none; }
+  .phonepanel .dockgrid { grid-template-columns: minmax(0, 1fr); }
+  #tab-room.panel-shut .phonepanel { display: none; }
+
+  /* Floating buttons over the drawing: the library and showing/hiding the details. */
+  .phonefab { position: absolute; z-index: 6; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; border-radius: 22px; padding: 9px 14px; font: 600 14px var(--f-label); box-shadow: 0 3px 12px rgb(0 0 0 / 22%); cursor: pointer; }
+  .views > .railtab.phonefab { right: 10px; left: auto; border: 0; background: var(--accent); color: var(--accent-ink, #fff); writing-mode: horizontal-tb; flex-direction: row; align-self: auto; }
+  .views > .railtab.phonefab span { writing-mode: horizontal-tb; }
+  .views > .railtab.phonefab .ic { width: 16px; height: 16px; }
+  .phonefab.details { left: 10px; border: 1.5px solid var(--line-strong, #9aa); background: var(--panel); color: var(--ink); }
+
+  /* The library: a sheet from the bottom when open, nothing when shut (the button opens it). */
+  #tab-room .rail { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; height: 62%; display: flex; flex-direction: column; gap: 0; padding: 10px 10px max(10px, env(safe-area-inset-bottom, 0px)); background: var(--panel); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 30px rgb(0 0 0 / 28%); }
+  #tab-room .rail .srcbox { display: flex !important; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border: 0; box-shadow: none; }
+  #tab-room .rail .srclist { max-height: none; flex: 1; min-height: 0; overflow: auto; }
+  #tab-room .rail .srctabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  #tab-room.rail-shut .rail { display: none; }
+  #tab-room:not(.rail-shut) .views > .railtab.phonefab { position: fixed; z-index: 31; bottom: calc(62% + 10px); }
+  body.dragging #tab-room .rail { visibility: hidden; }
+  .dndchip { pointer-events: none; }
+}
+
+/* Turned sideways: drawing on the left, details on the right, library from the left. */
+@media (max-height: 560px) and (orientation: landscape) and (pointer: coarse), (max-width: 960px) and (orientation: landscape) {
+  .top { flex-direction: row; align-items: center; gap: 8px; padding-bottom: 4px; }
+  .topline { flex: 0 1 auto; min-width: 0; }
+  .brand, .roompick, .savestate { display: none; }
+  .tabs { flex: 1 1 auto; min-width: 0; padding-bottom: 0; margin-inline: 0; }
+  #tab-room.room { flex-direction: row; }
+  #tab-room .views { flex: 1 1 auto; min-width: 0; }
+  .phonepanel { flex: 0 0 min(320px, 42%); }
+  /* The cabinet list sits in a column on the left, beside the drawing, while it's open.
+     The details make way for it and come back when it's folded away. */
+  #tab-room .rail { position: static; order: -1; flex: 0 0 min(300px, 40%); min-width: 0; max-width: min(300px, 40%); height: auto; padding: 8px; border-radius: 12px; box-shadow: none; border: 1.5px solid var(--line); }
+  #tab-room:not(.rail-shut) .phonepanel { display: none; }
+  #tab-room:not(.rail-shut) .views > .phonefab.details { display: none; }
+  /* Hiding the details: a slim tab on the drawing's right edge. */
+  .views > .phonefab.details { left: auto; right: 0; bottom: auto; top: 62%; transform: translateY(-50%); width: 26px; height: 72px; padding: 0; justify-content: center; border-radius: 12px 0 0 12px; border-right: 0; font-size: 22px; line-height: 1; }
+  #tab-room:not(.rail-shut) .views > .railtab.phonefab { position: absolute; bottom: 10px; right: 10px; }
+  body.dragging #tab-room .rail { visibility: visible; }
+}

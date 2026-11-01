@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Extension Hub</title>
+  <link rel="icon" href="/icon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/phone.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Hub">
+  <meta name="theme-color" content="#3b5bdb">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="btn ghost" id="menu-btn" aria-label="Menu">☰</button>
+    <span class="topbar-title" id="topbar-title">Extension Hub</span>
+  </header>
+  <div class="scrim" id="scrim"></div>
+  <button class="nav-show" id="nav-show" title="Show the menu" aria-label="Show the menu">☰</button>
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="brand"><picture><source srcset="/icon-light.png" media="(prefers-color-scheme: dark)"><img class="brand-mark" src="/icon-dark.png" alt="" width="24" height="24"></picture><span id="brand-name">Extension Hub</span><button class="btn ghost small nav-hide" id="nav-hide" title="Hide this menu" aria-label="Hide this menu">⇤</button></div>
+      <div class="nav-section">
+        <a class="nav-item" href="#/home" data-tab="home"><span class="nav-icon">🏠</span><span>Home</span></a>
+        <a class="nav-item" href="#/files" data-tab="files"><span class="nav-icon">📁</span><span>Files</span></a>
+      </div>
+      <div class="nav-label">Extensions</div>
+      <div class="nav-section" id="ext-nav"></div>
+      <div class="nav-spacer"></div>
+      <div class="app-update" id="app-update" hidden></div>
+      <div class="nav-section">
+        <a class="nav-item" href="#/store" data-tab="store"><span class="nav-icon">⬇️</span><span>Get extensions</span></a>
+        <a class="nav-item" href="#" id="phone-access" hidden><span class="nav-icon">📱</span><span>Phone &amp; tablet</span></a>
+        <a class="nav-item" href="#" id="sign-out" hidden><span class="nav-icon">🚪</span><span>Sign out</span></a>
+        <a class="nav-item" href="#/manage" data-tab="manage"><span class="nav-icon">⚙️</span><span>Manage extensions</span><span class="badge" id="update-badge" title="Updates available" hidden></span></a>
+      </div>
+    </nav>
+
+    <main class="main">
+      <section class="view" id="view-home" hidden>
+        <header class="page-head">
+          <div>
+            <h1 id="greeting">Welcome back</h1>
+            <p class="muted" id="today"></p>
+          </div>
+        </header>
+        <div class="home-grid">
+          <div class="card span-2">
+            <div class="card-head">
+              <h2>Reminders</h2>
+              <label class="toggle"><input type="checkbox" id="show-done"> Show done</label>
+            </div>
+            <form id="reminder-form" class="inline-form">
+              <input name="title" placeholder="Add a reminder…" required autocomplete="off">
+              <input name="due" type="datetime-local" title="Due (optional)">
+              <button class="btn primary">Add</button>
+            </form>
+            <div id="reminders"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Business details</h2>
+              <button class="btn ghost small" id="edit-business">Edit</button>
+            </div>
+            <div id="business"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Recent files</h2>
+              <a class="btn ghost small" href="#/files">Open library</a>
+            </div>
+            <div id="recent-files"></div>
+          </div>
+
+          <div class="card span-2">
+            <div class="card-head"><h2>Your extensions</h2></div>
+            <div id="ext-cards" class="ext-cards"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-files" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Files</h1>
+            <nav class="crumbs" id="crumbs"></nav>
+          </div>
+          <div class="actions">
+            <a class="btn" href="#/files/Archive">🗄️ Archive</a>
+            <button class="btn" id="new-folder">New folder</button>
+            <label class="btn primary">Upload<input type="file" id="file-input" multiple hidden></label>
+          </div>
+        </header>
+        <p class="muted" id="archive-intro" hidden>Everything you archive is zipped and kept here, in the same folders it came from. Restore puts it back where it was.</p>
+        <div id="uploads"></div>
+        <div class="dropzone" id="dropzone">
+          <div id="file-list"></div>
+          <div class="drop-hint">Drop files here to upload. Any size works.</div>
+        </div>
+      </section>
+
+      <section class="view" id="view-manage" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Manage extensions</h1>
+            <p class="muted">Add an extension by dropping its folder into <code id="ext-dir"></code>, then press Rescan.</p>
+          </div>
+          <div class="actions">
+            <button class="btn" id="rescan">Rescan</button>
+            <button class="btn" id="check-updates">Check for updates</button>
+            <button class="btn primary" id="install">Add or update…</button>
+          </div>
+        </header>
+        <div id="manage-list"></div>
+      </section>
+
+      <section class="view" id="view-store" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Get extensions</h1>
+            <p class="muted">Install with one click. Your files and saved data stay put if you remove one later.</p>
+          </div>
+          <div class="actions"><button class="btn" id="install-other">Install from a link or .zip…</button></div>
+        </header>
+        <div id="store-errors"></div>
+        <div id="store-list" class="store-grid"></div>
+      </section>
+
+      <div id="ext-frames"></div>
+    </main>
+  </div>
+
+  <dialog id="dialog"></dialog>
+  <div id="toasts"></div>
+  <script src="/phone-boot.js" type="module"></script>
+</body>
+</html>

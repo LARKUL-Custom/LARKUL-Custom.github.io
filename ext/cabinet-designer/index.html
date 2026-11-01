@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cabinet Designer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&family=Roboto:wght@400;500&family=Rajdhani:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Inside the Extension Hub the page lives at /ext/<id>/ and the hub SDK gives it storage and files.
+  if (/^\/ext\//.test(location.pathname)) document.write('<script src="/hub-sdk.js"><\/script>');
+</script>
+<link rel="stylesheet" href="phone-overrides.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="topline">
+      <button class="logobtn" data-act="jobs" title="Jobs: open, create and organize jobs" aria-label="Jobs"><img src="img/logo.png" alt=""></button>
+      <button class="jobsbtn" data-act="jobs" title="Open, create and organize jobs"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 5.5a1 1 0 0 1 1-1h4l1.6 1.8h7.4a1 1 0 0 1 1 1v8.2a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z"/></svg><span>Jobs</span></button>
+      <div class="brand"><span class="crumb" id="jobfolder"></span><span class="crumbsep">›</span><textarea id="jobname" rows="2" spellcheck="false" aria-label="Job name" data-obj="job" data-field="name" data-type="text"></textarea><span class="savestate" id="savestate" data-state="saved">Saved</span></div>
+      <label class="roompick"><span>Room</span><select id="roomsel" aria-label="Room"></select></label>
+      <div class="hdr-actions">
+        <button class="btn iconbtn helpbtn" id="helpbtn" data-act="help-flip" title="Show help text" aria-label="Help text" aria-pressed="false"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M7.8 7.6a2.3 2.3 0 1 1 3.3 2.1c-.7.4-1.1.9-1.1 1.7v.4M10 14.3v.3"/></svg></button>
+        <button class="btn iconbtn" id="themebtn" data-act="theme-flip" title="Switch to dark mode" aria-label="Switch to dark mode"></button>
+        <button class="btn" data-act="undo" title="Undo (Ctrl+Z)"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4L3 8l4 4"/><path d="M3.5 8H12a4.5 4.5 0 0 1 0 9H8"/></svg>Undo</button>
+        <button class="btn" data-act="redo" title="Redo (Ctrl+Y)"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><path d="M13 4l4 4-4 4"/><path d="M16.5 8H8a4.5 4.5 0 0 0 0 9h4"/></svg>Redo</button>
+        <button class="btn" data-act="job-close" title="Save and close this job"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>Close job</button>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+    <div class="menu" id="libmenu" role="menu" hidden></div>
+  </header>
+  <main id="main">
+    <section id="tab-room" class="room">
+      <div class="rail">
+        <button class="railtab" id="railtab" data-act="rail-toggle"></button>
+        <div class="card srcbox"><div class="srctabs" id="srctabs"></div><div class="srclist" id="srclist"></div></div>
+      </div>
+      <div class="views" id="views" data-mode="plan">
+        <div class="viewbar">
+          <div class="seg" id="viewmode" role="group" aria-label="View"></div>
+          <div class="seg drawctl" id="drawctl" role="group" aria-label="Walls"></div>
+          <div class="seg" id="dimctl" role="group" aria-label="Dimensions"></div>
+          <div class="seg" id="openctl" role="group" aria-label="Doors and drawers"></div>
+          <label class="itempick"><select id="itemsel" aria-label="Select item"></select></label>
+          <div class="row-actions ctl3d">
+            <div class="views3d" id="views3d"></div>
+            <button class="btn sm" data-act="v3" data-id="persp">Perspective</button>
+            <button class="btn sm" data-act="v3" data-id="iso">Isometric</button>
+            <button class="btn sm" data-act="v3" data-id="top">Top</button>
+            <button class="btn sm" data-act="v3" data-id="front">Front of wall</button>
+            <button class="btn sm" data-act="v3" data-id="sel" id="v3sel">Zoom to selected</button>
+            <button class="btn sm" data-act="v3" data-id="fit">Fit</button>
+            <details class="layers3d" id="layers3d"><summary class="btn sm">Layers</summary><div class="layerpop" id="layerpop"></div></details>
+            <button class="btn sm" data-act="render3d" id="render3d" title="Realistic look: wood grain, soft shadows and reflections"></button>
+            <button class="btn sm" data-act="snap3d" title="Save a picture of this view for a presentation"></button>
+            <button class="btn sm" data-act="full3d" id="full3d" title="Room viewer: the 3D view on the whole screen, with a list of views (F)"></button>
+          </div>
+          <div class="row-actions ctlelev">
+            <select id="elevwall" aria-label="Wall shown in elevation" style="width:auto"></select>
+            <button class="btn sm" data-act="elev-flip">Flip side</button>
+            <span class="note" id="elevnote"></span>
+          </div>
+        </div>
+        <div class="card view pane" id="plan-card">
+          <svg id="plan" preserveAspectRatio="none" aria-label="Plan view"></svg>
+          <div class="viewctl">
+            <button class="btn" data-act="zoom-in" aria-label="Zoom in" title="Zoom in"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5"/><path d="M12.3 12.3L17 17M6.5 8.5h4M8.5 6.5v4"/></svg></button>
+            <button class="btn" data-act="zoom-out" aria-label="Zoom out" title="Zoom out"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5"/><path d="M12.3 12.3L17 17M6.5 8.5h4"/></svg></button>
+            <button class="btn" data-act="fit" title="Fit the room in view"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7.5V3h4.5M12.5 3H17v4.5M17 12.5V17h-4.5M7.5 17H3v-4.5"/></svg>Fit</button>
+          </div>
+          <div class="hint" id="hint"></div>
+        </div>
+        <div class="card view pane" id="elev-card"><svg id="elev" aria-label="Wall elevation"></svg>
+          <button class="elevarrow prev" id="elevprev" data-act="elev-step" data-id="-1" aria-label="Previous wall"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4l-6 6 6 6"/></svg><span></span></button>
+          <button class="elevarrow next" id="elevnext" data-act="elev-step" data-id="1" aria-label="Next wall"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4l6 6-6 6"/></svg><span></span></button>
+        </div>
+        <div class="card view3d-wrap pane" id="room3d-card"><div id="room3d" aria-label="3D view"></div></div>
+        <aside class="card fullside" id="fullside" hidden></aside>
+      </div>
+      <aside class="card props" id="props"></aside>
+      <section class="card dock" id="dock" aria-label="Details"></section>
+    </section>
+    <section id="tab-job" class="page" hidden></section>
+    <section id="tab-settings" class="page wide" hidden></section>
+    <section id="tab-designer" class="page" hidden></section>
+    <section id="tab-library" class="page" hidden></section>
+    <section id="tab-materials" class="page" hidden></section>
+    <section id="tab-doors" class="page" hidden></section>
+    <section id="tab-hardware" class="page" hidden></section>
+    <section id="tab-countertops" class="page" hidden></section>
+    <section id="tab-moldings" class="page" hidden></section>
+    <section id="tab-panels" class="page" hidden></section>
+    <section id="tab-parts" class="page" hidden></section>
+    <section id="tab-cnctools" class="page" hidden></section>
+    <section id="tab-rules" class="page" hidden></section>
+    <section id="tab-remnants" class="page" hidden></section>
+    <section id="tab-shop" class="page" hidden></section>
+    <section id="tab-cutlist" class="page" hidden></section>
+    <section id="tab-pricing" class="page" hidden></section>
+    <section id="tab-export" class="page" hidden></section>
+  </main>
+</div>
+<div class="menu ctxmenu" id="ctxmenu" role="menu" aria-label="Cabinet" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="labelsheet" id="labelsheet" hidden></div>
+<div class="labelsheet quotesheet" id="quotesheet" role="dialog" aria-label="Printable quote" hidden></div>
+<div class="qe-back" id="quickedit" hidden></div>
+<div class="qe-back" id="texpick" hidden></div>
+<div class="calcpop" id="calcpop" role="dialog" aria-label="Calculator" hidden></div>
+<div class="jobsheet" id="jobsheet" hidden></div>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/core.js"></script>
+<script src="js/build.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/forms.js"></script>
+<script src="js/formulas.js"></script>
+<script src="js/views2d.js"></script>
+<script src="js/view3d.js"></script>
+<script src="js/shapes.js"></script>
+<script src="js/libpick.js"></script>
+<script src="js/tabs.js"></script>
+<script src="js/cnc.js"></script>
+<script src="js/designer.js"></script>
+<script src="js/job.js"></script>
+<script src="js/jobs.js"></script>
+<script src="js/pricing.js"></script>
+<script src="js/look.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/texlib.js"></script>
+<script src="js/lights.js"></script>
+<script src="js/cabshape.js"></script>
+<script src="js/multi.js"></script>
+<script src="js/partedit.js"></script>
+<script src="js/ops.js"></script>
+<script src="js/quick.js"></script>
+<script src="js/fxmore.js"></script>
+<script src="js/joints2.js"></script>
+<script src="js/libs2.js"></script>
+<script src="js/vmore.js"></script>
+<script src="js/mainui.js"></script>
+<script src="js/app.js"></script>
+<script src="js/clip.js"></script>
+<script src="phone-overrides.js"></script>
+</body>
+</html>

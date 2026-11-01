@@ -1,0 +1,15 @@
+{
+  "id": "ad-tracker",
+  "name": "Ads (experimental)",
+  "icon": "📣",
+  "description": "Experimental: tracks where and what you advertise, with views, clicks, leads and jobs won per site, limits and warnings, suggestions, and a tab for brainstorming ad ideas with Claude",
+  "version": "0.2.1",
+  "experimental": true,
+  "ui": "index.html",
+  "server": "server.js",
+  "order": 40,
+  "update": {
+    "github": "LARKUL-Custom/Extension-Hub",
+    "tag": "ad-tracker-v"
+  }
+}

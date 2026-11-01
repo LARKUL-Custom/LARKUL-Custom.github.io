@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Larkul Ads</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" media="print" onload="this.media='all'">
+<script src="/hub-sdk.js"></script>
+<style>
+/* Same look as the Schedule tab: Larkul charcoal header band, white oak and brass */
+:root{
+  --bg:#f6f4f0; --surface:#ffffff; --sunk:#eeeae3; --ink:#26241f; --muted:#6c665c; --line:#ddd7cc;
+  --accent:#2b2925; --accent-ink:#ffffff; --accent-soft:#f1e8d6; --brass:#a6814a;
+  --head-bg:#1f1e1b; --head-ink:#f4efe6; --head-muted:#b9ad98;
+  --ok:#3d7650; --warn:#9a6410; --bad:#a93b2c; --ok-soft:#e1eee3; --warn-soft:#f5e9cf; --bad-soft:#f6dfd9;
+  --f-display:"Marcellus","Palatino Linotype","Times New Roman",serif;
+  --f-body:"Nunito Sans","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#161513; --surface:#1f1e1b; --sunk:#292723; --ink:#eee9e0; --muted:#a69e90; --line:#3a3732;
+  --accent:#d6b47a; --accent-ink:#1a1814; --accent-soft:#3a3122; --brass:#d6b47a;
+  --head-bg:#0f0e0d; --head-ink:#f4efe6; --head-muted:#b9ad98;
+  --ok:#6cc08a; --warn:#e0a640; --bad:#ec7a68; --ok-soft:#1e3426; --warn-soft:#3a2f17; --bad-soft:#3e211c;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161513; --surface:#1f1e1b; --sunk:#292723; --ink:#eee9e0; --muted:#a69e90; --line:#3a3732;
+  --accent:#d6b47a; --accent-ink:#1a1814; --accent-soft:#3a3122; --brass:#d6b47a;
+  --head-bg:#0f0e0d; --head-ink:#f4efe6; --head-muted:#b9ad98;
+  --ok:#6cc08a; --warn:#e0a640; --bad:#ec7a68; --ok-soft:#1e3426; --warn-soft:#3a2f17; --bad-soft:#3e211c;
+  color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1300px;margin:0 auto}
+header{position:sticky;top:0;z-index:5;background:var(--head-bg);color:var(--head-ink);border-bottom:3px solid var(--brass)}
+.bar{display:flex;align-items:center;gap:8px 20px;flex-wrap:wrap;padding-block:10px}
+.brand{margin-right:auto;display:flex;flex-direction:column;line-height:1.1}
+.brand .word{font-family:var(--f-display);font-size:28px;letter-spacing:.32em;margin-right:-.32em}
+.brand .tag{font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--head-muted);margin-top:4px}
+.brand .tag b{color:var(--brass)}
+nav{display:flex;gap:2px;flex-wrap:wrap}
+nav button{font:700 13px var(--f-body);letter-spacing:.14em;text-transform:uppercase;border:0;border-bottom:2px solid transparent;background:none;color:var(--head-muted);padding:10px 12px;cursor:pointer}
+nav button:hover{color:var(--head-ink)}
+nav button[aria-selected="true"]{color:var(--head-ink);border-bottom-color:var(--brass)}
+.hstat{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--head-muted)}
+.hstat .err{color:#ff9d8c;font-weight:700}
+.hbtn{font:700 12px var(--f-body);letter-spacing:.1em;text-transform:uppercase;background:none;color:var(--head-ink);border:1px solid var(--head-muted);border-radius:3px;padding:5px 10px;cursor:pointer}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+main{padding-block:20px 80px;display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+h2{font-family:var(--f-display);font-weight:400;font-size:24px;letter-spacing:.12em;text-transform:uppercase;margin:0;text-wrap:balance}
+h3{font-family:var(--f-body);font-weight:800;font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin:0;color:var(--brass)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:18px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{justify-content:space-between}
+.grow{flex:1 1 200px;min-width:0}
+.muted{color:var(--muted)} .small{font-size:14px}
+.note{font-size:14px;color:var(--muted);margin:0}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 16px;border-radius:3px;cursor:pointer;font-weight:700}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.sm{padding:3px 10px;font-size:14px}
+.btn.danger{color:var(--bad)} .btn.danger.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--brass)}
+.pill{display:inline-block;font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.done{background:var(--sunk);color:var(--muted)} .pill.place{background:var(--accent-soft);color:var(--ink)}
+.banner{background:var(--accent-soft);border-radius:4px;padding:12px 14px;display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+/* numbers across the top */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 16px;display:grid;gap:6px;align-content:start}
+.stat b{font-size:26px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+/* limit meters */
+.meter{display:grid;gap:3px;font-size:14px}
+.meter .lab{display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums}
+.meter .lab em{font-style:normal;font-weight:700}
+.meter .track{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden}
+.meter .fill{height:100%;border-radius:4px;background:var(--ok)}
+.meter.warn .fill{background:var(--warn)} .meter.warn em{color:var(--warn)}
+.meter.bad .fill{background:var(--bad)} .meter.bad em{color:var(--bad)}
+/* suggestion list */
+.alerts{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.alerts li{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 14px;border-radius:4px;background:var(--sunk)}
+.alerts li.bad{background:var(--bad-soft)} .alerts li.warn{background:var(--warn-soft)} .alerts li.ok{background:var(--ok-soft)}
+.alerts li>span{flex:1 1 260px;min-width:0}
+.alerts .acts{display:flex;gap:6px;flex-wrap:wrap;flex:0 1 auto;min-width:0;align-items:center}
+.alerts .x{background:none;border:0;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 6px}
+/* places */
+.places{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.pcard{display:grid;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 16px;align-content:start;min-width:0}
+.pcard.bad{border-left:5px solid var(--bad)} .pcard.warn{border-left:5px solid var(--warn)}
+.pcard .nm{font-weight:800;font-size:17px;overflow-wrap:anywhere}
+.facts{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.facts b{color:var(--ink)}
+/* ads */
+.alist{display:grid;gap:8px}
+.ad{display:grid;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:12px 14px;min-width:0}
+.ad.open{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.ad .nm{font-weight:800;font-size:17px;overflow-wrap:anywhere;flex:1 1 200px;min-width:0}
+.ad .what{margin:0;font-size:14px;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.ad select.status{width:auto;padding:4px 8px}
+.leads{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:3px}
+.leads button{border:0;background:none;padding:3px 10px;cursor:pointer;font-weight:800}
+.leads b{padding:0 6px;min-width:28px;text-align:center;font-variant-numeric:tabular-nums}
+.quickadd{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.2fr) minmax(0,.7fr) minmax(0,.8fr) auto;gap:10px;align-items:end}
+@media (max-width:800px){.quickadd{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.quickadd .wide{grid-column:1/-1}}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.form .wide{grid-column:1/-1}
+label.f{display:grid;gap:4px;font-size:14px;font-weight:700;color:var(--muted);align-content:start}
+label.f small{font-weight:400}
+input[type=text],input[type=number],input[type=date],input[type=search],input[type=url],select,textarea{border:1px solid var(--line);background:var(--bg);border-radius:3px;padding:8px 10px;color:var(--ink);width:100%;min-width:0}
+textarea{min-height:70px;resize:vertical}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+details summary{cursor:pointer;font-weight:700;color:var(--muted)}
+details[open] summary{margin-bottom:8px}
+.scroll{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:13px;color:var(--muted);font-weight:700}
+td input{max-width:160px}
+/* stats */
+table.nums td,table.nums th{white-space:nowrap;font-variant-numeric:tabular-nums}
+table.nums td.best{color:var(--ok);font-weight:800}
+table.nums tr.total td{font-weight:800;border-top:2px solid var(--line)}
+table.nums th button{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline dotted}
+table.nums th button[aria-pressed="true"]{color:var(--ink);text-decoration:underline}
+.hint{background:var(--sunk);border-radius:4px;padding:10px 14px;font-size:14px;color:var(--muted)}
+/* ideas */
+.chat{display:grid;gap:12px;max-height:70vh;overflow-y:auto;padding-right:4px}
+.msg{display:grid;gap:10px;max-width:880px}
+.msg.me{justify-self:end;background:var(--accent);color:var(--accent-ink);border-radius:12px 12px 2px 12px;padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.ai>p{margin:0;background:var(--sunk);border-radius:12px 12px 12px 2px;padding:10px 14px;white-space:pre-wrap;overflow-wrap:anywhere;justify-self:start}
+.msg.ai>small{color:var(--muted)}
+.ideas{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.idea{display:grid;gap:8px;align-content:start;background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--brass);border-radius:4px;padding:12px 14px;min-width:0}
+.idea .nm{font-weight:800;font-size:16px;overflow-wrap:anywhere}
+.idea p{margin:0;font-size:14px;overflow-wrap:anywhere}
+.idea .why{color:var(--muted);font-style:italic}
+.idea.tried{border-top-color:var(--ok)} .idea.skip{opacity:.6;border-top-color:var(--line)}
+.star{background:none;border:0;cursor:pointer;font-size:20px;line-height:1;color:var(--brass);padding:0 4px}
+.composer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+.composer textarea{min-height:52px}
+.thinking{color:var(--muted);font-style:italic}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--head-bg);color:var(--head-ink);border:1px solid var(--brass);border-radius:4px;padding:10px 14px;display:flex;gap:14px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:calc(100% - 32px)}
+.toast button{background:none;border:0;color:var(--brass);font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:.1em;font-size:13px}
+.toast.bad{border-color:var(--bad)}
+@media (prefers-reduced-motion:no-preference){.btn,.ad,.pcard{transition:border-color .15s}}
+</style>
+</head>
+<body>
+
+<header><div class="wrap bar">
+  <div class="brand"><span class="word">LARKUL</span><span class="tag">Advertising · <b>Experimental</b></span></div>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="overview">Overview</button>
+    <button role="tab" data-tab="ads">Ads</button>
+    <button role="tab" data-tab="stats">Stats</button>
+    <button role="tab" data-tab="ideas">Ideas</button>
+    <button role="tab" data-tab="places">Places</button>
+    <button role="tab" data-tab="settings">Settings</button>
+  </nav>
+  <div class="hstat"><button id="undoBtn" class="hbtn" data-act="undo" hidden>Undo</button><span id="saveState"></span></div>
+</div></header>
+<div class="wrap"><main id="app"><p class="note">Loading your ads…</p></main></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const addDays=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return iso(d)};
+const daysBetween=(a,b)=>Math.round((parse(b)-parse(a))/864e5);
+const TODAY=iso(new Date()),MONTH=TODAY.slice(0,7),WEEK_START=addDays(TODAY,-6);
+const isDate=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s);
+const num=(v,d=0)=>{const n=parseFloat(v);return Number.isFinite(n)?n:d};
+const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+const plural=(n,w)=>`${n} ${w}${n===1?'':'s'}`;
+const money=n=>{n=num(n);return n.toLocaleString(undefined,{style:'currency',currency:'USD',minimumFractionDigits:n%1?2:0,maximumFractionDigits:2})};
+const fmt=s=>isDate(s)?parse(s).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'—';
+const ago=s=>{if(!isDate(s))return 'never';const d=daysBetween(s,TODAY);return d<=0?(d===0?'today':`in ${plural(-d,'day')}`):d===1?'yesterday':`${d} days ago`};
+const optNum=v=>v===''||v==null||!Number.isFinite(parseFloat(v))?null:Math.max(0,Math.round(parseFloat(v)));
+const pct=x=>x==null?'—':(x*100<10?(x*100).toFixed(1):Math.round(x*100))+'%';
+const big=n=>n==null?'—':n>=10000?Math.round(n/1000)+'k':n.toLocaleString();
+const monthName=parse(TODAY).toLocaleDateString(undefined,{month:'long'});
+
+const STATUS={live:'Live',paused:'Paused',draft:'Not out yet',ended:'Ended'};
+const KINDS=['Social','Search & maps','Listing site','Print','Sign','Email','Word of mouth','Other'];
+/* places most shops like ours advertise; offered as one-click adds */
+const COMMON=[['Google Business Profile','Search & maps'],['Facebook','Social'],['Instagram','Social'],['Nextdoor','Social'],['Houzz','Listing site'],['Yelp','Listing site'],
+  ['Facebook Marketplace','Listing site'],['Craigslist','Listing site'],['Yard signs','Sign'],['Truck or trailer','Sign'],['Flyers & door hangers','Print'],['Local paper','Print']];
+
+/* ---------- state ---------- */
+const KEY='larkul-ads-v1';
+const HUB=typeof window.Hub!=='undefined'&&!!Hub.id;
+let state=freshState(),tab='overview',openAd=null,armed=null,q='',af='active',pf='',importText='';
+let period='90',statBy='place',statSort='cpl',planBudget=null,chatText='',thinking=false,aiStatus=null,ideaFilter='new';
+const TABS=['overview','ads','stats','ideas','places','settings'];
+let undoStack=[],lastJSON='',saveTimer=null,savePending=false;
+
+function freshState(){return{v:1,settings:{monthlyBudget:0,warnAt:80,quietDays:21,snoozeDays:14},places:[],ads:[],ideas:[],chat:[],dismissed:{}}}
+function normIdea(i){return{id:i.id||uid('i'),title:String(i.title||'Untitled idea').slice(0,200),place:String(i.place||'').slice(0,100),what:String(i.what||'').slice(0,3000),
+  why:String(i.why||'').slice(0,1000),cost:Math.max(0,num(i.cost)),status:['new','tried','skip'].includes(i.status)?i.status:'new',starred:!!i.starred,added:isDate(i.added)?i.added:TODAY,adId:i.adId||''}}
+function normPlace(p){return{id:p.id||uid('p'),name:String(p.name||'New place'),kind:KINDS.includes(p.kind)?p.kind:'Other',link:String(p.link||''),notes:String(p.notes||''),
+  budget:Math.max(0,num(p.budget)),perWeek:Math.max(0,Math.round(num(p.perWeek))),maxLive:Math.max(0,Math.round(num(p.maxLive))),archived:!!p.archived,example:!!p.example}}
+function normAd(a,places){return{id:a.id||uid('a'),title:String(a.title||'Untitled ad'),body:String(a.body||''),link:String(a.link||''),notes:String(a.notes||''),
+  placeId:places.some(p=>p.id===a.placeId)?a.placeId:'',status:STATUS[a.status]?a.status:'draft',cost:Math.max(0,num(a.cost)),
+  start:isDate(a.start)?a.start:'',end:isDate(a.end)?a.end:'',example:!!a.example,
+  runs:(Array.isArray(a.runs)?a.runs:[]).filter(r=>r&&isDate(r.date)).map(r=>({id:r.id||uid('r'),date:r.date,cost:Math.max(0,num(r.cost)),views:optNum(r.views),clicks:optNum(r.clicks)})),
+  wins:(Array.isArray(a.wins)?a.wins:[]).filter(w=>w&&isDate(w.date)).map(w=>({id:w.id||uid('w'),date:w.date,amount:Math.max(0,num(w.amount))})),
+  leads:(Array.isArray(a.leads)?a.leads:[]).filter(isDate)}}
+function normalize(st){
+  const f=freshState();st=st&&typeof st==='object'?st:{};
+  const places=(Array.isArray(st.places)?st.places:[]).filter(p=>p&&typeof p==='object').map(normPlace);
+  const s={...f.settings,...(st.settings||{})};
+  for(const k of Object.keys(f.settings))s[k]=Math.max(0,num(s[k],f.settings[k]));
+  if(!s.warnAt||s.warnAt>100)s.warnAt=f.settings.warnAt;
+  return{v:1,settings:s,places,ads:(Array.isArray(st.ads)?st.ads:[]).filter(a=>a&&typeof a==='object').map(a=>normAd(a,places)),
+    ideas:(Array.isArray(st.ideas)?st.ideas:[]).filter(i=>i&&typeof i==='object').map(normIdea),
+    chat:(Array.isArray(st.chat)?st.chat:[]).filter(m=>m&&(m.role==='user'||m.role==='assistant')).slice(-40).map(m=>({role:m.role,text:String(m.text||''),deck:!!m.deck,ideas:(Array.isArray(m.ideas)?m.ideas:[]).map(normIdea)})),
+    dismissed:Object.fromEntries(Object.entries(st.dismissed&&typeof st.dismissed==='object'?st.dismissed:{}).filter(([,d])=>isDate(d)&&daysBetween(d,TODAY)<90))};
+}
+
+function exampleData(){
+  const d=n=>addDays(TODAY,n),P=(name,kind,o={})=>({id:uid('p'),name,kind,example:true,...o});
+  const fb=P('Facebook','Social',{budget:150,perWeek:3}),gbp=P('Google Business Profile','Search & maps',{perWeek:2}),
+    nd=P('Nextdoor','Social',{perWeek:2}),sign=P('Yard signs','Sign',{budget:80,maxLive:6}),hz=P('Houzz','Listing site',{budget:60});
+  const A=(placeId,title,o={})=>({id:uid('a'),placeId,title,example:true,status:'live',start:d(-40),...o});
+  const r=(n,cost,views,clicks)=>({date:d(n),cost,views,clicks});
+  return{places:[fb,gbp,nd,sign,hz],ads:[
+    A(fb.id,'Painted kitchen before/after',{body:'Before and after photos of the white shaker kitchen. "Free in-home measure this month."',cost:40,
+      runs:[r(-25,40,3100,52),r(-12,40,2800,61),r(-5,40,3400,70),r(-2,40,1900,33)],leads:[d(-24),d(-11),d(-4)],wins:[{date:d(-6),amount:14500}]}),
+    A(fb.id,'Shop tour video',{cost:25,runs:[r(-30,25,2600,18),r(-1,25,1200,7)],leads:[]}),
+    A(gbp.id,'Weekly project photos',{cost:0,runs:[r(-9,0,640,29),r(-3,0,580,31)],leads:[d(-8),d(-6),d(-2)],wins:[{date:d(-1),amount:6200}]}),
+    A(nd.id,'Neighborhood intro post',{cost:0,runs:[r(-38,0,900,22)],leads:[d(-36)]}),
+    A(sign.id,'Job site signs',{body:'"Cabinets by LARKUL" with phone number',cost:18,runs:[{date:d(-20),cost:72}],leads:[d(-15)]}),
+    A(hz.id,'Pro listing',{cost:60,status:'paused',runs:[r(-34,60,450,6)],leads:[]}),
+    A(fb.id,'Holiday built-ins promo',{status:'draft',start:'',cost:30})]};
+}
+
+function setSaved(text,err){const el=document.getElementById('saveState');el.textContent=text;el.className=err?'err':''}
+async function flushSave(){
+  if(!HUB||!savePending)return;
+  clearTimeout(saveTimer);savePending=false;
+  try{await Hub.storage.set('state',{app:'larkul-ads',version:1,saved:new Date().toISOString(),state});setSaved('Saved')}
+  catch(e){console.error(e);savePending=true;setSaved('Could not save to the hub. Is it still running?',true)}
+}
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}
+  if(HUB){savePending=true;setSaved('Saving…');clearTimeout(saveTimer);saveTimer=setTimeout(flushSave,150)}
+  else setSaved('Saved in this browser');
+}
+function commit(msg,bad){
+  const now=JSON.stringify(state);
+  if(now===lastJSON){if(msg)toast(msg,false,bad);return}
+  undoStack.push(lastJSON);if(undoStack.length>50)undoStack.shift();
+  lastJSON=now;save();
+  document.getElementById('undoBtn').hidden=false;
+  if(msg)toast(msg,true,bad);
+}
+let toastTimer=null;
+function toast(msg,withUndo,bad){
+  const t=document.getElementById('toast');
+  t.innerHTML=`<span>${msg}</span>${withUndo?'<button data-act="undo">Undo</button>':''}`;t.hidden=false;t.classList.toggle('bad',!!bad);
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.hidden=true},bad?9000:5000);
+}
+function undo(){
+  if(!undoStack.length)return;
+  state=normalize(JSON.parse(undoStack.pop()));lastJSON=JSON.stringify(state);save();
+  document.getElementById('undoBtn').hidden=!undoStack.length;
+  toast('Undone');
+}
+
+/* ---------- numbers ---------- */
+const placeOf=a=>state.places.find(p=>p.id===a.placeId);
+const placeName=a=>{const p=placeOf(a);return p?p.name:'No place'};
+const adSpent=(a,from='',to='9')=>a.runs.reduce((s,r)=>r.date>=from&&r.date<=to?s+r.cost:s,0);
+const lastRun=a=>a.runs.reduce((m,r)=>r.date>m?r.date:m,'');
+const inMonth=d=>d.slice(0,7)===MONTH;
+function placeStats(p){
+  const ads=state.ads.filter(a=>a.placeId===p.id);
+  const s={ads,month:0,all:0,week:0,runs:0,last:'',leads:0,leadsMonth:0,live:ads.filter(a=>a.status==='live').length};
+  for(const a of ads){
+    s.leads+=a.leads.length;s.leadsMonth+=a.leads.filter(inMonth).length;
+    for(const r of a.runs){s.all+=r.cost;s.runs++;if(inMonth(r.date))s.month+=r.cost;if(r.date>=WEEK_START&&r.date<=TODAY)s.week++;if(r.date>s.last)s.last=r.date}
+  }
+  s.cpl=s.leads?s.all/s.leads:null;
+  return s;
+}
+const adsAt=p=>state.ads.filter(a=>a.placeId===p.id);
+/* totals and rates for some ads between two dates; a rate is null until there is something to divide by */
+function tally(ads,from='',to='9'){
+  const t={spent:0,runs:0,views:0,clicks:0,tracked:0,cvViews:0,cvClicks:0,leads:0,wins:0,revenue:0};
+  for(const a of ads){
+    for(const r of a.runs){
+      if(r.date<from||r.date>to)continue;
+      t.spent+=r.cost;t.runs++;
+      if(r.views!=null)t.views+=r.views;
+      if(r.clicks!=null)t.clicks+=r.clicks;
+      if(r.views!=null||r.clicks!=null)t.tracked++;
+      if(r.views!=null&&r.clicks!=null){t.cvViews+=r.views;t.cvClicks+=r.clicks}
+    }
+    t.leads+=a.leads.filter(d=>d>=from&&d<=to).length;
+    for(const w of a.wins)if(w.date>=from&&w.date<=to){t.wins++;t.revenue+=w.amount}
+  }
+  t.ctr=t.cvViews>0?t.cvClicks/t.cvViews:null;
+  t.conv=t.clicks>0?t.leads/t.clicks:null;
+  t.close=t.leads>0?t.wins/t.leads:null;
+  t.cpc=t.clicks>0&&t.spent>0?t.spent/t.clicks:null;
+  t.cpl=t.leads>0?t.spent/t.leads:null;
+  t.cpj=t.wins>0?t.spent/t.wins:null;
+  t.roi=t.spent>0&&t.revenue>0?t.revenue/t.spent:null;
+  return t;
+}
+const periodFrom=()=>period==='month'?MONTH+'-01':period==='90'?addDays(TODAY,-89):'';
+const PERIODS=[['month',`This month`],['90','Last 90 days'],['all','All time']];
+const totalMonth=()=>state.ads.reduce((s,a)=>s+a.runs.reduce((t,r)=>inMonth(r.date)?t+r.cost:t,0),0);
+const leadsMonth=()=>state.ads.reduce((s,a)=>s+a.leads.filter(inMonth).length,0);
+/* every limit that is set, with how much of it is used: lvl is ok, warn (at or past the warning line) or bad (over) */
+function level(used,limit){const r=used/limit;return r>1?'bad':r>=state.settings.warnAt/100?'warn':'ok'}
+function placeLimits(p,s=placeStats(p)){
+  const out=[];
+  if(p.budget>0)out.push({key:'budget',label:`Spent in ${monthName}`,used:s.month,limit:p.budget,show:`${money(s.month)} of ${money(p.budget)}`,lvl:level(s.month,p.budget)});
+  if(p.perWeek>0)out.push({key:'perWeek',label:'Put out in the last 7 days',used:s.week,limit:p.perWeek,show:`${s.week} of ${p.perWeek}`,lvl:level(s.week,p.perWeek)});
+  if(p.maxLive>0)out.push({key:'maxLive',label:'Live at once',used:s.live,limit:p.maxLive,show:`${s.live} of ${p.maxLive}`,lvl:level(s.live,p.maxLive)});
+  return out;
+}
+function totalLimit(){const b=state.settings.monthlyBudget,m=totalMonth();return b>0?{key:'total',label:`All ads in ${monthName}`,used:m,limit:b,show:`${money(m)} of ${money(b)}`,lvl:level(m,b)}:null}
+const worst=ls=>ls.some(l=>l.lvl==='bad')?'bad':ls.some(l=>l.lvl==='warn')?'warn':'ok';
+/* a snapshot of every limit, to tell what an edit pushed near or over */
+function limitSnap(){const m={};for(const p of state.places)for(const l of placeLimits(p))m[p.id+l.key]={...l,place:p.name};const t=totalLimit();if(t)m.total={...t,place:'All places'};return m}
+function limitWarning(before){
+  const after=limitSnap(),rank={ok:0,warn:1,bad:2};
+  const hit=Object.entries(after).filter(([k,l])=>l.lvl!=='ok'&&rank[l.lvl]>rank[(before[k]||{lvl:'ok'}).lvl]);
+  if(!hit.length)return null;
+  const [,l]=hit.sort((a,b)=>rank[b[1].lvl]-rank[a[1].lvl])[0];
+  return{bad:l.lvl==='bad',text:`${l.lvl==='bad'?'Over the limit':'Near the limit'}: ${esc(l.place)}, ${esc(l.label.toLowerCase())} is ${esc(l.show)}.`};
+}
+
+/* ---------- suggestions ---------- */
+function suggestions(){
+  const S=state.settings,out=[],add=(key,lvl,text,acts=[])=>{const d=state.dismissed[key];if(d&&daysBetween(d,TODAY)<S.snoozeDays)return;out.push({key,lvl,text,acts})};
+  const t=totalLimit();
+  if(t&&t.lvl!=='ok')add('total-'+MONTH+t.lvl,t.lvl,t.lvl==='bad'?`You are over your ${monthName} ad budget: ${esc(t.show)}. Pause something or raise the budget in Settings.`:`You have used ${Math.round(t.used/t.limit*100)}% of your ${monthName} ad budget (${esc(t.show)}).`,[{act:'tab',id:'settings',label:'Budget'}]);
+  const active=state.places.filter(p=>!p.archived);
+  const stats=new Map(active.map(p=>[p.id,placeStats(p)]));
+  for(const p of active){
+    const s=stats.get(p.id);
+    for(const l of placeLimits(p,s)){
+      if(l.lvl==='ok')continue;
+      const what=l.key==='budget'?(l.lvl==='bad'?`spent ${money(l.used-l.limit)} more than its ${money(l.limit)} monthly limit`:`has used ${money(l.used)} of its ${money(l.limit)} monthly budget`)
+        :l.key==='perWeek'?(l.lvl==='bad'?`had ${plural(l.used,'post')} this week, over its limit of ${l.limit}. Posting too often can wear people out.`:`is at ${esc(l.show)} posts for the week. Hold off a few days.`)
+        :(l.lvl==='bad'?`has ${l.used} live ads, over its limit of ${l.limit}. Pause or end one.`:`has ${esc(l.show)} live ads allowed.`);
+      add(`lim-${p.id}-${l.key}-${l.lvl}-${l.key==='budget'?MONTH:TODAY}`,l.lvl,`<b>${esc(p.name)}</b> ${what}`,[{act:'place',id:p.id,label:'See ads'}]);
+    }
+  }
+  for(const a of state.ads)if(a.status==='live'&&a.end&&a.end<TODAY)
+    add('end-'+a.id,'warn',`<b>${esc(a.title)}</b> on ${esc(placeName(a))} was set to end ${fmt(a.end)} but is still marked live.`,[{act:'setstatus',id:a.id,n:'ended',label:'Mark ended'},{act:'edit',id:a.id,label:'Edit'}]);
+  for(const p of active){
+    const s=stats.get(p.id);
+    if(s.last&&daysBetween(s.last,TODAY)>=S.quietDays){
+      const latest=[...s.ads].filter(a=>a.status!=='ended').sort((a,b)=>lastRun(b)<lastRun(a)?-1:1)[0];
+      add('quiet-'+p.id+s.last,'',`Nothing new on <b>${esc(p.name)}</b> in ${daysBetween(s.last,TODAY)} days.${s.leads?` It has brought ${plural(s.leads,'lead')} so far.`:''} Put something out again?`,
+        latest?[{act:'run',id:latest.id,label:`Put “${esc(latest.title)}” out again`}]:[{act:'newfor',id:p.id,label:'New ad here'}]);
+    }else if(!s.runs&&!s.ads.length)add('unused-'+p.id,'',`You added <b>${esc(p.name)}</b> but haven't tracked an ad there yet.`,[{act:'newfor',id:p.id,label:'Add an ad'}]);
+    if(s.runs>=3&&s.all>0&&!s.leads)add('nolead-'+p.id+s.runs,'warn',`<b>${esc(p.name)}</b> has had ${plural(s.runs,'run')} and ${money(s.all)} spent with no leads yet. Try a different ad there, or move that money somewhere that works.`,[{act:'place',id:p.id,label:'See ads'}]);
+  }
+  /* where leads come cheapest, among places with at least 2 leads */
+  const ranked=active.map(p=>({p,s:stats.get(p.id)})).filter(x=>x.s.leads>=2).sort((a,b)=>a.s.cpl-b.s.cpl);
+  if(ranked.length){
+    const best=ranked[0],left=t?t.limit-t.used:null,room=best.p.budget>0?best.p.budget-best.s.month:null;
+    if(best.s.cpl===0)add('free-'+best.p.id+MONTH,'ok',`<b>${esc(best.p.name)}</b> is free and has brought ${plural(best.s.leads,'lead')}. Post there more often${best.p.perWeek?` (up to ${best.p.perWeek} a week)`:''}.`);
+    else if((left==null||left>0)&&(room==null||room>0))add('best-'+best.p.id+MONTH,'ok',`<b>${esc(best.p.name)}</b> brings leads for the least: about ${money(Math.round(best.s.cpl))} each.${left!=null?` You have ${money(left)} left this month.`:''} Put more there first.`,[{act:'place',id:best.p.id,label:'See ads'}]);
+    const worstP=ranked.length>1?ranked[ranked.length-1]:null;
+    if(worstP&&worstP.s.cpl>best.s.cpl*3&&worstP.s.cpl>0)add('worst-'+worstP.p.id+MONTH,'',`Leads from <b>${esc(worstP.p.name)}</b> cost about ${money(Math.round(worstP.s.cpl))} each, more than 3 times ${esc(best.p.name)}.`,[{act:'place',id:worstP.p.id,label:'See ads'}]);
+  }
+  /* an ad that does far better than the rest at the same place */
+  for(const a of state.ads){
+    if(a.status!=='live'||a.leads.length<3)continue;
+    const others=state.ads.filter(b=>b!==a&&b.placeId===a.placeId&&b.runs.length);
+    const otherRate=others.reduce((s,b)=>s+b.leads.length,0)/Math.max(1,others.reduce((s,b)=>s+b.runs.length,0));
+    if(others.length&&a.leads.length/Math.max(1,a.runs.length)>=2*otherRate)add('star-'+a.id,'ok',`<b>${esc(a.title)}</b> gets the most leads per run on ${esc(placeName(a))}. Try the same idea somewhere else.`,[{act:'copy',id:a.id,label:'Copy this ad'}]);
+  }
+  /* click and conversion rates over the last 90 days, compared with the average across places */
+  const from90=addDays(TODAY,-89),rated=active.map(p=>({p,t:tally(adsAt(p),from90)}));
+  const all90=tally(state.ads,from90);
+  for(const {p,t:x} of rated){
+    if(x.cvViews>=1000&&all90.ctr&&x.ctr<all90.ctr/2)add('lowctr-'+p.id+MONTH,'',`People see your <b>${esc(p.name)}</b> ads but few click (${pct(x.ctr)}, your average is ${pct(all90.ctr)}). Try a stronger first photo or headline.`,[{act:'tab',id:'ideas',label:'Get ideas'}]);
+    if(x.clicks>=50&&all90.conv&&(x.conv||0)<all90.conv/2)add('lowconv-'+p.id+MONTH,'warn',`<b>${esc(p.name)}</b> gets clicks but few turn into leads (${pct(x.conv||0)} of clicks, your average is ${pct(all90.conv)}). Check the offer and where the link takes people.`,[{act:'place',id:p.id,label:'See ads'}]);
+  }
+  const roiBest=rated.filter(x=>x.t.roi!=null&&x.t.wins>=1).sort((a,b)=>b.t.roi-a.t.roi)[0];
+  if(roiBest&&roiBest.t.roi>=5)add('roi-'+roiBest.p.id+MONTH,'ok',`Every $1 on <b>${esc(roiBest.p.name)}</b> brought back about ${money(Math.round(roiBest.t.roi))} in jobs over the last 90 days.`,[{act:'tab',id:'stats',label:'See stats'}]);
+  const runs90=state.ads.reduce((n,a)=>n+a.runs.filter(r=>r.date>=from90).length,0);
+  if(runs90>=5&&!state.ads.some(a=>a.runs.some(r=>r.views!=null||r.clicks!=null)))add('trackclicks','',`Copy views and clicks from each site's insights into your ads (Edit › Each time it went out) to see click and conversion rates for every site.`,[{act:'tab',id:'stats',label:'Stats'}]);
+  const drafts=state.ads.filter(a=>a.status==='draft');
+  if(drafts.length)add('drafts-'+drafts.length,'',`${plural(drafts.length,'ad')} not out yet: ${drafts.slice(0,3).map(a=>'<b>'+esc(a.title)+'</b>').join(', ')}${drafts.length>3?'…':''}.`,[{act:'filter',id:'draft',label:'Show them'}]);
+  const have=new Set(state.places.map(p=>p.name.toLowerCase()));
+  const missing=COMMON.filter(([n])=>!have.has(n.toLowerCase())).slice(0,4);
+  if(state.places.length&&missing.length)add('common-'+missing.map(m=>m[0]).join(),'',`Places you aren't tracking yet: ${missing.map(m=>esc(m[0])).join(', ')}.`,missing.slice(0,3).map(m=>({act:'addcommon',id:m[0],label:'+ '+esc(m[0])})));
+  if(!S.monthlyBudget&&state.ads.some(a=>a.runs.some(r=>r.cost>0)))add('setbudget','',`Set a monthly ad budget to get a warning before you spend too much.`,[{act:'tab',id:'settings',label:'Set budget'}]);
+  const order={bad:0,warn:1,'':2,ok:3};
+  return out.sort((a,b)=>order[a.lvl]-order[b.lvl]);
+}
+
+/* ---------- views ---------- */
+const btn=(act,label,o={})=>`<button class="btn ${o.cls||''}" data-act="${act}"${o.id!=null?` data-id="${esc(o.id)}"`:''}${o.n!=null?` data-n="${esc(o.n)}"`:''}${o.pressed!=null?` aria-pressed="${o.pressed}"`:''}>${label}</button>`;
+const meter=l=>`<div class="meter ${l.lvl}"><div class="lab"><span>${esc(l.label)}</span><em>${esc(l.show)}</em></div><div class="track"><div class="fill" style="width:${Math.min(100,Math.round(l.used/l.limit*100))}%"></div></div></div>`;
+const fld=(path,label,v,o={})=>{
+  const id='f-'+path.replace(/[^\w-]/g,'_');
+  if(o.type==='select')return`<label class="f${o.wide?' wide':''}">${label}<select id="${id}" data-path="${path}">${o.opts.map(([k,n])=>`<option value="${esc(k)}"${k===v?' selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
+  if(o.type==='area')return`<label class="f wide">${label}<textarea id="${id}" data-path="${path}" placeholder="${esc(o.ph||'')}">${esc(v)}</textarea></label>`;
+  return`<label class="f${o.wide?' wide':''}">${label}<input id="${id}" type="${o.type||'text'}" data-path="${path}"${o.kind?` data-kind="${o.kind}"`:''}${o.type==='number'?' min="0" step="any" inputmode="decimal"':''} value="${esc(v)}" placeholder="${esc(o.ph||'')}"></label>`;
+};
+const placeOpts=(withNone)=>[...(withNone?[['','No place']]:[]),...state.places.filter(p=>!p.archived).map(p=>[p.id,p.name])];
+
+function viewSuggestions(list){
+  if(!list.length)return`<p class="note">Nothing needs you right now. Suggestions show up here as you track ads and set limits.</p>`;
+  return`<ul class="alerts">${list.map(s=>`<li class="${s.lvl}"><span>${s.text}</span><span class="acts">${s.acts.map(a=>btn(a.act,a.label,{cls:'sm',id:a.id,n:a.n})).join('')}
+    <button class="x" data-act="dismiss" data-id="${esc(s.key)}" title="Hide for ${state.settings.snoozeDays} days" aria-label="Hide this suggestion">×</button></span></li>`).join('')}</ul>`;
+}
+function viewOverview(){
+  if(!state.places.length&&!state.ads.length)return viewStart();
+  const t=totalLimit(),sug=suggestions(),m=totalMonth(),lm=leadsMonth();
+  const live=state.ads.filter(a=>a.status==='live').length;
+  const cards=state.places.filter(p=>!p.archived).map(p=>({p,s:placeStats(p)})).sort((a,b)=>b.s.month-a.s.month||b.s.leads-a.s.leads);
+  return`
+  ${state.ads.some(a=>a.example)||state.places.some(p=>p.example)?`<div class="banner"><span>You're looking at example ads. Try things out, then remove them when you're ready to track your own.</span>${btn('clearex','Remove examples',{cls:'sm'})}</div>`:''}
+  <div class="stats">
+    <div class="stat"><span>Spent in ${esc(monthName)}</span><b>${money(m)}</b>${t?meter({...t,label:'Monthly budget'}):`<button class="btn sm" data-act="tab" data-id="settings">Set a budget</button>`}</div>
+    <div class="stat"><span>Leads in ${esc(monthName)}</span><b>${lm}</b><small class="muted">${lm&&m?`about ${money(Math.round(m/lm))} each`:'Press + on an ad when someone reaches out'}</small></div>
+    <div class="stat"><span>Live ads</span><b>${live}</b><small class="muted">across ${plural(cards.filter(c=>c.s.live).length,'place')}</small></div>
+  </div>
+  <section class="panel"><div class="row spread"><h2>What to do next</h2>${btn('newad','+ New ad',{cls:'primary'})}</div>${viewSuggestions(sug)}</section>
+  <section class="panel"><div class="row spread"><h2>Where you advertise</h2>${btn('tab','Edit places &amp; limits',{id:'places',cls:'sm'})}</div>
+    <div class="places">${cards.map(({p,s})=>{const ls=placeLimits(p,s);return`<div class="pcard ${worst(ls)}">
+      <div class="row spread"><span class="nm">${esc(p.name)}</span><span class="pill done">${esc(p.kind)}</span></div>
+      <div class="facts"><span><b>${s.live}</b> live</span><span><b>${money(s.month)}</b> this month</span><span><b>${s.leads}</b> leads</span>${s.cpl!=null&&s.all?`<span><b>${money(Math.round(s.cpl))}</b> a lead</span>`:''}${(c=>c!=null?`<span><b>${pct(c)}</b> click rate</span>`:'')(tally(s.ads,addDays(TODAY,-89)).ctr)}<span>Last out ${ago(s.last)}</span></div>
+      ${ls.map(meter).join('')||'<p class="note">No limits set.</p>'}
+      <div class="row">${btn('place','See ads',{id:p.id,cls:'sm'})}${btn('newfor','+ Ad here',{id:p.id,cls:'sm'})}</div></div>`}).join('')||'<p class="note">No places yet.</p>'}</div>
+  </section>`;
+}
+function viewStart(){
+  return`<section class="panel">
+    <h2>Track your advertising</h2>
+    <p class="note">This tab is <b>experimental</b>. It keeps a list of where you advertise and what you put there, what each one costs and how many leads it brings. Set limits per place (money per month, posts per week, live ads at once) and it warns you before you go over, and suggests what to do next.</p>
+    <h3>Pick the places you use</h3>
+    <div class="chips">${COMMON.map(([n])=>btn('addcommon','+ '+esc(n),{id:n,cls:'sm'})).join('')}</div>
+    <div class="row">${btn('tab','Add your own place',{id:'places'})}${btn('examples','Try it with example ads')}</div>
+  </section>`;
+}
+function adFacts(a){
+  const lr=lastRun(a),sm=adSpent(a,MONTH+'-01',MONTH+'-31'),sa=adSpent(a),t=tally([a]);
+  return`<div class="facts"><span><b>${money(sm)}</b> this month${sa!==sm?` · ${money(sa)} total`:''}</span><span>${a.runs.length?`${plural(a.runs.length,'run')}, last ${ago(lr)}`:'Not out yet'}</span>${a.end?`<span>Ends ${fmt(a.end)}</span>`:''}${a.leads.length&&sa?`<span><b>${money(Math.round(sa/a.leads.length))}</b> a lead</span>`:''}${t.ctr!=null?`<span><b>${pct(t.ctr)}</b> click rate</span>`:''}${t.conv!=null?`<span><b>${pct(t.conv)}</b> of clicks became leads</span>`:''}${t.wins?`<span><b>${plural(t.wins,'job')}</b> won · ${money(t.revenue)}</span>`:''}</div>`;
+}
+function viewAd(a){
+  const open=openAd===a.id,p='ads.'+a.id;
+  return`<div class="ad${open?' open':''}" id="ad-${esc(a.id)}">
+    <div class="row"><span class="nm">${esc(a.title)}</span><span class="pill place">${esc(placeName(a))}</span>
+      <select class="status" id="st-${esc(a.id)}" data-path="${p}.status" aria-label="Status">${Object.entries(STATUS).map(([k,n])=>`<option value="${k}"${a.status===k?' selected':''}>${n}</option>`).join('')}</select></div>
+    ${a.body&&!open?`<p class="what">${esc(a.body.length>160?a.body.slice(0,160)+'…':a.body)}</p>`:''}
+    ${adFacts(a)}
+    <div class="row">
+      <span class="leads" title="Leads: people who reached out from this ad"><button data-act="lead" data-id="${esc(a.id)}" data-n="-1" aria-label="One less lead">−</button><b>${a.leads.length}</b><button data-act="lead" data-id="${esc(a.id)}" data-n="1" aria-label="One more lead">+</button></span><span class="small muted">leads</span>
+      ${btn('win','+ Job won',{id:a.id,cls:'sm'})}
+      ${btn('run',`${a.runs.length?'Put out again':'Put it out'}${a.cost?' · '+money(a.cost):''}`,{id:a.id,cls:'sm'})}
+      ${btn('edit',open?'Close':'Edit',{id:a.id,cls:'sm',pressed:open})}
+    </div>
+    ${open?viewAdForm(a):''}
+  </div>`;
+}
+function viewAdForm(a){
+  const p='ads.'+a.id;
+  return`<div class="form">
+    ${fld(p+'.title','What it is',a.title)}
+    ${fld(p+'.placeId','Where',a.placeId,{type:'select',opts:placeOpts(true)})}
+    ${fld(p+'.cost','Cost each time it goes out',a.cost,{type:'number',kind:'num'})}
+    ${fld(p+'.start','Started',a.start,{type:'date'})}
+    ${fld(p+'.end','Ends',a.end,{type:'date'})}
+    ${fld(p+'.link','Link',a.link,{type:'url',ph:'https://'})}
+    ${fld(p+'.body','What the ad says or shows',a.body,{type:'area',ph:'Headline, photos used, offer…'})}
+    ${fld(p+'.notes','Notes',a.notes,{type:'area'})}
+  </div>
+  <details${a.runs.length<=6?' open':''}><summary>Each time it went out (${a.runs.length})</summary>
+    <p class="note">Copy views and clicks from the site's insights or stats page. Leave them blank if the site doesn't show them.</p>
+    <div class="scroll"><table><thead><tr><th>Date</th><th>Cost</th><th>Views</th><th>Clicks</th><th></th></tr></thead><tbody>
+    ${[...a.runs].sort((x,y)=>x.date<y.date?1:-1).map(r=>`<tr><td><input type="date" id="r-${esc(r.id)}-d" data-path="${p}.runs.${r.id}.date" value="${r.date}"></td>
+      <td><input type="number" min="0" step="any" id="r-${esc(r.id)}-c" data-kind="num" data-path="${p}.runs.${r.id}.cost" value="${r.cost}"></td>
+      <td><input type="number" min="0" step="1" id="r-${esc(r.id)}-v" data-kind="opt" data-path="${p}.runs.${r.id}.views" value="${r.views??''}" placeholder="—" aria-label="Views"></td>
+      <td><input type="number" min="0" step="1" id="r-${esc(r.id)}-k" data-kind="opt" data-path="${p}.runs.${r.id}.clicks" value="${r.clicks??''}" placeholder="—" aria-label="Clicks"></td>
+      <td>${btn('delrun','Remove',{id:a.id,n:r.id,cls:'sm danger'})}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Not out yet. Press "Put it out" when it goes out.</td></tr>'}
+    </tbody></table></div></details>
+  <details${a.wins.length?' open':''}><summary>Jobs won from this ad (${a.wins.length})</summary>
+    <div class="scroll"><table><thead><tr><th>Date</th><th>Job worth</th><th></th></tr></thead><tbody>
+    ${[...a.wins].sort((x,y)=>x.date<y.date?1:-1).map(w=>`<tr><td><input type="date" id="w-${esc(w.id)}-d" data-path="${p}.wins.${w.id}.date" value="${w.date}"></td>
+      <td><input type="number" min="0" step="any" id="w-${esc(w.id)}-a" data-kind="num" data-path="${p}.wins.${w.id}.amount" value="${w.amount||''}" placeholder="$"></td>
+      <td>${btn('delwin','Remove',{id:a.id,n:w.id,cls:'sm danger'})}</td></tr>`).join('')||'<tr><td colspan="3" class="muted">Press "+ Job won" when someone from this ad signs on.</td></tr>'}
+    </tbody></table></div></details>
+  <div class="row">${a.link?`<a href="${esc(a.link)}" target="_blank" rel="noopener">Open link</a>`:''}<span class="grow"></span>
+    ${btn('copy','Copy',{id:a.id,cls:'sm'})}${btn('delad',armed===a.id?'Press again to delete':'Delete',{id:a.id,cls:'sm danger'+(armed===a.id?' armed':'')})}</div>`;
+}
+/* what an ad at this place can expect, from the place's own last 90 days */
+function expectHint(placeId){
+  const p=state.places.find(x=>x.id===placeId);if(!p)return '';
+  const t=tally(adsAt(p),addDays(TODAY,-89));
+  const bits=[t.ctr!=null?`a ${pct(t.ctr)} click rate`:'',t.conv!=null?`${pct(t.conv)} of clicks becoming leads`:'',t.cpl!=null&&t.spent?`about ${money(Math.round(t.cpl))} a lead`:'',t.close!=null&&t.wins?`${pct(t.close)} of leads becoming jobs`:''].filter(Boolean);
+  return bits.length?`<p class="hint">Over the last 90 days, ads on ${esc(p.name)} got ${bits.join(', ')}.</p>`:'';
+}
+function viewAds(){
+  const pl=state.places.find(p=>p.id===pf);
+  const qq=q.trim().toLowerCase();
+  const list=state.ads.filter(a=>(af==='all'||(af==='active'?a.status==='live'||a.status==='paused'||a.status==='draft':a.status===af))&&(!pf||a.placeId===pf)
+    &&(!qq||(a.title+' '+a.body+' '+a.notes+' '+placeName(a)).toLowerCase().includes(qq)))
+    .sort((a,b)=>({live:0,draft:1,paused:2,ended:3})[a.status]-({live:0,draft:1,paused:2,ended:3})[b.status]||(lastRun(b)>lastRun(a)?1:-1));
+  const qa=quick;
+  return`<section class="panel"><h2>Add an ad</h2>
+    <div class="quickadd">
+      <label class="f wide">What<input type="text" id="qa-title" value="${esc(qa.title)}" placeholder="e.g. Kitchen before/after photos"></label>
+      <label class="f">Where<select id="qa-place">${placeOpts(false).map(([k,n])=>`<option value="${esc(k)}"${k===qa.placeId?' selected':''}>${esc(n)}</option>`).join('')}<option value="__new">+ New place…</option></select></label>
+      <label class="f">Cost<input type="number" min="0" step="any" inputmode="decimal" id="qa-cost" value="${esc(qa.cost)}" placeholder="0"></label>
+      <label class="f">Status<select id="qa-status">${Object.entries(STATUS).filter(([k])=>k!=='ended').map(([k,n])=>`<option value="${k}"${k===qa.status?' selected':''}>${k==='live'?'Out today':n}</option>`).join('')}</select></label>
+      ${btn('quickadd','Add',{cls:'primary'})}
+    </div>
+    ${expectHint(qa.placeId||(placeOpts(false)[0]||[''])[0])}
+    ${qa.placeId==='__new'?`<div class="row"><label class="f grow">New place name<input type="text" id="qa-newplace" value="${esc(qa.newPlace)}" placeholder="e.g. Home show booth"></label></div>`:''}
+  </section>
+  <section class="panel">
+    <div class="row spread"><h2>Your ads</h2><input type="search" id="adsearch" value="${esc(q)}" placeholder="Search ads" style="max-width:260px"></div>
+    <div class="row">
+      <div class="chips">${[['active','Current'],['live','Live'],['draft','Not out yet'],['paused','Paused'],['ended','Ended'],['all','All']].map(([k,n])=>btn('filter',n,{id:k,cls:'sm',pressed:af===k})).join('')}</div>
+      ${pl?`<span class="pill place">${esc(pl.name)} <button class="x" data-act="place" data-id="" aria-label="Show every place" style="background:none;border:0;cursor:pointer">×</button></span>`:''}
+    </div>
+    <div class="alist">${list.map(viewAd).join('')||`<p class="note">No ads here${af!=='all'?'. Try "All"':''}.</p>`}</div>
+  </section>`;
+}
+/* ---------- stats ---------- */
+const money2=n=>n==null?'—':money(n<10?Math.round(n*100)/100:Math.round(n));
+/* key, heading, shown value, sort value, which way is better */
+const COLS=[
+  ['spent','Spent',t=>money(t.spent),t=>t.spent,''],
+  ['views','Views',t=>t.views?big(t.views):'—',t=>t.views||null,'hi'],
+  ['clicks','Clicks',t=>t.clicks?big(t.clicks):'—',t=>t.clicks||null,'hi'],
+  ['ctr','Click rate',t=>pct(t.ctr),t=>t.ctr,'hi'],
+  ['leads','Leads',t=>String(t.leads),t=>t.leads,'hi'],
+  ['conv','Clicks → leads',t=>pct(t.conv),t=>t.conv,'hi'],
+  ['wins','Jobs won',t=>String(t.wins),t=>t.wins,'hi'],
+  ['close','Leads → jobs',t=>pct(t.close),t=>t.close,'hi'],
+  ['cpc','Cost per click',t=>money2(t.cpc),t=>t.cpc,'lo'],
+  ['cpl','Cost per lead',t=>money2(t.cpl),t=>t.cpl,'lo'],
+  ['cpj','Cost per job',t=>money2(t.cpj),t=>t.cpj,'lo'],
+  ['revenue','Jobs worth',t=>t.revenue?money(t.revenue):'—',t=>t.revenue||null,'hi'],
+  ['roi','Back per $1',t=>t.roi!=null?money(t.roi>=10?Math.round(t.roi):Math.round(t.roi*10)/10):'—',t=>t.roi,'hi']];
+function statRows(){
+  const from=periodFrom();
+  if(statBy==='ad')return state.ads.filter(a=>a.runs.some(r=>r.date>=from)||a.leads.some(d=>d>=from))
+    .map(a=>({key:a.id,label:`${esc(a.title)} <span class="small muted">${esc(placeName(a))}</span>`,ads:[a],t:tally([a],from)}));
+  const rows=state.places.map(p=>({key:p.id,label:esc(p.name)+(p.archived?' <span class="small muted">(stopped)</span>':''),ads:adsAt(p)}));
+  const loose=state.ads.filter(a=>!placeOf(a));
+  if(loose.length)rows.push({key:'',label:'<span class="muted">No place</span>',ads:loose});
+  return rows.map(r=>({...r,t:tally(r.ads,from)})).filter(r=>r.t.runs||r.t.leads||r.t.wins);
+}
+function viewStats(){
+  const rows=statRows(),col=COLS.find(c=>c[0]===statSort)||COLS[9];
+  const sv=r=>col[3](r.t);
+  rows.sort((a,b)=>{const x=sv(a),y=sv(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;return col[4]==='lo'?x-y:y-x});
+  /* the best value in each column, when at least two rows have one */
+  const best={};
+  for(const [k,,,val,dir] of COLS){if(!dir)continue;const v=rows.map(r=>val(r.t)).filter(x=>x!=null&&!(dir==='hi'&&x===0));if(v.length>1)best[k]=dir==='lo'?Math.min(...v):Math.max(...v)}
+  const total=tally(rows.flatMap(r=>r.ads),periodFrom());
+  const tracked=total.tracked>0;
+  return`<section class="panel">
+    <div class="row spread"><h2>How each ${statBy==='ad'?'ad':'site'} is doing</h2>
+      <div class="chips">${PERIODS.map(([k,n])=>btn('statperiod',n,{id:k,cls:'sm',pressed:period===k})).join('')}</div></div>
+    <div class="row"><div class="chips">${btn('statby','By site',{id:'place',cls:'sm',pressed:statBy==='place'})}${btn('statby','By ad',{id:'ad',cls:'sm',pressed:statBy==='ad'})}</div>
+      <span class="small muted">Click a heading to sort. The best in each column is green.</span></div>
+    ${tracked?'':`<p class="hint">Click rates need views and clicks. Copy them from each site's insights or stats page into an ad: <b>Edit › Each time it went out</b>. Leads come from the <b>+</b> button on an ad, and jobs from <b>+ Job won</b>.</p>`}
+    ${rows.length?`<div class="scroll"><table class="nums"><thead><tr><th>${statBy==='ad'?'Ad':'Site'}</th>${COLS.map(([k,n])=>`<th><button data-act="statsort" data-id="${k}" aria-pressed="${statSort===k}">${n}</button></th>`).join('')}</tr></thead><tbody>
+      ${rows.map(r=>`<tr><td>${r.label}</td>${COLS.map(([k,,show,val])=>`<td class="${best[k]!=null&&val(r.t)===best[k]?'best':''}">${show(r.t)}</td>`).join('')}</tr>`).join('')}
+      <tr class="total"><td>All</td>${COLS.map(([,,show])=>`<td>${show(total)}</td>`).join('')}</tr>
+    </tbody></table></div>`:`<p class="note">Nothing tracked in this period yet.</p>`}
+    <p class="note">Click rate is clicks out of views. Clicks → leads is how many clicks turned into someone reaching out. Leads → jobs is how many of those became paying work. Back per $1 is what the jobs were worth for each dollar spent.</p>
+  </section>
+  ${viewPlan()}`;
+}
+/* splits a month's ad money: most to the places that bring leads cheapest, a little to try places without enough data, none to places that spent and got nothing */
+function plan(budget){
+  const from=addDays(TODAY,-89);
+  const rows=state.places.filter(p=>!p.archived).map(p=>({p,t:tally(adsAt(p),from),amount:0,kind:''}));
+  const all=tally(state.ads,from),avgCpl=all.cpl||null;
+  for(const r of rows){
+    if(r.t.spent===0&&r.t.leads>0)r.kind='free';
+    else if(r.t.spent>0&&r.t.leads>=2)r.kind='proven';
+    else if(r.t.spent>0&&avgCpl&&r.t.spent>2*avgCpl)r.kind='pause';
+    else r.kind='test';
+  }
+  const tests=rows.filter(r=>r.kind==='test'),proven=rows.filter(r=>r.kind==='proven');
+  let left=budget;
+  if(tests.length){const pool=Math.min(budget*(proven.length?0.2:1),tests.length*Math.max(budget*0.1,25));for(const r of tests){r.amount=Math.min(pool/tests.length,r.p.budget||Infinity)}left-=tests.reduce((s,r)=>s+r.amount,0)}
+  let open=proven.slice();
+  for(let i=0;i<5&&left>1&&open.length;i++){
+    const w=open.reduce((s,r)=>s+1/r.t.cpl,0);
+    for(const r of open)r.amount+=left*(1/r.t.cpl)/w;
+    left=0;
+    for(const r of open)if(r.p.budget&&r.amount>r.p.budget){left+=r.amount-r.p.budget;r.amount=r.p.budget}
+    open=open.filter(r=>!r.p.budget||r.amount<r.p.budget);
+  }
+  for(const r of rows)r.amount=Math.floor(r.amount/5)*5;
+  return{rows:rows.sort((a,b)=>b.amount-a.amount||(a.kind==='free'?-1:1)),left:budget-rows.reduce((s,r)=>s+r.amount,0)};
+}
+function viewPlan(){
+  const def=state.settings.monthlyBudget||Math.round(tally(state.ads,addDays(TODAY,-29)).spent/10)*10||'';
+  const b=planBudget==null?def:planBudget;
+  const out=num(b)>0?plan(num(b)):null;
+  const why=r=>r.kind==='proven'?`About ${money(Math.round(r.t.cpl))} a lead${r.t.ctr!=null?`, ${pct(r.t.ctr)} click rate`:''}${r.p.budget&&r.amount>=r.p.budget?'. Capped at its limit':''}`
+    :r.kind==='free'?`Free, and brought ${plural(r.t.leads,'lead')}. Keep posting${r.p.perWeek?` (up to ${r.p.perWeek} a week)`:''}`
+    :r.kind==='pause'?`${money(r.t.spent)} spent, ${plural(r.t.leads,'lead')}. Pause it or try a new ad first`
+    :r.t.runs?'Not enough data yet, so a small test':'Never tried, so a small test';
+  return`<section class="panel"><h2>Where to put next month's money</h2>
+    <p class="note">Based on your last 90 days. Most goes where leads come cheapest, a little goes to testing sites without enough data, and nothing goes to sites that spent and got no leads.</p>
+    <div class="row"><label class="f" style="max-width:220px">Money to spend<input type="number" min="0" step="any" inputmode="decimal" id="planbudget" value="${esc(b)}" placeholder="$"></label></div>
+    ${!out?'<p class="note">Type how much you want to spend.</p>':!out.rows.some(r=>r.kind==='proven'||r.kind==='test')?'<p class="note">Track a few ads with what they cost and the leads they bring first.</p>':`
+    <div class="scroll"><table class="nums"><thead><tr><th>Site</th><th>Put in</th><th>Expected leads</th><th>Why</th></tr></thead><tbody>
+      ${out.rows.map(r=>`<tr><td>${esc(r.p.name)}</td><td>${r.kind==='free'?'Free':money(r.amount)}</td><td>${r.kind==='proven'&&r.amount?'about '+Math.round(r.amount/r.t.cpl*10)/10:r.kind==='free'?'—':'?'}</td><td style="white-space:normal">${esc(why(r))}</td></tr>`).join('')}
+      ${out.left>=5?`<tr><td class="muted">Not placed</td><td>${money(out.left)}</td><td></td><td style="white-space:normal">Every site that works is at its limit. Raise a limit or try a new site.</td></tr>`:''}
+    </tbody></table></div>`}
+  </section>`;
+}
+
+/* ---------- ideas ---------- */
+/* used by "Surprise me", which works without Claude */
+const IDEA_DECK=[
+  ['Before & after slider','Facebook','Post the same kitchen from the same spot, before and after, as a two-photo slide. First line: "Same kitchen. Same walls. New everything."',0,'Before/after is the easiest thing to stop a scroll.'],
+  ['Guess the price','Instagram','Show a finished built-in and ask people to guess what it cost in the comments. Reveal the range the next day with a "free measure" offer.',0,'A question gets comments, and comments push the post to more people.'],
+  ['Shop sounds','Instagram','A 15-second clip of the CNC cutting, edgebander running and a door getting sprayed. Caption: "Your kitchen, starting Monday."',0,'Shop videos show the work is made here, not shipped in a box.'],
+  ['The drawer that closes itself','Facebook','Slow-motion video of a soft-close drawer full of pots. "Your drawers could do this."',20,'Small details sell upgrades.'],
+  ['Neighbor discount','Nextdoor','"We just finished a kitchen on your street. Neighbors get a free design visit this month." Include one photo from that job.',0,'People trust work they can walk past.'],
+  ['Thank-you yard sign','Yard signs','Ask finished customers to keep a "Cabinets by LARKUL" sign out for two weeks, with a small gift card as thanks.',40,'A sign at a finished house is a reference that works all day.'],
+  ['Pantry makeover contest','Facebook','Ask people to post their messiest pantry. Pick a winner for a free pantry pull-out. Boost the winner post.',150,'Contests get shares, and every entry is a warm lead.'],
+  ['Design-it-in-an-hour','Instagram','Time-lapse of laying out a kitchen in the design software, ending with the real photo of the finished job.',0,'It shows the planning people are paying for.'],
+  ['Wood of the month','Instagram','Close-up photos of one wood or paint color each month, where it works best, and a finished job that uses it.',0,'Easy to repeat, and it builds a library of posts.'],
+  ['Ask the cabinet maker','Facebook','A weekly short answer to one common question: "Painted or stained?", "How long do cabinets take?". End with "Got a question? Comment below."',0,'Being helpful makes people remember you when they are ready.'],
+  ['Holiday hosting built-ins','Facebook','In fall, show a buffet or bar built-in all set for a party. "Want it before the holidays? Order by the 15th."',60,'A deadline gives people a reason to call now.'],
+  ['Realtor flyer','Flyers & door hangers','A one-page flyer for local real estate agents: three before/after kitchens and "Cabinet updates that sell houses."',50,'Agents pass you to buyers and sellers again and again.'],
+  ['Google photo streak','Google Business Profile','Post one new project photo every week with the town name in the caption, like "Painted vanity in Springfield."',0,'Fresh photos with a place name help you show up in local searches.'],
+  ['Customer reveal video','Facebook','Film the customer seeing the finished kitchen for the first time (with permission).',30,'Real reactions are more convincing than anything you could say.'],
+  ['Scrap wood giveaway','Nextdoor','Offer offcuts and scraps free to local crafters. Every post mentions what you build.',0,'It is friendly and keeps your name in front of neighbors.'],
+  ['Truck back-window ad','Truck or trailer','A clean decal with one finished-kitchen photo, the name and the website.',120,'Your truck is parked in front of every job.'],
+  ['Houzz idea book','Houzz','Put your best ten photos in one idea book with short notes on each choice.',0,'People on Houzz are already planning a remodel.'],
+  ['Small project weekend','Facebook','Promote small jobs (one vanity, a floating shelf) for slow weeks: "Booking a few small projects this month."',40,'Small jobs fill gaps and often turn into kitchens later.'],
+].map(([title,place,what,cost,why])=>({title,place,what,cost,why}));
+async function aiContext(){
+  let business='';
+  try{const b=await Hub.business();if(b&&typeof b==='object')business=Object.entries(b).filter(([,v])=>typeof v==='string'&&v.trim()).map(([k,v])=>`${k}: ${v}`).join('; ')}catch(_){}
+  const from=addDays(TODAY,-89);
+  const say=t=>[`spent ${money(t.spent)} over ${plural(t.runs,'run')}`,t.ctr!=null?`click rate ${pct(t.ctr)}`:'',plural(t.leads,'lead'),t.conv!=null?`${pct(t.conv)} of clicks became leads`:'',t.cpl!=null&&t.spent?`${money(Math.round(t.cpl))} a lead`:'',t.wins?`${plural(t.wins,'job')} won worth ${money(t.revenue)}`:''].filter(Boolean).join(', ');
+  const tl=totalLimit();
+  return{today:TODAY,business,
+    places:state.places.filter(p=>!p.archived).map(p=>({name:p.name,kind:p.kind,stats:'last 90 days: '+say(tally(adsAt(p),from))})),
+    ads:state.ads.slice(0,25).map(a=>({title:a.title,place:placeName(a),what:a.body,stats:`${STATUS[a.status].toLowerCase()}, ${say(tally([a]))}`})),
+    saved:state.ideas.map(i=>i.title),budgetLeft:tl?Math.max(0,tl.limit-tl.used):null};
+}
+async function loadAi(force){
+  if(!HUB){aiStatus={ok:false,error:'Brainstorming with Claude works when this tab runs inside the hub.'};return}
+  aiStatus=aiStatus||{checking:true};
+  try{aiStatus=await Hub.api('/ai/status'+(force?'?recheck=1':''))}catch(e){aiStatus={ok:false,error:'The hub needs a restart to pick up this tab\'s Claude helper. ('+e.message+')'}}
+  render();
+}
+function scrollChat(){setTimeout(()=>{const c=document.getElementById('chat');if(c)c.scrollTop=c.scrollHeight},0)}
+async function sendChat(text){
+  text=String(text||'').trim();if(!text||thinking)return;
+  state.chat.push({role:'user',text,ideas:[],deck:false});chatText='';thinking=true;commit();render(true);scrollChat();
+  try{
+    const messages=state.chat.filter(m=>!m.deck).map(m=>({role:m.role,text:m.ideas.length?`${m.text}\nIdeas I gave: ${m.ideas.map(i=>i.title).join('; ')}`:m.text}));
+    const r=await Hub.api('/ai/ideas',{method:'POST',json:{messages,context:await aiContext()}});
+    state.chat.push({role:'assistant',text:String(r.reply||''),ideas:(r.ideas||[]).map(normIdea),deck:false});
+    state.chat=state.chat.slice(-40);aiStatus={ok:true};commit();
+  }catch(e){toast(esc(e.message||'Claude did not answer.'),false,true);aiStatus={ok:false,error:e.message}}
+  thinking=false;render(true);scrollChat();
+}
+function surprise(){
+  const seen=new Set([...state.ideas.map(i=>i.title),...state.chat.flatMap(m=>m.ideas.map(i=>i.title))]);
+  let pool=IDEA_DECK.filter(i=>!seen.has(i.title));if(pool.length<3)pool=IDEA_DECK.slice();
+  const pick=[];while(pick.length<3&&pool.length)pick.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  state.chat.push({role:'assistant',deck:true,text:'Here are three from the idea deck. Save any you like, or ask Claude to riff on one.',ideas:pick.map(normIdea)});
+  state.chat=state.chat.slice(-40);commit();scrollChat();
+}
+const chatIdea=id=>state.chat.flatMap(m=>m.ideas).find(i=>i.id===id);
+const savedLike=i=>state.ideas.find(x=>x.id===i.id||x.title.toLowerCase()===i.title.toLowerCase());
+function saveIdea(i){const have=savedLike(i);if(have)return have;const n=normIdea({...i,id:'',added:TODAY});state.ideas.unshift(n);return n}
+function ideaToAd(i){
+  const saved=saveIdea(i);
+  let p=state.places.find(x=>x.name.toLowerCase()===i.place.trim().toLowerCase());
+  if(!p&&i.place.trim()){const c=COMMON.find(x=>x[0].toLowerCase()===i.place.trim().toLowerCase());p=addPlace(i.place,c?c[1]:'Other')}
+  const a=normAd({title:i.title,body:i.what,notes:i.why?'Why: '+i.why:'',cost:i.cost,placeId:p?p.id:'',status:'draft'},state.places);
+  state.ads.unshift(a);saved.adId=a.id;saved.status='tried';
+  openAd=a.id;af='active';pf='';setTab('ads');
+  commit(`Made “${esc(a.title)}” an ad. Put it out when it's ready.`);
+}
+function ideaCard(i,where){
+  const saved=where==='saved'?i:savedLike(i),p='ideas.'+i.id;
+  return`<div class="idea ${where==='saved'?i.status:''}">
+    <div class="row spread"><span class="nm grow">${esc(i.title)}</span>${where==='saved'?`<button class="star" data-act="star" data-id="${esc(i.id)}" aria-pressed="${i.starred}" aria-label="${i.starred?'Unstar':'Star'}">${i.starred?'★':'☆'}</button>`:''}</div>
+    <div class="row">${i.place?`<span class="pill place">${esc(i.place)}</span>`:''}<span class="pill done">${i.cost?'about '+money(i.cost):'Free'}</span></div>
+    ${i.what?`<p>${esc(i.what)}</p>`:''}${i.why?`<p class="why">${esc(i.why)}</p>`:''}
+    <div class="row">
+      ${where==='saved'?`<select id="is-${esc(i.id)}" data-path="${p}.status" aria-label="Status" style="width:auto;padding:4px 8px">${[['new','New'],['tried','Tried'],['skip','Not for us']].map(([k,n])=>`<option value="${k}"${i.status===k?' selected':''}>${n}</option>`).join('')}</select>`
+        :saved?'<span class="small muted">Saved ✓</span>':btn('saveidea','Save',{id:i.id,cls:'sm'})}
+      ${saved&&saved.adId&&state.ads.some(a=>a.id===saved.adId)?btn('edit','Open the ad',{id:saved.adId,cls:'sm'}):btn('ideaad','Make it an ad',{id:i.id,n:where,cls:'sm'})}
+      ${where==='saved'?btn('delidea',armed===i.id?'Press again to delete':'Delete',{id:i.id,cls:'sm danger'+(armed===i.id?' armed':'')}):''}
+    </div></div>`;
+}
+function viewIdeas(){
+  const st=aiStatus,best=state.places.filter(p=>!p.archived).map(p=>({p,t:tally(adsAt(p),addDays(TODAY,-89))})).filter(x=>x.t.leads).sort((a,b)=>(a.t.cpl??1e9)-(b.t.cpl??1e9))[0];
+  const month=parse(TODAY).toLocaleDateString(undefined,{month:'long'});
+  const starters=[`Fun ideas for ${month}`,'Cheap ideas under $50',best?`Something new for ${best.p.name}`:'Ideas for a new site to try','A contest or giveaway','Ideas for slow weeks','Make my best ad better'];
+  const counts={new:0,starred:0,tried:0,skip:0,all:state.ideas.length};
+  for(const i of state.ideas){counts[i.status]++;if(i.starred)counts.starred++}
+  const shown=state.ideas.filter(i=>ideaFilter==='all'||(ideaFilter==='starred'?i.starred:i.status===ideaFilter)).sort((a,b)=>(b.starred-a.starred)||(a.added<b.added?1:-1));
+  return`<section class="panel">
+    <div class="row spread"><h2>Brainstorm with Claude</h2><div class="row">${btn('surprise','🎲 Surprise me',{cls:'sm'})}${state.chat.length?btn('clearchat',armed==='chat'?'Press again to clear':'Clear chat',{cls:'sm'+(armed==='chat'?' danger armed':'')}):''}</div></div>
+    ${!st||st.checking?'<p class="note">Checking for Claude…</p>':st.ok?'<p class="note">Claude sees your sites and their numbers, so it can build on what works. Save the ideas you like, then make them into ads.</p>'
+      :`<p class="hint">${esc(st.error||'Claude is not available.')} ${HUB?btn('aicheck','Check again',{cls:'sm'}):''}<br>🎲 Surprise me still works without Claude.</p>`}
+    <div class="chat" id="chat">
+      ${state.chat.map(m=>m.role==='user'?`<div class="msg me">${esc(m.text)}</div>`
+        :`<div class="msg ai">${m.deck?'<small>From the idea deck</small>':''}${m.text?`<p>${esc(m.text)}</p>`:''}${m.ideas.length?`<div class="ideas">${m.ideas.map(i=>ideaCard(i,'chat')).join('')}</div>`:''}</div>`).join('')}
+      ${thinking?'<div class="msg ai"><p class="thinking">Claude is thinking up ideas…</p></div>':''}
+      ${!state.chat.length&&!thinking?'<p class="note">Pick a starter below or say what you want, like "something fun for Halloween on Instagram".</p>':''}
+    </div>
+    <div class="chips">${starters.map(t=>btn('starter',esc(t),{n:t,cls:'sm'})).join('')}</div>
+    <div class="composer"><textarea id="chatbox" placeholder="What kind of ideas do you want?" aria-label="Message to Claude">${esc(chatText)}</textarea>${btn('chatsend',thinking?'Thinking…':'Send',{cls:'primary'})}</div>
+  </section>
+  <section class="panel">
+    <div class="row spread"><h2>Saved ideas</h2>
+      <div class="chips">${[['new','New'],['starred','★ Starred'],['tried','Tried'],['skip','Not for us'],['all','All']].map(([k,n])=>btn('ideafilter',`${n} (${counts[k]})`,{id:k,cls:'sm',pressed:ideaFilter===k})).join('')}</div></div>
+    ${shown.length?`<div class="ideas">${shown.map(i=>ideaCard(i,'saved')).join('')}</div>`:`<p class="note">${state.ideas.length?'None here.':'Ideas you save show up here.'}</p>`}
+  </section>`;
+}
+function viewPlaces(){
+  const have=new Set(state.places.map(p=>p.name.toLowerCase()));
+  const shown=state.places.filter(p=>!p.archived),arch=state.places.filter(p=>p.archived);
+  const card=p=>{const s=placeStats(p),pp='places.'+p.id,ls=placeLimits(p,s);return`<div class="pcard ${worst(ls)}">
+    <div class="form">
+      ${fld(pp+'.name','Name',p.name)}
+      ${fld(pp+'.kind','Kind',p.kind,{type:'select',opts:KINDS.map(k=>[k,k])})}
+      ${fld(pp+'.budget','Money per month <small>0 = no limit</small>',p.budget||'',{type:'number',kind:'num',ph:'No limit'})}
+      ${fld(pp+'.perWeek','Times out per week <small>0 = no limit</small>',p.perWeek||'',{type:'number',kind:'int',ph:'No limit'})}
+      ${fld(pp+'.maxLive','Live ads at once <small>0 = no limit</small>',p.maxLive||'',{type:'number',kind:'int',ph:'No limit'})}
+      ${fld(pp+'.link','Link to your page there',p.link,{type:'url',ph:'https://'})}
+      ${fld(pp+'.notes','Notes',p.notes,{type:'area',ph:'Login, who manages it, what works…'})}
+    </div>
+    ${ls.map(meter).join('')}
+    <div class="row"><span class="small muted grow">${plural(s.ads.length,'ad')}, ${plural(s.leads,'lead')}</span>
+      ${p.archived?btn('unarchive','Bring back',{id:p.id,cls:'sm'}):btn('archive','Stop using',{id:p.id,cls:'sm'})}
+      ${s.ads.length?'':btn('delplace',armed===p.id?'Press again to delete':'Delete',{id:p.id,cls:'sm danger'+(armed===p.id?' armed':'')})}</div>
+  </div>`};
+  return`<section class="panel"><h2>Places and limits</h2>
+    <p class="note">A place is anywhere you advertise. Set any of the limits and the Overview warns you at ${state.settings.warnAt}% and again when you go over. Limits never block you, they only warn.</p>
+    <div class="row"><input type="text" id="newplace" placeholder="Add a place, e.g. Home show booth" style="max-width:320px">${btn('addplace','Add place',{cls:'primary'})}</div>
+    ${COMMON.some(([n])=>!have.has(n.toLowerCase()))?`<div class="chips">${COMMON.filter(([n])=>!have.has(n.toLowerCase())).map(([n])=>btn('addcommon','+ '+esc(n),{id:n,cls:'sm'})).join('')}</div>`:''}
+  </section>
+  <div class="places">${shown.map(card).join('')}</div>
+  ${arch.length?`<details class="panel"><summary>Places you stopped using (${arch.length})</summary><div class="places">${arch.map(card).join('')}</div></details>`:''}`;
+}
+function viewSettings(){
+  const S='settings';
+  return`<section class="panel"><h2>Limits and warnings</h2>
+    <div class="form">
+      ${fld(S+'.monthlyBudget','Ad budget for the whole month <small>0 = none</small>',state.settings.monthlyBudget||'',{type:'number',kind:'num',ph:'No budget'})}
+      ${fld(S+'.warnAt','Warn when a limit is this % used',state.settings.warnAt,{type:'number',kind:'num'})}
+      ${fld(S+'.quietDays','Suggest posting again after this many quiet days',state.settings.quietDays,{type:'number',kind:'int'})}
+      ${fld(S+'.snoozeDays','Hidden suggestions come back after (days)',state.settings.snoozeDays,{type:'number',kind:'int'})}
+    </div>
+    ${Object.keys(state.dismissed).length?`<div class="row"><span class="note grow">${plural(Object.keys(state.dismissed).length,'suggestion')} hidden.</span>${btn('undismiss','Show them again',{cls:'sm'})}</div>`:''}
+  </section>
+  <section class="panel"><h2>Your data</h2>
+    <p class="note">${HUB?'Everything is saved in the hub with the rest of your extension data.':'Not running inside the hub, so this is saved in this browser only.'} This tab is experimental, so keep a copy if it matters.</p>
+    <div class="row">${btn('export','Download a copy')}${HUB?btn('backup','Save a copy to Files'):''}</div>
+    <label class="f">Bring in a copy<textarea id="importbox" placeholder="Paste a copy here">${esc(importText)}</textarea></label>
+    <div class="row">${btn('import',armed==='import'?'Press again to replace everything':'Bring it in',{cls:armed==='import'?'danger armed':''})}
+      ${state.places.length||state.ads.length?'':btn('examples','Load example ads')}
+      <span class="grow"></span>${btn('reset',armed==='reset'?'Press again to erase everything':'Erase everything',{cls:'danger'+(armed==='reset'?' armed':'')})}</div>
+  </section>`;
+}
+
+/* ---------- render ---------- */
+let quick={title:'',placeId:'',cost:'',status:'live',newPlace:''};
+let rendering=false,deferred=false;
+const typingIn=el=>el&&el.closest&&el.closest('#app')&&!['adsearch','importbox','chatbox','planbudget'].includes(el.id)&&!/^qa-/.test(el.id)&&el.id!=='newplace'&&(el.tagName==='TEXTAREA'||(el.tagName==='INPUT'&&/^(text|number|date|search|url)$/.test(el.type)));
+document.addEventListener('focusout',()=>setTimeout(()=>{if(deferred&&!typingIn(document.activeElement)){deferred=false;render(true)}},0));
+function render(force){
+  if(!force&&typingIn(document.activeElement)){deferred=true;return}
+  deferred=false;
+  if(rendering){setTimeout(()=>render(true),0);return}
+  rendering=true;
+  try{renderNow()}finally{rendering=false}
+}
+function renderNow(){
+  const ae=document.activeElement,aid=ae&&ae.id;
+  let sel=null;try{if(aid&&typeof ae.selectionStart==='number')sel=[ae.selectionStart,ae.selectionEnd]}catch(_){}
+  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab));
+  const sy=window.scrollY;
+  if(tab==='ideas'&&!aiStatus)loadAi();
+  document.getElementById('app').innerHTML=tab==='ads'?viewAds():tab==='stats'?viewStats():tab==='ideas'?viewIdeas():tab==='places'?viewPlaces():tab==='settings'?viewSettings():viewOverview();
+  window.scrollTo(0,sy);
+  if(aid){const el=document.getElementById(aid);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(sel)el.setSelectionRange(sel[0],sel[1])}catch(_){}}}
+}
+function setTab(t){tab=t;armed=null;try{localStorage.setItem(KEY+'-tab',t)}catch(_){}window.scrollTo(0,0)}
+function scrollToAd(id){setTimeout(()=>{const el=document.getElementById('ad-'+id);if(el)el.scrollIntoView({block:'nearest',behavior:'smooth'})},0)}
+
+/* ---------- editing ---------- */
+/* data-path is like "ads.<id>.title" or "ads.<id>.runs.<runId>.cost" or "settings.warnAt" */
+function resolve(path){
+  const segs=path.split('.');let o=state;
+  for(const s of segs.slice(0,-1)){if(o==null)return null;o=Array.isArray(o)?o.find(x=>x&&x.id===s):o[s]}
+  return o==null?null:[o,segs[segs.length-1]];
+}
+function applyField(el){
+  const r=resolve(el.dataset.path);if(!r)return null;
+  const [o,f]=r,k=el.dataset.kind;
+  let v=el.value;
+  if(k==='num')v=Math.max(0,num(v));
+  if(k==='int')v=Math.max(0,Math.round(num(v)));
+  if(k==='opt')v=optNum(v);
+  if(el.type==='date'&&!isDate(v))v=f==='date'?o[f]:'';
+  if(f==='title'||f==='name')v=v.trim()||o[f];
+  if(f==='warnAt')v=Math.min(100,Math.max(1,v));
+  o[f]=v;return{o,f};
+}
+document.addEventListener('input',e=>{
+  const el=e.target;
+  if(el.id==='adsearch'){q=el.value;render(true);return}
+  if(el.id==='importbox'){importText=el.value;return}
+  if(el.id==='chatbox'){chatText=el.value;return}
+  if(el.id==='planbudget'){planBudget=el.value;render(true);return}
+  if(el.id==='qa-title')quick.title=el.value;
+  if(el.id==='qa-cost')quick.cost=el.value;
+  if(el.id==='qa-newplace')quick.newPlace=el.value;
+});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.id==='qa-place'){quick.placeId=el.value;const last=state.ads.filter(a=>a.placeId===el.value).sort((a,b)=>lastRun(b)>lastRun(a)?1:-1)[0];if(last&&quick.cost==='')quick.cost=String(last.cost||'');render(true);if(el.value==='__new')document.getElementById('qa-newplace')?.focus();return}
+  if(el.id==='qa-status'){quick.status=el.value;return}
+  if(!el.dataset.path)return;
+  const before=limitSnap(),r=applyField(el);if(!r)return;
+  /* an ad going live: count its first run today if it never went out */
+  if(r.f==='status'&&r.o.runs&&r.o.status==='live'&&!r.o.runs.length){r.o.runs.push({id:uid('r'),date:TODAY,cost:r.o.cost});if(!r.o.start)r.o.start=TODAY}
+  if(r.f==='status'&&r.o.runs&&r.o.status==='ended'&&!r.o.end)r.o.end=TODAY;
+  const w=limitWarning(before);
+  commit(w?w.text:r.f==='status'&&r.o.runs?`${esc(r.o.title)} is now ${STATUS[r.o.status].toLowerCase()}`:'',w&&w.bad);
+  if(!el.isConnected)return;
+  setTimeout(render,0);
+});
+
+function addPlace(name,kind='Other'){
+  name=name.trim();if(!name)return null;
+  const old=state.places.find(p=>p.name.toLowerCase()===name.toLowerCase());
+  if(old){old.archived=false;return old}
+  const p=normPlace({name,kind});state.places.push(p);return p;
+}
+function putOut(a,date=TODAY,cost=a.cost){
+  const before=limitSnap();
+  a.runs.push({id:uid('r'),date,cost});
+  if(a.status!=='live')a.status='live';
+  if(!a.start)a.start=date;
+  return limitWarning(before);
+}
+function newAd(placeId){
+  const a=normAd({title:'New ad',placeId,status:'draft'},state.places);
+  state.ads.unshift(a);openAd=a.id;af='active';pf='';setTab('ads');commit();
+  setTimeout(()=>{const el=document.getElementById('f-ads_'+a.id+'_title');if(el){el.focus();el.select()}},0);
+}
+function download(name,text){
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+}
+const fileText=()=>JSON.stringify({app:'larkul-ads',version:1,saved:new Date().toISOString(),state},null,1);
+
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-act]');if(!el)return;
+  const act=el.dataset.act,id=el.dataset.id,n=el.dataset.n;
+  const ad=state.ads.find(a=>a.id===id),place=state.places.find(p=>p.id===id);
+  if(!['delad','delplace','import','reset','delidea','clearchat'].includes(act))armed=null;
+  e.stopPropagation();
+  switch(act){
+    case 'undo':undo();break;
+    case 'tab':setTab(id);break;
+    case 'filter':af=id;if(tab!=='ads')setTab('ads');break;
+    case 'place':pf=id||'';af='all';if(tab!=='ads')setTab('ads');break;
+    case 'edit':openAd=openAd===id?null:id;if(tab!=='ads'){af='all';pf='';setTab('ads');scrollToAd(id)}break;
+    case 'newad':newAd(quick.placeId&&quick.placeId!=='__new'?quick.placeId:'');return;
+    case 'newfor':quick.placeId=id;setTab('ads');render(true);document.getElementById('qa-title')?.focus();return;
+    case 'quickadd':{
+      const title=quick.title.trim();if(!title){toast('Type what the ad is first.');document.getElementById('qa-title')?.focus();return}
+      let placeId=quick.placeId||(placeOpts(false)[0]||[''])[0];
+      if(placeId==='__new'){const p=addPlace(quick.newPlace);if(!p){toast('Type a name for the new place.');return}placeId=p.id}
+      const a=normAd({title,placeId,cost:quick.cost,status:'draft'},state.places);
+      state.ads.unshift(a);
+      const w=quick.status==='live'?putOut(a):(a.status=quick.status,null);
+      quick={title:'',placeId,cost:'',status:quick.status,newPlace:''};
+      commit(w?w.text:`Added ${esc(a.title)}`,w&&w.bad);
+      setTimeout(()=>document.getElementById('qa-title')?.focus(),0);break}
+    case 'run':{if(!ad)break;const w=putOut(ad);commit(w?w.text:`${esc(ad.title)} went out again${ad.cost?' for '+money(ad.cost):''}`,w&&w.bad);break}
+    case 'win':if(ad){ad.wins.push({id:uid('w'),date:TODAY,amount:0});openAd=ad.id;commit(`Job won from ${esc(ad.title)}. Add what it's worth to see your return.`);
+      const wid=ad.wins[ad.wins.length-1].id;setTimeout(()=>{const el=document.getElementById('w-'+wid+'-a');if(el){el.focus();el.scrollIntoView({block:'nearest'})}},0)}break;
+    case 'delwin':if(ad){ad.wins=ad.wins.filter(w=>w.id!==n);commit('Removed that job')}break;
+    case 'statperiod':period=id;break;
+    case 'statby':statBy=id;break;
+    case 'statsort':statSort=id;break;
+    case 'starter':sendChat(n);return;
+    case 'chatsend':sendChat(chatText);return;
+    case 'surprise':surprise();break;
+    case 'clearchat':if(armed==='chat'){state.chat=[];armed=null;commit('Chat cleared')}else armed='chat';break;
+    case 'aicheck':aiStatus={checking:true};loadAi(true);break;
+    case 'saveidea':{const i=chatIdea(id);if(i){saveIdea(i);commit(`Saved “${esc(i.title)}”`)}break}
+    case 'ideaad':{const i=n==='saved'?state.ideas.find(x=>x.id===id):chatIdea(id);if(i)ideaToAd(i);break}
+    case 'star':{const i=state.ideas.find(x=>x.id===id);if(i){i.starred=!i.starred;commit()}break}
+    case 'delidea':if(armed===id){const i=state.ideas.find(x=>x.id===id);state.ideas=state.ideas.filter(x=>x.id!==id);armed=null;commit(`Deleted “${esc(i?i.title:'idea')}”`)}else armed=id;break;
+    case 'ideafilter':ideaFilter=id;break;
+    case 'delrun':if(ad){ad.runs=ad.runs.filter(r=>r.id!==n);commit('Removed that run')}break;
+    case 'lead':if(ad){if(+n>0){ad.leads.push(TODAY);commit(`Lead added to ${esc(ad.title)}`)}else if(ad.leads.length){ad.leads.sort();ad.leads.pop();commit()}}break;
+    case 'setstatus':if(ad){ad.status=n;if(n==='ended'&&!ad.end)ad.end=TODAY;commit(`${esc(ad.title)} marked ${STATUS[n].toLowerCase()}`)}break;
+    case 'copy':if(ad){const c=normAd({...ad,id:'',title:ad.title+' (copy)',status:'draft',runs:[],leads:[],start:'',end:'',example:false},state.places);state.ads.unshift(c);openAd=c.id;af='active';pf='';setTab('ads');commit('Copied. Pick where it goes and put it out.')}break;
+    case 'delad':if(armed===id){state.ads=state.ads.filter(a=>a.id!==id);armed=null;commit(`Deleted ${esc(ad.title)}`)}else armed=id;break;
+    case 'addplace':{const inp=document.getElementById('newplace');const p=addPlace(inp?inp.value:'');if(p)commit(`Added ${esc(p.name)}`);else toast('Type a name first.');break}
+    case 'addcommon':{const c=COMMON.find(x=>x[0]===id);const p=addPlace(id,c?c[1]:'Other');if(p)commit(`Added ${esc(p.name)}`);break}
+    case 'archive':if(place){place.archived=true;state.ads.forEach(a=>{if(a.placeId===id&&a.status==='live')a.status='paused'});commit(`Stopped using ${esc(place.name)}. Its live ads are paused.`)}break;
+    case 'unarchive':if(place){place.archived=false;commit(`${esc(place.name)} is back`)}break;
+    case 'delplace':if(armed===id){state.places=state.places.filter(p=>p.id!==id);armed=null;commit(`Deleted ${esc(place.name)}`)}else armed=id;break;
+    case 'dismiss':state.dismissed[id]=TODAY;commit('Hidden for now');break;
+    case 'undismiss':state.dismissed={};commit('Hidden suggestions are back');break;
+    case 'examples':{const ex=exampleData();state.places.push(...ex.places.map(normPlace));state.ads.push(...ex.ads.map(a=>normAd(a,state.places)));setTab('overview');commit('Example ads loaded');break}
+    case 'clearex':{state.ads=state.ads.filter(a=>!a.example);state.places=state.places.filter(p=>!p.example||state.ads.some(a=>a.placeId===p.id));commit('Examples removed');break}
+    case 'export':download(`larkul-ads-${TODAY}.json`,fileText());break;
+    case 'backup':try{try{await Hub.files.mkdir('Ads')}catch(_){}await Hub.files.upload(new File([fileText()],`larkul-ads-${TODAY}.json`,{type:'application/json'}),'Ads');toast('Saved to Files › Ads')}catch(err){toast('Could not save to Files.',false,true)}break;
+    case 'import':{
+      const text=importText.trim();if(!text){toast('Paste a copy into the box first.');break}
+      if(armed!=='import'){armed='import';break}
+      armed=null;let obj;try{obj=JSON.parse(text)}catch(err){toast("That doesn't look like a copy from this tab.",false,true);break}
+      const st=obj&&obj.state?obj.state:obj;
+      if(!st||!Array.isArray(st.ads)||!Array.isArray(st.places)){toast("That doesn't look like a copy from this tab.",false,true);break}
+      state=normalize(st);importText='';commit('Copy brought in');break}
+    case 'reset':if(armed==='reset'){state=freshState();armed=null;openAd=null;pf='';commit('Erased everything')}else armed='reset';break;
+    default:return;
+  }
+  render(true);
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey&&e.target.id==='chatbox'){e.preventDefault();sendChat(e.target.value);return}
+  if(e.key==='Enter'&&/^qa-(title|cost|newplace)$/.test(e.target.id)){e.preventDefault();document.querySelector('[data-act="quickadd"]')?.click()}
+  else if(e.key==='Enter'&&e.target.id==='newplace'){e.preventDefault();document.querySelector('[data-act="addplace"]')?.click()}
+  else if(e.key==='Enter'&&typingIn(e.target)&&e.target.tagName==='INPUT'){e.target.dispatchEvent(new Event('change',{bubbles:true}));render(true)}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)){e.preventDefault();undo();render(true)}
+});
+document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;e.stopPropagation();setTab(b.dataset.tab);render(true)});
+
+/* ---------- start ---------- */
+async function boot(){
+  let loaded=null;
+  if(HUB){try{loaded=await Hub.storage.get('state')}catch(e){console.error(e);setSaved('Could not reach the hub.',true)}
+    addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSave()});addEventListener('pagehide',()=>flushSave())}
+  if(!loaded){try{loaded=JSON.parse(localStorage.getItem(KEY))}catch(e){}}
+  if(loaded&&loaded.state)loaded=loaded.state;
+  state=normalize(loaded);
+  lastJSON=JSON.stringify(state);
+  try{const t=localStorage.getItem(KEY+'-tab');if(TABS.includes(t))tab=t}catch(e){}
+  if(TABS.includes(location.hash.slice(1)))tab=location.hash.slice(1);
+  if(!loaded)setSaved(HUB?'':'Saved in this browser');
+  render(true);
+}
+boot();
+</script>
+
+</body>
+</html>
