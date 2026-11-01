@@ -336,6 +336,7 @@ function initShapeEditor() {
   const end = () => { const dr = seDrag; seDrag = null; ui.seGuides = []; if (dr && dr.live) { undoStack.push(dr.snap); redoStack = []; save(); } if (dr) render(); };
   stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
 }
+onAllFingersUp(() => { if (seDrag) { const dr = seDrag; seDrag = null; ui.seGuides = []; if (dr.live) { undoStack.push(dr.snap); redoStack = []; save(); } render(); } });
 function redrawShapeSvg(view) {
   const st = $('.se-stage'); if (!st) return;
   st.innerHTML = shapeEditorSVG(S.shapeDesign);

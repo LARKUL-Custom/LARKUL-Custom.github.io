@@ -151,6 +151,7 @@ h3{font:600 14px/1.2 var(--f-label);margin:0;letter-spacing:.02em;display:flex;a
 .v3msg{display:grid;place-items:center;height:100%;color:var(--muted);padding:20px;text-align:center}
 .viewhead{position:absolute;left:10px;top:8px;display:flex;gap:8px;align-items:center;pointer-events:none}
 .viewctl{position:absolute;right:8px;top:8px;display:flex;gap:4px;z-index:2}
+#elev-card .viewctl{left:8px;right:auto}
 .hint{position:absolute;left:10px;bottom:8px;right:10px;font-size:13px;color:var(--ink);pointer-events:none;background:color-mix(in srgb,var(--paper) 85%,transparent);padding:4px 8px;border-radius:4px;width:fit-content;max-width:calc(100% - 20px)}
 .hint b{color:var(--ink);font-family:var(--f-mono)}
 
@@ -1824,3 +1825,34 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .pe-pane .pe-anc{min-width:4.6em;width:4.6em}
 .pe-form .f.chk{flex-direction:row;align-items:center;gap:8px}
 .pe-pane input[type=checkbox]{width:auto;min-height:0}
+
+/* ---------- Touch screens (phones and tablets): bigger targets for a finger ---------- */
+@media (pointer: coarse){
+  /* No double-tap page zoom on buttons (pinching the page still works), no long-press text callout on the drawings */
+  html{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #plan,#elev,#room3d,.se-stage,.view svg{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  .btn.sm{min-height:32px}
+  .viewctl{gap:6px}
+  .viewctl .btn{min-width:40px;min-height:40px;justify-content:center}
+  .seg button{min-height:34px}
+  select{min-height:32px}
+  .menu button,.ctxmenu button{min-height:40px}
+  .srctabs button{min-height:34px}
+  .lgrp-h,.lfold-h{min-height:34px}
+  .ib-ctr{min-width:30px;min-height:30px}
+  .ib-slide{height:30px}
+}
+@media (pointer: coarse) and (min-width: 961px) and (min-height: 561px){
+  .top .hdr-actions{gap:3px}
+  .top .hdr-actions .btn{width:max(calc(40 * var(--u)),32px);height:max(calc(40 * var(--u)),32px)}
+  .top .hdr-actions .btn .ic,.top .hdr-actions .btn svg{width:max(calc(20 * var(--u)),17px);height:max(calc(20 * var(--u)),17px)}
+  .room .rail .lgrp-h,.room .rail .lfold-h{min-height:max(calc(33 * var(--u)),34px)}
+  .room .rail .srctabs button,:root[data-libsize] .room .rail .srctabs button{min-height:34px}
+  /* The panel tabs under the drawing sit two to a row so each is tall enough to tap */
+  .room .dock .dockhead{width:max(calc(150 * var(--u)),200px)}
+  .room .dock .docktabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+  .room .dock .docktabs button{min-height:34px;padding:4px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dockgrip{height:20px}
+  .dockgrip::after{top:6px;width:64px;height:6px;margin-left:-32px;opacity:.8}
+  .ib-ctr{width:max(calc(32 * var(--u)),30px);height:max(calc(32 * var(--u)),30px)}
+}

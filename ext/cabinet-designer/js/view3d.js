@@ -334,6 +334,8 @@ class Viewer3D {
     this.controls = new THREE.OrbitControls(this.cam, this.renderer.domElement);
     this.controls.screenSpacePanning = true;
     this.controls.addEventListener('change', () => this.requestRender());
+    // Phones: when every finger is off the screen, the controls forget any finger whose lift was lost.
+    if (typeof onAllFingersUp === 'function') onAllFingersUp(() => { if (this.controls.resetPointers) this.controls.resetPointers(); });
     this.persp.position.set(-150, 160, 250); this.controls.target.set(70, 30, 40); this.controls.update();
     new ResizeObserver(() => this.resize()).observe(host);
     const el = this.renderer.domElement; let down = null;
@@ -480,13 +482,15 @@ function cabDrag3d(v, e) {
     v.requestRender();
   };
   const up = () => {
-    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); unhook();
     v.controls.enabled = true; v.renderer.domElement.style.cursor = '';
     if (!d.live) return;
     if (c.off !== d.off || c.elev !== d.elev) { undoStack.push(d.snap); redoStack = []; save(); }
     render();
   };
   window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  // A lost finger lift must not leave the 3D view frozen.
+  const unhook = onAllFingersUp(up);
 }
 
 /* ---------- Room scene ---------- */

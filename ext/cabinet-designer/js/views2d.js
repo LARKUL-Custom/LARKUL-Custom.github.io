@@ -359,7 +359,14 @@ function initPlan() {
   // Two fingers on a phone or tablet pinch to zoom and drag to pan. Mouse use is unchanged.
   const touches = new Map(); let pinch = null;
   const pinchAt = () => { const [a, b] = [...touches.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
-  const touchUp = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
+  // When one finger of a pinch lifts, the other one carries on as a pan.
+  const touchUp = e => {
+    touches.delete(e.pointerId);
+    if (touches.size >= 2 || !pinch) return;
+    pinch = null;
+    const [f] = [...touches.values()];
+    if (f) { ui.downAt = { x: f.x, y: f.y }; ui.drag = { mode: 'pan', vx: ui.view.x, vy: ui.view.y }; }
+  };
   plan.addEventListener('pointerdown', e => {
     if (dnd) return;
     ui.touchDown = e.pointerType === 'touch';
@@ -527,7 +534,9 @@ function initPlan() {
     else if (d.mode === 'cab' && d.was && d.hits.length > 1) { const i = d.hits.indexOf(d.id); select({ type: 'cab', id: d.hits[(i + 1) % d.hits.length] }); }
   };
   plan.addEventListener('pointerup', e => { const was = pinch; touchUp(e); if (!was) end(); });
-  plan.addEventListener('pointercancel', e => { touchUp(e); end(); });
+  plan.addEventListener('pointercancel', e => { const was = pinch; touchUp(e); if (!was) end(); });
+  // Every finger is off the screen: forget them all, and finish a drag whose lift was lost.
+  onAllFingersUp(() => { touches.clear(); pinch = null; if (ui.drag && ui.touchDown) end(); });
   plan.addEventListener('pointerleave', () => { if (ui.placing && !dnd) { ui.ghost = null; ui.ghostBlocked = false; renderPlan(); } });
   // A double tap must not end the walls on a phone; there the Stop button does.
   plan.addEventListener('dblclick', () => { if (ui.drawWalls && !ui.touchDown) stopWalls(); });
@@ -645,9 +654,16 @@ function renderElev() {
   const cs = S.cabinets.filter(c => c.wall === w.id && c.side === side);
   note.textContent = cs.length ? `${cs.length} cabinet${cs.length > 1 ? 's' : ''}. Drag a cabinet to move it.` : 'No cabinets on this side yet';
   const dm = ui.dims.cab, r = svg.getBoundingClientRect(), x0 = -12, top = -H - (dm ? 22 : 8), vbW = L + (dm ? 46 : 24), vbH = -top + (dm ? 40 : 22);
-  const px = Math.max(vbW / (r.width || 600), vbH / (r.height || 300)); const fs = 10.5 * px;
+  let px = Math.max(vbW / (r.width || 600), vbH / (r.height || 300));
+  // Zoomed in (pinch, scroll wheel or the + button): a smaller window on the same drawing.
+  ui.elevBase = { wall: w.id, x0, top, vbW, vbH, px };
+  const z = ui.elevZ && ui.elevZ.wall === w.id ? ui.elevZ : null;
+  let vb = `${x0} ${top} ${vbW} ${vbH}`;
+  if (z) { const zw = vbW / z.k, zh = vbH / z.k; px /= z.k; vb = `${z.cx - zw / 2} ${z.cy - zh / 2} ${zw} ${zh}`; }
+  const fs = 10.5 * px;
   ui.elevPx = px; ui.elevL = L;
-  svg.setAttribute('viewBox', `${x0} ${top} ${vbW} ${vbH}`);
+  svg.setAttribute('viewBox', vb);
+  const zc = $('#elevzoom'); if (zc) zc.style.display = z ? '' : 'none';
   let body = `<rect class="ev-wall nss" x="0" y="${-H}" width="${L}" height="${H}"/><line class="ev-floor nss" x1="-8" x2="${L + 8}" y1="0" y2="0" stroke-width="2"/>`;
   const mats = [], dims = []; let labels = '';
   cs.forEach(c => {
@@ -758,10 +774,46 @@ function elevPoint(e) {
   const svg = $('#elev'), pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
   const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 };
 }
+// Zoom the elevation to k times its fitted size, with drawing point wp under screen point m.
+function elevZoomTo(k, wp, m) {
+  const b = ui.elevBase, svg = $('#elev'); if (!b || !svg || b.wall !== ui.elevWall) return;
+  const r = svg.getBoundingClientRect(), clamp = (v, a, z) => Math.max(a, Math.min(z, v));
+  k = clamp(k, 1, 40);
+  if (k <= 1.001) ui.elevZ = null;
+  else {
+    const upp = b.px / k;
+    ui.elevZ = { wall: b.wall, k,
+      cx: clamp(wp.x - (m.x - (r.left + r.width / 2)) * upp, b.x0, b.x0 + b.vbW),
+      cy: clamp(wp.y - (m.y - (r.top + r.height / 2)) * upp, b.top, b.top + b.vbH) };
+  }
+  renderElev();
+}
+// The + and - buttons zoom about the middle of the view; Fit goes back to the whole wall.
+function elevZoomStep(f) {
+  const b = ui.elevBase, svg = $('#elev'); if (!b || !svg) return;
+  if (!f) { ui.elevZ = null; renderElev(); return; }
+  const z = ui.elevZ && ui.elevZ.wall === b.wall ? ui.elevZ : null, r = svg.getBoundingClientRect();
+  elevZoomTo((z ? z.k : 1) * f, z ? { x: z.cx, y: z.cy } : { x: b.x0 + b.vbW / 2, y: b.top + b.vbH / 2 }, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
+}
 function initElev() {
   const svg = $('#elev');
+  // Two fingers pinch to zoom and drag to pan; one finger (or the mouse) on open wall pans once zoomed in.
+  const touches = new Map(); let pinch = null;
+  const pinchAt = () => { const [a, b] = [...touches.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+  const panFrom = (x, y) => { const z = ui.elevZ && ui.elevZ.wall === ui.elevWall ? ui.elevZ : null; ui.edrag = { pan: true, x, y, z: z && { ...z }, moved: false }; };
   svg.addEventListener('pointerdown', e => {
     if (dnd) return;
+    if (e.pointerType === 'touch') {
+      if (e.isPrimary) { touches.clear(); pinch = null; }
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size > 1) {
+        try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+        if (ui.edrag && !ui.edrag.pan) end(); ui.edrag = null; lastDown = null;
+        const m = pinchAt(), z = ui.elevZ && ui.elevZ.wall === ui.elevWall ? ui.elevZ : null;
+        pinch = { d: m.d, k: z ? z.k : 1, world: elevPoint({ clientX: m.x, clientY: m.y }) };
+        return;
+      }
+    }
     if (ui.chainDim && typeof vChainClick === 'function') { const w = wall(ui.elevWall); if (w && vChainClick(e, w, elevSide(w))) return; }
     const rz = e.target.closest('[data-rz]');
     if (rz && rzShow()) {
@@ -781,7 +833,11 @@ function initElev() {
     }
     const g = e.target.closest('[data-cab]');
     // A click on open wall measures the opening there, wall to wall or to the nearest cabinet, end cap or top.
-    if (!g) { if (e.button === 0 && !ui.placing && !ui.drawWalls) { const p = elevPoint(e); ui.measure = elevMeasure(p.x, -p.y); renderElev(); } return; }
+    // Dragging there instead pans the zoomed-in view.
+    if (!g) {
+      if (e.button === 0 && !ui.placing && !ui.drawWalls) { try { svg.setPointerCapture(e.pointerId); } catch (_) {} panFrom(e.clientX, e.clientY); ui.edrag.measure = elevPoint(e); }
+      return;
+    }
     const c = cab(g.dataset.cab); if (!c) return;
     ui.measure = null;
     if (ui.placeLight === 'strip') { toggleStrip(c.id); return; }
@@ -793,7 +849,19 @@ function initElev() {
     ui.edrag = { id: c.id, sx: p.x, sy: p.y, off: c.off, elev: c.elev, snap: JSON.stringify(S), live: false };
   });
   svg.addEventListener('pointermove', e => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch) {
+      if (touches.size < 2) return;
+      const m = pinchAt(); elevZoomTo(pinch.k * m.d / pinch.d, pinch.world, m); return;
+    }
     const d = ui.edrag; if (!d) return;
+    if (d.pan) {
+      if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
+      d.moved = true; if (!d.z) return;
+      const b = ui.elevBase, upp = b.px / d.z.k, r = svg.getBoundingClientRect();
+      elevZoomTo(d.z.k, { x: d.z.cx - (e.clientX - d.x) * upp, y: d.z.cy - (e.clientY - d.y) * upp }, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      return;
+    }
     if (d.resize) {
       const p = elevPoint(e), c = cab(d.id), w = c && wall(c.wall); if (!w) return;
       if (!d.live && Math.abs(p.x - d.sx) < 1 && Math.abs(p.y - d.sy) < 1) return;
@@ -830,11 +898,26 @@ function initElev() {
     if (off === null) { c.off = was.off; c.elev = was.elev; } else c.off = Math.round(off * 1000) / 1000;
     renderElev(); renderPlan();
   });
-  const end = () => {
+  function end() {
     const d = ui.edrag; ui.edrag = null; if (!d) return;
+    if (d.pan) { if (!d.moved && d.measure) { ui.measure = elevMeasure(d.measure.x, -d.measure.y); renderElev(); } return; }
     if (d.resize) { rzFinish(d); return; }
     if (d.live) { undoStack.push(d.snap); redoStack = []; save(); render(); }
+  }
+  // When one finger of a pinch lifts, the other one carries on as a pan.
+  const up = e => {
+    touches.delete(e.pointerId);
+    if (!pinch) { end(); return; }
+    if (touches.size >= 2) return;
+    pinch = null; const [f] = [...touches.values()]; ui.edrag = null;
+    if (f) panFrom(f.x, f.y);
   };
-  svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
+  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+  onAllFingersUp(() => { touches.clear(); pinch = null; if (ui.edrag) end(); });
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const z = ui.elevZ && ui.elevZ.wall === ui.elevWall ? ui.elevZ : null;
+    elevZoomTo((z ? z.k : 1) * (e.deltaY > 0 ? 1 / 1.15 : 1.15), elevPoint(e), { x: e.clientX, y: e.clientY });
+  }, { passive: false });
   $('#elevwall').addEventListener('change', e => { ui.elevWall = e.target.value; renderElev(); });
 }

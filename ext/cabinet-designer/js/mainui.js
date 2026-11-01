@@ -122,12 +122,13 @@ document.addEventListener('pointerdown', e => {
   const max = room.getBoundingClientRect().height * 0.7;
   document.body.classList.add('dockdrag');
   const move = ev => { const h = Math.round(Math.max(70, Math.min(max, h0 + (y0 - ev.clientY)))); room.style.setProperty('--dockh', h + 'px'); fitDock(); };
-  const up = ev => {
-    removeEventListener('pointermove', move); removeEventListener('pointerup', up); document.body.classList.remove('dockdrag');
+  const up = () => {
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); unhook(); document.body.classList.remove('dockdrag');
     try { localStorage.setItem(DOCK_KEY(), String(Math.round(dock.getBoundingClientRect().height))); } catch (_) {}
     if (typeof redrawView === 'function') redrawView();
   };
-  addEventListener('pointermove', move); addEventListener('pointerup', up);
+  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  const unhook = onAllFingersUp(up);
 });
 document.addEventListener('dblclick', e => {
   if (!(e.target.closest && e.target.closest('.dockgrip'))) return;

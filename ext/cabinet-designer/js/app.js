@@ -596,7 +596,10 @@ document.addEventListener('pointercancel', () => {
   dndPending = null; if (!dnd) return;
   dnd.chip.remove(); dnd = null; document.body.classList.remove('dragging'); ui.ghost = null; ui.ghostLib = null; ui.dropCab = null; redrawView();
 });
-document.addEventListener('pointerup', e => {
+document.addEventListener('pointerup', dndDrop);
+// A finger whose lift was lost drops what it carried where it was last seen.
+onAllFingersUp(() => { dndPending = null; if (dnd) dndDrop(); });
+function dndDrop() {
   dndPending = null;
   if (!dnd) return;
   const d = dnd; dnd = null; d.chip.remove(); document.body.classList.remove('dragging');
@@ -605,7 +608,8 @@ document.addEventListener('pointerup', e => {
   const target = ui.dropCab; ui.dropCab = null;
   if (target) { applyPayload(target, d.kind, d.val); ui.sel = { type: 'cab', id: target }; renderRoom(); flash(`Applied to ${LBL[target]}`); }
   else renderRoom();
-});
+}
+
 // Doors and drawers: true opens, false closes, undefined flips each one.
 const openable = c => computeFronts(c).some(f => f.type === 'door' || f.type === 'drawer');
 function setOpen(ids, v) {
@@ -762,6 +766,7 @@ document.addEventListener('click', e => {
     case 'fit': fitView(); break;
     case 'zoom-in': zoomAt(1 / 1.3); break;
     case 'zoom-out': zoomAt(1.3); break;
+    case 'elev-zoom': elevZoomStep(id === 'in' ? 1.3 : id === 'out' ? 1 / 1.3 : 0); break;
     case 'src': ui.src = id; renderSources(); break;
     case 'props-toggle': ui.propsShut = !propsShut(); if (ui.sel && /wall|shape/.test(ui.sel.type) && ui.propsShut) ui.sel = null; try { localStorage.setItem(KEY + '.side', ui.propsShut ? '1' : '0'); } catch (_) {} renderProps(); break;
     case 'lib-view': ui.libFavs = id === 'favs'; renderSources(); break;

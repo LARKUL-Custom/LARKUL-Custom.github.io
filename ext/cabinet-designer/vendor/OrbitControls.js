@@ -324,6 +324,18 @@
 			const dollyDelta = new THREE.Vector2();
 			const pointers = [];
 			const pointerPositions = {};
+
+			// Cabinet Designer: forget every finger and stop any gesture. A phone sometimes loses a finger's
+			// "lifted" event; without this the controls think it is still down and every touch acts as two.
+			this.resetPointers = function () {
+
+				pointers.length = 0;
+				for ( const k in pointerPositions ) delete pointerPositions[ k ];
+				scope.domElement.removeEventListener( 'pointermove', onPointerMove );
+				scope.domElement.removeEventListener( 'pointerup', onPointerUp );
+				state = STATE.NONE;
+
+			};
 			function getAutoRotationAngle() {
 
 				return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
@@ -747,6 +759,8 @@
 			function onPointerDown( event ) {
 
 				if ( scope.enabled === false ) return;
+				// Cabinet Designer: a first finger means no other finger is down, whatever was missed.
+				if ( event.pointerType === 'touch' && event.isPrimary && pointers.length ) scope.resetPointers();
 				if ( pointers.length === 0 ) {
 
 					scope.domElement.setPointerCapture( event.pointerId );

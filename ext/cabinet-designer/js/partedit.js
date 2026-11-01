@@ -676,7 +676,7 @@ document.addEventListener('pointermove', ev => {
   const c = peDrag.g.querySelector('circle'), t = peDrag.g.querySelector('text');
   c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); if (t) { t.setAttribute('x', p.x); t.setAttribute('y', p.y); }
 });
-document.addEventListener('pointerup', () => {
+function peDragEnd() {
   const d = peDrag; peDrag = null; if (!d) return;
   if (!d.moved) { renderPartEdit(); return; }
   const s = ui.partEdit, r = pePart(); if (!r || !r.q) return;
@@ -689,7 +689,10 @@ document.addEventListener('pointerup', () => {
     if (list && list[d.i]) peStore(list[d.i], z.x, z.y, r.q.L, r.q.W);
   });
   renderPartEdit();
-});
+}
+document.addEventListener('pointerup', peDragEnd);
+document.addEventListener('pointercancel', peDragEnd);
+onAllFingersUp(peDragEnd);
 
 // Little tags on the Parts tab for what was changed by hand, like Mozaik's colour codes.
 function peBadges(e) {
@@ -780,7 +783,7 @@ function partDrag3d(v, e) {
     d.np = np; d.moved = true; o.position.copy(np); v.requestRender();
   };
   const up = () => {
-    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); unhook();
     v.controls.enabled = true; v.renderer.domElement.style.cursor = '';
     if (!d.moved) return;
     const cc = cab(d.cid), a = cc && peAdded(cc, d.key); if (!a) return;
@@ -789,7 +792,8 @@ function partDrag3d(v, e) {
     mutate(() => { a.pos = { ...P, x: r3(n(P.x) + dd.x), z: r3(n(P.z) + dd.y), y: r3(n(P.y) + dd.z) }; });
     if (ui.partEdit) renderPartEdit();
   };
-  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  const unhook = onAllFingersUp(up);
 }
 
 /* ----- Editor controls that are not buttons: grid, snap, stretch sliders, DXF and picture files ----- */
