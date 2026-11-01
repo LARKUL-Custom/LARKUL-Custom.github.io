@@ -20,3 +20,19 @@ let fingersDown = 0;
   addEventListener('touchend', lifted, o);
   addEventListener('touchcancel', lifted, o);
 })();
+
+// iPhone and iPad: a tap on a text box must bring up the keyboard. Inside the hub's frame the phone
+// sometimes lets a tap through without focusing the box, and then no keyboard comes up; focusing it
+// here, while the finger is lifting, counts as the tap itself, so the keyboard opens.
+(() => {
+  let start = null;
+  const typable = el => el && el.matches && el.matches('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]):not([type=color]):not([type=file]),textarea,[contenteditable=""],[contenteditable=true]') && !el.disabled && !el.readOnly;
+  addEventListener('touchstart', e => { const t = e.touches[0]; start = e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY, el: e.target } : null; }, { capture: true, passive: true });
+  addEventListener('touchend', e => {
+    const s = start; start = null; const t = e.changedTouches[0];
+    if (!s || !t || e.touches.length || Math.hypot(t.clientX - s.x, t.clientY - s.y) > 10) return;
+    const el = s.el && s.el.closest ? s.el.closest('input,textarea,[contenteditable]') || (s.el.closest('label') && s.el.closest('label').control) : null;
+    if (!typable(el) || document.activeElement === el) return;
+    try { el.focus(); } catch (_) {}
+  }, { capture: true, passive: true });
+})();

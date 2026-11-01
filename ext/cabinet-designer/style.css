@@ -1856,3 +1856,9 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   .dockgrip::after{top:6px;width:64px;height:6px;margin-left:-32px;opacity:.8}
   .ib-ctr{width:max(calc(32 * var(--u)),30px);height:max(calc(32 * var(--u)),30px)}
 }
+@media (pointer: coarse){
+  .hint .btn,.hint input{pointer-events:auto}
+  .hint .hintlen{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+  .hint #walllen{width:96px;min-height:34px;font-size:16px;padding:4px 8px;border:1.5px solid var(--line-strong);border-radius:6px;background:var(--panel);color:var(--ink)}
+  .hint .wdir{min-width:36px;min-height:34px;justify-content:center;font-size:17px}
+}

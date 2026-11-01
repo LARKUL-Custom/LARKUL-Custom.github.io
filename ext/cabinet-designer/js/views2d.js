@@ -179,6 +179,16 @@ function wallPreviewEnd() {
   }));
   return { x: st.x + ux * L, y: st.y + uy * L, guides };
 }
+// Touch: the Length box's arrow buttons draw a wall of that length to the right, up, left or down.
+function wallByLength(deg) {
+  const box = $('#walllen'), t = parseLen(box ? box.value : ''), st = ui.drawing;
+  if (!st) return;
+  if (!isFinite(t) || t <= 0) { flash('Type a length first, like 96 or 8\' 2 1/2'); if (box) box.focus(); return; }
+  const a = deg * Math.PI / 180, shift = ui.shift;
+  ui.mouse = { x: st.x + Math.cos(a) * 10, y: st.y + Math.sin(a) * 10 }; ui.typed = box.value; ui.shift = false;
+  commitWallSegment(); ui.shift = shift; ui.typed = '';
+  const nb = $('#walllen'); if (nb) nb.value = '';
+}
 function commitWallSegment() {
   const e = wallPreviewEnd(); if (!e) return;
   const st = ui.drawing; if (Math.hypot(e.x - st.x, e.y - st.y) < 1) return;
@@ -268,16 +278,22 @@ function hitHandle(p) {
 function renderHint() {
   const h = $('#hint'); if (!h) return;
   h.classList.remove('idle');
-  // Phones get touch wording and a Stop button, since there is no Esc key or right-click.
-  if (typeof isPhone === 'function' && isPhone()) {
+  // Phones and tablets get touch wording and a Stop button, since there is no Esc key or right-click,
+  // and a Length box (which brings up the keyboard) with arrow buttons in place of typing a length.
+  if ((typeof isPhone === 'function' && isPhone()) || matchMedia('(pointer: coarse)').matches) {
     const stop = '<button class="btn sm" data-act="place-stop">Stop</button>', what = ui.placing && (String(ui.placing).startsWith('shape:') ? shapeLibItem(ui.placing.slice(6)) : libItem(ui.placing));
-    h.innerHTML = ui.drawWalls ? (ui.drawing ? 'Tap the next corner. Tap the first corner to close the room. ' : 'Tap to start a wall. ') + stop
+    const arrows = [['0', '→', 'right'], ['270', '↑', 'up'], ['180', '←', 'left'], ['90', '↓', 'down']].map(([d, a, t]) => `<button class="btn sm wdir" data-act="wall-dir" data-id="${d}" aria-label="Wall going ${t}" title="Wall going ${t}">${a}</button>`).join('');
+    const lenBox = `<span class="hintlen"><input id="walllen" type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" placeholder="Length" aria-label="Wall length"> ${arrows}</span>`;
+    const html = ui.drawWalls ? (ui.drawing ? 'Tap the next corner (the first one closes the room), or type a length and tap an arrow. ' + lenBox : 'Tap to start a wall. ') + stop
       : what ? `Placing <b>${esc(what.name)}</b>. Tap near a wall. ${stop}`
       : ui.sel && ui.sel.type === 'wall' ? 'Drag the wall to slide it. Drag an orange end to change its length.'
       : 'Tap to select, double tap to edit, hold for more. Two fingers to zoom and pan.';
+    // Rebuilt only when it changes, so the Length box keeps its keyboard and what is typed while the plan redraws.
+    if (h._html !== html) { h.innerHTML = html; h._html = html; }
     if (!ui.drawWalls && !what && !(ui.sel && ui.sel.type === 'wall')) h.classList.add('idle');
     return;
   }
+  h._html = null;
   if (ui.topEdit && cab(ui.topEdit)) { h.innerHTML = `Editing the top shape of <b>${esc(LBL[ui.topEdit] || '')}</b>. Drag a point, click a + to add one, <b>right-click</b> a point or an edge for more. <b>Esc</b> or <button class="btn sm" data-act="te-done">Done</button>`; return; }
   if (ui.placeLight === 'strip') { h.innerHTML = 'Click each cabinet that gets an LED strip; click again to take it off. <b>Right-click</b> or <b>Esc</b> to stop.'; return; }
   if (ui.placeLight) { h.innerHTML = 'Click where each ceiling light goes. <b>Right-click</b> or <b>Esc</b> to stop.'; return; }
@@ -921,3 +937,10 @@ function initElev() {
   }, { passive: false });
   $('#elevwall').addEventListener('change', e => { ui.elevWall = e.target.value; renderElev(); });
 }
+// The touch Length box: what is typed shows on the wall being drawn; Enter draws it the way the last finger pointed.
+document.addEventListener('input', e => { if (e.target.id === 'walllen' && ui.drawWalls) { ui.typed = e.target.value.trim(); renderPlan(); } });
+document.addEventListener('keydown', e => {
+  if (e.target.id !== 'walllen' || e.key !== 'Enter') return;
+  e.preventDefault(); const t = parseLen(e.target.value);
+  if (ui.drawing && isFinite(t) && t > 0) { ui.typed = e.target.value.trim(); commitWallSegment(); ui.typed = ''; const nb = $('#walllen'); if (nb) nb.value = ''; }
+});

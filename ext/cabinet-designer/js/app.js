@@ -841,6 +841,7 @@ document.addEventListener('click', e => {
     case 'layers-inside': ui.layers = { fronts: false, pulls: false, ceiling: false, tops: false }; saveLayers3d(); break;
     case 'fv': fullView(id); break;
     case 'des3d': view3dPreset(designerViewer, id); break;
+    case 'wall-dir': wallByLength(+id); break;
     case 'place-stop': if (ui.drawWalls) stopWalls(); else placeMode(null); break;
     case 'lib-pick': ui.libOpen = false; placeMode(ui.placing === id ? null : id); break;
     case 'elev-step': stepElev(+id); break;
