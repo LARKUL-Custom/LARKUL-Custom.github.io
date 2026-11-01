@@ -16,13 +16,17 @@ function renderPlan() {
   // Base and tall first, uppers over them; the selected cabinet last so its outline is never hidden.
   const hot = c => (ui.sel && ui.sel.id === c.id) || ui.dropCab === c.id;
   const order = [...S.cabinets].sort((a, b) => ((a.cat === 'Wall') - (b.cat === 'Wall')) || (hot(a) - hot(b)));
-  order.forEach(c => { s += cabPlanSVG(c); });
-  // countertops
+  order.filter(c => c.cat !== 'Wall' && !hot(c)).forEach(c => { s += cabPlanSVG(c); });
+  // Countertops: solid, in their own color, over the base cabinets, so you can see which tops there are and where.
   countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), g = wg(w), f = w.thick / 2;
     const poly = [wallPt(w, g, r.side, r.start - r.ovS, f), wallPt(w, g, r.side, r.end + r.ovE, f), wallPt(w, g, r.side, r.end + r.ovE, f + r.depth), wallPt(w, g, r.side, r.start - r.ovS, f + r.depth)];
-    s += `<polygon class="ct-outline nss" points="${polyPts(poly)}"/>`;
+    const mx = poly.reduce((a, p) => a + p.x, 0) / 4, my = poly.reduce((a, p) => a + p.y, 0) / 4;
+    let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;
+    s += `<polygon class="ct-solid nss" points="${polyPts(poly)}"/>`;
+    if (r.len > 8) s += `<text class="lbl ct-lbl" x="${mx}" y="${my}" font-size="${fs * 0.9}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${mx} ${my})">${esc(r.generic ? r.name : (r.tpl && r.tpl.name) || 'Top')} · ${fmtLen(r.len, 1)}</text>`;
   });
+  order.filter(c => c.cat === 'Wall' || hot(c)).forEach(c => { s += cabPlanSVG(c); });
   s += shapesPlanSVG();
   s += lightsPlanSVG(px);
   // walls

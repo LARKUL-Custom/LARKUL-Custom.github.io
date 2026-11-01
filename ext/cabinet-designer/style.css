@@ -262,6 +262,9 @@ svg text{font-family:var(--f-label)}
 .c-drop{stroke:var(--drop);stroke-width:3}
 .c-bad{stroke:var(--warn);stroke-width:2.5;stroke-dasharray:3 2}
 .ct-outline{fill:none;stroke:var(--muted);stroke-dasharray:2 3}
+.ct-solid{fill:#5f8aa6;stroke:#2f566f;stroke-width:1.2px;pointer-events:none}
+.ct-lbl{fill:#fff;font-weight:600;pointer-events:none}
+:root[data-theme="dark"] .ct-solid{fill:#4c7590;stroke:#9cc3db}
 .apanel{fill:var(--wood-edge);stroke:var(--wood-edge)}
 .ghost{fill:var(--accent);fill-opacity:.2;stroke:var(--accent);stroke-dasharray:4 3}
 .ghost.bad{fill:var(--warn);stroke:var(--warn)}
@@ -1664,7 +1667,7 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 
   /* Room screen grid: tree on the left, drawing, the item panel along the bottom */
   main.is-room{padding:0 0 max(56px,calc(env(safe-area-inset-bottom,0px) + 24px));background:var(--d-panel)}
-  #tab-room.room,:root[data-rail] #tab-room.room,#tab-room.room.props-shut,#tab-room.room.rail-shut{position:relative;grid-template-columns:calc(300 * var(--u)) minmax(0,1fr) auto!important;grid-template-rows:minmax(0,1fr) calc(184 * var(--u));gap:0}
+  #tab-room.room,:root[data-rail] #tab-room.room,#tab-room.room.props-shut,#tab-room.room.rail-shut{position:relative;grid-template-columns:calc(300 * var(--u)) minmax(0,1fr) auto!important;grid-template-rows:minmax(0,1fr) var(--dockh,calc(184 * var(--u)));gap:0}
   .room .rail{grid-column:1;grid-row:1 / span 2;padding-top:calc(124 * var(--u));background:var(--d-tree);border-right:2px solid var(--d-top-line);gap:0;min-height:0}
   .room .rail .railtab{display:none!important}
   .room.rail-shut .srcbox{display:flex!important}
@@ -1672,7 +1675,7 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   .room .props{grid-column:3;grid-row:1 / span 2;width:calc(340 * var(--u));border-radius:0;border-width:0 0 0 2px}
   .room.props-shut .props{position:absolute;right:0;top:calc(64 * var(--u) + 64px);width:34px;height:auto;max-height:60%;grid-column:auto;grid-row:auto;z-index:4;padding:0;border:0;background:transparent}
   .room.props-shut .props .pstrip{min-height:150px;border-radius:10px 0 0 10px}
-  .room .dock,.room.props-shut .dock{grid-column:2;grid-row:2;max-height:none;height:auto;min-height:0;border-radius:0;border:0;border-top:2px solid var(--d-panel-line);background:var(--d-panel);box-shadow:none;flex-direction:row;overflow:hidden}
+  .room .dock,.room.props-shut .dock{grid-column:2;grid-row:2;max-height:none;height:auto;min-height:0;border-radius:0;border:0;border-top:2px solid var(--d-panel-line);background:var(--d-panel);box-shadow:none;flex-direction:row;overflow:hidden;position:relative}
 
   /* View bar pills */
   .views > .viewbar{padding:calc(4 * var(--u)) calc(30 * var(--u)) calc(6 * var(--u)) calc(36 * var(--u));gap:calc(10 * var(--u)) calc(24 * var(--u));flex-wrap:wrap;align-items:center;min-height:calc(64 * var(--u))}
@@ -1699,9 +1702,12 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 
   /* Products tree */
   .room .rail .srcbox{border:0;border-radius:0!important;background:transparent;box-shadow:none;zoom:1!important;min-height:0}
-  .room .rail .srctabs{order:2;flex-wrap:nowrap;justify-content:space-between;gap:2px;padding:calc(6 * var(--u)) calc(8 * var(--u));border-top:1px solid var(--line);border-bottom:0}
-  .room .rail .srctabs button{padding:calc(6 * var(--u));font-size:0;gap:0;border-radius:8px}
-  .room .rail .srctabs button .ic{width:calc(22 * var(--u));height:calc(22 * var(--u))}
+  .room .rail .srctabs,:root[data-libsize] .room .rail .srctabs{order:2;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:6px;border-top:1px solid var(--line);border-bottom:0}
+  .room .rail .srctabs button,:root[data-libsize] .room .rail .srctabs button{display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;padding:5px 2px;font:500 12px/1.1 var(--f-ui);border-radius:7px;white-space:nowrap;overflow:hidden}
+  .room .rail .srctabs button span{overflow:hidden;text-overflow:ellipsis}
+  .room .rail .srctabs button .ic{width:14px;height:14px;flex:none}
+  .room .rail .srclist > .eyebrow,.room .rail .srclist > .srcitem,.room .rail .srclist > .btn,.room .rail .srclist > .faces{margin-left:8px;margin-right:8px}
+  .room .rail .srclist > .srcitem{width:calc(100% - 16px)}
   .room .rail .srclist{flex:1;min-height:0;overflow:auto;padding:0 0 calc(10 * var(--u));font-family:var(--f-tree);color:var(--d-treeink)}
   .room .rail .srclist > .note{display:none!important}
   .room .rail #libfind{display:block;width:calc(100% - 16px);margin:calc(12 * var(--u)) 8px calc(10 * var(--u));padding:calc(8 * var(--u)) calc(12 * var(--u));border:1px solid transparent;border-radius:6px;background:color-mix(in srgb,var(--d-treeink) 4%,transparent);color:var(--d-treeink);font:400 calc(21 * var(--u)) var(--f-tree)}
@@ -1724,15 +1730,22 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   .room .rail .srclist .srcitem:not(.libbtn){font-family:var(--f-tree)}
 
   /* Item panel along the bottom: the selected item's position and size, the automatic switches, then its tabs on the right */
-  .room .dock .dockhead{order:2;flex:none;flex-direction:column;align-items:stretch;justify-content:flex-start;width:calc(150 * var(--u));padding:calc(8 * var(--u));border:0;border-left:1px solid var(--line);overflow:auto}
+  .room .dock .dockhead{order:2;flex:none;flex-direction:column;align-items:stretch;justify-content:flex-start;width:calc(150 * var(--u));padding:calc(8 * var(--u)) calc(8 * var(--u)) 0;border:0;border-left:1px solid var(--line);overflow:hidden}
+  .room .dock .dockhead .docktabs{transform-origin:0 0}
   .room .dock .dockhead > .btn{display:none}
   .room .dock .docktabs{display:flex;flex-direction:column;gap:2px;overflow:visible}
   .room .dock .docktabs button{justify-content:flex-start;padding:calc(3 * var(--u)) calc(8 * var(--u));font:500 calc(16 * var(--u))/1.2 var(--f-field);border-radius:6px;border:0;min-height:0}
   .room .dock .docktabs button .ic{width:calc(16 * var(--u));height:calc(16 * var(--u))}
   .room .dock .docktabs button[aria-selected="true"]{background:var(--d-primary);color:var(--d-onprimary);box-shadow:none}
-  .room .dock .dockbody{flex:1;min-width:0;overflow:auto;padding:calc(10 * var(--u)) calc(14 * var(--u))}
+  .room .dock .dockbody{flex:1;min-width:0;overflow:hidden;padding:calc(10 * var(--u)) calc(14 * var(--u))}
+  .room .dock .dockbody.scroll{overflow-y:auto}
+  .room .dock .dockfit{width:max-content;transform-origin:0 0}
+  .dockgrip{position:absolute;left:0;right:0;top:0;height:8px;z-index:3;cursor:ns-resize;touch-action:none}
+  .dockgrip::after{content:"";position:absolute;left:50%;top:2px;width:48px;height:4px;margin-left:-24px;border-radius:2px;background:var(--line-strong);opacity:.6}
+  .dockgrip:hover::after,body.dockdrag .dockgrip::after{opacity:1;background:var(--d-primary)}
+  body.dockdrag,body.dockdrag *{cursor:ns-resize!important;user-select:none}
   .room .dock .dockbody.dock-item{padding:calc(6 * var(--u)) calc(18 * var(--u)) 0}
-  .itembar{display:flex;flex-direction:row;align-items:flex-start;gap:calc(70 * var(--u));min-width:max-content;font-family:var(--f-field)}
+  .itembar{display:flex;flex-direction:row;align-items:flex-start;gap:calc(56 * var(--u));min-width:max-content;font-family:var(--f-field)}
   .ib-f{display:flex;flex-direction:column;gap:0;margin:0}
   .ib-f > span{font:500 calc(15 * var(--u))/1.2 var(--f-field);color:var(--d-lbl);padding-left:2px}
   .ib-f input{height:calc(52 * var(--u));width:calc(144 * var(--u));padding:0 calc(12 * var(--u));border:1px solid var(--d-fline);border-radius:calc(6 * var(--u));background:var(--d-field);color:var(--d-fieldink);font:500 calc(20 * var(--u)) var(--f-field);box-shadow:none}

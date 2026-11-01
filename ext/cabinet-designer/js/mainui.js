@@ -82,3 +82,54 @@ function setDesignScale() {
 addEventListener('resize', setDesignScale);
 deskQuery.addEventListener('change', setDesignScale);
 setDesignScale();
+
+// Panel under the drawing: drag its top edge to make it taller or shorter (remembered), and its
+// contents shrink or grow to fit it, so it never needs scroll bars. Double-click the edge to reset.
+const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh';
+function applyDockH() {
+  let h = 0; try { h = +localStorage.getItem(DOCK_KEY()) || 0; } catch (_) {}
+  const room = document.getElementById('tab-room'); if (!room) return;
+  if (h > 0) room.style.setProperty('--dockh', h + 'px'); else room.style.removeProperty('--dockh');
+}
+function fitDock() {
+  const el = document.getElementById('dock'); if (!el || !deskUI() || ui.tab !== 'room') return;
+  const body = el.querySelector('.dockbody'), inner = body && body.firstElementChild;
+  if (body && inner) {
+    let fit = body.querySelector(':scope > .dockfit');
+    if (!fit) { fit = document.createElement('div'); fit.className = 'dockfit'; while (body.firstChild) fit.appendChild(body.firstChild); body.appendChild(fit); }
+    fit.style.zoom = 1; body.classList.remove('scroll');
+    const cs = getComputedStyle(body), aw = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const w = fit.scrollWidth, h = fit.scrollHeight;
+    // Room-wide tabs (long tables) only shrink so far, then scroll up and down; the item bar always fits.
+    const lo = ui.dock === 'item' || ui.dock === 'ends' ? 0.3 : 0.7;
+    let z = Math.min(1.35, aw / w, ah / h);
+    if (z < lo) { z = Math.min(1, aw / w); body.classList.add('scroll'); }
+    fit.style.zoom = Math.max(0.3, z).toFixed(3);
+  }
+  const head = el.querySelector('.dockhead'), tabs = head && head.querySelector('.docktabs');
+  if (head && tabs) { tabs.style.zoom = 1; const z = Math.min(1, (head.clientHeight - 8) / tabs.scrollHeight); tabs.style.zoom = Math.max(0.4, z).toFixed(3); }
+}
+function dockExtras(el) {
+  applyDockH();
+  if (!el.querySelector('.dockgrip')) el.insertAdjacentHTML('afterbegin', '<div class="dockgrip" title="Drag to resize this panel. Double-click to reset." aria-hidden="true"></div>');
+  requestAnimationFrame(fitDock);
+}
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest && e.target.closest('.dockgrip'); if (!g || !deskUI()) return;
+  e.preventDefault();
+  const room = document.getElementById('tab-room'), dock = document.getElementById('dock'), y0 = e.clientY, h0 = dock.getBoundingClientRect().height;
+  const max = room.getBoundingClientRect().height * 0.7;
+  document.body.classList.add('dockdrag');
+  const move = ev => { const h = Math.round(Math.max(70, Math.min(max, h0 + (y0 - ev.clientY)))); room.style.setProperty('--dockh', h + 'px'); fitDock(); };
+  const up = ev => {
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up); document.body.classList.remove('dockdrag');
+    try { localStorage.setItem(DOCK_KEY(), String(Math.round(dock.getBoundingClientRect().height))); } catch (_) {}
+    if (typeof redrawView === 'function') redrawView();
+  };
+  addEventListener('pointermove', move); addEventListener('pointerup', up);
+});
+document.addEventListener('dblclick', e => {
+  if (!(e.target.closest && e.target.closest('.dockgrip'))) return;
+  try { localStorage.removeItem(DOCK_KEY()); } catch (_) {} applyDockH(); fitDock(); if (typeof redrawView === 'function') redrawView();
+});
+addEventListener('resize', () => requestAnimationFrame(fitDock));

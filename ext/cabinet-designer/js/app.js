@@ -490,6 +490,7 @@ function renderDock() {
   const open = ui.dockOpen || deskUI();
   el.classList.toggle('shut', !open);
   el.innerHTML = head + (open ? `<div class="dockbody dock-${ui.dock}">${dockBody(ui.dock)}</div>` : '');
+  if (typeof dockExtras === 'function') dockExtras(el);
 }
 function dockBody(k) {
   const rm = curRoom(), c = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id);
