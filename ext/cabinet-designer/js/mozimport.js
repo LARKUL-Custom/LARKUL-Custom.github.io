@@ -72,7 +72,12 @@ function readMozRoom(el, fallbackName) {
       name: x.getAttribute('ProdName') || x.getAttribute('Name') || '', desc: x.getAttribute('ProductDesc') || '',
       w: mzNum(x, 'Width'), h: mzNum(x, 'Height'), d: mzNum(x, 'Depth'), x: mzNum(x, 'X') || 0, y: mzNum(x, 'Y'),
       elev: mzNum(x, 'Elev') || 0, outset: mzNum(x, 'Outset') || 0, rot: mzNum(x, 'Rot') || 0,
-      wall: parseInt(x.getAttribute('Wall'), 10) || 0, sub: t ? +t.getAttribute('SubSubType') : NaN, num: +x.getAttribute('CabNo') || 0,
+      // Wall="3_1": wall 3, front side; "_2" is the back of the wall (an island back or the room behind).
+      wall: parseInt(x.getAttribute('Wall'), 10) || 0, back: /_2$/.test(x.getAttribute('Wall') || ''),
+      // ProductType SubType 1 base, 2 wall, 3 tall; SubSubType 7 filler, 9 end panel or applied door.
+      type: t ? +t.getAttribute('SubType') : NaN, sub: t ? +t.getAttribute('SubSubType') : NaN, num: +x.getAttribute('CabNo') || 0,
+      // Inserts placed in the cabinet's openings (graphic-only ones like an oven picture are left out).
+      inserts: [...x.getElementsByTagName('*')].filter(e => /^Insert[ABC]$/.test(e.tagName) && e.getAttribute('GraphicOnly') !== 'True').map(e => e.getAttribute('Name') || ''),
       // Every door and drawer front with its spot on the cabinet face (Z up from the cabinet bottom).
       fronts: [...x.getElementsByTagName('ProductDoor'), ...x.getElementsByTagName('DrawerFront')].map(f => ({
         type: f.tagName === 'DrawerFront' || f.getAttribute('IsDrawerFront') === 'True' ? 'drawer' : 'door',
@@ -108,6 +113,7 @@ const isEndPanel = p => /end panel/i.test(p.name + ' ' + p.desc) || p.sub === 9;
 function mozCat(p) {
   const known = Object.keys(MOZ_LIB_CATS).find(k => MOZ_LIB_CATS[k].includes(p.name.trim()));
   if (known) return known;
+  if (p.type === 1 || p.type === 2 || p.type === 3) return ['Base', 'Wall', 'Tall'][p.type - 1];
   const n = (p.name + ' ' + p.desc).toLowerCase();
   if (/\b(upper|wall (single|pair|cab|corner|blind|with|end|filler)|uppers)/.test(n)) return 'Wall';
   if (/\b(tall|pantry|oven|utility|linen|broom)\b/.test(n) || p.h >= 66) return 'Tall';
@@ -127,7 +133,7 @@ function mozLib(p, cat) {
 function mozWalls(src, cv, rm) {
   const W = src.map(w => {
     const a = w.ang * Math.PI / 180, u = { x: Math.cos(a), y: -Math.sin(a) }, n = { x: -u.y, y: u.x };
-    const t = w.thick > 0 ? cv(w.thick) : rm.wallThick, L = cv(w.len), sx = cv(w.x), sy = -cv(w.y);
+    const t = w.thick > 0 ? cv(w.thick) : w.hidden || w.thick === 0 ? 0 : rm.wallThick, L = cv(w.len), sx = cv(w.x), sy = -cv(w.y);
     const back = { x: -n.x * t / 2, y: -n.y * t / 2 };
     return { u, t, L, ms: { x: sx, y: sy }, me: { x: sx + u.x * L, y: sy + u.y * L }, s: { x: sx + back.x, y: sy + back.y }, e: { x: sx + u.x * L + back.x, y: sy + u.y * L + back.y }, height: w.height > 0 ? cv(w.height) : rm.wallHeight };
   });
@@ -140,7 +146,7 @@ function mozWalls(src, cv, rm) {
     if (A === B || Math.hypot(A.me.x - B.ms.x, A.me.y - B.ms.y) > 0.1) return;
     const p = cross(A, B); if (p) { A.e = { ...p }; B.s = { ...p }; }
   }));
-  return W.map(w => ({ id: uid('w'), x1: r3(w.s.x), y1: r3(w.s.y), x2: r3(w.e.x), y2: r3(w.e.y), thick: r3(w.t), height: r3(w.height), a0: (w.ms.x - w.s.x) * w.u.x + (w.ms.y - w.s.y) * w.u.y }));
+  return W.map((w, i) => ({ id: uid('w'), x1: r3(w.s.x), y1: r3(w.s.y), x2: r3(w.e.x), y2: r3(w.e.y), thick: r3(w.t), height: r3(w.height), ...(src[i].hidden ? { hidden: true } : {}), a0: (w.ms.x - w.s.x) * w.u.x + (w.ms.y - w.s.y) * w.u.y, L: w.L }));
 }
 // The cabinet face from Mozaik's own doors and drawer fronts, when they stack in clean rows: each row is the fronts
 // that share a height band, left to right. Faces Mozaik splits into columns (a drawer bank beside doors) don't fit
@@ -170,6 +176,18 @@ function mozHardware(rm, src) {
     if (hit) rm.settings[kind] = hit.id;
   });
 }
+// Mozaik inserts that Cabinet Designer has: trash pull-outs, tray dividers, lazy susans and roll-outs; anything else
+// goes on the hardware list as an Other insert with its Mozaik name.
+function mozInsert(name) {
+  const n = name.toLowerCase(), def = id => ({ type: id, ...clone((INSERT_TYPES.find(t => t.id === id) || {}).def || {}) });
+  if (/trash|waste|recycl/.test(n)) return { ...def('trash'), name };
+  if (/tray div/.test(n)) return def('traydiv');
+  if (/susan/.test(n)) return { ...def('lazy'), name };
+  if (/roll ?out|rollout|pull ?out shel/.test(n)) return def('rollout');
+  return { ...def('other'), name };
+}
+// Not cabinets: floating shelves, crown and ceiling trim, panel backs. They're listed after the import instead.
+const mozSkip = p => /panel back|back panel/i.test(p.name) || /shelf|trim|molding|crown/i.test(p.name) && !p.fronts.length;
 // A product with no wall (an island) gets a thin back wall of its own at its spot in the room.
 function mozIsland(rm, p) {
   const a = p.rot * Math.PI / 180, u = { x: Math.cos(a), y: -Math.sin(a) }, x = p.x, y = -(p.y || 0);
@@ -186,28 +204,33 @@ function mozRooms(data) {
     rm.wallThick = th ? sz(th) : S.job.wallThick; rm.wallHeight = ht ? sz(ht) : S.job.wallHeight;
     mozHardware(rm, src);
     const walls = mozWalls(src.walls, sz, rm);
-    rm.walls = walls.map(({ a0, ...w }) => w);
+    rm.walls = walls.map(({ a0, L, ...w }) => w);
     const ps = src.prods.map(p0 => ({ ...p0, w: sz(p0.w), h: sz(p0.h), d: sz(p0.d), x: cv(p0.x), y: isFinite(p0.y) ? cv(p0.y) : NaN, elev: sz(p0.elev), outset: sz(p0.outset) }));
     const cabs = [], extras = [];
     ps.forEach(p => {
+      if (mozSkip(p)) { (data.skipped = data.skipped || []).push(p.name); return; }
       const wl = walls[p.wall - 1];
-      const at = wl ? { wall: wl.id, side: 1, off: r3(p.x + wl.a0) } : mozIsland(rm, p);
+      // On the back of a wall Mozaik measures X from the wall's far end, the viewer's left from that side.
+      const at = !wl ? mozIsland(rm, p) : p.back ? { wall: wl.id, side: -1, off: r3(wl.a0 + wl.L - p.x - p.w) } : { wall: wl.id, side: 1, off: r3(p.x + wl.a0) };
       if (isFiller(p) || isEndPanel(p)) { extras.push({ p, at }); return; }
       const cat = mozCat(p), lib = mozLib(p, cat), c = newCab(S, lib, at.wall, at.side, at.off);
       Object.assign(c, { name: p.name || lib.name, w: p.w, h: p.h, d: p.d, elev: p.elev, fromMozaik: true });
       const rows = mozRows(p, sz); if (rows) c.rows = rows;
       if (p.outset) c.outset = p.outset;
       if (p.num) c.num = p.num;
+      if (p.inserts.length) c.inserts = p.inserts.map(mozInsert);
       rm.cabinets.push(c); cabs.push(c);
     });
     // Fillers and end panels belong to the cabinet beside them: a filler that reaches a wall turns that cabinet's
     // filler on, anything else becomes its end panel.
     extras.forEach(({ p, at }) => {
-      const near = (c, end) => c.wall === at.wall && Math.abs(end === 'R' ? at.off - (c.off + c.w) : c.off - (at.off + p.w)) < 0.2;
-      const c = cabs.find(x => near(x, 'R')) || cabs.find(x => near(x, 'L')); if (!c) return;
-      const end = near(c, 'R') ? 'R' : 'L';
+      // hi: the piece sits past the cabinet's far end along the wall. Which of those is the viewer's left or right
+      // depends on the side of the wall.
+      const near = (c, hi) => c.wall === at.wall && c.side === at.side && p.elev < c.elev + c.h - 0.5 && p.elev + p.h > c.elev + 0.5 && Math.abs(hi ? at.off - (c.off + c.w) : c.off - (at.off + p.w)) < 0.2;
+      const c = cabs.find(x => near(x, true)) || cabs.find(x => near(x, false)); if (!c) { (data.skipped = data.skipped || []).push(p.name); return; }
+      const hi = near(c, true), end = (hi === (at.side === 1)) ? 'R' : 'L';
       const wl = rm.walls.find(w => w.id === at.wall), L = wl ? Math.hypot(wl.x2 - wl.x1, wl.y2 - wl.y1) : 0, ref = walls.find(w => w.id === at.wall);
-      const toWall = ref && (end === 'L' ? at.off < 0.5 + ref.a0 : at.off + p.w > L - 0.5) && rm.walls.length > 1;
+      const toWall = ref && !ref.hidden && (hi ? at.off + p.w > L - 0.5 : at.off < 0.5 + ref.a0) && rm.walls.length > 1;
       if (isFiller(p) && toWall) c['fill' + end] = 'on'; else c['panel' + end] = 'on';
     });
     return rm;
@@ -230,8 +253,10 @@ async function importMozaik(files) {
   await jobStore().mkdir(folder).catch(() => {}); await jobStore().write(p, JSON.stringify(s));
   await refreshJobs();
   loadJobState(attachRoom(s), p);
-  const nc = rooms.reduce((t, r) => t + r.cabinets.length, 0), nw = rooms.reduce((t, r) => t + r.walls.filter(w => !w.island).length, 0);
-  flash(`Imported ${s.job.name} from Mozaik: ${rooms.length} room${rooms.length > 1 ? 's' : ''}, ${nw} walls, ${nc} cabinets`);
+  const nc = rooms.reduce((t, r) => t + r.cabinets.length, 0), nw = rooms.reduce((t, r) => t + r.walls.filter(w => !w.island && !w.hidden).length, 0);
+  const sk = {}; (data.skipped || []).forEach(n => { sk[n] = (sk[n] || 0) + 1; });
+  const left = Object.entries(sk).map(([n, k]) => k > 1 ? `${k} ${n}` : n).join(', ');
+  flash(`Imported ${s.job.name} from Mozaik: ${rooms.length} room${rooms.length > 1 ? 's' : ''}, ${nw} walls, ${nc} cabinets.${left ? ' Not brought in: ' + left + '.' : ''}`);
 }
 // Anything that is not a Cabinet Designer job file is read as Mozaik.
 const isMozaikPick = files => files.length > 1 || !/\.json$/i.test(files[0].name);
