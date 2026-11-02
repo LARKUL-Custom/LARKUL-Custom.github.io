@@ -101,30 +101,19 @@ function applyDockH() {
   const room = document.getElementById('tab-room'); if (!room) return;
   if (h > 0) room.style.setProperty('--dockh', h + 'px'); else room.style.removeProperty('--dockh');
 }
+// The panel keeps its normal size whatever its height: a taller panel shows more, a shorter one
+// scrolls. Its contents wrap to the width so nothing runs off the side.
 function fitDock() {
   const el = document.getElementById('dock'); if (!el || !deskUI() || ui.tab !== 'room') return;
   const body = el.querySelector('.dockbody'), inner = body && body.firstElementChild;
   if (body && inner) {
     let fit = body.querySelector(':scope > .dockfit');
     if (!fit) { fit = document.createElement('div'); fit.className = 'dockfit'; while (body.firstChild) fit.appendChild(body.firstChild); body.appendChild(fit); }
-    fit.style.zoom = 1; fit.style.width = ''; body.classList.remove('scroll');
-    const bar = fit.querySelector('.itembar'); if (bar) bar.classList.remove('ib-wrap');
-    const cs = getComputedStyle(body), aw = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    let w = fit.scrollWidth, h = fit.scrollHeight;
-    // Room-wide tabs (long tables) only shrink so far, then scroll up and down; the item bar always fits.
-    const lo = ui.dock === 'item' || ui.dock === 'ends' ? 0.3 : 0.7;
-    let z = Math.min(1.35, aw / w, ah / h);
-    // A tall panel: the item bar wraps onto two rows when that lets everything grow bigger.
-    if (bar && ah / h > aw / w * 1.3) {
-      bar.classList.add('ib-wrap'); fit.style.width = Math.round(w * 0.6) + 'px';
-      const w2 = fit.scrollWidth, h2 = fit.scrollHeight, z2 = Math.min(1.35, aw / w2, ah / h2);
-      if (z2 > z * 1.08) { z = z2; w = w2; h = h2; } else { bar.classList.remove('ib-wrap'); fit.style.width = ''; }
-    }
-    if (z < lo) { z = Math.min(1, aw / w); body.classList.add('scroll'); }
-    fit.style.zoom = Math.max(0.3, z).toFixed(3);
+    fit.style.zoom = ''; fit.style.width = '';
+    const bar = fit.querySelector('.itembar'); if (bar) bar.classList.add('ib-wrap');
+    body.classList.add('scroll');
   }
-  const head = el.querySelector('.dockhead'), tabs = head && head.querySelector('.docktabs');
-  if (head && tabs) { tabs.style.zoom = 1; const z = Math.min(1, (head.clientHeight - 8) / tabs.scrollHeight); tabs.style.zoom = Math.max(0.4, z).toFixed(3); }
+  const tabs = el.querySelector('.dockhead .docktabs'); if (tabs) tabs.style.zoom = '';
 }
 function dockExtras(el) {
   applyDockH();

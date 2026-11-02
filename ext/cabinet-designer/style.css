@@ -1736,21 +1736,22 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 
   /* Item panel along the bottom: the selected item's position and size, the automatic switches, then its tabs on the right */
   .room .dock .dockhead{order:2;flex:none;flex-direction:column;align-items:stretch;justify-content:flex-start;width:calc(150 * var(--u));padding:calc(8 * var(--u)) calc(8 * var(--u)) 0;border:0;border-left:1px solid var(--line);overflow:hidden}
+  .room .dock .dockhead{overflow-y:auto;scrollbar-width:thin}
   .room .dock .dockhead .docktabs{transform-origin:0 0}
   .room .dock .dockhead > .btn{display:none}
-  .room .dock .docktabs{display:flex;flex-direction:column;gap:2px;overflow:visible}
-  .room .dock .docktabs button{justify-content:flex-start;padding:calc(3 * var(--u)) calc(8 * var(--u));font:500 calc(16 * var(--u))/1.2 var(--f-field);border-radius:6px;border:0;min-height:0}
+  .room .dock .docktabs{display:flex;flex-direction:column;gap:1px;overflow:visible}
+  .room .dock .docktabs button{justify-content:flex-start;padding:calc(1.5 * var(--u)) calc(8 * var(--u));font:500 calc(15 * var(--u))/1.2 var(--f-field);border-radius:6px;border:0;min-height:0}
   .room .dock .docktabs button .ic{width:calc(16 * var(--u));height:calc(16 * var(--u))}
   .room .dock .docktabs button[aria-selected="true"]{background:var(--d-primary);color:var(--d-onprimary);box-shadow:none}
   .room .dock .dockbody{flex:1;min-width:0;overflow:hidden;padding:calc(10 * var(--u)) calc(14 * var(--u))}
-  .room .dock .dockbody.scroll{overflow-y:auto}
-  .room .dock .dockfit{width:max-content;transform-origin:0 0}
+  .room .dock .dockbody.scroll{overflow-y:auto;overflow-x:hidden}
+  .room .dock .dockfit{width:100%;min-width:0}
   .dockgrip{position:absolute;left:0;right:0;top:0;height:8px;z-index:3;cursor:ns-resize;touch-action:none}
   .dockgrip::after{content:"";position:absolute;left:50%;top:2px;width:48px;height:4px;margin-left:-24px;border-radius:2px;background:var(--line-strong);opacity:.6}
   .dockgrip:hover::after,body.dockdrag .dockgrip::after{opacity:1;background:var(--d-primary)}
   body.dockdrag,body.dockdrag *{cursor:ns-resize!important;user-select:none}
   .room .dock .dockbody.dock-item{padding:calc(6 * var(--u)) calc(18 * var(--u)) 0}
-  .itembar{display:flex;flex-direction:row;align-items:flex-start;gap:calc(56 * var(--u));min-width:max-content;font-family:var(--f-field)}
+  .itembar{display:flex;flex-direction:row;align-items:flex-start;gap:calc(26 * var(--u));min-width:max-content;font-family:var(--f-field)}
   .room .dock .itembar.ib-wrap{flex-wrap:wrap;min-width:0;row-gap:calc(18 * var(--u))}
   .ib-f{display:flex;flex-direction:column;gap:0;margin:0}
   .ib-f > span{font:500 calc(15 * var(--u))/1.2 var(--f-field);color:var(--d-lbl);padding-left:2px}
