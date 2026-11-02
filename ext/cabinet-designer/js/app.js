@@ -34,9 +34,10 @@ function fixSel() {
   if (ui.sel && ui.sel.type === 'cab' && !cab(ui.sel.id)) ui.sel = null;
   if (ui.sel && ui.sel.type === 'wall' && !wall(ui.sel.id)) ui.sel = null;
   if (ui.sel && ui.sel.type === 'shape' && !shapeById(ui.sel.id)) ui.sel = null;
+  if (ui.sel && ui.sel.type === 'fixt' && !fixtById(ui.sel.id)) ui.sel = null;
   if (!wall(ui.elevWall)) { const c = S.cabinets[0]; ui.elevWall = c ? c.wall : S.walls[0] ? S.walls[0].id : null; }
   if (!libItem(ui.libSel) && !(String(ui.libSel || '').startsWith('shape:') && shapeLibItem(ui.libSel.slice(6)))) ui.libSel = S.library[0] && S.library[0].id;
-  if (ui.placing && !libItem(ui.placing) && !shapeLibItem(String(ui.placing).replace(/^shape:/, ''))) ui.placing = null;
+  if (ui.placing && !libItem(ui.placing) && !shapeLibItem(String(ui.placing).replace(/^shape:/, '')) && !fixtPreset(String(ui.placing).replace(/^fixt:/, ''))) ui.placing = null;
 }
 function render() {
   // Order lives on the Pricing page now (what to buy and the files to send).
@@ -111,15 +112,16 @@ function shapeButton(l) {
 function productTree() {
   const favs = ui.favs || (ui.favs = loadFavs()), q = (ui.libFind || '').trim().toLowerCase(), fold = ui.libFold || (ui.libFold = {});
   const all = S.library.filter(l => l.cat !== 'Shape').map(l => ({ key: l.id, g: libGroup(l), f: libFolder(l), name: l.name, html: libButton(l, 'lib-pick', ui.placing === l.id) }))
-    .concat((S.shapeLib || []).map(l => ({ key: 'shape:' + l.id, g: shapeGroup(l), f: shapeFolder(l), name: l.name, html: shapeButton(l) })));
+    .concat((S.shapeLib || []).map(l => ({ key: 'shape:' + l.id, g: shapeGroup(l), f: shapeFolder(l), name: l.name, html: shapeButton(l) })))
+    .concat(fixtTreeItems());
   const wrap = x => `<div class="lw">${x.html}<button class="favbtn${favs.includes(x.key) ? ' on' : ''}" data-act="lib-fav" data-id="${esc(x.key)}" title="${favs.includes(x.key) ? 'Remove from Favorites' : 'Add to Favorites'}" aria-label="Favorite ${esc(x.name)}">★</button></div>`;
-  const gname = g => (LIB_GROUPS.find(([k]) => k === g) || [])[1] || '';
+  const groups = [...LIB_GROUPS, FIXT_GROUP], gname = g => (groups.find(([k]) => k === g) || [])[1] || '';
   const hit = x => !q || x.name.toLowerCase().includes(q) || gname(x.g).toLowerCase().includes(q) || x.f.toLowerCase().includes(q);
   const list = all.filter(hit);
   const head = (k, label, n, shut, cls) => `<button class="${cls}" data-act="lib-fold" data-id="${esc(k)}" aria-expanded="${!shut}"><span class="arr" aria-hidden="true">${shut ? '▸' : '▾'}</span><span>${label}</span>${n ? `<span class="ct">${n}</span>` : ''}</button>`;
   const fav = list.filter(x => favs.includes(x.key)), favShut = !q && fold.fav;
   const favGrp = fav.length ? `<div class="lgrp lg-fav">${head('fav', '★ Favorites', fav.length, favShut, 'lgrp-h')}${favShut ? '' : `<div class="grp">${fav.map(wrap).join('')}</div>`}</div>` : '';
-  const body = LIB_GROUPS.map(([g, gl]) => {
+  const body = groups.map(([g, gl]) => {
     const items = list.filter(x => x.g === g); if (q && !items.length) return '';
     const shut = !q && fold[g], folders = [...new Set(items.map(x => x.f))];
     const inner = !items.length ? '<div class="note show">Nothing here yet.</div>' : folders.length === 1 ? `<div class="grp">${items.map(wrap).join('')}</div>`
@@ -232,8 +234,8 @@ function renderRoom() {
 }
 function ensureRoomViewer() {
   if (roomViewer) return;
-  roomViewer = new Viewer3D($('#room3d'), id => { if (id) select({ type: shapeById(id) ? 'shape' : 'cab', id }); else if (ui.sel) select(null); });
-  roomViewer.onDouble = id => shapeById(id) ? editShape(id) : openQuick(id);
+  roomViewer = new Viewer3D($('#room3d'), id => { if (id) select({ type: shapeById(id) ? 'shape' : fixtById(id) ? 'fixt' : 'cab', id }); else if (ui.sel) select(null); });
+  roomViewer.onDouble = id => shapeById(id) ? editShape(id) : fixtById(id) ? null : openQuick(id);
   viewers.push(roomViewer);
 }
 
@@ -253,7 +255,7 @@ function saveRoomImage() {
 // The side panel, with a small switch at the bottom for its gray help text (same as Look and feel).
 // It can fold to a thin strip so the plan gets the width. Walls and shapes open it, since their only editor is here.
 const wideQuery = matchMedia('(max-width: 960px)');
-const propsShut = () => !!ui.propsShut && !wideQuery.matches && !(ui.sel && (ui.sel.type === 'wall' || ui.sel.type === 'shape'));
+const propsShut = () => !!ui.propsShut && !wideQuery.matches && !(ui.sel && (ui.sel.type === 'wall' || ui.sel.type === 'shape' || ui.sel.type === 'fixt'));
 function renderProps() {
   const el = $('#props'), room = $('#tab-room'), shut = propsShut();
   if (room && room.classList.contains('props-shut') !== shut) { room.classList.toggle('props-shut', shut); requestAnimationFrame(redrawView); }
@@ -279,6 +281,7 @@ function renderPropsBody() {
   if (ui.sel && ui.sel.type === 'cab') { const c = cab(ui.sel.id); if (c) { el.innerHTML = cabProps(c); return; } }
   if (ui.sel && ui.sel.type === 'wall') { const w = wall(ui.sel.id); if (w) { el.innerHTML = wallProps(w); return; } }
   if (ui.sel && ui.sel.type === 'shape') { const s = shapeById(ui.sel.id); if (s) { el.innerHTML = shapeProps(s); return; } }
+  if (ui.sel && ui.sel.type === 'fixt') { const f = fixtById(ui.sel.id); if (f) { el.innerHTML = fixtProps(f); return; } }
   const j = S.job, rm = curRoom(), n = {}; S.cabinets.forEach(c => n[c.cat] = (n[c.cat] || 0) + 1);
   el.innerHTML = `<div class="psec"><div class="pshead"><h2 class="ph2">${icon('home')}${esc(rm.name)}</h2><button class="btn" data-act="tab" data-id="job">All rooms</button></div>
     <div class="stats3"><div class="t-wall"><b>${S.walls.length}</b><span>walls</span></div><div class="t-base"><b>${n.Base || 0}</b><span>base</span></div><div class="t-upper"><b>${n.Wall || 0}</b><span>wall</span></div><div class="t-tall"><b>${n.Tall || 0}</b><span>tall</span></div></div>
@@ -584,7 +587,11 @@ document.addEventListener('pointermove', e => {
   e.preventDefault();
   dnd.chip.style.transform = `translate(${e.clientX + 12}px, ${e.clientY + 12}px)`;
   const t = dndTarget(e);
-  if (dnd.kind === 'lib') {
+  if (dnd.kind === 'fixt') {
+    const f = fixtNew(dnd.val), at = f && t.p && (t.where === 'plan' || t.where === '3d') ? fixtSpot(f, t.p, ui.px) : null;
+    ui.fixtGhost = at ? Object.assign(f, at) : null;
+    if (ui.viewMode === 'plan') renderPlan();
+  } else if (dnd.kind === 'lib') {
     const l = libItem(dnd.val);
     ui.ghost = !l ? null : t.where === 'elev' ? elevGhost(l, t.ep) : t.p && (t.where === 'plan' || t.where === '3d') ? snapToWall(t.p, l, null, 0, ui.px) : null;
     ui.ghostLib = dnd.val;
@@ -597,7 +604,7 @@ document.addEventListener('pointermove', e => {
 // A finger drag the browser takes over (a scroll) ends without a pointerup: drop the drag there too.
 document.addEventListener('pointercancel', () => {
   dndPending = null; if (!dnd) return;
-  dnd.chip.remove(); dnd = null; document.body.classList.remove('dragging'); ui.ghost = null; ui.ghostLib = null; ui.dropCab = null; redrawView();
+  dnd.chip.remove(); dnd = null; document.body.classList.remove('dragging'); ui.ghost = null; ui.ghostLib = null; ui.fixtGhost = null; ui.dropCab = null; redrawView();
 });
 document.addEventListener('pointerup', dndDrop);
 // A finger whose lift was lost drops what it carried where it was last seen.
@@ -607,6 +614,7 @@ function dndDrop() {
   if (!dnd) return;
   const d = dnd; dnd = null; d.chip.remove(); document.body.classList.remove('dragging');
   ui.suppressClick = true; setTimeout(() => { ui.suppressClick = false; }, 0);
+  if (d.kind === 'fixt') { const g = ui.fixtGhost; ui.fixtGhost = null; if (g) { mutate(() => { S.fixtures = S.fixtures || []; S.fixtures.push(g); }); ui.sel = { type: 'fixt', id: g.id }; ui.elevWall = g.wall; } renderRoom(); return; }
   if (d.kind === 'lib') { const g = ui.ghost; ui.ghost = null; ui.ghostLib = null; if (g) placeCabinet(d.val, g); else renderRoom(); return; }
   const target = ui.dropCab; ui.dropCab = null;
   if (target) { applyPayload(target, d.kind, d.val); ui.sel = { type: 'cab', id: target }; renderRoom(); flash(`Applied to ${LBL[target]}`); }
@@ -755,6 +763,7 @@ document.addEventListener('click', e => {
   if (/^lp-/.test(a) && typeof libAct === 'function' && libAct(a, id)) return;
   if (/^(rl|rvar|jfield|fx)-/.test(a) && typeof fxAct === 'function' && fxAct(a, id, el)) return;
   if (/^te-/.test(a) && typeof topEditAct === 'function' && topEditAct(a, id)) return;
+  if (/^fixt-/.test(a) && typeof fixtAct === 'function' && fixtAct(a, id)) return;
   switch (a) {
     case 'tab': goTab(id); break;
     case 'walls-draw': if (ui.drawWalls) stopWalls(); else startWalls(); break;
@@ -1046,7 +1055,7 @@ document.addEventListener('click', e => {
     case 'cab-end': { const [cid, end, k] = id.split(':'), c = cab(cid), ch = END_CHOICES.find(x => x[0] === k); if (c && ch) mutate(() => { c['fill' + end] = ch[2]; c['panel' + end] = ch[3]; }); break; }
     case 'cap-end': { const [wid, end] = id.split(':'), w = wall(wid); if (w && !wallEndJoined(w, end)) { mutate(() => { w['cap' + end] = { ...capDefaults(w), side: elevSide(w), ...(w['cap' + end] || {}), on: true }; settleWall(w); }); select({ type: 'wall', id: wid }); } break; }
     case 'wall-sel': select({ type: 'wall', id }); ui.elevWall = id; renderRoom(); break;
-    case 'wall-del': mutate(() => { S.walls = S.walls.filter(w => w.id !== id); S.cabinets = S.cabinets.filter(c => c.wall !== id); }); ui.sel = null; render(); break;
+    case 'wall-del': mutate(() => { S.walls = S.walls.filter(w => w.id !== id); S.cabinets = S.cabinets.filter(c => c.wall !== id); S.fixtures = (S.fixtures || []).filter(f => f.wall !== id); }); ui.sel = null; render(); break;
     case 'face': { const o = resolve(ref), fp = FACE_PRESETS.find(f => f.id === id); if (o && fp) mutate(() => { o.rows = clone(fp.rows); }); break; }
     case 'row-add': { const o = resolve(ref); if (o) { ui.rowsOpen = true; mutate(() => o.rows.push({ type: 'door', h: '*', count: 1 })); } break; }
     case 'row-del': { const o = resolve(ref); if (o) { ui.rowsOpen = true; mutate(() => o.rows.splice(+el.dataset.i, 1)); } break; }
@@ -1269,7 +1278,7 @@ document.addEventListener('keydown', e => {
 }, true);
 // Click a library cabinet, then click a wall: one placement (Shift keeps placing). null stops.
 function placeMode(id) {
-  ui.placing = id; ui.drawWalls = false; ui.drawing = null; ui.typed = ''; ui.ghost = null; ui.ghostBlocked = false;
+  ui.placing = id; ui.drawWalls = false; ui.drawing = null; ui.typed = ''; ui.ghost = null; ui.fixtGhost = null; ui.ghostBlocked = false;
   if (id && ui.viewMode !== 'plan') { ui.viewMode = 'plan'; requestAnimationFrame(fitView); }
   if (ui.tab !== 'room') { ui.tab = 'room'; render(); requestAnimationFrame(() => renderRoom()); } else renderRoom();
 }
@@ -1310,7 +1319,8 @@ function deleteSelected() {
   const s = ui.sel; if (!s) return; ui.sel = null;
   if (s.type === 'cab') mutate(() => { S.cabinets = S.cabinets.filter(c => c.id !== s.id); });
   else if (s.type === 'shape') mutate(() => { S.shapes = S.shapes.filter(x => x.id !== s.id); });
-  else if (s.type === 'wall') mutate(() => { S.walls = S.walls.filter(w => w.id !== s.id); S.cabinets = S.cabinets.filter(c => c.wall !== s.id); S.shapes = S.shapes.filter(x => x.wall !== s.id); });
+  else if (s.type === 'fixt') mutate(() => { S.fixtures = (S.fixtures || []).filter(x => x.id !== s.id); });
+  else if (s.type === 'wall') mutate(() => { S.walls = S.walls.filter(w => w.id !== s.id); S.cabinets = S.cabinets.filter(c => c.wall !== s.id); S.shapes = S.shapes.filter(x => x.wall !== s.id); S.fixtures = (S.fixtures || []).filter(x => x.wall !== s.id); });
   render();
 }
 // Ends whatever drawing or placing is going on (walls, a cabinet being placed, molding or tops, lights, a top's shape).
@@ -1345,8 +1355,8 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if
   try { const t = JSON.parse(localStorage.getItem(KEY + '.doorFold')); if (t && typeof t === 'object') ui.doorFold = t; } catch (_) {}
   try { ui.dockOpen = localStorage.getItem(KEY + '.dock') === '1'; } catch (_) {}
   // The Products tree opens with every group closed; folders inside keep how they were left.
-  ui.libFold = Object.fromEntries(LIB_GROUPS.map(([g]) => [g, true]));
-  try { ui.railShut = localStorage.getItem(KEY + '.rail') === '1'; ui.libFold = JSON.parse(localStorage.getItem(KEY + '.fold') || '{}'); LIB_GROUPS.forEach(([g]) => ui.libFold[g] = true); ui.propsShut = localStorage.getItem(KEY + '.side') !== '0'; const ly = JSON.parse(localStorage.getItem(KEY + '.layers') || 'null'); if (ly) { ui.layers = ly.layers || {}; ui.wallOp = ly.wallOp ?? 1; ui.cutaway = !!ly.cutaway; } } catch (_) {}
+  ui.libFold = Object.fromEntries([...LIB_GROUPS, FIXT_GROUP].map(([g]) => [g, true]).concat(FIXT_FOLDERS.map(f => ['fixt/' + f, true])));
+  try { ui.railShut = localStorage.getItem(KEY + '.rail') === '1'; ui.libFold = JSON.parse(localStorage.getItem(KEY + '.fold') || '{}'); [...LIB_GROUPS, FIXT_GROUP].forEach(([g]) => ui.libFold[g] = true); FIXT_FOLDERS.forEach(f => { if (!(('fixt/' + f) in ui.libFold)) ui.libFold['fixt/' + f] = true; }); ui.propsShut = localStorage.getItem(KEY + '.side') !== '0'; const ly = JSON.parse(localStorage.getItem(KEY + '.layers') || 'null'); if (ly) { ui.layers = ly.layers || {}; ui.wallOp = ly.wallOp ?? 1; ui.cutaway = !!ly.cutaway; } } catch (_) {}
   try { ui.render3d = localStorage.getItem(KEY + '.render') === '1'; } catch (_) {}
   initPlan(); initElev();
   $('#quickedit').addEventListener('pointerdown', e => { if (e.target.id === 'quickedit') closeQuick(); });

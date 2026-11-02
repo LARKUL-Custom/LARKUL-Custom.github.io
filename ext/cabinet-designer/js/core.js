@@ -69,7 +69,7 @@ const PARAM_GROUPS = [['base', 'Feet and toe kick'], ['box', 'Box construction']
 const SHOP_PARAMS = {
   baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'none', nailerWidth: 3.5, backInset: 0.75, dadoDepth: 0.375,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
-  frontTopReveal: 0, frontBottomReveal: 0, hingeSide: 'L', hingeInset: 3.5, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'butt', dovetailPin: 0.5,
+  frontTopReveal: 0, frontBottomReveal: 0, hingeSide: 'L', hingeInset: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'butt', dovetailPin: 0.5,
 };
 const R = (type, h, count = 1) => ({ type, h, count });
 const FACE_PRESETS = [
@@ -206,6 +206,15 @@ function defaultJoints() {
 }
 // Leg layout like Mozaik's Legs tab. Insets are from the outside of the cabinet: toe (front), finished end, unfinished end, back.
 const LEG_DEF = { inToe: 3.9685, inFin: 2.1969, inUnfin: 1.4094, inBack: 3.9685, maxSep: 0, noBack: false, holeDia: 0.3937, holeDepth: 0.4724, width: 2.2441, depth: 2.5827 };
+// Ayden's shop hardware, copied from his Mozaik exports (2026-11-02): Blum CLIP top BLUMOTION with the old plate, 71B35xx
+// full overlay, drilling two 8 mm dowels beside the cup; hinges 4" from the door ends, at most 36" apart.
+const CLIPTOP_MOZAIK = { kind: 'hinge', name: 'Blum CLIP top BLUMOTION 110° full overlay', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 5,
+  cupExtra: [{ dx: -22.5, dy: 9.5, dia: 8, depth: 13 }, { dx: 22.5, dy: 9.5, dia: 8, depth: 13 }],
+  plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12.7 }, { dz: 16, y: 37, dia: 5, depth: 12.7 }], max2: 42, max3: 80, cost: 5, plateCost: 0 };
+// Hafele Axilo 78 square screw-in leg: centre 39.5 mm in from the toe skin, ends and back; four 5 mm marks per leg on
+// a 64 mm square, offset 13 mm toward the cabinet's middle; at most 34" apart; $4.50 each.
+const AXILO78_MOZAIK = { kind: 'leg', name: 'Hafele Axilo 78 square screw-in', feet: true, inToe: 5.3151, inFin: 2.3151, inUnfin: 2.3051, inBack: 4, maxSep: 34,
+  noBack: false, holeDia: 0.1969, holeDepth: 0.0394, width: 4.1339, depth: 3.1102, holesMM: [{ x: -19, y: 32 }, { x: 45, y: 32 }, { x: 45, y: -32 }, { x: -19, y: -32 }], cost: 4.5 };
 // Older saves get the joint templates, real legs and the job's picks.
 function ensureJoinery(s) {
   if (!Array.isArray(s.hardware)) return s;
@@ -280,15 +289,14 @@ function seed() {
         sideThickMM: 12.7, widthDeductMM: 25.4, bottomRecessMM: 6.35, bottomClearMM: 6, topClearMM: 20, rearClearMM: 10,
         cabHoles: [{ ref: 'front', y: 37, z: 22, dia: 5, depth: 12 }, { ref: 'rear32', y: 0, z: 22, dia: 5, depth: 12 }],
         boxOps: [{ part: 'side', type: 'bore', edge: '', x: 37, y: 22, inset: 0, dia: 3, depth: 8 }], bomExtra: '' },
-      { id: 'hw-cliptop', kind: 'hinge', name: 'Blum Clip Top Blumotion 110° full overlay', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 5,
-        cupExtra: [], plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12 }, { dz: 16, y: 37, dia: 5, depth: 12 }], max2: 40, max3: 60 },
+      { id: 'hw-cliptop', ...clone(CLIPTOP_MOZAIK) },
       { id: 'hw-inserta', kind: 'hinge', name: 'Blum Clip Top Inserta 110° (press-in dowels)', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 5,
         cupExtra: [{ dx: -22.5, dy: 9.5, dia: 8, depth: 11.5 }, { dx: 22.5, dy: 9.5, dia: 8, depth: 11.5 }], plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12 }, { dz: 16, y: 37, dia: 5, depth: 12 }], max2: 40, max3: 60 },
       { id: 'hw-pull128', kind: 'pull', name: 'Bar pull 128 mm, matte black', ccMM: 128, lengthMM: 168, holeDiaMM: 5, finish: '#2b2b2b' },
       { id: 'hw-pull96', kind: 'pull', name: 'Bar pull 96 mm, brass', ccMM: 96, lengthMM: 136, holeDiaMM: 5, finish: '#b08d4f' },
       { id: 'hw-knob', kind: 'pull', name: 'Round knob 32 mm', ccMM: 0, lengthMM: 32, holeDiaMM: 5, finish: '#b08d4f' },
       { id: 'hw-pin5', kind: 'shelfpin', name: '5 mm shelf pin, System 32', pinDiaMM: 5, pinDepthMM: 10, pinSetbackMM: 37, pitchMM: 32 },
-      { id: 'hw-leg', kind: 'leg', name: 'Hafele Axilo 48 round press fit', feet: true, ...LEG_DEF },
+      { id: 'hw-leg', ...clone(AXILO78_MOZAIK) },
       ...defaultJoints(),
     ],
     countertops: [
@@ -354,7 +362,7 @@ function seed() {
 }
 // New rooms start with no countertops; Auto build countertops on the Tops tab lays them. Rooms saved before that keep theirs.
 function newRoom(id, name, walls, settings) {
-  return { id, name, walls: walls || [], cabinets: [], shapes: [], ctRuns: {}, genTops: [], genMolds: [], lights: [], autoTops: false, settings: settings || {}, params: {}, wallThick: 4.5, wallHeight: 96 };
+  return { id, name, walls: walls || [], cabinets: [], shapes: [], ctRuns: {}, genTops: [], genMolds: [], lights: [], fixtures: [], autoTops: false, settings: settings || {}, params: {}, wallThick: 4.5, wallHeight: 96 };
 }
 function defaultConstruction(cat) { return { toeKick: cat !== 'Wall', top: cat === 'Base' ? 'stretchers' : 'full' }; }
 function newCab(S, lib, wallId, side, off) {
@@ -377,7 +385,7 @@ let S = null;
 let undoStack = [], redoStack = [];
 let saveTimer = null, saveNote = '';
 // Walls, cabinets and countertop overrides live in each room; S.walls and friends point at the open room.
-const ROOM_KEYS = ['walls', 'cabinets', 'shapes', 'ctRuns', 'genTops', 'genMolds', 'lights'];
+const ROOM_KEYS = ['walls', 'cabinets', 'shapes', 'ctRuns', 'genTops', 'genMolds', 'lights', 'fixtures'];
 function attachRoom(st) {
   ROOM_KEYS.forEach(k => {
     if ((Object.getOwnPropertyDescriptor(st, k) || {}).get) return;
@@ -397,9 +405,11 @@ const TANDEM_563H = {
   partNos: { 12: '563H3050B', 15: '563H3810B', 18: '563H4570B', 21: '563H5330B' },
   runnerMM: { 12: 319, 15: 395, 18: 471, 21: 548 },
   minDepthMM: { 12: 328, 15: 404, 18: 480, 21: 557 },
-  holeSets: { 12: [37, 165, 261], 15: [37, 165, 357], 18: [37, 261, 453], 21: [37, 261, 517] },
+  // Rear screw holes and prices from Ayden's Mozaik guide (Blum TANDEM 563H, 1/2" slides = 3/4 material), 0.42.2.
+  holeSets: { 12: [37, 261], 15: [37, 261], 18: [37, 69, 261], 21: [37, 69, 261] },
+  prices: { 12: 24, 15: 25, 18: 26, 21: 27 },
   sideThickMM: 16, widthDeductMM: 10, bottomRecessMM: 13, bottomClearMM: 14, topClearMM: 6, rearClearMM: 23,
-  cabHoles: [{ ref: 'set', i: 1, y: 0, z: 23, dia: 5, depth: 12 }, { ref: 'set', i: 2, y: 0, z: 23, dia: 5, depth: 12 }, { ref: 'set', i: 3, y: 0, z: 23, dia: 5, depth: 12 }],
+  cabHoles: [{ ref: 'set', i: 1, y: 0, z: 24, dia: 5, depth: 12.7 }, { ref: 'set', i: 2, y: 0, z: 24, dia: 5, depth: 12.7 }, { ref: 'set', i: 3, y: 0, z: 24, dia: 5, depth: 12.7 }],
   boxOps: [{ part: 'side', type: 'hbore', edge: 'rear', x: 0, y: 11, inset: 7, dia: 6, depth: 10 }],
   bomExtra: 'Blum TANDEM locking devices T51.1901R + T51.1901L (pair)',
 };
@@ -421,11 +431,21 @@ function migrate(s) {
   (s.hardware || []).forEach(h => { if (h.id === 'hw-leg' && !('feet' in h)) { h.feet = true; delete h.perCabinet; } });
   // The 563H runner had placeholder sizes until 0.32.0; jobs pick up the real ones from Blum's sheet.
   (s.hardware || []).forEach(h => { if (h.id === 'hw-563h' && !h.holeSets) Object.assign(h, clone(TANDEM_563H)); });
+  // 0.42.2: the shop's Mozaik hinge, 563H holes and Axilo 78 leg replace the starting values, unless a job already changed them.
+  if (!s.hwMozaik) {
+    (s.hardware || []).forEach(h => {
+      if (h.id === 'hw-cliptop' && !(h.cupExtra || []).length && h.max2 === 40) Object.assign(h, clone(CLIPTOP_MOZAIK));
+      if (h.id === 'hw-563h' && h.holeSets && JSON.stringify(h.holeSets[18]) === '[37,261,453]') { h.holeSets = clone(TANDEM_563H.holeSets); h.prices = clone(TANDEM_563H.prices); h.cabHoles = clone(TANDEM_563H.cabHoles); }
+      if (h.id === 'hw-leg' && /axilo 48|adjustable cabinet leg/i.test(h.name || '') && Math.abs((+h.inToe || 0) - LEG_DEF.inToe) < 0.01) Object.assign(h, clone(AXILO78_MOZAIK));
+    });
+    if (s.job && s.job.params && s.job.params.hingeInset === 3.5) s.job.params.hingeInset = 4;
+    s.hwMozaik = 1;
+  }
   if (s.job && s.job.params) Object.entries(SHOP_PARAMS).forEach(([k, v]) => { if (!(k in s.job.params)) s.job.params[k] = v; });
   // Formulas and job variables came later.
   s.formulas = s.formulas || {}; if (s.job) s.job.vars = s.job.vars || [];
   // Hand-placed tops and molding runs came with 0.13.1.
-  s.rooms.forEach(r => { r.shapes = r.shapes || []; r.genTops = r.genTops || []; r.genMolds = r.genMolds || []; r.lights = r.lights || []; });
+  s.rooms.forEach(r => { r.shapes = r.shapes || []; r.genTops = r.genTops || []; r.genMolds = r.genMolds || []; r.lights = r.lights || []; r.fixtures = r.fixtures || []; });
   if (!s.shapeLib) s.shapeLib = defaultShapeLib(s);
   // Molding profiles live on the molding (0.21.2); 3/8 HDF for two-piece door panels came with 0.21.0.
   (s.moldings || []).forEach(m => { if (m.profile === 'shape' && !(m.pts || []).length) { const l = s.shapeLib.find(x => x.id === m.shape); m.pts = l ? clone(l.pts) : moldStartPts(); } delete m.shape; });

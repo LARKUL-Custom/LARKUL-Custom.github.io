@@ -80,7 +80,9 @@ function readMozRoom(el, fallbackName) {
       })).filter(f => f.w > 0 && f.h > 0),
     };
   }).filter(p => p.w > 0 && p.h > 0 && p.d > 0);
-  return { name: el.getAttribute('Name') || fallbackName, walls, prods };
+  const set = el.querySelector(':scope > RoomSet'), hwNames = {};
+  if (set) [['slide', 'DrawerGuide'], ['hinge', 'BaseHinges'], ['pull', 'BasePulls']].forEach(([k, a]) => { const v = set.getAttribute(a); if (v) hwNames[k] = v; });
+  return { name: el.getAttribute('Name') || fallbackName, walls, prods, hwNames };
 }
 function readMozaik(texts) {
   const rooms = []; let jobName = '';
@@ -159,6 +161,15 @@ function mozRows(p, sz) {
     return r;
   });
 }
+// The room's Mozaik drawer guide, hinge and pull, when the job has the same product: it must share a model word
+// like "563H", "TANDEM" or "CLIP", not just a maker's name.
+function mozHardware(rm, src) {
+  const words = n => new Set(n.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 2 && !/^(blum|salice|hafele|grass|slides?|mat|in|full|ext|for|and|the|with|old|plate|pull|bar|knob|hinges?|drawer|door|\d+)$/.test(w)));
+  Object.entries(src.hwNames || {}).forEach(([kind, name]) => {
+    const want = words(name), hit = hwOf(kind).find(h => [...words(h.name)].some(w => want.has(w)));
+    if (hit) rm.settings[kind] = hit.id;
+  });
+}
 // A product with no wall (an island) gets a thin back wall of its own at its spot in the room.
 function mozIsland(rm, p) {
   const a = p.rot * Math.PI / 180, u = { x: Math.cos(a), y: -Math.sin(a) }, x = p.x, y = -(p.y || 0);
@@ -173,6 +184,7 @@ function mozRooms(data) {
     const rm = newRoom(uid('r'), src.name || 'Room ' + (i + 1), []); rm.block = i + 1;
     const th = src.walls.map(w => w.thick).find(t => t > 0), ht = src.walls.map(w => w.height).find(t => t > 0);
     rm.wallThick = th ? sz(th) : S.job.wallThick; rm.wallHeight = ht ? sz(ht) : S.job.wallHeight;
+    mozHardware(rm, src);
     const walls = mozWalls(src.walls, sz, rm);
     rm.walls = walls.map(({ a0, ...w }) => w);
     const ps = src.prods.map(p0 => ({ ...p0, w: sz(p0.w), h: sz(p0.h), d: sz(p0.d), x: cv(p0.x), y: isFinite(p0.y) ? cv(p0.y) : NaN, elev: sz(p0.elev), outset: sz(p0.outset) }));

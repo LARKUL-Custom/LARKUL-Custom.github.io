@@ -88,6 +88,7 @@ function resolve(ref) {
     case 'shd': return S.shapeDesign;
     case 'shdpt': return S.shapeDesign && S.shapeDesign.pts[+id];
     case 'shp': return shapeById(id);
+    case 'fixt': return typeof fixtById === 'function' ? fixtById(id) : null;
     case 'slib': return shapeLibItem(id);
     case 'jvar': return (S.job.vars || []).find(v => v.id === id);
     case 'rvar': { const [rid, vid] = id.split(':'), r = roomById(rid); return r && (r.vars || []).find(v => v.id === vid); }

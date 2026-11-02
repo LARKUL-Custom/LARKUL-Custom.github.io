@@ -31,7 +31,13 @@ const ftLen = v => (Math.round(v * 100) / 100).toLocaleString(undefined, { maxim
 const addSq = list => PAINT_PARTS.concat([['total']]).reduce((o, [k]) => (o[k] = list.reduce((a, x) => a + x[k], 0), o), {});
 // A starting sheet: rough shop numbers to edit, with doors, hardware and materials priced from this job's libraries.
 function defaultPriceSheet(name = 'Standard pricing') {
-  const hwPrice = n => /slide/i.test(n) ? 32 : /plate/i.test(n) ? 1.5 : /hinge/i.test(n) ? 5.5 : /pin/i.test(n) ? 0.15 : /pull|knob/i.test(n) ? 7 : /\bleg\b/i.test(n) ? 2.5 : /clip/i.test(n) ? 0.5 : 2;
+  // Hardware with its own price (Ayden's Mozaik prices) starts there; the rest get rough shop numbers.
+  const own = n => { for (const h of (S ? S.hardware : [])) {
+    if (h.prices && n.startsWith(h.name + ' ')) { const L = parseFloat(n.slice(h.name.length + 1)); if (h.prices[L] != null) return +h.prices[L]; }
+    if (h.cost != null && n === h.name) return +h.cost;
+    if (h.plateCost != null && n === h.name + ' mounting plate') return +h.plateCost;
+  } return null; };
+  const hwPrice = n => own(n) ?? (/slide/i.test(n) ? 32 : /plate/i.test(n) ? 1.5 : /hinge/i.test(n) ? 5.5 : /pin/i.test(n) ? 0.15 : /pull|knob/i.test(n) ? 7 : /\bleg\b/i.test(n) ? 2.5 : /clip/i.test(n) ? 0.5 : 2);
   const hardware = {};
   if (S) allCabs().forEach(c => inRoomOf(c, () => Object.keys(buildParts(c).bom).forEach(k => { if (!(k in hardware)) hardware[k] = hwPrice(k); })));
   return {

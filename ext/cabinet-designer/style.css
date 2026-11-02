@@ -1885,3 +1885,28 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .hint.touchbar #walllen{width:calc(96px * var(--fk,1));min-height:calc(40px * var(--fk,1));font-size:max(16px,calc(16px * var(--fk,1)));padding:0 calc(8px * var(--fk,1))}
 /* Text boxes always take typing on touch screens, even inside something that can't be selected */
 @media (pointer: coarse){ input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text} }
+
+/* ---------- Appliances and fixtures (0.42.0) ---------- */
+.fixt{fill:var(--sunk);stroke:var(--line-strong);stroke-width:1.4}
+.fixt.fx-washer,.fixt.fx-dryer{fill:var(--panel)}
+.fixt.fx-door,.fixt.fx-window,.fixt.fx-opening{fill:var(--panel);stroke:var(--ink);stroke-width:1.2}
+.fixt.sel{stroke:var(--sel);stroke-width:2.6}
+.fixt.ghost{fill:var(--accent);fill-opacity:.25;stroke:var(--accent);stroke-dasharray:4 3}
+#plan .fixt.fx-case{fill:var(--panel)}
+.fx-gap{fill:var(--paper);stroke:none}
+.fx-hole{fill:var(--paper);stroke:var(--ink);stroke-width:1}
+.fx-hit{fill:transparent;cursor:grab}
+.fx-swing{fill:none;stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3}
+.fx-leafln{stroke-width:2.2}
+.fx-glass{fill:#9fd0ef;fill-opacity:.45;stroke:var(--line-strong);stroke-width:1}
+.fx-leaf{fill:var(--wood);stroke:var(--wood-edge);stroke-width:1}
+.fx-knob{fill:var(--muted)}
+.fx-line{fill:none;stroke:var(--line-strong);stroke-width:1.2}
+.fx-bowl{fill:var(--panel);stroke:var(--ink);stroke-width:1.2}
+.fx-bowl.ev{fill:none;stroke:var(--muted);stroke-dasharray:4 3}
+.fx-faucet{fill:var(--line-strong);stroke:var(--ink);stroke-width:1}
+.fx-faucet.ev{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round}
+.fx-burner{fill:none;stroke:var(--line-strong);stroke-width:1.2}
+.fx-lbl{fill:var(--muted);font-weight:600;letter-spacing:.04em}
+.fx-ico{fill:none;stroke:var(--t-teal);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
+.lg-fixt{--tone:#0d9488}

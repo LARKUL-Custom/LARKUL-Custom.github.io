@@ -438,8 +438,8 @@ class Viewer3D {
     const r = this.renderer.domElement.getBoundingClientRect();
     const v = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     const rc = new THREE.Raycaster(); rc.setFromCamera(v, this.cam);
-    const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && (h.object.userData.cabId || h.object.userData.shapeId));
-    return hit ? hit.object.userData.cabId || hit.object.userData.shapeId : null;
+    const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && (h.object.userData.cabId || h.object.userData.shapeId || h.object.userData.fixtId));
+    return hit ? hit.object.userData.cabId || hit.object.userData.shapeId || hit.object.userData.fixtId : null;
   }
   // Floor point under the cursor, as a plan point.
   floorPoint(cx, cy) {
@@ -465,7 +465,7 @@ function realWall3(op = 1) {
   return c[k] || (c[k] = new THREE.MeshStandardMaterial({ color: 0xeceae5, roughness: 0.95, envMapIntensity: 0.3, transparent: k < 1, opacity: k, depthWrite: k >= 1 }));
 }
 // What the 3D room shows. Each is on unless turned off in the Layers menu (the ceiling only shows from below).
-const LAYERS3D = [['walls', 'Walls'], ['ceiling', 'Ceiling'], ['floor', 'Floor'], ['box', 'Cabinet boxes'], ['fronts', 'Doors and drawer fronts'], ['drawerBox', 'Drawer boxes'], ['pulls', 'Pulls'], ['tops', 'Countertops'], ['molding', 'Molding'], ['shapes', 'Shapes'], ['lights', 'Lights'], ['labels', 'Labels and sizes'], ['glass', 'Glass (3D and elevation)'], ['fasteners', 'Joint fasteners']];
+const LAYERS3D = [['walls', 'Walls'], ['ceiling', 'Ceiling'], ['floor', 'Floor'], ['box', 'Cabinet boxes'], ['fronts', 'Doors and drawer fronts'], ['drawerBox', 'Drawer boxes'], ['pulls', 'Pulls'], ['tops', 'Countertops'], ['molding', 'Molding'], ['shapes', 'Shapes, appliances and fixtures'], ['lights', 'Lights'], ['labels', 'Labels and sizes'], ['glass', 'Glass (3D and elevation)'], ['fasteners', 'Joint fasteners']];
 // Fasteners start hidden; everything else starts shown.
 const layers3d = () => ({ ...Object.fromEntries(LAYERS3D.map(([k]) => [k, k !== 'fasteners'])), ...(ui.layers || {}) });
 function realFloor3() {
@@ -490,7 +490,7 @@ function buildRoomScene(v) {
     grp.position.set(mx, 0, my);
     grp.rotation.y = Math.atan2(-g.u.y, g.u.x);
     const wm = R3 ? realWall3(op) : flat3(cssVar('--wall3d'), op);
-    grp.add(box3(g.L + w.thick, w.height, w.thick, wm, 0, w.height / 2, 0, wallMode !== 'faded'));
+    fixtWall3(w, g, wm, wallMode !== 'faded').forEach(m => grp.add(m));
     const inward = (mid.x - mx) * g.n.x + (mid.y - my) * g.n.y >= 0 ? 1 : -1, cut = { x: mx, z: my, nx: g.n.x * inward, nz: g.n.y * inward };
     grp.userData.wall = true; if (cutaway) grp.userData.cut = cut;
     v.root.add(grp);
@@ -555,6 +555,7 @@ function buildRoomScene(v) {
     const sel = ui.sel && ui.sel.type === 'shape' && ui.sel.id === s.id, g = shapeMesh3(s, sel ? { sel: selCol } : {});
     if (g) v.root.add(g);
   });
+  if (L.shapes) fixt3d(v, selCol);
   if (L.tops) countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), a = r.start - r.ovS, b = r.end + r.ovE;
     const grp = wallGroup(w, r.side, r.side === 1 ? a : b), tm = mat3(mat(r.tpl.mat));

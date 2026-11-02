@@ -23,6 +23,7 @@ function duplicateRoom(src) {
   r.walls.forEach(w => { ids[w.id] = uid('w'); w.id = ids[w.id]; });
   r.cabinets.forEach(c => { ids[c.id] = uid('c'); c.id = ids[c.id]; c.wall = ids[c.wall] || c.wall; });
   (r.shapes = r.shapes || []).forEach(s => { s.id = uid('s'); s.wall = ids[s.wall] || s.wall; });
+  (r.fixtures = r.fixtures || []).forEach(f => { f.id = uid('fx'); f.wall = ids[f.wall] || f.wall; });
   r.ctRuns = Object.fromEntries(Object.entries(r.ctRuns || {}).map(([k, v]) => [k.split(':').map(p => ids[p] || p).join(':'), v]));
   return r;
 }

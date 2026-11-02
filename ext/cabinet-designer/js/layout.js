@@ -48,6 +48,8 @@ function obstacles(wallId, side, spec, excludeId) {
     add(p, 'cab', k.id);
     panelPolys(k, true).forEach(pp => add(pp, 'cab', k.id));
   });
+  // Doors, windows and appliances keep cabinets out of their space.
+  if (typeof fixtObstacles === 'function') fixtObstacles(wallId, side, spec, excludeId, add, out);
   return out;
 }
 // Extra width a cabinet carries past its box at the low and high ends along the wall (panels set to Always).

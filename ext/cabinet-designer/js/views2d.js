@@ -17,6 +17,7 @@ function renderPlan() {
   const hot = c => (ui.sel && ui.sel.id === c.id) || ui.dropCab === c.id;
   const order = [...S.cabinets].sort((a, b) => ((a.cat === 'Wall') - (b.cat === 'Wall')) || (hot(a) - hot(b)));
   order.filter(c => c.cat !== 'Wall' && !hot(c)).forEach(c => { s += cabPlanSVG(c); });
+  s += fixtPlanSVG(true);
   // Countertops: solid, in their own color, over the base cabinets, so you can see which tops there are and where.
   if (topOp() > 0) countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), g = wg(w), f = w.thick / 2;
@@ -45,6 +46,7 @@ function renderPlan() {
     s += `<text class="lbl dimtxt walltxt" x="${m.x}" y="${m.y}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${m.x} ${m.y})"><tspan font-weight="600">${wallName(w)}</tspan> · ${fmtLen(g.L, 1)}</text>`;
     if (isSel) [[w.x1, w.y1], [w.x2, w.y2]].forEach(([x, y]) => { s += `<circle class="handle nss" cx="${x}" cy="${y}" r="${7 * px}"/>`; });
   });
+  s += fixtPlanSVG();
   // ghost (placing from the library, or drag and drop)
   const gl = ui.ghost && libItem(ui.ghostLib || ui.placing);
   if (gl) { const poly = cabPoly({ ...gl, w: ui.ghost.w || gl.w }, ui.ghost); if (poly) s += `<polygon class="ghost nss" points="${polyPts(poly)}"/>`; }
@@ -285,11 +287,11 @@ function renderHint() {
     const pane = document.getElementById(ui.viewMode === 'elev' ? 'elev-card' : ui.viewMode === '3d' ? 'room3d-card' : 'plan-card');
     if (pane && h.parentNode !== pane) pane.appendChild(h);
     const b = (act, label, cls = '', id = '') => `<button class="btn${cls}" data-act="${act}"${id ? ` data-id="${id}"` : ''}>${label}</button>`;
-    const stop = b('place-stop', 'Done', ' primary'), what = ui.placing && (String(ui.placing).startsWith('shape:') ? shapeLibItem(ui.placing.slice(6)) : libItem(ui.placing));
+    const stop = b('place-stop', 'Done', ' primary'), what = ui.placing && (String(ui.placing).startsWith('shape:') ? shapeLibItem(ui.placing.slice(6)) : String(ui.placing).startsWith('fixt:') ? fixtPreset(ui.placing.slice(5)) : libItem(ui.placing));
     const arrows = [['0', '→', 'right'], ['270', '↑', 'up'], ['180', '←', 'left'], ['90', '↓', 'down']].map(([d, a, t]) => `<button class="btn wdir" data-act="wall-dir" data-id="${d}" aria-label="Wall going ${t}" title="Wall going ${t}">${a}</button>`).join('');
     const lenBox = `<span class="hintlen"><input id="walllen" type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" placeholder="Length" aria-label="Wall length"> ${arrows}</span>`;
     const multi = typeof multiIds === 'function' ? multiIds() : [], sel = ui.sel, c = sel && sel.type === 'cab' && cab(sel.id);
-    const selName = !sel ? '' : sel.type === 'cab' ? (c ? `${LBL[c.id] || ''} ${c.name}` : '') : sel.type === 'wall' ? (wall(sel.id) ? wallName(wall(sel.id)) : '') : sel.type === 'shape' ? ((shapeById(sel.id) || {}).name || 'Shape') : '';
+    const selName = !sel ? '' : sel.type === 'cab' ? (c ? `${LBL[c.id] || ''} ${c.name}` : '') : sel.type === 'wall' ? (wall(sel.id) ? wallName(wall(sel.id)) : '') : sel.type === 'shape' ? ((shapeById(sel.id) || {}).name || 'Shape') : sel.type === 'fixt' ? (fixtById(sel.id) ? fixtName(fixtById(sel.id)) : '') : '';
     const none = b('sel-none', '✕', ' ghost', '');
     let html = '';
     if (ui.drawWalls) html = `<span class="tb-msg">${ui.drawing ? 'Tap the next corner, or type a length and tap an arrow.' : 'Tap to start a wall.'}</span>${ui.drawing ? lenBox : ''}${stop}`;
@@ -315,6 +317,9 @@ function renderHint() {
   if (ui.drawWalls) {
     if (!ui.drawing) h.innerHTML = 'Click to start a wall. Ends snap to other walls, to lines through them and to the grid.';
     else h.innerHTML = `Type a length and press <b>Enter</b>, or click. Click the first corner to close the room. <b>Shift</b> for any angle. <b>Right-click</b> or <b>Esc</b> to stop.`;
+  } else if (ui.placing && String(ui.placing).startsWith('fixt:')) {
+    const l = fixtPreset(ui.placing.slice(5));
+    h.innerHTML = l ? `Placing <b>${esc(l.name)}</b>. Click near a wall${l.kind === 'sink' ? ' or on a base cabinet' : ''}. Hold <b>Shift</b> to place more. <b>Right-click</b> or <b>Esc</b> to stop.` : '';
   } else if (ui.placing && String(ui.placing).startsWith('shape:')) {
     const l = shapeLibItem(ui.placing.slice(6));
     h.innerHTML = l ? `Placing <b>${esc(l.name)}</b>. Click near a wall. Hold <b>Shift</b> to place more. <b>Right-click</b> or <b>Esc</b> to stop.` : '';
@@ -453,6 +458,11 @@ function initPlan() {
     // Touch: a corner goes down when the finger lifts after a tap, so dragging pans and pinching zooms without adding walls.
     if (ui.drawWalls && e.pointerType === 'touch') { ui.drag = { mode: 'walltap', vx: ui.view.x, vy: ui.view.y }; return; }
     if (ui.drawWalls) { if (!ui.drawing) { const sp = wallSnap(p); ui.drawing = { x: sp.x, y: sp.y }; ui.drawing.first = { x: sp.x, y: sp.y }; ui.typed = ''; renderPlan(); } else commitWallSegment(); return; }
+    if (ui.placing && String(ui.placing).startsWith('fixt:')) {
+      const keep = e.shiftKey ? ui.placing : null;
+      if (fixtPlace(ui.placing.slice(5), p)) { ui.placing = keep; renderRoom(); }
+      return;
+    }
     if (ui.placing && String(ui.placing).startsWith('shape:')) {
       const keep = e.shiftKey ? ui.placing : null;
       if (placeShape(ui.placing.slice(6), p)) { ui.placing = keep; renderRoom(); }
@@ -467,7 +477,15 @@ function initPlan() {
     if (rz && rzShow()) { ui.drag = { mode: 'resize', key: rz.dataset.rz, id: ui.sel.id, snap: JSON.stringify(S), live: false }; return; }
     const hd = hitHandle(p);
     if (hd) { ui.drag = { mode: 'handle', ...hd, snap: JSON.stringify(S), st: wallSnapState(), live: false, ox: hd.end === 1 ? hd.w.x1 : hd.w.x2, oy: hd.end === 1 ? hd.w.y1 : hd.w.y2 }; return; }
-    const hits = hitCabs(p), sh = hitShapes(p), dbl = hits.length || sh.length ? isDouble(e) : false;
+    const hits = hitCabs(p), sh = hitShapes(p), fx = fixtHit(p), dbl = hits.length || sh.length ? isDouble(e) : false;
+    // Appliances, doors and windows: a sink over a cabinet is picked by clicking again once the cabinet is selected.
+    const fxSel = ui.sel && ui.sel.type === 'fixt' && fx.includes(ui.sel.id);
+    if (fx.length && (!hits.length || fxSel || (ui.sel && ui.sel.type === 'cab' && hits.includes(ui.sel.id)))) {
+      const id = fxSel ? ui.sel.id : fx[0], f = fixtById(id);
+      select({ type: 'fixt', id }); ui.elevWall = f.wall; const r = segDist(p, wall(f.wall));
+      ui.drag = { mode: 'fixt', id, snap: JSON.stringify(S), live: false, grab: r.t - f.off };
+      return;
+    }
     // A shape over cabinets (like a top) is picked by clicking again once the cabinet under it is selected.
     const shSel = ui.sel && ui.sel.type === 'shape' && sh.includes(ui.sel.id);
     if (sh.length && (!hits.length || shSel || (ui.sel && ui.sel.type === 'cab' && hits.includes(ui.sel.id)))) {
@@ -559,6 +577,14 @@ function initPlan() {
       renderPlan(); renderElev(); return;
     }
     if (d && d.mode === 'box') { d.p1 = p; renderPlan(); return; }
+    if (d && d.mode === 'fixt') {
+      if (!d.live && !moved()) return;
+      d.live = true; const f = fixtById(d.id); if (!f) return;
+      // Floor appliances can move to another wall; doors, windows and sinks slide along their own.
+      if (fixtFloor(f)) { const at = fixtSpot(f, { x: p.x - 0, y: p.y }, ui.px); if (at) { const r = segDist(p, wall(at.wall)), off = fixtFree(f, at.wall, at.side, r.t - (at.wall === f.wall ? d.grab : f.w / 2), ui.px); if (off !== null) Object.assign(f, { wall: at.wall, side: at.side, off: r3(off) }); } }
+      else { const w = wall(f.wall), r = segDist(p, w), gr = lay().grid > 0 ? lay().grid : 1, off = fixtFree(f, f.wall, f.side, Math.round((r.t - d.grab) / gr) * gr, ui.px); if (off !== null) f.off = r3(off); }
+      ui.elevWall = f.wall; renderPlan(); renderElev(); return;
+    }
     if (d && d.mode === 'shape') {
       if (!d.live && !moved()) return;
       d.live = true; const s = shapeById(d.id), w = wall(s.wall), r = segDist(p, w), gr = lay().grid > 0 ? lay().grid : 1;
@@ -575,6 +601,7 @@ function initPlan() {
       }
       renderPlan(); renderElev(); return;
     }
+    if (ui.placing && String(ui.placing).startsWith('fixt:')) { const f = fixtNew(ui.placing.slice(5)), at = f && fixtSpot(f, p, ui.px); ui.fixtGhost = at ? Object.assign(f, at) : null; ui.ghostBlocked = !!f && !at && fixtFloor(f) && S.walls.some(w => segDist(p, w).d < f.d + 30); renderPlan(); return; }
     if (ui.placing) { const l = libItem(ui.placing); ui.ghost = l ? snapToWall(p, l, null, 0, ui.px) : null; ui.ghostBlocked = !!l && !ui.ghost && S.walls.some(w => segDist(p, w).d < l.d + 30); ui.ghostLib = null; renderPlan(); return; }
     if (ui.drawWalls || ui.drawMold || ui.placeLight) renderPlan();
   });
@@ -589,14 +616,14 @@ function initPlan() {
       return;
     }
     if (d.mode === 'cab' && d.live) { const c = cab(d.id); if (c) ['L', 'R'].forEach(e => { if (c['fill' + e] === 'on') c['fill' + e] = ''; }); }
-    if ((d.mode === 'cab' || d.mode === 'handle' || d.mode === 'wall' || d.mode === 'shape') && d.live) { undoStack.push(d.snap); redoStack = []; save(); render(); }
+    if ((d.mode === 'cab' || d.mode === 'handle' || d.mode === 'wall' || d.mode === 'shape' || d.mode === 'fixt') && d.live) { undoStack.push(d.snap); redoStack = []; save(); render(); }
     else if (d.mode === 'cab' && d.was && d.hits.length > 1) { const i = d.hits.indexOf(d.id); select({ type: 'cab', id: d.hits[(i + 1) % d.hits.length] }); }
   };
   plan.addEventListener('pointerup', e => { const was = pinch; touchUp(e); if (!was) end(); });
   plan.addEventListener('pointercancel', e => { const was = pinch; touchUp(e); if (!was) end(); });
   // Every finger is off the screen: forget them all, and finish a drag whose lift was lost.
   onAllFingersUp(() => { touches.clear(); pinch = null; if (ui.drag && ui.touchDown) end(); });
-  plan.addEventListener('pointerleave', () => { if (ui.placing && !dnd) { ui.ghost = null; ui.ghostBlocked = false; renderPlan(); } });
+  plan.addEventListener('pointerleave', () => { if (ui.placing && !dnd) { ui.ghost = null; ui.fixtGhost = null; ui.ghostBlocked = false; renderPlan(); } });
   // A double tap must not end the walls on a phone; there the Stop button does.
   plan.addEventListener('dblclick', () => { if (ui.drawWalls && !ui.touchDown) stopWalls(); });
   plan.addEventListener('wheel', e => { e.preventDefault(); const p = toWorld(e); zoomAt(e.deltaY > 0 ? 1.15 : 1 / 1.15, p.x, p.y); }, { passive: false });
@@ -725,6 +752,8 @@ function renderElev() {
   const zc = $('#elevzoom'); if (zc) zc.style.display = z ? '' : 'none';
   let body = `<rect class="ev-wall nss" x="0" y="${-H}" width="${L}" height="${H}"/><line class="ev-floor nss" x1="-8" x2="${L + 8}" y1="0" y2="0" stroke-width="2"/>`;
   const mats = [], dims = []; let labels = '';
+  // Doors and windows sit in the wall, behind the cabinets.
+  body += fixtElevSVG(w, side, L, fs, true);
   cs.forEach(c => {
     const ex = elevX(c, L), by = -c.elev, f = frontsSVG(c, ex, by, { withDefs: true, dims: ui.dims.fronts ? fs * 0.95 : 0, open: !!ui.open[c.id] });
     mats.push(...f.mats);
@@ -742,6 +771,8 @@ function renderElev() {
     if (!c.noDim) dims.push([ex, ex + c.w, c.cat === 'Wall' ? 'up' : 'down']);
     fillersOf(c).forEach(fl => { const fx = fl.end === 'L' ? ex - fl.gap : ex + c.w; dims.push([fx, fx + fl.gap, c.cat === 'Wall' ? 'up' : 'down', 'fill']); });
   });
+  // Appliances on the floor get their width in the chain below.
+  fixtList().filter(f => f.wall === w.id && f.side === side && fixtFloor(f)).forEach(f => { const x = side === 1 ? f.off : L - f.off - f.w; dims.push([x, x + f.w, 'down']); });
   // Open stretches of wall get a dimension too: below for the base run, above for the uppers.
   const levels = [['down', cs.filter(c => c.cat !== 'Wall')], ['up', cs.filter(c => c.cat === 'Wall')]];
   levels.forEach(([where, lv]) => {
@@ -759,6 +790,7 @@ function renderElev() {
   const gl = ui.ghost && ui.ghost.wall === w.id && ui.ghost.side === side && libItem(ui.ghostLib);
   if (gl) { const gw = ui.ghost.w || gl.w, gx = elevX({ ...gl, w: gw, side, off: ui.ghost.off }, L); body += `<rect class="ghost nss" x="${gx}" y="${-gl.elev - gl.h}" width="${gw}" height="${gl.h}"/>`; }
   body += shapesElevSVG(w, side, L, mats);
+  body += fixtElevSVG(w, side, L, fs, false);
   // The room standard gap under the ceiling: a dashed line that uppers and talls stay below.
   if (typeof ceilGap === 'function' && ceilGap() > 0 && !(roomCeiling().slope && roomCeiling().slope !== 'none')) { const cy = (+roomCeiling().h > 0 ? +roomCeiling().h : (w.height || 96)) - ceilGap(); body += `<line class="ev-ceilgap nss" x1="0" x2="${L}" y1="${-cy}" y2="${-cy}"><title>Cabinets stay ${fmtLen(ceilGap())} off the ceiling (Room tab below)</title></line>`; }
   // end caps that stick out toward the viewer
@@ -881,6 +913,15 @@ function initElev() {
       const p = elevPoint(e); ui.edrag = { resize: true, key: rz.dataset.rz, id: ui.sel.id, sx: p.x, sy: p.y, snap: JSON.stringify(S), live: false };
       return;
     }
+    const gf = e.target.closest('[data-fixt]');
+    if (gf && !ui.placing) {
+      const f = fixtById(gf.dataset.fixt); if (!f) return;
+      select({ type: 'fixt', id: f.id });
+      const p = elevPoint(e);
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      ui.edrag = { fixt: f.id, sx: p.x, sy: p.y, off: f.off, elev: f.elev, snap: JSON.stringify(S), live: false };
+      return;
+    }
     const gs = e.target.closest('[data-shape]');
     if (gs) {
       const s = shapeById(gs.dataset.shape); if (!s) return;
@@ -936,6 +977,7 @@ function initElev() {
       }
       renderElev(); renderPlan(); return;
     }
+    if (d.fixt) { fixtElevMove(d, elevPoint(e)); return; }
     if (d.shape) {
       const p = elevPoint(e), s = shapeById(d.shape); if (!s) return;
       const dx = p.x - d.sx, dz = -(p.y - d.sy);

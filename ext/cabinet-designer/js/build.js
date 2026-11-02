@@ -592,7 +592,11 @@ function buildParts(c) {
       const xl = endFinished(c, 'L') ? +leg.inFin : +leg.inUnfin, xr = W - (endFinished(c, 'R') ? +leg.inFin : +leg.inUnfin), span = xr - xl;
       const per = +leg.maxSep > 0 ? Math.ceil(span / +leg.maxSep) + 1 : (p.feetCount | 0) > 0 ? Math.max(2, Math.ceil((p.feetCount | 0) / (leg.noBack ? 1 : 2))) : W > 36 ? 3 : 2;
       const xs = Array.from({ length: per }, (_, i) => xl + span * i / Math.max(1, per - 1)), ys = leg.noBack ? [+leg.inToe] : [+leg.inToe, D - +leg.inBack];
-      xs.forEach(x => ys.forEach(y => bot.ops.push({ type: 'bore', x: r3(x - t), y: r3(y), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name })));
+      // A leg with a screw pattern (holesMM, offsets from its centre) gets each screw marked; the pattern's x offset
+      // points toward the middle of the cabinet, so legs on the right half mirror it.
+      const pat = (leg.holesMM || []).length ? leg.holesMM : [{ x: 0, y: 0 }];
+      xs.forEach(x => ys.forEach(y => pat.forEach(o => { const dx = (+o.x || 0) * MM * (x > W / 2 ? -1 : 1), dy = (+o.y || 0) * MM;
+        bot.ops.push({ type: 'bore', x: r3(x + dx - t), y: r3(y + dy), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name }); })));
       n = xs.length * ys.length;
     }
     addB(leg ? leg.name : `Cabinet leveler leg ${fmtLen(tk, 1)}`, n); if (p.toeSkin !== 'off') addB('Toe skin clip', Math.ceil(n / 2));
@@ -675,30 +679,41 @@ function allParts() {
 }
 
 /* ---------- Countertop runs ---------- */
-function runsBy(filter, keyOf) {
+// bridges: spans a run carries on over without a cabinet (a dishwasher under the countertop). A run that is
+// only bridges is left out; one that starts on a bridge takes the height of the first cabinet after it.
+function runsBy(filter, keyOf, bridges) {
   const runs = [];
   S.walls.forEach(w => [1, -1].forEach(side => {
-    const cs = S.cabinets.filter(c => c.wall === w.id && c.side === side && filter(c)).sort((a, b) => a.off - b.off);
+    const cs = S.cabinets.filter(c => c.wall === w.id && c.side === side && filter(c)).concat((bridges || []).filter(b => b.wall === w.id && b.side === side)).sort((a, b) => a.off - b.off);
     let cur = null;
     cs.forEach(c => {
+      if (c.bridge) {
+        if (cur && c.off <= cur.end + 0.25) { cur.end = Math.max(cur.end, c.off + c.w); cur.d = Math.max(cur.d, c.d); }
+        else { cur = { wall: w.id, side, start: c.off, end: c.off + c.w, top: null, bottom: 0, d: c.d, cabs: [], k: null }; runs.push(cur); }
+        return;
+      }
       const top = c.elev + c.h, k = keyOf(c), fl = fillersOf(c), s0 = Math.min(c.off, ...fl.map(x => x.a0)), s1 = Math.max(c.off + c.w, ...fl.map(x => x.a1));
-      if (cur && s0 <= cur.end + 0.25 && Math.abs(top - cur.top) < 0.01 && cur.k === k) { cur.end = Math.max(cur.end, s1); cur.d = Math.max(cur.d, c.d + (c.outset || 0)); cur.bottom = Math.min(cur.bottom, c.elev); cur.cabs.push(c.id); }
+      if (cur && s0 <= cur.end + 0.25 && (cur.top === null || (Math.abs(top - cur.top) < 0.01 && cur.k === k))) {
+        if (cur.top === null) { cur.top = top; cur.k = k; cur.bottom = c.elev; }
+        cur.end = Math.max(cur.end, s1); cur.d = Math.max(cur.d, c.d + (c.outset || 0)); cur.bottom = Math.min(cur.bottom, c.elev); cur.cabs.push(c.id);
+      }
       else { cur = { wall: w.id, side, start: s0, end: s1, top, bottom: c.elev, d: c.d + (c.outset || 0), cabs: [c.id], k }; runs.push(cur); }
     });
   }));
-  return runs;
+  return runs.filter(r => r.cabs.length);
 }
 // Is a run end against a wall or another cabinet? "at" is the along-wall position of that end.
 function endBlocked(r, at, dir) {
   const w = wall(r.wall), L = wg(w).L;
   if (at <= w.thick / 2 + 0.5 || at >= L - w.thick / 2 - 0.5) return true;
   if (capsOf(w).some(cp => cp.side === r.side && (Math.abs(cp.a0 - at) < 0.5 || Math.abs(cp.a1 - at) < 0.5) && cp.height > r.bottom + 0.01)) return true;
+  if (typeof fixtBlocksEnd === 'function' && fixtBlocksEnd(r, at, dir)) return true;
   return S.cabinets.some(k => k.wall === r.wall && k.side === r.side && !r.cabs.includes(k.id) &&
     k.elev < r.top - 0.01 && k.elev + k.h > r.bottom + 0.01 && Math.abs((dir < 0 ? k.off + k.w : k.off) - at) < 0.5);
 }
 function countertopRuns() {
   // Automatic runs on base cabinets (unless the room turned them off), then any tops placed by hand.
-  const runs = curRoom().autoTops === false ? [] : runsBy(c => c.cat === 'Base', () => 'top');
+  const runs = curRoom().autoTops === false ? [] : runsBy(c => c.cat === 'Base', () => 'top', typeof fixtUnderList === 'function' ? fixtUnderList() : []);
   runs.forEach(r => {
     r.key = r.wall + ':' + r.side + ':' + r.cabs[0];
     const o = S.ctRuns[r.key] || {}; r.o = o;
