@@ -362,6 +362,17 @@ function rzApply(c, key, v, step) {
   const dir = v > cur ? 1 : -1;
   for (let i = 0, x = v; i < 400 && (x - cur) * dir > 0.001; i++, x -= dir * step) if (fits(r3(x))) return;
 }
+// Depth drag: the nearest depth of the cabinets beside it on the same wall (same height band), when the drag is close to it.
+function rzDepthSnap(c, v) {
+  const tol = Math.max(0.75, 12 * (ui.px || 0.1)), top = c.elev + c.h;
+  let best = null;
+  S.cabinets.forEach(o => {
+    if (o.id === c.id || o.wall !== c.wall || o.side !== c.side || o.elev >= top || o.elev + o.h <= c.elev) return;
+    const gap = Math.max(o.off - (c.off + c.w), c.off - (o.off + o.w), 0), dd = Math.abs(o.d - v);
+    if (dd <= tol && (!best || gap < best.gap || (gap === best.gap && dd < best.dd))) best = { d: o.d, gap, dd, lbl: `${LBL[o.id] || ''} ${o.name}`.trim() };
+  });
+  return best;
+}
 // End of an arrow drag: typed formulas on that size give way to the dragged size, and it goes on the undo list.
 function rzFinish(d) {
   if (!d.live) return;
@@ -476,7 +487,12 @@ function initPlan() {
       const r = segDist(p, w), g = r.g, step = e.shiftKey ? 0.0625 : 0.5;
       if (d.key === 'E') rzApply(c, 'E', r.t - c.off, step);
       else if (d.key === 'S') rzApply(c, 'S', c.off + c.w - r.t, step);
-      else rzApply(c, 'D', ((p.x - w.x1) * g.n.x + (p.y - w.y1) * g.n.y) * c.side - w.thick / 2 - (c.outset || 0), step);
+      else {
+        let v = ((p.x - w.x1) * g.n.x + (p.y - w.y1) * g.n.y) * c.side - w.thick / 2 - (c.outset || 0);
+        const near = !e.shiftKey && rzDepthSnap(c, v); if (near) v = near.d;
+        rzApply(c, 'D', v, near ? 0.0625 : step);
+        if (near && Math.abs(c.d - near.d) < 0.001) { renderPlan(); renderElev(); $('#hint').textContent = `Depth ${fmtLen(c.d)}, lined up with ${near.lbl}`; return; }
+      }
       renderPlan(); renderElev(); return;
     }
     if (d && d.mode === 'walltap' && moved()) d.mode = 'pan';
