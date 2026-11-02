@@ -347,7 +347,6 @@ class Viewer3D {
     host.addEventListener('pointerdown', e => {
       if (e.button !== 0 || e.target !== el) return;
       if (typeof partDrag3d === 'function') partDrag3d(this, e);
-      if (!e.defaultPrevented && this === roomViewer) cabDrag3d(this, e);
     }, true);
     el.addEventListener('dblclick', e => { const id = this.pick(e.clientX, e.clientY); if (id && this.onDouble) this.onDouble(id); else if (id && this.onPick) { this.onPick(id); view3dPreset(this, 'sel'); } });
     this.resize();
@@ -452,46 +451,6 @@ class Viewer3D {
   }
 }
 const viewers = [];
-// Drag the selected cabinet in the room's 3D view: it slides along its wall (and uppers move up and down),
-// snapping to cabinet ends and walls like the elevation, and never overlapping. Click first to select it.
-function cabDrag3d(v, e) {
-  if (ui.placing || ui.drawWalls || ui.placeLight || e.shiftKey || e.ctrlKey || e.metaKey) return;
-  const r = v.renderer.domElement.getBoundingClientRect(), ray = (cx, cy) => { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), v.cam); return rc; };
-  const hit = ray(e.clientX, e.clientY).intersectObjects(v.root.children, true).find(h => h.object.isMesh && h.object.visible && (h.object.userData.cabId || h.object.userData.shapeId));
-  const id = hit && hit.object.userData.cabId, c = id && cab(id), w = c && wall(c.wall);
-  if (!w || !ui.sel || ui.sel.type !== 'cab' || ui.sel.id !== id || multiIds().length > 1) return;
-  const g = wg(w), u = new THREE.Vector3(g.u.x, 0, g.u.y), plane = new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(g.n.x, 0, g.n.y), hit.point);
-  // The cabinet's own pieces, moved as one while dragging; the room is rebuilt when it is dropped.
-  const objs = []; v.root.traverse(o => { if (o.userData.cabId === id && !(o.parent && o.parent.userData.cabId === id)) objs.push({ o, p: o.position.clone() }); });
-  const d = { start: hit.point.clone(), off: c.off, elev: c.elev, snap: JSON.stringify(S), live: false, x0: e.clientX, y0: e.clientY };
-  e.preventDefault(); e.stopPropagation(); v.controls.enabled = false; v.renderer.domElement.style.cursor = 'grabbing';
-  const move = ev => {
-    if (!d.live && Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0) < 4) return;
-    const p = ray(ev.clientX, ev.clientY).ray.intersectPlane(plane, new THREE.Vector3()); if (!p) return;
-    d.live = true;
-    const dl = p.clone().sub(d.start), dt = dl.dot(u), dz = dl.y, was = { off: c.off, elev: c.elev };
-    if (c.cat === 'Wall') {
-      let z = Math.max(0, Math.round((d.elev + dz) * 4) / 4), best = lay().snapReach;
-      S.cabinets.forEach(k => { if (k.id !== c.id && k.wall === c.wall) [k.elev, k.elev + k.h - c.h, k.elev + k.h].forEach(t => { if (Math.abs(t - (d.elev + dz)) < best) { best = Math.abs(t - (d.elev + dz)); z = t; } }); });
-      c.elev = z;
-    }
-    const off = findFree(c, c.wall, c.side, snapOff(c, c.wall, c.side, d.off + dt, c.id, 0), c.id);
-    if (off === null) { c.off = was.off; c.elev = was.elev; } else c.off = Math.round(off * 1000) / 1000;
-    const sh = u.clone().multiplyScalar(c.off - d.off); sh.y = c.elev - d.elev;
-    objs.forEach(x => { x.o.position.copy(x.p); if (x.o.parent) { const wp = x.o.parent.localToWorld(x.p.clone()).add(sh); x.o.position.copy(x.o.parent.worldToLocal(wp)); } });
-    v.requestRender();
-  };
-  const up = () => {
-    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); unhook();
-    v.controls.enabled = true; v.renderer.domElement.style.cursor = '';
-    if (!d.live) return;
-    if (c.off !== d.off || c.elev !== d.elev) { undoStack.push(d.snap); redoStack = []; save(); }
-    render();
-  };
-  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
-  // A lost finger lift must not leave the 3D view frozen.
-  const unhook = onAllFingersUp(up);
-}
 
 /* ---------- Room scene ---------- */
 let roomViewer = null;
@@ -555,7 +514,6 @@ function buildRoomScene(v) {
     else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), R3 ? realWall3() : flat3(cssVar('--wall3d')));
       cl.rotation.x = Math.PI / 2; cl.position.set((x0 + x1) / 2, hgt, (y0 + y1) / 2); cl.userData.noBounds = true; cl.userData.wall = true; v.root.add(cl); }
   }
-  if (pts.length && L.walls && typeof soffits3d === 'function') soffits3d(v, R3 ? realWall3() : flat3(cssVar('--wall3d')));
   if (pts.length && L.floor) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     // Well past the walls, so open sides and wide views never run off the edge of the floor.

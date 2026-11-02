@@ -50,7 +50,7 @@ function itemBar(c) {
     <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}<span class="ib-gap"></span>${sz('Depth', 'd')}${sz('Outset', 'outset')}</div>
     <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}</div>
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
-      <div class="ib-small">${openable(c) ? `<button data-act="open-toggle" data-id="${id}" aria-pressed="${!!ui.open[id]}" title="Open or close its doors and drawers (O)">${icon('open')}${ui.open[id] ? 'Close' : 'Open'}</button>` : ''}<button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
+      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
       : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
   </div>`;
 }
@@ -98,12 +98,19 @@ function fitDock() {
   if (body && inner) {
     let fit = body.querySelector(':scope > .dockfit');
     if (!fit) { fit = document.createElement('div'); fit.className = 'dockfit'; while (body.firstChild) fit.appendChild(body.firstChild); body.appendChild(fit); }
-    fit.style.zoom = 1; body.classList.remove('scroll');
+    fit.style.zoom = 1; fit.style.width = ''; body.classList.remove('scroll');
+    const bar = fit.querySelector('.itembar'); if (bar) bar.classList.remove('ib-wrap');
     const cs = getComputedStyle(body), aw = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    const w = fit.scrollWidth, h = fit.scrollHeight;
+    let w = fit.scrollWidth, h = fit.scrollHeight;
     // Room-wide tabs (long tables) only shrink so far, then scroll up and down; the item bar always fits.
     const lo = ui.dock === 'item' || ui.dock === 'ends' ? 0.3 : 0.7;
     let z = Math.min(1.35, aw / w, ah / h);
+    // A tall panel: the item bar wraps onto two rows when that lets everything grow bigger.
+    if (bar && ah / h > aw / w * 1.3) {
+      bar.classList.add('ib-wrap'); fit.style.width = Math.round(w * 0.6) + 'px';
+      const w2 = fit.scrollWidth, h2 = fit.scrollHeight, z2 = Math.min(1.35, aw / w2, ah / h2);
+      if (z2 > z * 1.08) { z = z2; w = w2; h = h2; } else { bar.classList.remove('ib-wrap'); fit.style.width = ''; }
+    }
     if (z < lo) { z = Math.min(1, aw / w); body.classList.add('scroll'); }
     fit.style.zoom = Math.max(0.3, z).toFixed(3);
   }
@@ -125,16 +132,23 @@ document.addEventListener('pointerdown', e => {
   const up = () => {
     removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); unhook(); document.body.classList.remove('dockdrag');
     try { localStorage.setItem(DOCK_KEY(), String(Math.round(dock.getBoundingClientRect().height))); } catch (_) {}
-    if (typeof redrawView === 'function') redrawView();
+    dockRefit();
   };
   addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
   const unhook = onAllFingersUp(up);
 });
 document.addEventListener('dblclick', e => {
   if (!(e.target.closest && e.target.closest('.dockgrip'))) return;
-  try { localStorage.removeItem(DOCK_KEY()); } catch (_) {} applyDockH(); fitDock(); if (typeof redrawView === 'function') redrawView();
+  try { localStorage.removeItem(DOCK_KEY()); } catch (_) {} applyDockH(); fitDock(); dockRefit();
 });
-addEventListener('resize', () => requestAnimationFrame(fitDock));
+// After the panel changes height the drawing gets a new size, so fit the room in it again.
+function dockRefit() { requestAnimationFrame(() => { fitDock(); if (ui.viewMode === 'plan' && typeof fitView === 'function') fitView(); if (typeof redrawView === 'function') redrawView(); }); }
+// A saved panel height never takes more than 70% of the room, even after the window gets smaller.
+addEventListener('resize', () => requestAnimationFrame(() => {
+  const room = document.getElementById('tab-room'), dock = document.getElementById('dock');
+  if (room && dock && deskUI()) { const max = room.getBoundingClientRect().height * 0.7; if (dock.getBoundingClientRect().height > max + 1) room.style.setProperty('--dockh', Math.round(max) + 'px'); }
+  fitDock();
+}));
 
 // How solid the countertops look in the plan: 0 hides them, 100 covers the cabinets (remembered on this computer).
 function topOp() { if (ui.topOp === undefined) { let v = 30; try { const s = localStorage.getItem((typeof KEY === 'string' ? KEY : 'cd') + '.topop'); if (s !== null) v = +s; } catch (_) {} ui.topOp = v; } return ui.topOp / 100; }
@@ -145,45 +159,35 @@ document.addEventListener('input', e => {
   $('#topopv').textContent = ui.topOp ? ui.topOp + '%' : 'Hidden'; if (ui.viewMode === 'plan') renderPlan();
 });
 
-/* ----- Soffits: a boxed-in drop from the ceiling along a wall. Shown in plan, elevation and 3D. ----- */
-// room.soffits: [{ id, wall, side, from, len (0 = to the end of the wall), drop, depth }]; from is measured from the viewer's left.
-const soffitsOf = () => (curRoom().soffits || []);
-function soffitSpan(s) {
-  const w = wall(s.wall); if (!w) return null;
-  const L = wg(w).L, from = Math.max(0, Math.min(L, +s.from || 0)), len = +s.len > 0 ? Math.min(+s.len, L - from) : L - from;
-  return { w, L, from, len, a0: elevSide(w) === 1 ? from : L - from - len, drop: +s.drop > 0 ? +s.drop : 12, depth: +s.depth > 0 ? +s.depth : 14, top: w.height || 96 };
+/* ----- Ceiling gap: uppers and talls stay this far below the ceiling (room standard, 3" to start). ----- */
+function ceilGap(rm) { const g = ((rm || curRoom()).ceiling || {}).gap; return g === undefined || g === '' ? 3 : Math.max(0, +g || 0); }
+// The lowest the ceiling gets over a cabinet's footprint, following a sloped ceiling.
+function ceilOver(c) {
+  const w = wall(c.wall); if (!w) return Infinity;
+  const cl = roomCeiling(), H = +cl.h > 0 ? +cl.h : (w.height || 96), slope = cl.slope && cl.slope !== 'none' ? cl.slope : null;
+  const poly = cabPoly(c); if (!slope || !poly) return H;
+  const pts = []; S.walls.forEach(x => pts.push([x.x1, x.y1], [x.x2, x.y2]));
+  const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const low = +cl.low > 0 ? +cl.low : 48, run = +cl.run > 0 ? +cl.run : 60;
+  const at = q => { const d = slope === 'N' ? q.y - y0 : slope === 'S' ? y1 - q.y : slope === 'W' ? q.x - x0 : x1 - q.x; return d >= run ? H : low + (H - low) * Math.max(0, d) / run; };
+  return Math.min(...poly.map(at));
 }
-function soffitsPlanSVG() {
-  return soffitsOf().map(s => { const k = soffitSpan(s); if (!k) return ''; const g = wg(k.w), f = k.w.thick / 2, sd = s.side || elevSide(k.w);
-    return `<polygon class="p-soffit nss" points="${polyPts([wallPt(k.w, g, sd, k.a0, f), wallPt(k.w, g, sd, k.a0 + k.len, f), wallPt(k.w, g, sd, k.a0 + k.len, f + k.depth), wallPt(k.w, g, sd, k.a0, f + k.depth)])}"/>`; }).join('');
+// Highest a cabinet's top may go.
+function ceilMax(c) { return ceilOver(c) - ceilGap(); }
+// Keep a cabinet under the line: uppers move down, cabinets on the floor get shorter.
+function keepOffCeiling(c) {
+  const max = ceilMax(c); if (!(c.elev + c.h > max + 0.001)) return false;
+  if (c.elev > 0 && c.cat !== 'Tall') c.elev = r3(Math.max(0, max - c.h));
+  if (c.elev + c.h > max + 0.001) c.h = r3(Math.max(6, max - c.elev));
+  return true;
 }
-function soffitsElevSVG(w, side, L) {
-  return soffitsOf().filter(s => s.wall === w.id && (s.side || elevSide(w)) === side).map(s => { const k = soffitSpan(s); if (!k) return '';
-    return `<rect class="ev-soffit nss" x="${k.from}" y="${-k.top}" width="${k.len}" height="${k.drop}"/>`; }).join('');
-}
-function soffits3d(v, material) {
-  soffitsOf().forEach(s => { const k = soffitSpan(s); if (!k) return; const g = wg(k.w), f = k.w.thick / 2, sd = s.side || elevSide(k.w);
-    const a = wallPt(k.w, g, sd, k.a0 + k.len / 2, f + k.depth / 2);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(k.len, k.drop, k.depth), material);
-    m.position.set(a.x, k.top - k.drop / 2, a.y); m.rotation.y = -Math.atan2(g.u.y, g.u.x); m.userData.noBounds = true; m.userData.wall = true; v.root.add(m); });
-}
-// Bottom panel Room tab: the ceiling (height, slope) and the soffits, in one place.
+function keepAllOffCeiling() { (S.cabinets || []).forEach(keepOffCeiling); }
+// Bottom panel Room tab: the ceiling (height, slope, gap above the cabinets) and the walls.
 function roomDockBody() {
-  const rm = curRoom(), ws = S.walls, cur = wall(ui.elevWall) || ws[0];
-  const rows = soffitsOf().map(s => { const R = 'soffit:' + s.id;
-    return `<tr><td>${ctl(R, 'wall', s.wall, 'select', { label: 'Wall', options: ws.map(w => ({ v: w.id, l: wallName(w) })) })}</td><td>${ctl(R, 'from', s.from || 0, 'len', { label: 'From left' })}</td><td>${ctl(R, 'len', s.len || '', 'len', { label: 'Length', ph: 'Whole wall', blank: true })}</td><td>${ctl(R, 'drop', s.drop ?? 12, 'len', { label: 'Drop from ceiling' })}</td><td>${ctl(R, 'depth', s.depth ?? 14, 'len', { label: 'Depth off the wall' })}</td><td><button class="btn sm danger" data-act="soffit-del" data-id="${s.id}" aria-label="Delete soffit">${icon('trash')}</button></td></tr>`; }).join('');
+  const rm = curRoom(), ws = S.walls;
   return `<div class="roomdock">${typeof ceilingBox === 'function' ? ceilingBox(rm) : ''}
-    <div class="psec box">${secHead('wall', 'Soffits', 'slate')}
-      <table class="t soffitt"><thead><tr><th>Wall</th><th>From left</th><th>Length</th><th>Drop</th><th>Depth</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="muted">None yet.</td></tr>'}</tbody></table>
-      <div class="row-actions"><button class="btn sm" data-act="soffit-add"${cur ? '' : ' disabled'}>${icon('plus')}Add soffit${cur ? ' on ' + esc(wallName(cur)) : ''}</button></div></div>
     <div class="psec box">${secHead('wall', 'Walls', 'teal')}<div class="note show">Change the room's corners and wall lengths point by point.</div><div class="row-actions"><button class="btn sm" data-act="walls-shape"${ws.length ? '' : ' disabled'}>${icon('edit')}Edit walls in the shape editor</button></div></div></div>`;
 }
-document.addEventListener('click', e => {
-  const b = e.target.closest && e.target.closest('[data-act="soffit-add"],[data-act="soffit-del"]'); if (!b) return;
-  e.stopPropagation();
-  if (b.dataset.act === 'soffit-add') { const w = wall(ui.elevWall) || S.walls[0]; if (!w) return; mutate(() => { const r = curRoom(); (r.soffits = r.soffits || []).push({ id: uid('sf'), wall: w.id, side: elevSide(w), from: 0, len: 0, drop: 12, depth: 14 }); }); }
-  else mutate(() => { const r = curRoom(); r.soffits = (r.soffits || []).filter(s => s.id !== b.dataset.id); });
-}, true);
 
 /* ----- Edit the room's walls in the shape editor: each point is a corner, each edge a wall. ----- */
 // Walls are put in order corner to corner. Each point remembers the wall that starts at it (w) and whether that wall
@@ -277,3 +281,4 @@ document.addEventListener('keydown', e => {
   const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
   const c = cab(ui.sel.id); if (c && rehingeable(c)) { e.preventDefault(); rehinge(c); }
 });
+

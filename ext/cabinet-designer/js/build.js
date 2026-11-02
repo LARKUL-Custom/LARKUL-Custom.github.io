@@ -141,6 +141,12 @@ function doorLimit(c, f) {
   const T = 0.75, hits = a => [0, T].some(t => { const hh = P(c, w, g, hx + dir * t * Math.sin(a), -t * Math.cos(a), fb), e = P(c, w, g, hx + dir * (fw * Math.cos(a) + t * Math.sin(a)), fw * Math.sin(a) - t * Math.cos(a), fb); return obs.some(poly => inPoly(e, poly) || poly.some((q, i) => segHit(hh, e, q, poly[(i + 1) % poly.length]))); });
   let lim = MAX;
   for (let a = 0.04; a <= MAX + 1e-9; a += 0.02) if (hits(a)) { lim = Math.max(0, a - 0.06); break; }
+  // Two doors hinged on the same line, swinging away from each other (side-by-side cabinets),
+  // would cross past square, so each stops at 90°.
+  const wx = (cc, x) => cc.side === 1 ? cc.off + x : cc.off + cc.w - x, lean = (cc, ff) => (ff.hinge === 'R' ? -1 : 1) * cc.side;
+  const hxW = wx(c, hx), myLean = lean(c, f);
+  if (lim > Math.PI / 2 && S.cabinets.some(o => o.id !== c.id && o.wall === c.wall && o.side === c.side && Math.abs((o.outset || 0) + o.d - (c.outset || 0) - c.d) < 3
+    && computeFronts(o).some(d => d.type === 'door' && over((o.elev || 0) + d.z0, (o.elev || 0) + d.z1) && lean(o, d) === -myLean && Math.abs(wx(o, d.hinge === 'R' ? d.x1 : d.x0) - hxW) < 2.5))) lim = Math.PI / 2 - 0.02;
   return (doorLimCache[key] = lim);
 }
 // Which door style a front uses, after the template's frame-height rule.

@@ -206,7 +206,9 @@ function renderRoom() {
   const anyOpen = S.cabinets.some(c => ui.open[c.id]), dm = ui.drawMold;
   const drawBtn = (act, on, ic, l, t) => `<button data-act="${act}" aria-pressed="${on}" title="${t}" class="drawbtn">${on ? icon('check') : vic(ic)}<span>${on ? 'Done' : l}</span></button>`;
   $('#drawctl').innerHTML = `<span class="seglbl">Draw</span>${drawBtn('walls-draw', !!ui.drawWalls, 'Walls', 'Walls', 'Draw walls (W). Right-click or Esc stops.')}${drawBtn(dm === true ? 'gmold-stop' : 'gmold-draw', dm === true, 'Molding', 'Molding', 'Draw molding runs along the walls. Right-click or Esc stops.')}${drawBtn(dm === 'top' ? 'gmold-stop' : 'gtop-draw', dm === 'top', 'Tops', 'Tops', 'Draw countertops along the walls. Right-click or Esc stops.')}`;
-  $('#openctl').innerHTML = `<button data-act="open-all" aria-pressed="${anyOpen}" title="Open or close every door and drawer in this room">${vic('Open all')}<span>${anyOpen ? 'Close All' : 'Open All'}</span></button>`;
+  const oc = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id), ocOn = oc && openable(oc);
+  $('#openctl').innerHTML = `<button data-act="open-all" aria-pressed="${anyOpen}" title="Open or close every door and drawer in this room">${vic('Open all')}<span>${anyOpen ? 'Close All' : 'Open All'}</span></button>`
+    + `<button data-act="open-toggle" data-id="${ocOn ? oc.id : ''}" aria-pressed="${!!(ocOn && ui.open[oc.id])}"${ocOn ? '' : ' disabled'} title="${ocOn ? 'Open or close the doors and drawers of the selected cabinet (O)' : 'Select a cabinet with doors or drawers to open it'}">${vic('Open all')}<span>${ocOn && ui.open[oc.id] ? 'Close Cabinet' : 'Open Cabinet'}</span></button>`;
   // Every cabinet and shape in the room by name and number, grouped by wall, to select without clicking it.
   const cur = ui.sel && (ui.sel.type === 'cab' ? ui.sel.id : ui.sel.type === 'shape' ? 'shape:' + ui.sel.id : '');
   const byWall = w => [...S.cabinets.filter(c => c.wall === w.id).sort((a, b) => a.off - b.off).map(c => [c.id, `${c.name} ${LBL[c.id]}`]), ...(S.shapes || []).filter(x => x.wall === w.id).map(x => ['shape:' + x.id, x.name || 'Shape'])];

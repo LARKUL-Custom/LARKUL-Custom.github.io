@@ -437,6 +437,7 @@ function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY)
 // The open job lives in its own file (see jobs.js); browser storage keeps a working copy too.
 const loadState = () => bootJobs();
 function save() {
+  if (typeof keepAllOffCeiling === 'function') keepAllOffCeiling();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* the job file is the real copy */ }

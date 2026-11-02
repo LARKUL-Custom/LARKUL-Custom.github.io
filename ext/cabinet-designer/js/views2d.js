@@ -28,7 +28,6 @@ function renderPlan() {
   });
   order.filter(c => c.cat === 'Wall' || hot(c)).forEach(c => { s += cabPlanSVG(c); });
   s += shapesPlanSVG();
-  if (typeof soffitsPlanSVG === 'function') s += soffitsPlanSVG();
   s += lightsPlanSVG(px);
   // walls
   S.walls.forEach(w => {
@@ -370,6 +369,19 @@ function rzDepthSnap(c, v) {
     if (o.id === c.id || o.wall !== c.wall || o.side !== c.side || o.elev >= top || o.elev + o.h <= c.elev) return;
     const gap = Math.max(o.off - (c.off + c.w), c.off - (o.off + o.w), 0), dd = Math.abs(o.d - v);
     if (dd <= tol && (!best || gap < best.gap || (gap === best.gap && dd < best.dd))) best = { d: o.d, gap, dd, lbl: `${LBL[o.id] || ''} ${o.name}`.trim() };
+  });
+  return best;
+}
+// Height drag: the height of a cabinet beside it, or the top of any cabinet on the wall, when the drag is close to it.
+function rzHeightSnap(c, v) {
+  const tol = Math.max(0.75, 12 * (ui.elevPx || 0.1)), top = c.elev + c.h;
+  let best = null;
+  const take = (val, why, gap) => { const dd = Math.abs(val - v); if (val > 0 && dd <= tol && (!best || dd < best.dd - 0.01 || (Math.abs(dd - best.dd) <= 0.01 && gap < best.gap))) best = { v: val, dd, gap, why }; };
+  S.cabinets.forEach(o => {
+    if (o.id === c.id || o.wall !== c.wall || o.side !== c.side) return;
+    const gap = Math.max(o.off - (c.off + c.w), c.off - (o.off + o.w), 0), lbl = `${LBL[o.id] || ''} ${o.name}`.trim();
+    if (o.elev < top && o.elev + o.h > c.elev) take(o.h, `same as ${lbl}`, gap);
+    take(o.elev + o.h - c.elev, `top lined up with ${lbl}`, gap);
   });
   return best;
 }
@@ -732,7 +744,8 @@ function renderElev() {
   const gl = ui.ghost && ui.ghost.wall === w.id && ui.ghost.side === side && libItem(ui.ghostLib);
   if (gl) { const gw = ui.ghost.w || gl.w, gx = elevX({ ...gl, w: gw, side, off: ui.ghost.off }, L); body += `<rect class="ghost nss" x="${gx}" y="${-gl.elev - gl.h}" width="${gw}" height="${gl.h}"/>`; }
   body += shapesElevSVG(w, side, L, mats);
-  if (typeof soffitsElevSVG === 'function') body += soffitsElevSVG(w, side, L);
+  // The room standard gap under the ceiling: a dashed line that uppers and talls stay below.
+  if (typeof ceilGap === 'function' && ceilGap() > 0 && !(roomCeiling().slope && roomCeiling().slope !== 'none')) { const cy = (+roomCeiling().h > 0 ? +roomCeiling().h : (w.height || 96)) - ceilGap(); body += `<line class="ev-ceilgap nss" x1="0" x2="${L}" y1="${-cy}" y2="${-cy}"><title>Cabinets stay ${fmtLen(ceilGap())} off the ceiling (Room tab below)</title></line>`; }
   // end caps that stick out toward the viewer
   capsOf(w).filter(cp => cp.side === side).forEach(cp => {
     const a = side === 1 ? cp.a0 : L - cp.a1;
@@ -900,7 +913,12 @@ function initElev() {
       d.live = true; const L = wg(w).L, t = elevSide(w) === 1 ? p.x : L - p.x, step = e.shiftKey ? 0.0625 : 0.5;
       if (d.key === 'E') rzApply(c, 'E', t - c.off, step);
       else if (d.key === 'S') rzApply(c, 'S', c.off + c.w - t, step);
-      else rzApply(c, 'H', -p.y - c.elev, step);
+      else {
+        let v = -p.y - c.elev; const near = !e.shiftKey && rzHeightSnap(c, v); if (near) v = near.v;
+        if (typeof ceilMax === 'function') v = Math.min(v, ceilMax(c) - c.elev);
+        rzApply(c, 'H', v, near ? 0.0625 : step);
+        if (near && Math.abs(c.h - near.v) < 0.001) { renderElev(); renderPlan(); $('#hint').textContent = `Height ${fmtLen(c.h)}, ${near.why}`; return; }
+      }
       renderElev(); renderPlan(); return;
     }
     if (d.shape) {
@@ -923,7 +941,7 @@ function initElev() {
     if (c.cat === 'Wall') {
       let z = Math.max(0, Math.round((d.elev + dz) * 4) / 4), best = Math.max(lay().snapReach, 10 * ui.elevPx);
       S.cabinets.forEach(k => { if (k.id !== c.id && k.wall === c.wall) [k.elev, k.elev + k.h - c.h, k.elev + k.h].forEach(v => { if (Math.abs(v - (d.elev + dz)) < best) { best = Math.abs(v - (d.elev + dz)); z = v; } }); });
-      c.elev = z;
+      c.elev = typeof ceilMax === 'function' ? Math.max(0, Math.min(z, r3(ceilMax(c) - c.h))) : z;
     }
     const want = snapOff(c, c.wall, c.side, d.off + (c.side === 1 ? dx : -dx), c.id, ui.elevPx);
     const off = findFree(c, c.wall, c.side, want, c.id);

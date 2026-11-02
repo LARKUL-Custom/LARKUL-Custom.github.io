@@ -84,7 +84,9 @@ function ceilingBox(rm) {
   return `<div class="psec box">${secHead('home', 'Ceiling', 'slate')}
     <div class="autogrid">${fld('Height', 'rceil', 'h', cl.h || '', 'len', { blank: true, ph: 'Tallest wall' })}
     <label class="f"><span>Sloped</span>${ctl('rceil', 'slope', cl.slope || 'none', 'select', { label: 'Sloped ceiling', options: [{ v: 'none', l: 'Flat' }, { v: 'N', l: 'Low side at the top of the plan' }, { v: 'S', l: 'Low side at the bottom' }, { v: 'W', l: 'Low side at the left' }, { v: 'E', l: 'Low side at the right' }] })}</label>
-    ${slope ? fld('Height at the low side', 'rceil', 'low', cl.low ?? 48, 'len') + fld('Slope runs this far in', 'rceil', 'run', cl.run ?? 60, 'len') : ''}</div>
+    ${slope ? fld('Height at the low side', 'rceil', 'low', cl.low ?? 48, 'len') + fld('Slope runs this far in', 'rceil', 'run', cl.run ?? 60, 'len') : ''}
+    ${fld('Cabinets off the ceiling', 'rceil', 'gap', cl.gap ?? 3, 'len')}</div>
+    <div class="note show">Uppers and talls always stay at least this far below the ceiling, also under a slope.</div>
     <div class="note">Shows in the 3D view (Layers › Ceiling).</div></div>`;
 }
 // The room outline when its walls close into a loop, else null.

@@ -72,7 +72,6 @@ function resolve(ref) {
     case 'top': return S.countertops.find(t => t.id === id);
     case 'ctrun': return (S.ctRuns[id] = S.ctRuns[id] || {});
     case 'gtop': return (S.genTops || []).find(g => g.id === id);
-    case 'soffit': return (curRoom().soffits || []).find(g => g.id === id);
     case 'gmold': return (S.genMolds || []).find(g => g.id === id);
     case 'light': return (S.lights || []).find(l => l.id === id);
     case 'mold': return molding(id);

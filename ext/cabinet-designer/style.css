@@ -1741,6 +1741,7 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   body.dockdrag,body.dockdrag *{cursor:ns-resize!important;user-select:none}
   .room .dock .dockbody.dock-item{padding:calc(6 * var(--u)) calc(18 * var(--u)) 0}
   .itembar{display:flex;flex-direction:row;align-items:flex-start;gap:calc(56 * var(--u));min-width:max-content;font-family:var(--f-field)}
+  .room .dock .itembar.ib-wrap{flex-wrap:wrap;min-width:0;row-gap:calc(18 * var(--u))}
   .ib-f{display:flex;flex-direction:column;gap:0;margin:0}
   .ib-f > span{font:500 calc(15 * var(--u))/1.2 var(--f-field);color:var(--d-lbl);padding-left:2px}
   .ib-f input{height:calc(52 * var(--u));width:calc(144 * var(--u));padding:0 calc(12 * var(--u));border:1px solid var(--d-fline);border-radius:calc(6 * var(--u));background:var(--d-field);color:var(--d-fieldink);font:500 calc(20 * var(--u)) var(--f-field);box-shadow:none}
@@ -1775,11 +1776,8 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .topop{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-weight:600}
 .topop input{width:180px;accent-color:var(--accent)}
 .ordh{margin:18px 0 8px}
-.p-soffit{fill:var(--wall);fill-opacity:.12;stroke:var(--wall);stroke-dasharray:6 4;pointer-events:none}
-.ev-soffit{fill:var(--wall3d);stroke:var(--wall);stroke-width:1.2px}
 .roomdock{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
 .roomdock .psec.box{margin:0;min-width:320px}
-.soffitt td{padding:3px 4px}.soffitt input,.soffitt select{width:96px}
 
 /* Part drawings, black and white like Mozaik: the only colour is the operations (grey, green on the flip side, red when picked). */
 .partsvg{background:#fff;border-radius:8px}
@@ -1862,3 +1860,4 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   .hint #walllen{width:96px;min-height:34px;font-size:16px;padding:4px 8px;border:1.5px solid var(--line-strong);border-radius:6px;background:var(--panel);color:var(--ink)}
   .hint .wdir{min-width:36px;min-height:34px;justify-content:center;font-size:17px}
 }
+.ev-ceilgap{stroke:var(--accent);stroke-width:1.2px;stroke-dasharray:6 5;opacity:.7}
