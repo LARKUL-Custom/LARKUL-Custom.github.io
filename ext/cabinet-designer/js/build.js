@@ -12,7 +12,7 @@ function cabPoly(c, o) {
   const g = wg(w), s = o ? o.side : c.side, off = o ? o.off : c.off, f = w.thick / 2 + (c.outset || 0);
   return [wallPt(w, g, s, off, f), wallPt(w, g, s, off + c.w, f), wallPt(w, g, s, off + c.w, f + c.d), wallPt(w, g, s, off, f + c.d)];
 }
-function panelThick(c) { return (mat(panelStyle(cabSet(c, 'panelStyle')).mat) || { thick: 0.75 }).thick; }
+function panelThick(c) { return (mat(panelFor(c).mat) || { thick: 0.75 }).thick; }
 // Applied panel spans along the wall: [a0, a1] for the viewer's left and right ends. explicitOnly skips automatic ones.
 function panelSpans(c, explicitOnly) {
   const pt = panelThick(c), s = c.side, out = [];
@@ -25,7 +25,7 @@ function panelSpans(c, explicitOnly) {
 }
 function panelPolys(c, explicitOnly) {
   const w = wall(c.wall); if (!w) return [];
-  const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), depth = c.d + panelStyle(cabSet(c, 'panelStyle')).frontOverhang;
+  const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), depth = c.d + panelFor(c).frontOverhang;
   return panelSpans(c, explicitOnly).map(({ a: [a0, a1] }) => [wallPt(w, g, s, a0, f), wallPt(w, g, s, a1, f), wallPt(w, g, s, a1, f + depth), wallPt(w, g, s, a0, f + depth)]);
 }
 // Filler strips in plan: flush with the fronts, across the gap to the wall.
@@ -643,7 +643,7 @@ function buildParts(c) {
   const jtLateCtx = { jt: (type, pt, fx, zr) => joinSides(type, pt, fx, zr, 0, Math.min(backY, pt.W)), jFor, spread: spots, addB };
 
   // Applied end panels
-  const ps = panelStyle(cabSet(c, 'panelStyle')), pm = mat(ps.mat) || cm;
+  const ps = panelFor(c), pm = mat(ps.mat) || cm;
   ['L', 'R'].forEach(sd => {
     if (!hasPanel(c, sd)) return;
     const L = c.cat === 'Wall' ? H : (ps.toFloor ? H : H - tk), Wd = D + ps.frontOverhang + ps.scribe;

@@ -25,7 +25,7 @@ const opts = (arr, filter) => arr.filter(filter || (() => true)).map(m => ({ v: 
 // Options for a pick that can follow the level above: cabinet follows its room, a room follows the job.
 function setOpts(k, list, level = 'room') {
   const inh = level === 'cab' ? roomSet(k) : S.job.defaults[k] || '';
-  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : 'none');
+  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'same as the doors' : 'none');
   return [{ v: '', l: `${level === 'cab' ? 'Room' : 'Job'} · ${nm}` }, ...list];
 }
 // L1: name pickers list A to Z under their group headers.
@@ -57,6 +57,9 @@ function resolve(ref) {
     case 'mtc': return S.matTemplates.cabinet.find(d => d.id === id);
     case 'mtd': return S.matTemplates.drawer.find(d => d.id === id);
     case 'panel': return S.panels.find(p => p.id === id);
+    // Insert library prices, and this job's own prices for library items: pov:<door|mat|ins>:<id>
+    case 'insp': return ((S.insertPrices = S.insertPrices || {})[id] = S.insertPrices[id] || {});
+    case 'pov': { const [g, iid] = id.split(':'), o = (S.job.priceOver = S.job.priceOver || {}); o[g] = o[g] || {}; return (o[g][iid] = o[g][iid] || {}); }
     case 'hw': return hw(id);
     // One length of a drawer runner: its part number, minimum inside depth and screw holes, kept in maps by length.
     case 'hwlen': {
@@ -188,7 +191,7 @@ document.addEventListener('change', e => {
     }
     if (ref.startsWith('cvar:') && field === 'v' && typeof fxParamClamp === 'function') v = fxParamClamp(o, v);
     if ((ref.startsWith('cvar:') || ref.startsWith('rvar:') || ref.startsWith('jfield:')) && field === 'k') { o.k = ref.startsWith('jfield:') ? varName(v) : varName(v); return; }
-    if (/^(cabp|libp|desp|roomp|rset):|^desp$/.test(ref) && v === '') { delete o[field]; return; }
+    if (/^(cabp|libp|desp|roomp|rset|pov):|^desp$/.test(ref) && v === '') { delete o[field]; return; }
     if (field.includes('.')) { const [i, k] = field.split('.'); if (o[+i]) o[+i][k] = v; return; }
     o[field] = v;
   }, true);

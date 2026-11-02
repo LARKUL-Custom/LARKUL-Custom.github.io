@@ -162,6 +162,7 @@ function materialUsage() {
   return { use, bom };
 }
 function renderMaterials() {
+  ensureLibPrices();
   const { use, bom } = materialUsage();
   let totalCost = 0, totalSheets = 0;
   const kinds = [{ v: 'sheet', l: 'Sheet' }, { v: 'top', l: 'Countertop' }, { v: 'solid', l: 'Solid wood' }];
@@ -204,6 +205,7 @@ function renderMaterials() {
 
 /* ---------- Doors ---------- */
 function renderDoors() {
+  ensureLibPrices();
   const types = [{ v: 'slab', l: 'Slab' }, { v: 'routed', l: 'Routed shaker (CNC pocket)' }, { v: 'twopiece', l: 'Two-piece (CNC frame, recessed panel)' }, { v: 'fivepiece', l: '5-piece (stiles, rails, panel)' }];
   const styleOpts = opts(S.doorStyles), pullOpts = opts(hwOf('pull'));
   const keep3d = $('#door3d');
@@ -465,9 +467,9 @@ function doorDesigner() {
         <div class="grid2">${fld('Min width', R, 'minW', d.minW, 'len', { blank: true, ph: 'none' })}${fld('Max width', R, 'maxW', d.maxW, 'len', { blank: true, ph: 'none' })}${fld('Min height', R, 'minH', d.minH, 'len', { blank: true, ph: 'none' })}${fld('Max height', R, 'maxH', d.maxH, 'len', { blank: true, ph: 'none' })}</div>
         ${fld('Outside these, use', R, 'swap', d.swap || '', 'select', { options: [{ v: '', l: 'This style anyway' }, ...S.doorStyles.filter(x => x.id !== d.id).map(x => ({ v: x.id, l: x.name }))], wide: true })}
         <div class="note">A door or drawer front smaller or bigger than these limits is built with the style you pick here instead, like Mozaik's minimum and maximum sizes.</div>${typeof sizeRuleUse === 'function' && d.swap ? sizeRuleUse(d) : ''}</div>
-      <div class="dsec">${secHead('tag', 'Cost', 'teal')}
-        <div class="grid2">${fld('Cost factor', R, 'costFactor', d.costFactor, 'num', { ph: '1' })}${fld('Material ($/sq ft)', R, 'matCost', d.matCost, 'num', { blank: true, ph: doorMatRate({ ...d, matCost: '' }, priceSheet()).toFixed(2) })}</div>
-        <div class="note">The price sheet's rate for this style times the cost factor, plus the material cost. Blank material uses the material's sheet price.</div></div>
+      <div class="dsec">${secHead('tag', 'Price', 'teal')}
+        <div class="grid2">${fld('Price ($/sq ft)', R, 'rate', d.rate, 'num')}${fld('Minimum per front', R, 'min', d.min, 'num')}${fld('Material ($/sq ft)', R, 'matCost', d.matCost, 'num', { blank: true, ph: doorMatRate({ ...d, matCost: '' }, priceSheet()).toFixed(2) })}</div>
+        <div class="note">Every door, drawer front, false front and applied end panel in this style costs its size times the price, never under the minimum, plus material. Blank material uses the material's sheet price. A job can use its own price under Pricing › Edit prices.</div></div>
       ${!framedT || d.panelType === 'flat' || d.panelType === 'raised' ? `<div class="dsec">${secHead('palette', 'Panel design', 'rose')}
         ${fld('Design', R, 'design', d.design, 'select', { options: PANEL_DESIGNS, wide: true })}<div class="grid2">
         ${d.design !== 'none' && d.design !== 'xbrace' ? fld('Spacing', R, 'grooveSpacing', d.grooveSpacing, 'len') : ''}
@@ -501,21 +503,20 @@ function buildDoor3D() {
 
 /* ---------- Applied panels ---------- */
 function renderPanels() {
-  const types = [{ v: 'flat', l: 'Flat' }, { v: 'routed', l: 'Routed shaker (CNC pocket)' }];
-  $('#tab-panels').innerHTML = `<div class="pagehead"><div><h2>Applied panels</h2><p>Finished end panels for exposed cabinet sides. Turn them on per cabinet in the Room inspector. The panel runs past the cabinet front by the overhang and adds scribe at the back.</p></div><button class="btn primary" data-act="panel-add">Add panel style</button></div>
-  ${pickBar('panel', S.panels, 'Panel style')}<div class="cards">${picked('panel', S.panels).map(d => {
-    const R = 'panel:' + d.id, W = 24 + d.frontOverhang + d.scribe, H = 34.5, m = mat(d.mat);
-    const pk = d.type === 'routed' && d.frame > 0 ? `<rect class="ev-inner nss" x="${d.frame + d.scribe}" y="${-H + d.frame}" width="${W - 2 * d.frame - d.scribe}" height="${H - 2 * d.frame}"/>` : '';
+  // The panel's look and price come from a door style (Settings › Box and panels); this library keeps only how it fits.
+  const ds = doorStyle(roomSet('panelDoor') || doorTpl(roomSet('doorT')).door), m = mat(ds.mat), framed = ds.type !== 'slab', fr = framed ? Math.max(+ds.stile || 0, +ds.rail || 0) : 0;
+  $('#tab-panels').innerHTML = `<div class="pagehead"><div><h2>Applied panels</h2><p>Finished end panels for exposed cabinet sides. Each panel is made and priced in a door style picked for the job or room under Settings › Box and panels. These styles only set how the panel fits.</p></div><button class="btn primary" data-act="panel-add">Add panel fit</button></div>
+  <div class="card"><div class="cardbody"><div class="roomsum">${swatch(m, 16)}<span>${esc(curRoom().name)} uses <b>${esc(ds.name)}</b>, ${money(doorRate(ds))}/sq ft</span><button class="linkbtn" data-act="tab" data-id="settings">Change in Settings</button><button class="linkbtn" data-act="tab" data-id="doors">Door designer</button></div></div></div>
+  ${pickBar('panel', S.panels, 'Panel fit')}<div class="cards">${picked('panel', S.panels).map(d => {
+    const R = 'panel:' + d.id, W = 24 + d.frontOverhang + d.scribe, H = 34.5;
+    const pk = fr > 0 ? `<rect class="ev-inner nss" x="${fr + d.scribe}" y="${-H + fr}" width="${W - 2 * fr - d.scribe}" height="${H - 2 * fr}"/>` : '';
     return `<div class="card">${cardHead(esc(d.name), `<span class="note">${nCab(usedBy(c => (hasPanel(c, 'L') || hasPanel(c, 'R')) && cabSet(c, 'panelStyle') === d.id))}</span>${delBtn('panel-del', d.id, S.panels.length < 2)}`)}
     <div class="cardbody"><div class="cardsplit"><div class="stack">
       ${fld('Name', R, 'name', d.name, 'text', { wide: true })}
-      ${fld('Style', R, 'type', d.type, 'select', { options: types, wide: true })}
-      ${fld('Material', R, 'mat', d.mat, 'select', { options: matOpts('sheet'), wide: true })}
       ${fld('Front overhang', R, 'frontOverhang', d.frontOverhang, 'len')}
       ${fld('Back scribe', R, 'scribe', d.scribe, 'len')}
-      ${d.type === 'routed' ? fld('Frame width', R, 'frame', d.frame, 'len') + fld('Pocket depth', R, 'pocketDepth', d.pocketDepth, 'len') : ''}
       <label class="checkrow">${ctl(R, 'toFloor', d.toFloor, 'bool', { label: 'Runs to floor' })} Runs to the floor (covers toe kick)</label>
-    </div><div class="preview pad"><svg viewBox="-2 ${-H - 2} ${W + 4} ${H + 4}"><defs>${texDefs([d.mat])}</defs><rect ${fillFor(m, 'ev-front')} x="0" y="${-H}" width="${W}" height="${H}"/>${pk}</svg></div></div></div></div>`;
+    </div><div class="preview pad"><svg viewBox="-2 ${-H - 2} ${W + 4} ${H + 4}"><defs>${texDefs([ds.mat])}</defs><rect ${fillFor(m, 'ev-front')} x="0" y="${-H}" width="${W}" height="${H}"/>${pk}</svg></div></div></div></div>`;
   }).join('')}</div>`;
 }
 
@@ -730,7 +731,7 @@ function labelPartSVG(p) {
   return s + '</svg>';
 }
 function showLabels() {
-  const sc = cutScope(), parts = ui.cutCab === 'all' ? sc.parts : sc.parts.filter(p => p.cabId === ui.cutCab), labels = [], z = labelSize();
+  const sc = cutScope(), parts = sc.parts, labels = [], z = labelSize();
   parts.forEach(p => { for (let i = 1; i <= p.qty; i++) labels.push({ p, i }); });
   const short = p => EDGE_KEYS.filter(k => p.band[k]).join(' ') || 'none';
   // Edges that share a band are listed together: "PVC 1 mm: L1 L2 W1 W2".
@@ -778,8 +779,8 @@ function cutScope() {
   const rooms = ui.cutRoom === 'all' ? S.rooms : [roomById(ui.cutRoom) || curRoom()];
   const parts = [], tops = [], molds = [], cabs = [];
   rooms.forEach(rm => withRoom(rm, () => {
-    S.cabinets.forEach(c => { cabs.push({ c, room: rm }); if (!c.noCut) buildParts(c).parts.forEach(p => parts.push({ ...p, room: rm.name })); });
-    shapeParts().forEach(p => parts.push({ ...p, room: rm.name }));
+    S.cabinets.forEach(c => { cabs.push({ c, room: rm }); if (!c.noCut) buildParts(c).parts.forEach(p => { if (cutKeep(cutPartKey(p))) parts.push({ ...p, room: rm.name }); }); });
+    shapeParts().forEach(p => { if (cutKeep(cutPartKey(p))) parts.push({ ...p, room: rm.name }); });
     countertopRuns().filter(r => r.on).forEach(r => tops.push({ ...r, room: rm.name, wallN: wallName(wall(r.wall)) }));
     moldingRuns().forEach(r => molds.push({ ...r, room: rm.name, wallN: wallName(wall(r.wall)) }));
   }));
@@ -789,19 +790,18 @@ function renderCutlist() {
   if (ui.cutRoom !== 'all' && !roomById(ui.cutRoom)) ui.cutRoom = 'all';
   const sc = cutScope(), multi = sc.rooms.length > 1;
   sc.parts.forEach((p, i) => p.key = p.cabId + '#' + i);
-  if (ui.cutCab !== 'all' && !sc.cabs.some(x => x.c.id === ui.cutCab)) ui.cutCab = 'all';
-  const shown = ui.cutCab === 'all' ? sc.parts : sc.parts.filter(p => p.cabId === ui.cutCab);
+  const shown = sc.parts;
   const sel = shown.find(p => p.key === ui.partSel) || shown[0];
   const byMat = {}; shown.forEach(p => (byMat[p.mat] = byMat[p.mat] || []).push(p));
   const cabName = p => (multi ? esc(p.room) + ' · ' : '') + p.cab;
   $('#tab-cutlist').innerHTML = `<div class="pagehead"><div><h2>Cut list</h2><p>Every part with its machining. Length (x) runs with the grain where the material has grain. Click a part to see its drilling.</p></div>
-    <div class="row-actions"><button class="btn primary" data-act="labels">Print labels</button><button class="btn" data-act="mp-open">${icon('print')}Multi print</button><button class="btn" data-act="sv-open" data-id="${ui.cutCab !== 'all' ? ui.cutCab : ''}">${icon('list')}Shop view</button><label class="f wide" style="min-width:220px"><span>Room</span><select id="cutroom"><option value="all">Whole job (${S.rooms.length} rooms)</option>${S.rooms.map(r => `<option value="${r.id}"${ui.cutRoom === r.id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
-    <label class="f wide" style="min-width:260px"><span>Cabinets</span><select id="cutcab">${[`<option value="all">All cabinets (${sc.cabs.length})</option>`, ...sc.cabs.map(({ c, room }) => `<option value="${c.id}"${ui.cutCab === c.id ? ' selected' : ''}>${multi ? esc(room.name) + ' · ' : ''}${LBL[c.id]} · ${esc(c.name)}</option>`)].join('')}</select></label></div></div>
-  ${cncCard()}${typeof recutCard === 'function' ? recutCard() : ''}
+    <div class="row-actions"><button class="btn primary" data-act="labels">Print labels</button><button class="btn" data-act="mp-open">${icon('print')}Multi print</button><button class="btn" data-act="sv-open" data-id="${cutOneCab()}">${icon('list')}Shop view</button><label class="f wide" style="min-width:220px"><span>Room</span><select id="cutroom"><option value="all">Whole job (${S.rooms.length} rooms)</option>${S.rooms.map(r => `<option value="${r.id}"${ui.cutRoom === r.id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
+    <label class="f wide cp-open"><span>What to cut</span><button class="btn${ui.cutPick ? ' on' : ''}" data-act="cut-pk-open" aria-expanded="${!!ui.cutPickOpen}">${icon('check')}${esc(cutPickText(sc.rooms))}</button></label></div></div>
+  ${cutPickCard(sc.rooms)}${cncCard()}${typeof recutCard === 'function' ? recutCard() : ''}
   <div class="split2">
     <div class="stack"><div class="card tscroll"><table class="t"><thead><tr><th>Cab</th><th>Part</th><th class="r">Qty</th><th class="r">Length</th><th class="r">Width</th><th class="r">Thick</th><th>Edge</th><th class="r">Ops</th></tr></thead>
-    <tbody>${Object.entries(byMat).map(([mid, ps]) => `<tr><td colspan="8" class="grouprow">${swatch(mat(mid), 14)} <b>${esc((mat(mid) || {}).name || mid)}</b> <span class="muted">· ${ps.reduce((a, p) => a + p.qty, 0)} parts</span></td></tr>` + ps.map(p => `<tr class="click${sel && p.key === sel.key ? ' on' : ''}" data-act="part" data-id="${p.key}" title="Double-click to open the part editor"><td>${cabName(p)}</td><td>${esc(p.report || p.name)}${p.report ? ` <span class="muted">(${esc(p.name)})</span>` : ''}</td><td class="n">${p.qty}</td><td class="n">${fmtLen(p.L)}</td><td class="n">${fmtLen(p.W)}</td><td class="n">${fmtLen(p.T)}</td><td>${p.edges}</td><td class="n">${p.ops.length || ''}</td></tr>`).join('')).join('') || '<tr><td colspan="8" class="muted">No parts yet. Place cabinets in the Room tab.</td></tr>'}</tbody></table></div>
-    ${ui.cutCab === 'all' && (sc.tops.length || sc.molds.length) ? `<div class="card tscroll"><table class="t"><thead><tr><th>Countertops and moldings</th><th class="r">Length</th><th class="r">Depth / height</th><th>Material</th></tr></thead><tbody>
+    <tbody>${Object.entries(byMat).map(([mid, ps]) => `<tr><td colspan="8" class="grouprow">${swatch(mat(mid), 14)} <b>${esc((mat(mid) || {}).name || mid)}</b> <span class="muted">· ${ps.reduce((a, p) => a + p.qty, 0)} parts</span></td></tr>` + ps.map(p => `<tr class="click${sel && p.key === sel.key ? ' on' : ''}" data-act="part" data-id="${p.key}" title="Double-click to open the part editor"><td>${cabName(p)}</td><td>${esc(p.report || p.name)}${p.report ? ` <span class="muted">(${esc(p.name)})</span>` : ''}</td><td class="n">${p.qty}</td><td class="n">${fmtLen(p.L)}</td><td class="n">${fmtLen(p.W)}</td><td class="n">${fmtLen(p.T)}</td><td>${p.edges}</td><td class="n">${p.ops.length || ''}</td></tr>`).join('')).join('') || `<tr><td colspan="8" class="muted">${ui.cutPick ? 'Nothing picked to cut. Use What to cut above to pick cabinets, fillers and panels.' : 'No parts yet. Place cabinets in the Room tab.'}</td></tr>`}</tbody></table></div>
+    ${!ui.cutPick && (sc.tops.length || sc.molds.length) ? `<div class="card tscroll"><table class="t"><thead><tr><th>Countertops and moldings</th><th class="r">Length</th><th class="r">Depth / height</th><th>Material</th></tr></thead><tbody>
       ${sc.tops.map(r => `<tr><td>${esc(r.tpl.name)} · ${multi ? esc(r.room) + ' · ' : ''}${r.wallN}</td><td class="n">${fmtLen(r.len)}</td><td class="n">${fmtLen(r.depth)}</td><td>${esc((mat(r.tpl.mat) || {}).name || '')}</td></tr>`).join('')}
       ${sc.molds.map(r => `<tr><td>${esc(r.m.name)} · ${multi ? esc(r.room) + ' · ' : ''}${r.wallN}</td><td class="n">${fmtLen(r.len)}</td><td class="n">${fmtLen(r.h)}</td><td>${esc((mat(r.m.mat) || {}).name || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}</div>
     <div class="card sticky">${sel ? `${cardHead(`${cabName(sel)} · ${esc(sel.report || sel.name)}`, `<span class="mono">${fmtLen(sel.L)} × ${fmtLen(sel.W)} × ${fmtLen(sel.T)}</span>${sel.cabId && cab(sel.cabId) ? `<button class="btn sm primary" data-act="cut-edit-part" data-id="${esc(sel.cabId + '|' + peKeyOf(sel))}">Edit part</button>` : ''}<button class="btn sm" data-act="rc-add" data-id="${esc(sel.key)}" title="Add to the recut list">Recut</button>`)}
@@ -810,8 +810,8 @@ function renderCutlist() {
       <div class="note">Origin (orange dot) is the top-left corner as drawn. L1 is the top edge as drawn, L2 the bottom, W1 the left end and W2 the right end. Cabinet sides: x runs up from the floor, y back from the front edge. Fronts: x up from the bottom edge, y from the left edge as seen from the front.</div>
       <div class="tscroll" style="max-height:300px;overflow:auto"><table class="t"><thead><tr><th>Operation</th><th>For</th></tr></thead><tbody>${sel.ops.map(o => `<tr><td>${esc(opText(o))}</td><td class="muted">${esc(o.why || '')}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No machining on this part</td></tr>'}</tbody></table></div></div>` : '<div class="cardbody muted">Select a part.</div>'}</div>
   </div>`;
-  $('#cutroom').addEventListener('change', e => { ui.cutRoom = e.target.value; ui.cutCab = 'all'; ui.partSel = null; renderCutlist(); });
-  $('#cutcab').addEventListener('change', e => { ui.cutCab = e.target.value; ui.partSel = null; renderCutlist(); });
+  $('#cutroom').addEventListener('change', e => { ui.cutRoom = e.target.value; ui.partSel = null; renderCutlist(); });
+  document.querySelectorAll('.cut-pk[data-mixed]').forEach(x => { x.indeterminate = true; });
 }
 
 /* ---------- Export ---------- */
@@ -832,7 +832,7 @@ function exportData(units) {
         width: r(c.w), height: r(c.h), depth: r(c.d), elevation: r(c.elev), wall: c.wall, side: c.side, positionAlongWall: r(c.off),
         cabinetMaterials: cabMatT(cabSet(c, 'cabMatT')).name, drawerMaterials: drawerMatT(cabSet(c, 'drawerMatT')).name, doorTemplate: doorTpl(cabSet(c, 'doorT')).name,
         drawerSlide: (hwPick(cabSet(c, 'slide'), 'slide') || {}).name, hinge: (hwPick(cabSet(c, 'hinge'), 'hinge') || {}).name,
-        construction: c.construction, appliedPanels: { left: hasPanel(c, 'L'), right: hasPanel(c, 'R'), style: panelStyle(cabSet(c, 'panelStyle')).name }, fillers: fillersOf(c).map(f => ({ end: f.end === 'L' ? 'left' : 'right', width: r3(f.gap) })), molding: c.molding ? (molding(c.molding) || {}).name : null,
+        construction: c.construction, appliedPanels: { left: hasPanel(c, 'L'), right: hasPanel(c, 'R'), style: panelFor(c).door.name, fit: panelFor(c).name }, fillers: fillersOf(c).map(f => ({ end: f.end === 'L' ? 'left' : 'right', width: r3(f.gap) })), molding: c.molding ? (molding(c.molding) || {}).name : null,
         frontLayout: c.rows.map(x => ({ ...x, h: x.h === '*' ? '*' : r(x.h) })),
         fronts: b.fronts.filter(x => x.type !== 'open').map(x => ({ type: x.type, width: r(x.x1 - x.x0), height: r(x.z1 - x.z0) })),
         parameters: pp, custom: Object.fromEntries((c.custom || []).filter(x => x.k).map(x => [x.k, x.v])),
@@ -879,13 +879,14 @@ function exportText() {
 // What the CNC can't cut yet, so it gets done by hand or waits for a tool.
 // The CNC Cutlist parts file for the whole job, right on the Cutlist tab.
 function cncCard() {
-  const f = cncPartFile().file, n = (f.parts || []).reduce((a, p) => a + (p.qty || 1), 0);
-  return `<div class="card cardbody cnccard"><div class="pshead"><h3>${icon('export')}Send to the CNC</h3><span class="note">${n} part${n === 1 ? '' : 's'} for the whole job, in millimeters, for CNC Cutlist</span></div>
+  const f = cncPartFile(true).file, n = (f.parts || []).reduce((a, p) => a + (p.qty || 1), 0);
+  const where = ui.cutRoom === 'all' ? 'the whole job' : esc((roomById(ui.cutRoom) || curRoom()).name);
+  return `<div class="card cardbody cnccard"><div class="pshead"><h3>${icon('export')}Send to the CNC</h3><span class="cnc-count">${n} part${n === 1 ? '' : 's'} from ${ui.cutPick ? 'what is picked in ' : ''}${where}</span><span class="note">In millimeters, for CNC Cutlist</span></div>
     <div class="row-actions">${inHub() ? `<button class="btn primary" data-act="cnc-save">${icon('check')}Save CNC parts to Files</button>` : ''}<button class="btn${inHub() ? '' : ' primary'}" data-act="cnc-download">Download parts file</button><button class="btn" data-act="tab" data-id="export">Other exports</button></div>
     ${cncSkippedNote()}</div>`;
 }
 function cncSkippedNote() {
-  const { skipped } = cncPartFile();
+  const { skipped } = cncPartFile(true);
   if (!skipped.length) return '<div class="note">Every part and every machining operation is in the file.</div>';
   return `<details class="note"><summary>${skipped.length} item${skipped.length > 1 ? 's' : ''} not in the file (the CNC can't cut ${skipped.length > 1 ? 'them' : 'it'} yet)</summary><ul>${skipped.map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>`;
 }

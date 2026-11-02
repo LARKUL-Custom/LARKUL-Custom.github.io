@@ -211,7 +211,7 @@ document.addEventListener('change', e => {
 function edgeParts(c, parts, k, part, cm) {
   const E = cabTopEdges(c).filter(e => e.type && e.type !== 'open'); if (!E.length) return;
   const { t, bt, sh, warn } = k, Hs = r3(c.h - sh), mt = cabMatT(cabSet(c, 'cabMatT')), bm = mat(mt.back) || cm;
-  const fin = mat(panelStyle(cabSet(c, 'panelStyle')).mat) || cm, door = parts.find(q => q.cabId === c.id && /^Door/.test(q.name)), dm = door ? mat(door.mat) || cm : fin;
+  const fin = mat(panelFor(c).mat) || cm, door = parts.find(q => q.cabId === c.id && /^Door/.test(q.name)), dm = door ? mat(door.mat) || cm : fin;
   E.forEach(e => {
     if (e.curved) warn.push(`Edge ${e.i + 1} is curved; its ${edgeTypeName(e.type).toLowerCase()} is listed flat at the straight length.`);
     const L = r3(e.L), nm = `Edge ${e.i + 1} `;

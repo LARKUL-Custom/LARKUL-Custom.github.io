@@ -45,7 +45,7 @@ function multiProps() {
     <div class="note">Shift or Ctrl click adds or removes a cabinet; Shift-drag in the plan selects a box. A change here goes to every selected cabinet.</div></div>
   <div class="psec box">${secHead('palette', 'Materials and fronts', 'amber')}<div class="mgrid">
     ${sel('Cabinet materials', 'cabMatT', so('cabMatT', opts(S.matTemplates.cabinet)))}${sel('Drawer materials', 'drawerMatT', so('drawerMatT', opts(S.matTemplates.drawer)))}
-    ${sel('Door template', 'doorT', so('doorT', opts(S.doorTemplates)))}${sel('Applied panel style', 'panelStyle', so('panelStyle', opts(S.panels)))}
+    ${sel('Door template', 'doorT', so('doorT', opts(S.doorTemplates)))}${sel('Applied panel fit', 'panelStyle', so('panelStyle', opts(S.panels)))}
     ${sel('Part template', 'partT', so('partT', opts(S.partTemplates)))}${sel('Top molding', 'molding', [{ v: '', l: 'None' }, ...opts(S.moldings)])}
     ${sel('Finished interior', 'finInt', yn, c => c.finInt ? 'yes' : 'no')}</div></div>
   <div class="psec box">${secHead('sliders', 'Hardware and joints', 'blue')}<div class="mgrid">
@@ -74,7 +74,7 @@ document.addEventListener('change', e => {
 });
 function showMultiCtx(x, y) {
   const m = $('#ctxmenu'), n = multiIds().length, item = (act, label, extra = '') => `<button role="menuitem" data-act="${act}"${extra}>${label}</button>`;
-  m.innerHTML = `<div class="ctxhead">${n} cabinets</div>` + item('multi-edit', `Change all ${n}…`) + item('q-equal', 'Equalize widths') + item('q-copyset', 'Copy settings from the first') + (typeof setClip !== 'undefined' && setClip ? item('q-pasteset', `Paste settings on all ${n}`) : '') + item('multi-none', 'Select none') + (lightClip && lightClip.length ? item('light-paste-multi', `Paste lights on all ${n}`) : '') + item('multi-del', `Delete ${n}`, ' class="danger"');
+  m.innerHTML = `<div class="ctxhead">${n} cabinets</div>` + item('multi-edit', `Change all ${n}…`) + item('q-equal', 'Equalize widths') + item('multi-cut', `Cut only these ${n}`) + item('q-copyset', 'Copy settings from the first') + (typeof setClip !== 'undefined' && setClip ? item('q-pasteset', `Paste settings on all ${n}`) : '') + item('multi-none', 'Select none') + (lightClip && lightClip.length ? item('light-paste-multi', `Paste lights on all ${n}`) : '') + item('multi-del', `Delete ${n}`, ' class="danger"');
   m.hidden = false;
   const r = m.getBoundingClientRect();
   m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
@@ -84,6 +84,7 @@ function showMultiCtx(x, y) {
 function multiAct(act) {
   if (act === 'light-paste-multi') { pasteLights(multiIds()); return true; }
   if (act === 'multi-none') { ui.multi = []; select(null); return true; }
+  if (act === 'multi-cut') { cutPickOnly(multiIds()); return true; }
   if (act === 'multi-edit') { ui.propsShut = false; renderProps(); const el = $('#props'); if (el) el.scrollTop = 0; return true; }
   if (act === 'multi-del') { const ids = multiIds(); mutate(() => { S.cabinets = S.cabinets.filter(c => !ids.includes(c.id)); }); ui.multi = []; ui.sel = null; render(); flash(`Deleted ${ids.length} cabinets`); return true; }
   return false;

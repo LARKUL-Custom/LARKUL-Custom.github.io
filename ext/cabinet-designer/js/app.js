@@ -3,14 +3,14 @@
 const ui = {
   tab: 'room', sel: null, placing: null, drawWalls: false, dock: '', dockOpen: false, railShut: false, ptab: { cab: 'size', wall: 'size' }, view: { x: -30, y: -40, w: 240, h: 160 },
   drawing: null, typed: '', mouse: null, ghost: null, ghostLib: null, drag: null, edrag: null, elevWall: 'w2', libSel: 'b-2d1dr',
-  partSel: null, cutCab: 'all', exportFmt: 'cnc', exportUnits: 'in', px: 1, src: 'cabinets', viewMode: 'plan', render3d: false, wallOp: 1, cutaway: false, layers: {},
+  partSel: null, cutPick: null, cutPickOpen: false, exportFmt: 'cnc', exportUnits: 'in', px: 1, src: 'cabinets', viewMode: 'plan', render3d: false, wallOp: 1, cutaway: false, layers: {},
   hwKind: 'slide', dropCab: null, cutRoom: 'all', setRoom: null, dims: { cab: true, fronts: false },
   open: {}, des3d: false,
 };
 // Main toolbar, in Mozaik's order, then the libraries that sit behind the Libraries menu.
 // Shop order, left to right: set up the job, draw it, dress it, then order, price and cut it.
 const MAIN_TABS = [['job', 'Job'], ['settings', 'Settings'], ['room', 'Room'], ['countertops', 'Tops'], ['moldings', 'Molding'], ['pricing', 'Pricing'], ['cutlist', 'Cutlist']];
-const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['panels', 'Applied panels'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['rules', 'Rules'], ['remnants', 'Remnants']];
+const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['inserts', 'Inserts'], ['panels', 'Applied panels'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['rules', 'Rules'], ['remnants', 'Remnants']];
 // The Designer opens from Products (and from a cabinet); it has no button of its own.
 const HIDDEN_TABS = [['designer', 'Designer'], ['shop', 'Shop view'], ['export', 'Order']];
 const TABS = [...MAIN_TABS, ...LIB_TABS, ...HIDDEN_TABS];
@@ -29,7 +29,7 @@ const TAB_ICONS = {
 };
 const TAB_TONES = { job: 'indigo', settings: 'slate', room: 'teal', library: 'amber', designer: 'violet', countertops: 'stone', moldings: 'rose', cutlist: 'green', pricing: 'teal', export: 'blue', libs: 'amber', materials: 'amber', doors: 'violet', hardware: 'slate', panels: 'stone', parts: 'green' };
 const tabIcon = k => `<span class="tabic tone-${TAB_TONES[k] || 'slate'}"><svg viewBox="0 0 20 20" aria-hidden="true">${TAB_ICONS[k]}</svg></span>`;
-const RENDER = () => ({ job: renderJob, settings: renderSettings, room: renderRoom, designer: renderDesigner, library: renderLibrary, materials: renderMaterials, doors: renderDoors, hardware: renderHardware, countertops: renderCountertops, moldings: renderMoldings, panels: renderPanels, parts: renderPartTemplates, cnctools: renderCncTools, rules: renderRules, remnants: renderRemnants, shop: renderShop, cutlist: renderCutlist, pricing: renderPricing, export: renderExport });
+const RENDER = () => ({ job: renderJob, settings: renderSettings, room: renderRoom, designer: renderDesigner, library: renderLibrary, materials: renderMaterials, doors: renderDoors, hardware: renderHardware, countertops: renderCountertops, moldings: renderMoldings, panels: renderPanels, inserts: renderInserts, parts: renderPartTemplates, cnctools: renderCncTools, rules: renderRules, remnants: renderRemnants, shop: renderShop, cutlist: renderCutlist, pricing: renderPricing, export: renderExport });
 function fixSel() {
   if (ui.sel && ui.sel.type === 'cab' && !cab(ui.sel.id)) ui.sel = null;
   if (ui.sel && ui.sel.type === 'wall' && !wall(ui.sel.id)) ui.sel = null;
@@ -228,6 +228,7 @@ function renderRoom() {
   if (ui.viewMode === 'elev') renderElev();
   renderProps(); renderDock(); renderQuick();
   if (ui.viewMode === '3d') { ensureRoomViewer(); buildRoom3D(); }
+  if (ui.viewMode !== 'plan') renderHint();
 }
 function ensureRoomViewer() {
   if (roomViewer) return;
@@ -520,7 +521,7 @@ function dockBody(k) {
     ${fld('Drawer slide', R, 'slide', c.slide || '', 'select', { options: setOpts('slide', opts(hwOf('slide')), 'cab') })}
     ${fld('Hinge', R, 'hinge', c.hinge || '', 'select', { options: setOpts('hinge', opts(hwOf('hinge')), 'cab') })}
     ${fld('Part template', R, 'partT', c.partT || '', 'select', { options: setOpts('partT', opts(S.partTemplates), 'cab') })}
-    ${fld('Applied panel style', R, 'panelStyle', c.panelStyle || '', 'select', { options: setOpts('panelStyle', opts(S.panels), 'cab') })}
+    ${fld('Applied panel fit', R, 'panelStyle', c.panelStyle || '', 'select', { options: setOpts('panelStyle', opts(S.panels), 'cab') })}
     ${fld('Top molding', R, 'molding', c.molding || '', 'select', { options: [{ v: '', l: 'None' }, ...opts(S.moldings)] })}
     <div class="checkrow"><label>${ctl('cabc:' + id, 'toeKick', hasToe(c), 'bool', { label: 'Raised base (feet or toe kick)' })} Feet / toe kick</label>${ctl('cabc:' + id, 'top', (c.construction || {}).top || 'full', 'select', { options: [{ v: 'full', l: 'Full top' }, { v: 'stretchers', l: 'Stretchers' }], label: 'Top' })}</div>
     </div>${SETTING_FIELDS.some(f => c[f]) ? `<div class="row-actions"><button class="btn sm" data-act="cab-follow" data-id="${id}">Use room settings for all of these</button></div>` : ''}`;
@@ -744,6 +745,7 @@ document.addEventListener('click', e => {
   const a = el.dataset.act, id = el.dataset.id, ref = el.dataset.ref;
   const selCab = () => ui.sel && ui.sel.type === 'cab' ? ui.sel.id : null;
   if (/^multi-|^light-paste-multi$/.test(a) && multiAct(a)) return;
+  if (/^cut-pk-/.test(a) && cutPickAct(a)) return;
   if (/^pe-/.test(a) && typeof partsTabAct === 'function' && partsTabAct(a, id)) return;
   if (/^ct-/.test(a) && typeof cncToolsAct === 'function' && cncToolsAct(a, id)) return;
   if (/^q-/.test(a) && typeof quickAct === 'function' && quickAct(a, id, el)) return;
@@ -844,7 +846,9 @@ document.addEventListener('click', e => {
     case 'fv': fullView(id); break;
     case 'des3d': view3dPreset(designerViewer, id); break;
     case 'wall-dir': wallByLength(+id); break;
-    case 'place-stop': if (ui.drawWalls) stopWalls(); else placeMode(null); break;
+    case 'place-stop': stopDrawing(); break;
+    case 'sel-del': deleteSelected(); break;
+    case 'sel-none': select(null); break;
     case 'lib-pick': ui.libOpen = false; placeMode(ui.placing === id ? null : id); break;
     case 'elev-step': stepElev(+id); break;
     case 'elev-flip': { const w = wall(ui.elevWall); if (w) mutate(() => { w.viewSide = -elevSide(w); }); break; }
@@ -1051,7 +1055,7 @@ document.addEventListener('click', e => {
     case 'cust-del': { const o = resolve(ref); if (o) mutate(() => o.custom.splice(+el.dataset.i, 1)); break; }
     case 'list-add': { const o = resolve(ref), p = el.dataset.prop; if (o) mutate(() => { (o[p] = o[p] || []).push({ ...LIST_DEFAULTS[p] }); }); break; }
     case 'list-del': { const o = resolve(ref), p = el.dataset.prop; if (o) mutate(() => o[p].splice(+el.dataset.i, 1)); break; }
-    case 'show-parts': ui.cutCab = id; ui.partSel = null; goTab('cutlist'); break;
+    case 'show-parts': cutPickOnly([id]); break;
     case 'part': { const now = Date.now(), dbl = ui.cutClick && ui.cutClick.i === id && now - ui.cutClick.t < 450; ui.cutClick = { i: id, t: now }; ui.partSel = id; renderCutlist(); if (dbl) { const p = cutScope().parts.find((q, i) => q.cabId + '#' + i === id); if (p && cab(p.cabId)) openPartEdit(p.cabId, peKeyOf(p)); } break; }
     case 'cut-edit-part': { const [cid, ...k] = id.split('|'); openPartEdit(cid, k.join('|')); break; }
     case 'lib-sel': ui.libSel = id; renderLibrary(); break;
@@ -1107,7 +1111,7 @@ document.addEventListener('click', e => {
     case 'dtpl-add': mutate(() => S.doorTemplates.push({ ...clone(S.doorTemplates[0]), id: uid('door'), name: 'New door template' })); break;
     case 'dtpl-dup': { const t = S.doorTemplates.find(x => x.id === id); mutate(() => S.doorTemplates.push({ ...clone(t), id: uid('door'), name: t.name + ' copy' })); break; }
     case 'dtpl-del': mutate(() => { S.doorTemplates = S.doorTemplates.filter(x => x.id !== id); unsetPick('doorT', id, S.doorTemplates[0].id); }); break;
-    case 'panel-add': mutate(() => S.panels.push({ id: uid('p'), name: 'New panel style', type: 'flat', mat: S.materials[0].id, frontOverhang: 0.75, scribe: 0.5, toFloor: true, frame: 3, pocketDepth: 0.25 })); break;
+    case 'panel-add': mutate(() => S.panels.push({ id: uid('p'), name: 'New panel fit', frontOverhang: 0.75, scribe: 0.5, toFloor: true })); break;
     case 'panel-del': mutate(() => { S.panels = S.panels.filter(x => x.id !== id); unsetPick('panelStyle', id, S.panels[0].id); }); break;
     case 'hw-kind': ui.hwKind = id; renderHardware(); break;
     case 'hw-add': {
@@ -1155,7 +1159,8 @@ document.addEventListener('click', e => {
       break;
     }
     case 'cnc-save': case 'cnc-download': {
-      const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job', name = `${typeof cncFileName === 'function' ? cncFileName() : job + ' parts'}.json`, text = JSON.stringify(cncPartFile().file, null, 2);
+      const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job', name = `${typeof cncFileName === 'function' ? cncFileName() : job + ' parts'}.json`, cf = cncPartFile(true).file, text = JSON.stringify(cf, null, 2);
+      if (!cf.parts.length) { flash('Nothing to send. Pick something to cut first.'); break; }
       if (a === 'cnc-download') { const u = URL.createObjectURL(new Blob([text], { type: 'application/json' })), ln = document.createElement('a'); ln.href = u; ln.download = name; document.body.appendChild(ln); ln.click(); ln.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); break; }
       Hub.files.upload(new File([text], name), `CNC/${job}`).then(() => flash(`Saved to Files › CNC › ${job}. Open CNC Cutlist to nest it.`), err => flash('Could not save: ' + err.message));
       break;
@@ -1296,14 +1301,36 @@ document.addEventListener('keydown', e => {
   else if ((e.key === 'o' || e.key === 'O') && ui.sel && ui.sel.type === 'cab') { const c = cab(ui.sel.id); if (c && openable(c)) setOpen([c.id]); }
   else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && ui.viewMode === 'elev') { e.preventDefault(); stepElev(e.key === 'ArrowLeft' ? -1 : 1); }
   else if (e.key === '1' || e.key === '2' || e.key === '3') setView(['plan', 'elev', '3d'][+e.key - 1]);
-  else if ((e.key === 'Delete' || e.key === 'Backspace') && ui.sel) {
-    e.preventDefault();
-    const s = ui.sel; ui.sel = null;
-    if (s.type === 'cab') mutate(() => { S.cabinets = S.cabinets.filter(c => c.id !== s.id); });
-    else if (s.type === 'shape') mutate(() => { S.shapes = S.shapes.filter(x => x.id !== s.id); });
-    else mutate(() => { S.walls = S.walls.filter(w => w.id !== s.id); S.cabinets = S.cabinets.filter(c => c.wall !== s.id); S.shapes = S.shapes.filter(x => x.wall !== s.id); });
-  }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && ui.sel) { e.preventDefault(); deleteSelected(); }
 });
+// Delete key and the touch bar's Delete: the picked cabinets, shape or wall (a wall takes what is on it).
+function deleteSelected() {
+  const many = typeof multiIds === 'function' ? multiIds() : [];
+  if (many.length > 1) { mutate(() => { S.cabinets = S.cabinets.filter(c => !many.includes(c.id)); }); ui.multi = []; ui.sel = null; render(); flash(`Deleted ${many.length} cabinets`); return; }
+  const s = ui.sel; if (!s) return; ui.sel = null;
+  if (s.type === 'cab') mutate(() => { S.cabinets = S.cabinets.filter(c => c.id !== s.id); });
+  else if (s.type === 'shape') mutate(() => { S.shapes = S.shapes.filter(x => x.id !== s.id); });
+  else if (s.type === 'wall') mutate(() => { S.walls = S.walls.filter(w => w.id !== s.id); S.cabinets = S.cabinets.filter(c => c.wall !== s.id); S.shapes = S.shapes.filter(x => x.wall !== s.id); });
+  render();
+}
+// Ends whatever drawing or placing is going on (walls, a cabinet being placed, molding or tops, lights, a top's shape).
+const drawingNow = () => !!(ui.drawWalls || ui.placing || ui.drawMold || ui.placeLight || ui.topEdit);
+function stopDrawing() {
+  if (ui.drawWalls) stopWalls();
+  if (ui.placing) placeMode(null);
+  if (ui.drawMold) stopMoldDraw();
+  if (ui.placeLight) stopLightPlace();
+  if (ui.topEdit) { ui.topEdit = null; hideCtx(); render(); }
+}
+// Tapping or clicking anywhere outside the drawing (menus, panels, the library) ends drawing, as Esc does.
+document.addEventListener('pointerdown', e => {
+  if (!drawingNow() || ui.tab !== 'room' || !e.isPrimary || e.button > 0) return;
+  const t = e.target; if (!t.closest) return;
+  if (t.closest('#plan,#elev,#room3d,#hint,#drawctl,.viewctl,.zoomctl,#ctxmenu,.menu,.qe,dialog,#flash,.toast')) return;
+  // Picking a cabinet in the library while placing switches to it; dragging one in works as before.
+  if (ui.placing && t.closest('.rail')) return;
+  stopDrawing();
+}, true);
 window.addEventListener('resize', () => { if (ui.tab === 'room') { if (ui.viewMode === 'plan') renderPlan(); if (ui.viewMode === 'elev') renderElev(); } });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (ui.tab === 'room' && roomViewer) buildRoom3D(); });
 

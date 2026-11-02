@@ -280,18 +280,33 @@ function renderHint() {
   // Phones and tablets get touch wording and a Stop button, since there is no Esc key or right-click,
   // and a Length box (which brings up the keyboard) with arrow buttons in place of typing a length.
   if ((typeof isPhone === 'function' && isPhone()) || matchMedia('(pointer: coarse)').matches) {
-    const stop = '<button class="btn sm" data-act="place-stop">Stop</button>', what = ui.placing && (String(ui.placing).startsWith('shape:') ? shapeLibItem(ui.placing.slice(6)) : libItem(ui.placing));
-    const arrows = [['0', '→', 'right'], ['270', '↑', 'up'], ['180', '←', 'left'], ['90', '↓', 'down']].map(([d, a, t]) => `<button class="btn sm wdir" data-act="wall-dir" data-id="${d}" aria-label="Wall going ${t}" title="Wall going ${t}">${a}</button>`).join('');
+    h.classList.add('touchbar');
+    // It sits on whichever drawing is showing: plan, elevation or 3D.
+    const pane = document.getElementById(ui.viewMode === 'elev' ? 'elev-card' : ui.viewMode === '3d' ? 'room3d-card' : 'plan-card');
+    if (pane && h.parentNode !== pane) pane.appendChild(h);
+    const b = (act, label, cls = '', id = '') => `<button class="btn${cls}" data-act="${act}"${id ? ` data-id="${id}"` : ''}>${label}</button>`;
+    const stop = b('place-stop', 'Done', ' primary'), what = ui.placing && (String(ui.placing).startsWith('shape:') ? shapeLibItem(ui.placing.slice(6)) : libItem(ui.placing));
+    const arrows = [['0', '→', 'right'], ['270', '↑', 'up'], ['180', '←', 'left'], ['90', '↓', 'down']].map(([d, a, t]) => `<button class="btn wdir" data-act="wall-dir" data-id="${d}" aria-label="Wall going ${t}" title="Wall going ${t}">${a}</button>`).join('');
     const lenBox = `<span class="hintlen"><input id="walllen" type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" placeholder="Length" aria-label="Wall length"> ${arrows}</span>`;
-    const html = ui.drawWalls ? (ui.drawing ? 'Tap the next corner (the first one closes the room), or type a length and tap an arrow. ' + lenBox : 'Tap to start a wall. ') + stop
-      : what ? `Placing <b>${esc(what.name)}</b>. Tap near a wall. ${stop}`
-      : ui.sel && ui.sel.type === 'wall' ? 'Drag the wall to slide it. Drag an orange end to change its length.'
-      : 'Tap to select, double tap to edit, hold for more. Two fingers to zoom and pan.';
+    const multi = typeof multiIds === 'function' ? multiIds() : [], sel = ui.sel, c = sel && sel.type === 'cab' && cab(sel.id);
+    const selName = !sel ? '' : sel.type === 'cab' ? (c ? `${LBL[c.id] || ''} ${c.name}` : '') : sel.type === 'wall' ? (wall(sel.id) ? wallName(wall(sel.id)) : '') : sel.type === 'shape' ? ((shapeById(sel.id) || {}).name || 'Shape') : '';
+    const none = b('sel-none', '✕', ' ghost', '');
+    let html = '';
+    if (ui.drawWalls) html = `<span class="tb-msg">${ui.drawing ? 'Tap the next corner, or type a length and tap an arrow.' : 'Tap to start a wall.'}</span>${ui.drawing ? lenBox : ''}${stop}`;
+    else if (what) html = `<span class="tb-msg">Placing <b>${esc(what.name)}</b>. Tap near a wall.</span>${stop}`;
+    else if (ui.topEdit && cab(ui.topEdit)) html = `<span class="tb-msg">Editing the top of <b>${esc(LBL[ui.topEdit] || '')}</b>. Drag a point, hold a point for more.</span>${stop}`;
+    else if (ui.drawMold) html = `<span class="tb-msg">${ui.moldFrom ? `Tap where the ${ui.drawMold === 'top' ? 'top' : 'run'} ends.` : `Tap a wall where the ${ui.drawMold === 'top' ? 'top' : 'molding'} starts.`}</span>${stop}`;
+    else if (ui.placeLight) html = `<span class="tb-msg">${ui.placeLight === 'strip' ? 'Tap each cabinet that gets an LED strip.' : 'Tap where each ceiling light goes.'}</span>${stop}`;
+    else if (multi.length > 1) html = `<span class="tb-msg"><b>${multi.length} cabinets</b></span>${b('sel-del', `${icon('trash')}Delete ${multi.length}`, ' danger')}${none}`;
+    else if (selName) html = `<span class="tb-msg"><b>${esc(selName)}</b></span>${c ? b('ed-open', `${icon('edit')}Edit`, '', c.id) : ''}${b('sel-del', `${icon('trash')}Delete`, ' danger')}${none}`;
     // Rebuilt only when it changes, so the Length box keeps its keyboard and what is typed while the plan redraws.
     if (h._html !== html) { h.innerHTML = html; h._html = html; }
-    if (!ui.drawWalls && !what && !(ui.sel && ui.sel.type === 'wall')) h.classList.add('idle');
+    h.hidden = !html; h.classList.toggle('idle', !html);
     return;
   }
+  h.classList.remove('touchbar'); h.hidden = false;
+  { const pc = document.getElementById('plan-card'); if (pc && h.parentNode !== pc) pc.appendChild(h); }
+  if (ui.viewMode !== 'plan') return;
   h._html = null;
   if (ui.topEdit && cab(ui.topEdit)) { h.innerHTML = `Editing the top shape of <b>${esc(LBL[ui.topEdit] || '')}</b>. Drag a point, click a + to add one, <b>right-click</b> a point or an edge for more. <b>Esc</b> or <button class="btn sm" data-act="te-done">Done</button>`; return; }
   if (ui.placeLight === 'strip') { h.innerHTML = 'Click each cabinet that gets an LED strip; click again to take it off. <b>Right-click</b> or <b>Esc</b> to stop.'; return; }
@@ -714,7 +729,7 @@ function renderElev() {
     const ex = elevX(c, L), by = -c.elev, f = frontsSVG(c, ex, by, { withDefs: true, dims: ui.dims.fronts ? fs * 0.95 : 0, open: !!ui.open[c.id] });
     mats.push(...f.mats);
     body += `<g data-cab="${c.id}">` + f.svg;
-    const ps = panelStyle(cabSet(c, 'panelStyle')), pt = panelThick(c), ph = ps.toFloor || c.cat === 'Wall' ? c.h : c.h - effParams(c).toeKickHeight, pm = mat(ps.mat); mats.push(pm && pm.id);
+    const ps = panelFor(c), pt = panelThick(c), ph = ps.toFloor || c.cat === 'Wall' ? c.h : c.h - effParams(c).toeKickHeight, pm = mat(ps.mat); mats.push(pm && pm.id);
     if (hasPanel(c, 'L')) body += `<rect ${fillFor(pm, 'apanel')} x="${ex - pt}" y="${by - c.h}" width="${pt}" height="${ph}"/>`;
     if (hasPanel(c, 'R')) body += `<rect ${fillFor(pm, 'apanel')} x="${ex + c.w}" y="${by - c.h}" width="${pt}" height="${ph}"/>`;
     const fm = mat(fillerMat(c)), ftk = c.cat === 'Wall' || !hasToe(c) ? 0 : effParams(c).toeKickHeight; mats.push(fm && fm.id);

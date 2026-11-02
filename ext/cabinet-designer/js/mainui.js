@@ -13,7 +13,9 @@ const VIEW_ICONS = {
 };
 const vic = k => `<svg class="vic${['Walls', 'Molding', 'Tops'].includes(k) ? ' teal' : ''}" viewBox="0 0 20 20" aria-hidden="true">${VIEW_ICONS[k] || ''}</svg>`;
 // The desktop layout from the design; phones and narrow windows keep their own layout.
-const deskQuery = matchMedia('(min-width: 961px) and (min-height: 561px), (min-width: 961px) and (pointer: fine)');
+// Width only: on a phone or tablet the on-screen keyboard makes the window shorter, and switching
+// layouts then would close the keyboard the moment it opened.
+const deskQuery = matchMedia('(min-width: 961px)');
 const deskUI = () => deskQuery.matches;
 deskQuery.addEventListener('change', () => { if (ui.tab === 'room') renderRoom(); });
 
@@ -74,9 +76,16 @@ document.addEventListener('change', e => {
 document.addEventListener('keydown', e => { if (e.target.id === 'jobname' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
 // The design scales as one piece with the window, like the design tool's "Scale with screen":
 // one design pixel is min(width / 1920, height / 1080) of the window, never smaller than 0.62.
+// Touch screens: the keyboard shortens the window while typing; keep the height it had without it
+// (tallest seen at this width), so the screen doesn't shrink and jump under the finger.
+const tallAt = {};
+function screenH() {
+  if (!matchMedia('(pointer: coarse)').matches) return innerHeight;
+  return (tallAt[innerWidth] = Math.max(innerHeight, tallAt[innerWidth] || 0));
+}
 function setDesignScale() {
   const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
-  const u = Math.max(0.62, Math.min(innerWidth / 1920, innerHeight / 1080)) / z;
+  const u = Math.max(0.62, Math.min(innerWidth / 1920, screenH() / 1080)) / z;
   document.documentElement.style.setProperty('--u', u.toFixed(4) + 'px');
   document.body && document.body.classList.toggle('desk', deskUI());
 }

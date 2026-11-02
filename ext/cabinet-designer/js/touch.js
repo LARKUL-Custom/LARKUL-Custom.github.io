@@ -36,3 +36,15 @@ let fingersDown = 0;
     try { el.focus(); } catch (_) {}
   }, { capture: true, passive: true });
 })();
+
+// How far the page is zoomed out on this screen (the phone app shows the designer at a computer's
+// width), so the touch bar's buttons stay finger-sized: --fk is 1 when the page isn't zoomed out.
+(() => {
+  const set = () => {
+    const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
+    const sw = matchMedia('(orientation: landscape)').matches ? long : short;
+    const k = sw ? Math.max(1, Math.min(2.4, innerWidth / sw * 0.9)) : 1;
+    document.documentElement.style.setProperty('--fk', k.toFixed(2));
+  };
+  set(); addEventListener('resize', set); addEventListener('orientationchange', () => setTimeout(set, 200));
+})();

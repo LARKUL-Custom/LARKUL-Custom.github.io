@@ -204,7 +204,7 @@ function cabinetMeshes(c, opts = {}) {
       grp.add(pivot);
     } else grp.add(fg);
   });
-  const ps = panelStyle(cabSet(c, 'panelStyle')), pmM = M(mat(ps.mat) || cm), pt = panelThick(c);
+  const ps = panelFor(c), pmM = M(mat(ps.mat) || cm), pt = panelThick(c);
   const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pd = D + ps.frontOverhang;
   const pL = hasPanel(c, 'L'), pR = hasPanel(c, 'R');
   if (pL) grp.add(box3(pt, ph, pd, pmM, -pt / 2, py0 + ph / 2, pd / 2));

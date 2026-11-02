@@ -87,7 +87,8 @@ const SETTINGS = [
   { k: 'jointU', label: 'Joints, unfinished ends', list: () => opts(hwOf('joint')), tab: 'hardware' },
   { k: 'jointF', label: 'Joints, finished ends', list: () => opts(hwOf('joint')), tab: 'hardware' },
   { k: 'leg', label: 'Legs', list: () => opts(hwOf('leg')), tab: 'hardware' },
-  { k: 'panelStyle', label: 'Applied end panels', list: () => opts(S.panels), tab: 'panels' },
+  { k: 'panelDoor', label: 'Applied end panel door style', list: () => opts(S.doorStyles), tab: 'doors', blank: 'Same as the doors' },
+  { k: 'panelStyle', label: 'Applied end panel fit', list: () => opts(S.panels), tab: 'panels' },
   { k: 'partT', label: 'Part template (edgebanding)', list: () => opts(S.partTemplates), tab: 'parts' },
   { k: 'countertop', label: 'Countertop', list: () => opts(S.countertops), tab: 'countertops' },
   { k: 'molding', label: 'Quick molding', list: () => opts(S.moldings), tab: 'moldings' },
@@ -97,14 +98,14 @@ function settingPreview(k, id) {
   if (k === 'cabMatT') return swatch(mat(cabMatT(id).carcass), 16);
   if (k === 'drawerMatT') return swatch(mat(drawerMatT(id).sides), 16);
   if (k === 'countertop') return swatch(mat(countertop(id).mat), 16);
-  if (k === 'panelStyle') return swatch(mat(panelStyle(id).mat), 16);
+  if (k === 'panelDoor') return id ? swatch(mat(doorStyle(id).mat), 16) : '';
   return '';
 }
 /* ---------- Templates and hardware: picture tiles by category, like Mozaik ---------- */
 const TPL_CATS = [
   ['fronts', 'Doors and fronts', ['doorT', 'dt.door', 'dt.wallDoor', 'dt.drawerTop', 'dt.drawer', 'dt.drawerBot', 'dt.falseFront', 'pull', 'hinge']],
   ['drawers', 'Drawers', ['drawerMatT', 'slide']],
-  ['box', 'Box and panels', ['cabMatT', 'panelStyle', 'shelfpin', 'jointU', 'jointF', 'leg', 'partT']],
+  ['box', 'Box and panels', ['cabMatT', 'panelDoor', 'panelStyle', 'shelfpin', 'jointU', 'jointF', 'leg', 'partT']],
   ['tops', 'Tops and molding', ['countertop', 'molding']],
   ['walls', 'Walls', ['wallThick', 'wallHeight']],
 ];
@@ -130,7 +131,8 @@ function tplPic(k, id) {
       ? svg(`<path d="M30 24 L60 12 L94 22 L94 74 L64 86 L30 76 Z" fill="${c}" stroke="#555"/><path d="M30 24 L64 34 L94 22 M64 34 L64 86" fill="none" stroke="#555"/><path d="M36 30 L60 37 L60 78 L36 71 Z" fill="#000" fill-opacity=".12"/>`)
       : svg(`<path d="M22 40 L58 28 L100 38 L100 62 L64 74 L22 64 Z" fill="${c}" stroke="#555"/><path d="M22 40 L64 50 L100 38 M64 50 L64 74" fill="none" stroke="#555"/><path d="M28 44 L60 52 L96 42" fill="none" stroke="#555" stroke-opacity=".4"/>`);
   }
-  if (k === 'panelStyle') { const ps = panelStyle(id), c = col(mat(ps.mat)); return svg(`<rect x="44" y="4" width="32" height="82" fill="${c}" stroke="#555"/>${/shaker|routed|frame/i.test(ps.name + (ps.type || '')) ? '<rect x="50" y="12" width="20" height="66" fill="none" stroke="#555" stroke-opacity=".55"/>' : ''}`); }
+  if (k === 'panelDoor') { const ds = id ? doorStyle(id) : doorStyle(doorTpl(S.job.defaults.doorT).door), c = col(mat(ds.mat)); return svg(`<rect x="44" y="4" width="32" height="82" fill="${c}" stroke="#555"/>${ds.type !== 'slab' ? '<rect x="50" y="12" width="20" height="66" fill="none" stroke="#555" stroke-opacity=".55"/>' : ''}`); }
+  if (k === 'panelStyle') return svg('<rect x="44" y="4" width="32" height="82" fill="#e8e1d2" stroke="#555"/><path d="M76 10 h14 M76 80 h14" stroke="var(--accent)" stroke-width="2"/>');
   if (k === 'partT') return svg('<rect x="20" y="30" width="80" height="30" fill="#e8e1d2" stroke="#555"/><rect x="20" y="56" width="80" height="4" fill="var(--accent)"/><text x="60" y="80" text-anchor="middle" font-size="10" fill="currentColor">banded edge</text>');
   if (k === 'countertop') { const t = countertop(id), c = col(mat(t.mat)); return svg(`<path d="M10 40 L40 26 L112 26 L82 40 Z" fill="${c}" stroke="#555"/><path d="M10 40 L82 40 L82 48 L10 48 Z" fill="${c}" stroke="#555"/><path d="M82 40 L112 26 L112 34 L82 48 Z" fill="#000" fill-opacity=".15" stroke="#555"/>`); }
   if (k === 'molding') { const m = S.moldings.find(x => x.id === id); return m ? svg(`<path d="M40 76 L40 60 C 52 58 58 46 60 34 C 62 22 72 16 84 14 L84 76 Z" fill="${col(mat(m.mat))}" stroke="#555"/>`) : svg('<text x="60" y="50" text-anchor="middle" font-size="11" fill="currentColor">None</text>'); }
@@ -230,7 +232,7 @@ function renderDash() {
 // Every room's picks, by name, for a spreadsheet.
 function dashCSV() {
   const ks = dtKeys(TPL_CATS.flatMap(c => c[2]));
-  const name = (k, r) => { if (TPL_WALL[k]) return fmtLen(r[k] ?? S.job[k]); const sd = SETTINGS.find(x => x.k === k), id = roomSet(k, r); return ((sd.list().find(o => o.v === id) || {}).l) || (k === 'pull' ? 'From door template' : ''); };
+  const name = (k, r) => { if (TPL_WALL[k]) return fmtLen(r[k] ?? S.job[k]); const sd = SETTINGS.find(x => x.k === k), id = roomSet(k, r); return ((sd.list().find(o => o.v === id) || {}).l) || (k === 'pull' ? 'From door template' : sd.blank || ''); };
   const rows = [['Room', 'Cabinets', ...ks.map(k => TPL_WALL[k] || SETTINGS.find(x => x.k === k).label)], ...S.rooms.map(r => [r.name, r.cabinets.length, ...ks.map(k => name(k, r))])];
   return rows.map(r => r.map(csvq).join(',')).join('\n');
 }

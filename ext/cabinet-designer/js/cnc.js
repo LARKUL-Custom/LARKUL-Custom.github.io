@@ -16,10 +16,14 @@ const CNC_TRIM = 6.35; // mm, 1/4" kept clear on every sheet edge
 // opposite face become back side (flip) ops.
 const CNC_OPPOSITE = { inside: 'outside', outside: 'inside', front: 'back', back: 'front', left: 'right', right: 'left', top: 'bottom', bottom: 'top', show: 'hidden', hidden: 'show' };
 
-function cncPartFile() {
+// scoped: only the Cutlist tab's room and what is picked to cut (js/cutpick.js); else the whole job.
+function cncPartFile(scoped) {
   const d = exportData('mm'), r3 = v => Math.round(v * 1000) / 1000;
   const used = new Set(), parts = [], skipped = [];
-  d.rooms.forEach((rm, ri) => rm.cabinets.forEach(c => c.parts.forEach((p, pi) => {
+  const inRoom = ri => !scoped || ui.cutRoom === 'all' || !roomById(ui.cutRoom) || S.rooms[ri].id === ui.cutRoom;
+  const keep = (ri, cabId, kind) => inRoom(ri) && (!scoped || cutKeep(cutPartKey({ cabId, kind })));
+  d.rooms.forEach((rm, ri) => rm.cabinets.forEach((c, ci) => c.parts.forEach((p, pi) => {
+    if (!keep(ri, S.rooms[ri].cabinets[ci].id, p.kind)) return;
     const where = `${rm.name} · ${c.label} · ${p.name}`;
     const m = S.materials.find(x => x.id === p.material);
     if (!m || m.kind !== 'sheet') { skipped.push(`${where}: not a sheet material, left off`); return; }
@@ -106,6 +110,7 @@ function cncPartFile() {
   })));
   // Custom shapes cut as their outline, with no machining.
   d.rooms.forEach((rm, ri) => (rm.shapes || []).forEach((s, si) => {
+    if (!keep(ri, S.rooms[ri].shapes[si].id, 'shape')) return;
     const m = S.materials.find(x => x.id === s.material);
     if (!m || m.kind !== 'sheet') { skipped.push(`${rm.name} · ${s.name}: not a sheet material, left off`); return; }
     used.add(m.id);

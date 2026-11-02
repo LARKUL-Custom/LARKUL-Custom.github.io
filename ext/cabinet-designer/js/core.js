@@ -154,7 +154,7 @@ const DOOR_DEFAULTS = {
   // Made in the shop (cut list and CNC) or bought from a door maker (door order only).
   source: 'make', vHinge: 'none',
   // Split doors: opening sizes top to bottom (splitH) and left to right (splitW); a number, a formula of W and H, or blank to share.
-  splitH: [], splitW: [], fieldPanels: [], cat: '', costFactor: 1, matCost: '',
+  splitH: [], splitW: [], fieldPanels: [], cat: '', rate: 14, min: 20, matCost: '',
   // Size rules: a front outside these (blank = no limit) takes the swap style instead, e.g. a short shaker drawer front becomes a slab.
   minW: '', maxW: '', minH: '', maxH: '', swap: '',
   // Two-piece doors: the rabbet the panel drops into from the back, and the play around the panel.
@@ -386,7 +386,7 @@ function attachRoom(st) {
   });
   return st;
 }
-const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'doorT', 'pull', 'slide', 'hinge', 'panelStyle', 'partT', 'jointU', 'jointF'];
+const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'doorT', 'pull', 'slide', 'hinge', 'panelStyle', 'panelDoor', 'partT', 'jointU', 'jointF'];
 // Older saves had one room and stored the job default on every cabinet. Blank those so cabinets follow room settings.
 // Blum TANDEM plus BLUMOTION 563H, frameless, from Blum's 563H/563 installation sheet (2016).
 // Runner screws: top row 37 mm above the runner bottom (the opening bottom), the box sits 14 mm above it, so 23 mm above the box bottom.

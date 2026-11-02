@@ -174,7 +174,7 @@ let vAct = function (a, id) {
 };
 
 /* ----- V10: price sheet charges by count, and hiding zero lines ----- */
-const COUNT_KINDS = [['buyout', 'Buyout doors and fronts', 'each'], ['made', 'Shop-made doors and fronts', 'each'], ['shaped', 'Shaped cabinets (front, side or top shape)', 'each'], ['fillers', 'Fillers', 'each'], ['panels', 'Applied end panels', 'each'], ['cnc', 'CNC parts', 'each']];
+const COUNT_KINDS = [['buyout', 'Buyout doors and fronts', 'each'], ['made', 'Shop-made doors and fronts', 'each'], ['shaped', 'Shaped cabinets (front, side or top shape)', 'each'], ['cnc', 'CNC parts', 'each']];
 function vCounts(cabs) {
   const n = { buyout: 0, made: 0, shaped: 0, fillers: 0, panels: 0, cnc: 0 };
   cabs.forEach(({ c }) => {

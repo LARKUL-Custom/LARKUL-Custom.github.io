@@ -119,7 +119,7 @@ function setOpenJob(path) { jobs.path = path; jobs.folder = jobFolderOf(path); j
 function loadJobState(s, path) {
   S = s; setOpenJob(path);
   undoStack = []; redoStack = [];
-  Object.assign(ui, { sel: null, drawing: null, drawWalls: false, placing: null, ghost: null, open: {}, cutCab: 'all', cutRoom: 'all', setRoom: null, partSel: null });
+  Object.assign(ui, { sel: null, drawing: null, drawWalls: false, placing: null, ghost: null, open: {}, cutPick: null, cutPickOpen: false, cutRoom: 'all', setRoom: null, partSel: null });
   if (roomViewer) roomViewer.fitted = false; if (designerViewer) designerViewer.fitted = false;
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {}
   hideJobs(); goTab('room'); requestAnimationFrame(fitView); showSaveState();
@@ -137,7 +137,7 @@ async function openJob(path) {
 function blankJob(name, customer) {
   const s = clone(S), d = seed();
   ['walls', 'cabinets', 'ctRuns'].forEach(k => delete s[k]);
-  s.job = { ...s.job, name, customer: customer || '', notes: '' };
+  s.job = { ...s.job, name, customer: customer || '', notes: '' }; delete s.job.priceOver;
   s.rooms = [newRoom('r1', 'Room 1', [])]; s.rooms[0].wallThick = s.job.wallThick; s.rooms[0].wallHeight = s.job.wallHeight;
   s.roomId = 'r1'; s.designer = null;
   return migrate(JSON.parse(JSON.stringify(s))) || d;
