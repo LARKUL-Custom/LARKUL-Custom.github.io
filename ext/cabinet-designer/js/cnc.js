@@ -122,7 +122,8 @@ function cncPartFile(scoped) {
     if (!sm) return {};
     let tx = null;
     try { tx = typeof texURL === 'function' ? texURL(sm) : null; } catch (e) { tx = null; }
-    return { ...(sm.color ? { color: sm.color } : {}), ...(tx && tx.startsWith('data:image/') ? { texture: tx } : {}), textureSize: (sm.texScale || 24) * 25.4 };
+    const f = Number(sm.feedRate);
+    return { ...(f >= 10 && f <= 200 && f !== 100 ? { feedRate: Math.round(f) } : {}), ...(sm.color ? { color: sm.color } : {}), ...(tx && tx.startsWith('data:image/') ? { texture: tx } : {}), textureSize: (sm.texScale || 24) * 25.4 };
   };
   const materials = d.materials.filter(m => used.has(m.id)).map(m => ({
     id: m.id, name: m.name, thickness: m.thickness, grain: !!m.grain,

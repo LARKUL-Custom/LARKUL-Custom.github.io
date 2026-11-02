@@ -168,7 +168,7 @@ function renderMaterials() {
   const kinds = [{ v: 'sheet', l: 'Sheet' }, { v: 'top', l: 'Countertop' }, { v: 'solid', l: 'Solid wood' }];
   S.materials.forEach(m => { const u = use[m.id], sheets = u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0; totalSheets += m.kind === 'top' ? 0 : sheets; totalCost += sheets * (m.cost || 0); });
   const rows = libRows('mat', S.materials).map(m => {
-    if (m.hdr) return `<tr><td colspan="17" class="grouprow"><b>${esc(m.hdr)}</b></td></tr>`;
+    if (m.hdr) return `<tr><td colspan="18" class="grouprow"><b>${esc(m.hdr)}</b></td></tr>`;
     const u = use[m.id], sheets = u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0;
     const R = 'mat:' + m.id;
     return `<tr><td style="width:46px"><label class="texup" title="Upload a texture photo">${swatch(m, 30)}<input type="file" accept="image/*" data-tex="${m.id}" hidden></label></td>
@@ -183,6 +183,7 @@ function renderMaterials() {
       <td style="width:44px">${ctl(R, 'color', m.color, 'color', { label: 'Color' })}</td>
       <td style="width:60px">${ctl(R, 'texScale', m.texScale || 24, 'len', { label: 'Texture size' })}</td>
       <td style="width:70px">${ctl(R, 'cost', m.cost, 'num', { label: 'Cost per sheet' })}</td>
+      <td style="width:60px">${m.kind === 'sheet' || !m.kind ? ctl(R, 'feedRate', m.feedRate || 100, 'num', { label: 'CNC feed rate percent' }) : ''}</td>
       <td class="n">${u.count}</td><td class="n">${(u.area / 144).toFixed(1)}</td><td class="n"><b>${sheets}</b></td>
       <td style="width:120px;white-space:nowrap"><button class="btn sm" data-act="tex-lib" data-id="${m.id}" title="Pick a texture from the shop's texture library">Library</button>${m.texture ? ` <button class="btn sm" data-act="tex-clear" data-id="${m.id}">Clear</button>` : ''}</td>
       <td style="width:110px">${libRowBtns('mat', m.id)}</td><td style="width:30px"><button class="btn sm" data-act="mat-del" data-id="${m.id}" aria-label="Delete material">×</button></td></tr>`;
@@ -190,7 +191,7 @@ function renderMaterials() {
   const mc = S.matTemplates.cabinet, md = S.matTemplates.drawer;
   $('#tab-materials').innerHTML = `<div class="pagehead"><div><h2>Materials</h2><p>The material library holds every sheet, top and solid you use. Pick a texture from the library, or click a swatch to upload your own photo; it shows in the elevation, 3D and Realistic views. Templates bundle materials so a cabinet picks one template instead of five materials.</p></div><div class="row-actions"><button class="btn" data-act="tex-lib" data-id="">From texture library</button><button class="btn primary" data-act="mat-add">Add material</button></div></div>
   <div class="card stats"><div class="stat"><span class="eyebrow">Sheets</span><b>${totalSheets}</b></div><div class="stat"><span class="eyebrow">Material cost</span><b>$${totalCost.toLocaleString()}</b></div><div class="stat"><span class="eyebrow">Cabinets, all rooms</span><b>${allCabs().length}</b></div>${saveNote ? `<div class="warnbox">${esc(saveNote)}</div>` : ''}</div>
-  <div class="card">${cardHead('Material library')}${libTableBar('mat', 'Materials')}<datalist id="matgroups">${[...new Set(S.materials.map(m => m.group).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('')}</datalist><div class="tscroll"><table class="t"><thead><tr><th>Texture</th><th>Name</th><th>Group</th><th>Kind</th><th>Thick</th><th>Sheet W</th><th>Sheet L</th><th>Grain</th><th title="Takes the look of the material picked for each room">Dynamic</th><th>Color</th><th>Tex size</th><th>$/unit</th><th class="r">Parts</th><th class="r">Sq ft</th><th class="r">Sheets</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+  <div class="card">${cardHead('Material library')}${libTableBar('mat', 'Materials')}<datalist id="matgroups">${[...new Set(S.materials.map(m => m.group).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('')}</datalist><div class="tscroll"><table class="t"><thead><tr><th>Texture</th><th>Name</th><th>Group</th><th>Kind</th><th>Thick</th><th>Sheet W</th><th>Sheet L</th><th>Grain</th><th title="Takes the look of the material picked for each room">Dynamic</th><th>Color</th><th>Tex size</th><th>$/unit</th><th title="CNC feed rate, as a percent of the post's feeds (100 = as set). Goes to CNC Cutlist with the part file.">Feed %</th><th class="r">Parts</th><th class="r">Sq ft</th><th class="r">Sheets</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
   <div class="cards">
     <div class="card">${cardHead('Cabinet material templates', '<button class="btn sm" data-act="mtc-add">Add</button>')}<div class="cardbody">${mc.map(t => `<div class="tplrow" data-drag="cabMatT:${t.id}">
       <div class="tplhead">${swatch(mat(t.carcass), 22)}${ctl('mtc:' + t.id, 'name', t.name, 'text', { label: 'Template name' })}<span class="note">${nCab(usedBy(c => cabSet(c, 'cabMatT') === t.id))}</span>${delBtn('mtc-del', t.id, mc.length < 2, '×')}</div>
