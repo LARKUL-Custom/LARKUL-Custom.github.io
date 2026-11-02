@@ -85,9 +85,13 @@ function readMozRoom(el, fallbackName) {
       })).filter(f => f.w > 0 && f.h > 0),
     };
   }).filter(p => p.w > 0 && p.h > 0 && p.d > 0);
+  // Appliances and sinks (Appls, Wall="2_1" like products) and wall openings and windows (Fixts, Wall="1").
+  const fx = (x, src) => ({ src, name: x.getAttribute('Name') || '', type: +x.getAttribute('Type') || 0, wall: parseInt(x.getAttribute('Wall'), 10) || 0, back: /_2$/.test(x.getAttribute('Wall') || ''),
+    w: mzNum(x, 'Width'), h: mzNum(x, 'Height'), d: mzNum(x, 'Depth') || 0, x: mzNum(x, 'X') || 0, elev: mzNum(x, 'Elev') || 0 });
+  const appls = [...kids(el.querySelector(':scope > Appls'), 'Appl').map(x => fx(x, 'appl')), ...kids(el.querySelector(':scope > Fixts'), 'Fixt').map(x => fx(x, 'fixt'))].filter(a => a.w > 0 && a.h > 0);
   const set = el.querySelector(':scope > RoomSet'), hwNames = {};
   if (set) [['slide', 'DrawerGuide'], ['hinge', 'BaseHinges'], ['pull', 'BasePulls']].forEach(([k, a]) => { const v = set.getAttribute(a); if (v) hwNames[k] = v; });
-  return { name: el.getAttribute('Name') || fallbackName, walls, prods, hwNames };
+  return { name: el.getAttribute('Name') || fallbackName, walls, prods, appls, hwNames };
 }
 function readMozaik(texts) {
   const rooms = []; let jobName = '';
@@ -186,8 +190,30 @@ function mozInsert(name) {
   if (/roll ?out|rollout|pull ?out shel/.test(n)) return def('rollout');
   return { ...def('other'), name };
 }
-// Not cabinets: floating shelves, crown and ceiling trim, panel backs. They're listed after the import instead.
-const mozSkip = p => /panel back|back panel/i.test(p.name) || /shelf|trim|molding|crown/i.test(p.name) && !p.fronts.length;
+// Not cabinets: floating shelves, crown and ceiling trim. They're listed after the import instead.
+const mozSkip = p => /shelf|trim|molding|crown/i.test(p.name) && !p.fronts.length;
+// Mozaik's panel backs (the finished back of an island) become an upright panel in the room.
+const isPanelBack = p => /panel back|back panel/i.test(p.name);
+// The Cabinet Designer appliance or opening for a Mozaik one. Outlets, faucets and other pictures (Type 20) are left out
+// quietly; a Mozaik wall stub (TWall) and anything unknown is listed after the import.
+function mozFixtPreset(a) {
+  const n = a.name.toLowerCase();
+  if (a.src === 'fixt') return /window/.test(n) || a.type === 6 ? 'wn-1' : /door/.test(n) && !/opening/.test(n) ? 'dr-int-l' : 'op-cased';
+  if (a.type === 1 || /fridge|refrig/.test(n)) return 'fr-std';
+  if (a.type === 2 || /dish ?washer/.test(n)) return 'dw';
+  if (a.type === 5 || /sink/.test(n)) return /farm/.test(n) ? 'sk-farm' : /apron/.test(n) ? 'sk-apron' : /bar/.test(n) ? 'sk-bar' : /bath|vanity|oval/.test(n) ? 'sk-bath'
+    : /drop/.test(n) ? (/double/.test(n) ? 'sk-di2' : 'sk-di1') : /triple/.test(n) ? 'sk-um3' : /double/.test(n) ? 'sk-um2' : 'sk-um1';
+  if (/range|stove|cooktop/.test(n)) return 'rg-slide';
+  if (/washer/.test(n)) return 'ld-fw';
+  if (/dryer/.test(n)) return 'ld-fd';
+  return null;
+}
+// An upright panel standing on one side of a wall, from off along it, like the shapes drawn in the Shapes tool.
+function mozPanel(rm, name, wallId, side, off, w, h, t) {
+  const sheet = S.materials.find(m => (m.kind || 'sheet') === 'sheet') || S.materials[0];
+  const sh = { id: uid('s'), libId: null, name, plane: 'upright', pts: rect4(w, h), thick: t, mat: sheet.id, wall: wallId, side, off: r3(off), outset: 0, elev: 0, fromMozaik: true };
+  rm.shapes.push(sh); return sh;
+}
 // A product with no wall (an island) gets a thin back wall of its own at its spot in the room.
 function mozIsland(rm, p) {
   const a = p.rot * Math.PI / 180, u = { x: Math.cos(a), y: -Math.sin(a) }, x = p.x, y = -(p.y || 0);
@@ -209,6 +235,11 @@ function mozRooms(data) {
     const cabs = [], extras = [];
     ps.forEach(p => {
       if (mozSkip(p)) { (data.skipped = data.skipped || []).push(p.name); return; }
+      if (isPanelBack(p) && walls[p.wall - 1]) {
+        const wl = walls[p.wall - 1], side = p.back ? -1 : 1, off = p.back ? wl.a0 + wl.L - p.x - p.w : p.x + wl.a0;
+        mozPanel(rm, wl.hidden ? 'Island back panel' : p.name, wl.id, side, off, p.w, p.h, p.d > 0 && p.d < 2 ? p.d : 0.75);
+        return;
+      }
       const wl = walls[p.wall - 1];
       // On the back of a wall Mozaik measures X from the wall's far end, the viewer's left from that side.
       const at = !wl ? mozIsland(rm, p) : p.back ? { wall: wl.id, side: -1, off: r3(wl.a0 + wl.L - p.x - p.w) } : { wall: wl.id, side: 1, off: r3(p.x + wl.a0) };
@@ -233,6 +264,26 @@ function mozRooms(data) {
       const toWall = ref && !ref.hidden && (hi ? at.off + p.w > L - 0.5 : at.off < 0.5 + ref.a0) && rm.walls.length > 1;
       if (isFiller(p) && toWall) c['fill' + end] = 'on'; else c['panel' + end] = 'on';
     });
+    // An island line (Mozaik's see-through wall) with cabinets on one side gets one finished back panel along its
+    // whole length on the open side, as tall as the cabinets, unless Mozaik already had one there.
+    walls.forEach(wl => {
+      if (!wl.hidden) return;
+      const on = rm.cabinets.filter(c => c.wall === wl.id && c.elev < 1), sides = new Set(on.map(c => c.side));
+      if (sides.size !== 1) return;
+      const open = -[...sides][0];
+      if (rm.shapes.some(x => x.wall === wl.id && x.side === open)) return;
+      mozPanel(rm, 'Island back panel', wl.id, open, wl.a0, wl.L, Math.max(...on.map(c => c.elev + c.h)), 0.75);
+    });
+    // Appliances, sinks, openings and windows, placed along their wall like the cabinets.
+    (src.appls || []).forEach(a => {
+      const pid = mozFixtPreset(a), wl = walls[a.wall - 1];
+      if (!pid || !wl) { if (a.type !== 20) (data.skipped = data.skipped || []).push(a.name); return; }
+      const f = fixtNew(pid), w = sz(a.w), x = cv(a.x);
+      Object.assign(f, { w, h: sz(a.h), wall: wl.id, side: a.back ? -1 : 1, off: r3(a.back ? wl.a0 + wl.L - x - w : x + wl.a0), fromMozaik: true });
+      if (fixtDef(f).top) f.name = a.name || f.name; else if (a.src === 'fixt') { f.name = a.name || f.name; f.elev = sz(a.elev); } else f.d = sz(a.d) || f.d;
+      rm.fixtures.push(f);
+    });
+    rm.autoTops = true;
     return rm;
   });
 }

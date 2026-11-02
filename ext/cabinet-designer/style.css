@@ -238,6 +238,7 @@ svg text{font-family:var(--f-label)}
 .g-major{stroke:var(--grid-major);fill:none}
 .wallpoly{fill:var(--wall);stroke:var(--wall)}
 .wallpoly.sel{fill:var(--sel);stroke:var(--sel)}
+.wallhid{stroke:var(--wall);fill:none}.wallhid.sel{stroke:var(--sel)}
 .handle{fill:var(--panel);stroke:var(--sel);stroke-width:2;cursor:move}
 .c-base{fill:var(--wood);stroke:var(--wood-edge)}
 .c-tall{fill:var(--tall);stroke:var(--wood-edge)}

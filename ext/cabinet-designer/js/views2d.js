@@ -34,7 +34,9 @@ function renderPlan() {
   S.walls.forEach(w => {
     const g = wg(w), h = w.thick / 2, P = (a, b) => ({ x: w.x1 + g.u.x * a + g.n.x * b, y: w.y1 + g.u.y * a + g.n.y * b });
     const isSel = ui.sel && ui.sel.type === 'wall' && ui.sel.id === w.id;
-    s += `<polygon class="wallpoly nss${isSel ? ' sel' : ''}" data-wall="${w.id}" points="${polyPts([P(-h, -h), P(g.L + h, -h), P(g.L + h, h), P(-h, h)])}"/>`;
+    // An island line (see-through wall) shows as a dashed line.
+    if (w.hidden) s += `<line class="wallhid nss${isSel ? ' sel' : ''}" data-wall="${w.id}" x1="${w.x1}" y1="${w.y1}" x2="${w.x2}" y2="${w.y2}" stroke-width="${Math.max(2 * px, w.thick)}" stroke-dasharray="${6 * px} ${4 * px}"/>`;
+    else s += `<polygon class="wallpoly nss${isSel ? ' sel' : ''}" data-wall="${w.id}" points="${polyPts([P(-h, -h), P(g.L + h, -h), P(g.L + h, h), P(-h, h)])}"/>`;
     capsOf(w).forEach(cp => { s += `<polygon class="wallpoly cap nss${isSel ? ' sel' : ''}" points="${polyPts(capPoly(w, cp))}"/>`; });
     const out = -elevSide(w);
     const m = P(g.L / 2, out * (h + 15 * px)); let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;

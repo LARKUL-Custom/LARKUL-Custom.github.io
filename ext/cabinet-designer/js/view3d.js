@@ -485,7 +485,8 @@ function buildRoomScene(v) {
   // Cutaway (a Layers option): walls between the camera and the room hide, so you see in without lowering the opacity.
   const cutaway = !!ui.cutaway && wallMode !== 'hidden';
   S.walls.forEach(w => {
-    if (wallMode === 'hidden') return;
+    // An island line (a see-through wall from Mozaik) only places cabinets; there's no wall to draw.
+    if (wallMode === 'hidden' || w.hidden) return;
     const g = wg(w), grp = new THREE.Group(), mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
     grp.position.set(mx, 0, my);
     grp.rotation.y = Math.atan2(-g.u.y, g.u.x);
