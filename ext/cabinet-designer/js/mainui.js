@@ -50,7 +50,7 @@ function itemBar(c) {
     <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}<span class="ib-gap"></span>${sz('Depth', 'd')}${sz('Outset', 'outset')}</div>
     <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}</div>
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
-      <div class="ib-small">${openable(c) ? `<button data-act="open-toggle" data-id="${id}" aria-pressed="${!!ui.open[id]}" title="Open or close its doors and drawers (O)">${icon('open')}${ui.open[id] ? 'Close' : 'Open'}</button>` : ''}<button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-flip" data-id="${id}" title="Flip left and right">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
+      <div class="ib-small">${openable(c) ? `<button data-act="open-toggle" data-id="${id}" aria-pressed="${!!ui.open[id]}" title="Open or close its doors and drawers (O)">${icon('open')}${ui.open[id] ? 'Close' : 'Open'}</button>` : ''}<button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
       : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
   </div>`;
 }
@@ -257,3 +257,23 @@ document.addEventListener('click', e => {
   else if (a === 'se-walls-save') saveWallsShape();
   else { mutate(() => { S.shapeDesign = blankShapeDesign(); }); goTab('room'); }
 }, true);
+
+// Rehinge: single doors swap their hinge side. Pairs of doors have nothing to swap.
+function hingeRows(c) { return (c && c.rows || []).filter(r => r.type === 'door' && (r.count | 0) <= 1); }
+function rehingeable(c) { return hingeRows(c).length > 0; }
+function hingeNow(c) { const r = hingeRows(c)[0]; return r && (r.hinge === 'L' || r.hinge === 'R') ? r.hinge : effParams(c).hingeSide; }
+function rehinge(c) {
+  if (!rehingeable(c)) { flash('This cabinet has no single doors to rehinge.'); return; }
+  const to = hingeNow(c) === 'L' ? 'R' : 'L';
+  mutate(() => hingeRows(c).forEach(r => { r.hinge = to; }));
+  flash(`Hinged on the ${to === 'L' ? 'left' : 'right'}`);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-act="cab-rehinge"]'); if (!b) return;
+  e.stopPropagation(); rehinge(cab(b.dataset.id));
+}, true);
+document.addEventListener('keydown', e => {
+  if ((e.key !== 'h' && e.key !== 'H') || e.ctrlKey || e.metaKey || e.altKey || !ui.sel || ui.sel.type !== 'cab') return;
+  const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  const c = cab(ui.sel.id); if (c && rehingeable(c)) { e.preventDefault(); rehinge(c); }
+});
