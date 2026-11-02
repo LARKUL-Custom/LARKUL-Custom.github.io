@@ -242,7 +242,7 @@ function renderJobs() {
   el.innerHTML = `<div class="jobs">
     <div class="jobshead">
       <div class="jobstitle">${icon('folder')}<div><h2>Job manager</h2><p>Each job is saved as its own file in a folder. Open one to keep drawing, or start a new one.</p></div></div>
-      <div class="row-actions">${cur ? `<button class="btn" data-act="jobs-back">${icon('back')}Back to ${esc(cur.name)}</button>` : ''}<label class="btn">${icon('upload')}Import job<input type="file" accept=".json,application/json" data-job-import hidden></label><button class="btn primary" data-act="job-new-show">${icon('plus')}New job</button></div>
+      <div class="row-actions">${cur ? `<button class="btn" data-act="jobs-back">${icon('back')}Back to ${esc(cur.name)}</button>` : ''}<label class="btn">${icon('upload')}Import job<input type="file" multiple data-job-import hidden title="A Cabinet Designer job, or a Mozaik job (zipped job folder or .moz room files)"></label><button class="btn primary" data-act="job-new-show">${icon('plus')}New job</button></div>
     </div>
     ${jobs.newOpen ? `<div class="card newjob"><h3>${icon('plus')}New job</h3>
       <div class="newgrid"><label class="f wide"><span>Job name</span><input type="text" id="nj-name" value="${esc(jobs.newName || '')}" placeholder="Smith kitchen"></label>
@@ -419,7 +419,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'jm-archfrom') { jobs.cats.archiveFrom = e.target.value; stageStore.save(); renderJobs(); }
   if (e.target.id === 'jm-archdays') { jobs.cats.archiveDays = Math.max(1, Math.min(3650, +e.target.value || 30)); stageStore.save(); renderJobs(); }
   const inp = e.target.closest('input[data-job-import]');
-  if (inp && inp.files[0]) { importJob(inp.files[0]); inp.value = ''; }
+  if (inp && inp.files[0]) { const f = [...inp.files]; (isMozaikPick(f) ? importMozaik(f).catch(err => flash('Could not import from Mozaik: ' + err.message)) : importJob(f[0])); inp.value = ''; }
 });
 // A job file from Export (or another computer) comes in as a new job; it never replaces one you have.
 async function importJob(file) {
