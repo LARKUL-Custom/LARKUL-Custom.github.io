@@ -140,7 +140,10 @@ function libPeekHTML(id) {
   const l = id && typeof id === 'string' && !id.includes(':') && libItem(id);
   if (!l || l.cat === 'Shape') return `<div class="lp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1"/><path d="M14 7h7m-3-3 3 3-3 3M7 14v7m-3-3 3 3 3-3"/></svg><span>Drag a product onto the drawing</span></div>`;
   let pic = '';
-  try { const c = newCab(S, l, null, 1, 0); c.id = '_peek'; pic = frontPreviewSVG(c, 150); } catch (_) { pic = miniFront(l); }
+  const late = url => { const img = document.querySelector('#libpeek img[data-peek="' + l.id + '"]'); if (img) img.src = url; };
+  const url = typeof libPeek3D === 'function' ? libPeek3D(l, late) : null;
+  if (url) pic = `<img src="${url}" data-peek="${esc(l.id)}" alt="">`;
+  else try { const c = newCab(S, l, null, 1, 0); c.id = '_peek'; pic = frontPreviewSVG(c, 150); } catch (_) { pic = miniFront(l); }
   return `<div class="lp-pic">${pic}</div><div class="lp-name">${esc(l.name)}</div><div class="lp-dim">${fmtLen(l.w)} × ${fmtLen(l.h)} × ${fmtLen(l.d)}</div>`;
 }
 document.addEventListener('mouseover', e => {

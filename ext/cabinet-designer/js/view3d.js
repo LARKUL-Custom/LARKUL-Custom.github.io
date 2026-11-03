@@ -659,3 +659,34 @@ function view3dPreset(v, k) {
     const g = wg(w), s = elevSide(w); v.look({ x: g.n.x * s, y: 0.12, z: g.n.y * s });
   }
 }
+
+// Library picture: the product drawn in 3D once, off screen, and kept as an image (like Mozaik's preview
+// above its product tree). One small hidden viewer does every picture; textures that load late redraw it once.
+let peekViewer = null; const peekPics = {};
+function libPeek3D(l, onLate) {
+  if (!has3D() || !l) return null;
+  const key = l.id + '|' + [l.w, l.h, l.d].join('x') + '|' + (S.roomId || '') + '|' + document.documentElement.dataset.theme;
+  if (peekPics[key]) return peekPics[key];
+  if (!peekViewer) {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:360px;height:280px;pointer-events:none';
+    document.body.appendChild(host); peekViewer = new Viewer3D(host);
+    if (!peekViewer.ok) return null;
+    peekViewer.requestRender = () => {};
+  }
+  const v = peekViewer; if (!v.ok) return null;
+  const shot = () => {
+    v.scene.background = new THREE.Color(cssVar('--panel')); v.clear();
+    const c = newCab(S, l, null, 1, 0); c.id = '_peek';
+    const m = cabinetMeshes(c); m.position.x = -c.w / 2; v.root.add(m);
+    // Corners with an angled or L face are seen from the open side, so the doors show.
+    const sx = l.corner && l.corner.type !== 'blind' ? (cornerSide(l) === 'L' ? 0.8 : -0.8) : -0.8;
+    v.resize(); v.look({ x: sx, y: 0.5, z: 1.4 }); v.draw();
+    return v.renderer.domElement.toDataURL('image/png');
+  };
+  let url = null;
+  try { url = peekPics[key] = shot(); } catch (_) { return null; }
+  // Wood textures arrive a moment later: take the picture again once.
+  setTimeout(() => { try { peekPics[key] = shot(); if (onLate) onLate(peekPics[key]); } catch (_) {} }, 700);
+  return url;
+}
