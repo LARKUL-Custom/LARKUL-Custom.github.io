@@ -43,7 +43,7 @@ function edTools(c, qr) {
       <button class="btn sm icon-only" data-act="qe-rowmove" data-id="${qr}:1" title="Move opening ${qr + 1} down"${qr < c.rows.length - 1 ? '' : ' disabled'}>${icon('down')}</button>
       <button class="btn sm icon-only" data-act="qe-rowequal" data-id="${c.id}" title="Make every opening the same height"${c.rows.length > 1 ? '' : ' disabled'}>${icon('equal')}</button>
       <button class="btn sm icon-only danger" data-act="qe-rowdel" data-id="${qr}" title="Remove opening ${qr + 1}"${c.rows.length > 1 ? '' : ' disabled'}>${icon('trash')}</button>
-      <span class="muted">Opening ${qr + 1} of ${c.rows.length}</span></div>
+      <span class="muted ed-which">Opening ${qr + 1} of ${c.rows.length}</span></div>
     ${ui.edGrid ? `<div class="ed-gridform psec box">
       <div class="ed-split"><span>Direction</span>${seg('Dir', [['h', 'Stacked'], ['v', 'Side by side']], dir)}</div>
       <div class="ed-split"><span>Equal spaces</span>${seg('N', [2, 3, 4, 5, 6].map(x => [x, x]), n)}</div>
@@ -105,7 +105,7 @@ function edTab(c, tab, qr) {
           <div class="grid2">${fld('Door template', R, 'doorT', c.doorT || '', 'select', { options: setOpts('doorT', opts(S.doorTemplates), 'cab') })}${fld('Pulls', R, 'pull', c.pull || '', 'select', { options: setOpts('pull', opts(hwOf('pull')), 'cab') })}
           ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}</div></div>${ffBox(c)}`;
     }
-    case 'interior': return `${qeOpening(c, qr, 'inside')}${qeInside(c)}${typeof qInteriorExtras === 'function' ? qInteriorExtras(c) : ''}`;
+    case 'interior': return `${qeOpening(c, qr, 'inside')}${intLibrary(c, qr)}<div class="psec box">${intWhole(c)}</div>${typeof qInteriorExtras === 'function' ? qInteriorExtras(c) : ''}`;
     case 'materials': return `<div class="psec box">${secHead('palette', 'Materials and hardware', 'amber')}${dockBody('cab-tpl')}
         <div class="grid2">${fld('Joints, unfinished ends', R, 'jointU', c.jointU || '', 'select', { options: setOpts('jointU', opts(hwOf('joint')), 'cab') })}${fld('Joints, finished ends', R, 'jointF', c.jointF || '', 'select', { options: setOpts('jointF', opts(hwOf('joint')), 'cab') })}</div></div>`;
     case 'ends': return `<div class="psec box">${secHead('ends', 'End panels and fillers', 'amber')}${endRows(c)}
@@ -139,9 +139,9 @@ function renderEditor(el, c) {
       <button class="btn sm qe-x" data-act="qe-close" aria-label="Close the cabinet editor">${icon('close')}</button></div>
     <div class="ed-tabs" role="tablist" aria-label="Cabinet editor">${ED_TABS.map(([k, l, ic]) => `<button role="tab" data-act="ed-tab" data-id="${k}" aria-selected="${ui.edTab === k}">${icon(ic)}${l}</button>`).join('')}</div>
     <div class="ed-body">
-      <div class="qe-prev">${ui.edTab === 'face' ? edTools(c, qr) : ''}<div class="preview pad">${qeFaceSVG(c, qr, 620, ui.edTab === 'interior')}</div><div class="note qe-tip">${ui.edTab === 'interior' ? 'Inside view, with the doors and drawer fronts off. ' : ''}${isPhone() ? 'Tap' : 'Click'} an opening to edit it.</div></div>
+      <div class="qe-prev${ui.edTab === 'face' ? ' tools' : ''}">${ui.edTab === 'face' ? edTools(c, qr) : ''}<div class="preview pad">${qeFaceSVG(c, qr, 620, ui.edTab === 'interior')}</div><div class="note qe-tip">${ui.edTab === 'interior' ? 'Inside view, with the doors and drawer fronts off. ' : ''}${isPhone() ? 'Tap' : 'Click'} an opening to edit it.</div></div>
       <div class="ed-main">${edTab(c, ui.edTab, qr)}</div>
-      <div class="ed-acts">${act('qe-close', 'check', 'Done', ' primary')}${act('q-save', 'check', 'Save changes')}
+      <div class="ed-acts">${act('qe-close', 'check', 'Done', ' primary')}
         ${openable(c) ? act('open-toggle', 'open', ui.open[id] ? 'Close fronts' : 'Open fronts', ui.open[id] ? ' on' : '') : ''}
         ${act('cab-dup', 'copy', 'Duplicate')}${act('cab-flip', 'flip', 'Flip')}${act('show-parts', 'list', 'View cut list')}${act('q-tolib', 'stack', 'Save to library')}${act('cab-to-designer', 'cube', 'Open in Designer')}${act('cab-zoom3d', 'cube', 'See it in 3D')}
         <span class="ed-gap"></span>${act('cab-del', 'trash', 'Delete', ' danger')}</div>

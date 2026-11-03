@@ -311,12 +311,13 @@ function interiorLayout(c, p, fronts) {
   const zones = doorZones.length ? doorZones : (fronts.length ? [] : [[zIn0, zIn1]]);
   const low = zones.length ? zones[zones.length - 1] : null, ins = c.inserts || [];
   const hasDoors = fronts.some(f => f.type === 'door');
-  const out = { t, zIn0, zIn1, inW, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? 1 : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], bom: [] };
+  const out = { t, zIn0, zIn1, inW, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? 1 : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], pulls: [], bom: [] };
   // An insert goes in the door opening it names (it.row), or else the bottom one.
   const used = new Set();
   ins.forEach(it => {
     const low = (it.row !== undefined && it.row !== '' && zones.find(z => z.row === +it.row)) || out.low;
-    if (['rollout', 'rotray', 'roshelf', 'trash', 'lazy'].includes(it.type) && low) used.add(low);
+    // These fill their opening top to bottom, so it gets no adjustable shelves (tray dividers would have to go through them).
+    if (SHELF_BLOCKERS.includes(it.type) && low) used.add(low);
     if (it.type === 'divider') out.divX = it.x > 0 ? Math.min(c.w - t * 1.5, t + it.x) : c.w / 2;
     else if (['rollout', 'rotray', 'roshelf'].includes(it.type) && low) {
       // Roll-out trays and shelves are roll-outs with low sides (a lip on a shelf).
@@ -326,6 +327,7 @@ function interiorLayout(c, p, fronts) {
     } else if (it.type === 'traydiv' && low) out.trays.push({ n: Math.max(1, it.n | 0), z0: low[0], z1: low[1] });
     else if (it.type === 'trash') { if (low) out.bins.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('trash').def.name); }
     else if (it.type === 'lazy') { if (low) out.lazy.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('lazy').def.name); }
+    else if (it.type === 'pullout') { if (low) out.pulls.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('pullout').def.name); }
     else if (it.type === 'other') out.bom.push(it.name || 'Insert');
   });
   out.shelfZones = zones.filter(z => !used.has(z));

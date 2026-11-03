@@ -96,6 +96,7 @@ const INSERT_TYPES = [
   { id: 'roshelf', name: 'Roll-out shelves (lip only)', fields: ['n', 'h'], def: { n: 1, h: 1.5 }, hint: 'A shelf on slides with a small lip all round.' },
   { id: 'rod', name: 'Closet rod', fields: ['name'], def: { name: 'Closet rod' }, hint: 'A rod across the opening, with a pair of flanges. Goes on the hardware list with its length.' },
   { id: 'separator', name: 'Separator', fields: ['x'], def: { x: '*' }, hint: 'An upright panel splitting this one opening.' },
+  { id: 'pullout', name: 'Full-height pull-out', fields: ['name'], def: { name: 'Pull-out' }, hint: 'A pull-out that fills its opening, like a spice, paper towel or organizer pull-out. Goes on the hardware list.' },
   { id: 'other', name: 'Other insert', fields: ['name'], def: { name: 'Insert' }, hint: 'Goes on the hardware list only.' },
 ];
 // Part kinds for edgebanding. Edges follow the part's machining coordinates:
@@ -190,6 +191,8 @@ const DOOR_PRESETS = [
   { id: 'pair', name: 'Two-wide shaker', type: 'routed', stile: 2.25, rail: 2.25, midStiles: 1, panelType: 'flat' },
   { id: 'farm', name: 'Farmhouse X', type: 'fivepiece', stile: 3, rail: 3, panelType: 'flat', design: 'xbrace', grooveW: 2 },
 ];
+// Inserts that fill a door opening, so it can't also have adjustable shelves.
+const SHELF_BLOCKERS = ['rollout', 'rotray', 'roshelf', 'traydiv', 'trash', 'lazy', 'pullout'];
 const insertType = id => INSERT_TYPES.find(t => t.id === id) || INSERT_TYPES[INSERT_TYPES.length - 1];
 const HW_KINDS = [['slide', 'Drawer slides'], ['hinge', 'Hinges'], ['pull', 'Pulls and knobs'], ['shelfpin', 'Shelf pins'], ['joint', 'Joint templates'], ['leg', 'Legs'], ['other', 'Other hardware']];
 // Joint templates: how the box is fastened together. Female holes go in the face of the side (or the panel a divider lands on),
@@ -338,7 +341,7 @@ function seed() {
   };
   // The sample shows its tops already built.
   S.rooms.forEach(r => { r.autoTops = true; });
-  ensureEdgeLibs(S); ensureJoinery(S); ensureFaceFrames(S); attachRoom(S);
+  ensureEdgeLibs(S); ensureJoinery(S); ensureFaceFrames(S); if (typeof ensureInteriorLib === 'function') ensureInteriorLib(S); attachRoom(S);
   S.shapeLib = defaultShapeLib(S); S.formulas = {}; S.job.vars = [];
   const put = (libId, wall, off, o = {}) => S.cabinets.push(Object.assign(newCab(S, S.library.find(l => l.id === libId), wall, 1, off), o));
   // Runs start a filler's width off the wall (see LAYOUT_DEFAULTS); open ends get panels automatically.
@@ -454,6 +457,7 @@ function migrate(s) {
   (s.moldings || []).forEach(m => { if (m.profile === 'shape' && !(m.pts || []).length) { const l = s.shapeLib.find(x => x.id === m.shape); m.pts = l ? clone(l.pts) : moldStartPts(); } delete m.shape; });
   s.shapeLib = s.shapeLib.filter(l => l.id !== 'sh-crown');
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
+  if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
   return attachRoom(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))));
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
@@ -469,6 +473,7 @@ function save() {
 }
 function snapshot() { undoStack.push(JSON.stringify(S)); if (undoStack.length > 80) undoStack.shift(); redoStack = []; }
 function mutate(fn, defer) {
+  ui.intSel = []; // picked interior lines point at places that may move
   snapshot(); fn(); attachRoom(S); if (typeof recalcFormulas === 'function') recalcFormulas(); save();
   if (defer) setTimeout(() => { const id = document.activeElement && document.activeElement.id; render(); if (id) { const el = document.getElementById(id); if (el) el.focus(); } }, 0);
   else render();
@@ -476,6 +481,7 @@ function mutate(fn, defer) {
 function undoRedo(dir) {
   const from = dir < 0 ? undoStack : redoStack, to = dir < 0 ? redoStack : undoStack;
   if (!from.length) return;
+  ui.intSel = [];
   const keepRoom = S.roomId;
   to.push(JSON.stringify(S)); S = attachRoom(JSON.parse(from.pop()));
   if (S.rooms.some(r => r.id === keepRoom)) S.roomId = keepRoom;

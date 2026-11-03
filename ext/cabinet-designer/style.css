@@ -1145,7 +1145,7 @@ html{zoom:var(--ui-zoom,1)}
 .ed-tabs button .ic{width:16px;height:16px}
 .ed-tabs button:hover{color:var(--ink)}
 .ed-tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent);background:var(--panel)}
-.ed-body{display:grid;grid-template-columns:minmax(260px,.9fr) minmax(0,1.6fr) 170px;gap:16px;padding:16px;min-height:0;flex:1;overflow:hidden}
+.ed-body{display:grid;grid-template-columns:minmax(300px,1.2fr) minmax(0,1.4fr) 170px;gap:16px;padding:16px;min-height:0;flex:1;overflow:hidden}
 .ed-main{overflow:auto;display:flex;flex-direction:column;gap:12px;padding-right:4px;min-height:0}
 .ed-acts{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:auto;padding-left:12px;border-left:1px solid var(--line)}
 .ed-acts .btn{justify-content:flex-start;width:100%}
@@ -1978,3 +1978,71 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .libpeek .lp-empty{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);font-size:14px;font-weight:600}
 .libpeek .lp-empty svg{width:40px;height:40px;fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 :root[data-libsize="s"] .rail .libpeek{display:none}
+
+/* Opening panel in the cabinet editor: Mozaik-style label / dropdown rows. */
+.qe-picks{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.qe-pick{display:grid;grid-template-columns:130px minmax(0,1fr);align-items:center;gap:10px;margin:0}
+.qe-pick > span{font-weight:600;color:var(--muted)}
+.qe-pick select,.qe-pick input,.qe-pick .inwrap{width:100%;min-width:0}
+.qe-pick.qe-extra{grid-template-columns:130px minmax(0,1fr) auto}
+
+/* Cabinet editor Face tab: the split tools stand in a strip on the right of the drawing, like Mozaik. */
+.qe-prev.tools{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;gap:10px}
+.qe-prev.tools > .ed-tools{grid-column:2;grid-row:1 / 4;flex-direction:column;flex-wrap:nowrap;align-self:start;margin:0}
+.qe-prev.tools > .ed-tools .ed-sep{width:auto;height:1px;align-self:stretch;margin:4px 2px}
+.qe-prev.tools > .ed-tools .ed-which{display:none}
+.qe-prev.tools > .ed-gridform{grid-column:1;grid-row:1;margin:0}
+.qe-prev.tools > .preview{grid-column:1;grid-row:2}
+.qe-prev.tools > .qe-tip{grid-column:1;grid-row:3}
+@media (max-width: 760px){ .qe-prev.tools{display:flex;flex-direction:column} .qe-prev.tools > .ed-tools{flex-direction:row;flex-wrap:wrap} .qe-prev.tools > .ed-tools .ed-sep{width:1px;height:auto} }
+
+/* Interior library tiles in the cabinet editor. */
+.intlib .il-head,.il-in .il-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.intlib .il-head .sechead,.intlib .il-head > :first-child{margin:0}
+.il-grp{margin-top:8px}
+.il-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;margin-top:4px}
+.il-grp .eyebrow{margin:0}
+.il-tile{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font:600 12.5px/1.2 var(--f-label, inherit);text-align:center;cursor:grab}
+.il-tile:hover{border-color:var(--accent);background:var(--accent-soft)}
+.il-tile:active{cursor:grabbing}
+.ip{width:40px;height:40px;flex:none}
+.ip .ip-box{fill:var(--sunk);stroke:var(--ink);stroke-width:1.4}
+.ip .ip-box.fin{fill:#e9d3ad}
+.ip .ip-wood{fill:none;stroke:#b07a3c;stroke-width:2.4;stroke-linecap:round}
+.ip .ip-wood.thick{stroke-width:3.4}
+.ip .ip-pin{fill:none;stroke:var(--muted);stroke-width:1.2}
+.ip .ip-fill{fill:#d9a866;stroke:#8a5a22;stroke-width:1.2}
+.ip .ip-rod{fill:none;stroke:#8d939c;stroke-width:2.6;stroke-linecap:round}
+.ip .ip-hang{fill:none;stroke:var(--muted);stroke-width:1.2}
+.ip .ip-check{fill:none;stroke:#2f8a4e;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.il-in{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.il-line{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.il-line .ip{width:30px;height:30px}
+.il-line b{flex:1;min-width:0}
+.il-line .il-h{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.il-line .il-h .inwrap,.il-line .il-h input{width:90px}
+.qe-hit.drop{fill:var(--accent);fill-opacity:.25}
+.il-find{width:100%;margin:8px 0 4px}
+.il-tree{display:flex;flex-direction:column;gap:2px;max-height:340px;overflow:auto}
+.il-tree .lfold-h{display:flex;align-items:center;gap:6px;width:100%;padding:5px 4px;border:0;background:transparent;font-weight:700;cursor:pointer;text-align:left;color:var(--ink)}
+.il-tree .lfold-h .ct{margin-left:auto;font-weight:500;color:var(--muted);font-size:12px}
+.il-row{display:flex;align-items:center;gap:4px;padding-left:14px}
+.il-item{flex:1;display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid transparent;border-radius:8px;background:transparent;text-align:left;cursor:grab;color:var(--ink)}
+.il-item:hover{border-color:var(--accent);background:var(--accent-soft)}
+.il-item .ip{width:30px;height:30px}
+.il-item span{display:flex;flex-direction:column;min-width:0}
+.il-item small{color:var(--muted);font-size:12px}
+.il-item.nofit{opacity:.45}
+.ilibt .ip{width:28px;height:28px}
+.ilibt input,.ilibt select{min-width:0;width:100%}
+/* Interior view: openings are the spaces inside, numbered, the picked one outlined (no tint over the fronts) */
+.qe-hit.in{fill:transparent;stroke:transparent}
+.qe-hit.in:hover{fill:color-mix(in srgb,var(--accent) 8%,transparent);stroke:color-mix(in srgb,var(--accent) 60%,transparent);stroke-width:1.5px;stroke-dasharray:6 4}
+.qe-zone.on .qe-hit.in{fill:transparent;stroke:var(--accent);stroke-width:3px;stroke-dasharray:none}
+.qe-num{fill:var(--panel,#fff);stroke:var(--line,#c8ced6);stroke-width:1px;vector-effect:non-scaling-stroke;pointer-events:none}
+.qe-zone.on .qe-num{fill:var(--accent);stroke:var(--accent)}
+.qe-numt{fill:var(--ink,#222);font-weight:700;text-anchor:middle;dominant-baseline:central;pointer-events:none;font-family:inherit}
+.qe-zone.on .qe-numt{fill:#fff}
+.il-line .il-pick{display:flex;align-items:center;gap:8px;flex:1;min-width:0;background:none;border:1px solid transparent;border-radius:6px;padding:3px 6px;text-align:left;cursor:pointer;color:inherit;font:inherit}
+.il-line .il-pick:hover{border-color:var(--line,#c8ced6)}
+.il-line.sel .il-pick{background:color-mix(in srgb,var(--accent) 14%,transparent);border-color:var(--accent)}

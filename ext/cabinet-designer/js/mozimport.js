@@ -185,6 +185,9 @@ function mozHardware(rm, src) {
 // Mozaik inserts that Cabinet Designer has: trash pull-outs, tray dividers, lazy susans and roll-outs; anything else
 // goes on the hardware list as an Other insert with its Mozaik name.
 function mozInsert(name) {
+  // The same name in the interior library (it came from the same Mozaik library) links the product and its price.
+  const lib = typeof ensureInteriorLib === 'function' && (ensureInteriorLib(S).interiorLib || []).find(x => x.name.trim().toLowerCase() === name.trim().toLowerCase() && !['divider', 'finint', 'shelf', 'fixed'].includes(x.kind));
+  if (lib) { const t = INSERT_TYPES.find(y => y.id === lib.kind) || INSERT_TYPES[INSERT_TYPES.length - 1], o = { type: t.id, ...clone(t.def || {}), item: lib.id }; if (t.fields.includes('name')) o.name = lib.name; if (+lib.h > 0 && t.fields.includes('h')) o.h = +lib.h; return o; }
   const n = name.toLowerCase(), def = id => ({ type: id, ...clone((INSERT_TYPES.find(t => t.id === id) || {}).def || {}) });
   if (/trash|waste|recycl/.test(n)) return { ...def('trash'), name };
   if (/tray div/.test(n)) return def('traydiv');

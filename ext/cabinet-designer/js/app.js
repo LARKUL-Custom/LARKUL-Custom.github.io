@@ -412,6 +412,12 @@ const QE_TYPES = [['door', 'Door'], ['drawer', 'Drawer'], ['false', 'False front
 // The front view with every opening clickable; the opening being edited is outlined.
 function qeFaceSVG(c, qr, maxH = 340, inside = false) {
   const svg = frontPreviewSVG(c, maxH, Math.max(c.w, c.h) / 22, ui.open[c.id], inside), fr = computeFronts(c);
+  if (inside) {
+    // Inside view: each opening is the space behind its fronts, side to side, numbered, and clicked on its own.
+    const lay = interiorLayout(c, effParams(c), fr), x0 = lay.t, w = c.w - 2 * lay.t, r = Math.max(1.4, Math.max(c.w, c.h) / 34);
+    const zh = lay.zones.map(z => `<g class="qe-zone${z.row === qr ? ' on' : ''}"><rect class="qe-hit in" data-act="qe-row" data-id="${z.row}" x="${x0 + 0.3}" y="${-z[1] + 0.3}" width="${w - 0.6}" height="${z[1] - z[0] - 0.6}"><title>Opening ${z.row + 1}</title></rect><circle class="qe-num" cx="${x0 + r + 0.6}" cy="${-z[1] + r + 0.6}" r="${r}"/><text class="qe-numt" x="${x0 + r + 0.6}" y="${-z[1] + r + 0.6}" font-size="${r * 1.2}">${z.row + 1}</text></g>`).join('');
+    return svg.replace(/<\/svg>$/, zh + '</svg>');
+  }
   const hits = fr.map(f => { const [a, b] = frontEX(f); return b - a < 0.25 ? '' : `<rect class="qe-hit${f.row === qr ? ' on' : ''}" data-act="qe-row" data-id="${f.row}" x="${a}" y="${-f.z1}" width="${b - a}" height="${f.z1 - f.z0}"><title>Opening ${f.row + 1}</title></rect>`; }).join('');
   return svg.replace(/<\/svg>$/, hits + '</svg>');
 }
@@ -438,18 +444,33 @@ function qeOpening(c, i, part) {
   const inside = row.type === 'door' || row.type === 'open', sh = qeRowShelves(c, i), own = rows.some(r => r.shelves !== undefined && r.shelves !== '');
   const ins = (c.inserts || []).map((it, k) => ({ it, k })).filter(({ it }) => it.row !== undefined && it.row !== '' && +it.row === i);
   const face = part !== 'inside', inner = part !== 'face' && inside;
+  // Mozaik-style: every choice for the opening is one dropdown in a short list of label / value rows.
+  const pick = (label, key, opts, cur) => `<label class="qe-pick"><span>${label}</span><select data-qepick="${i}:${key}" aria-label="${label}">${opts.map(([v, l]) => `<option value="${esc(String(v))}"${String(cur) === String(v) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
+  const typeNow = row.type === 'door' ? (n === 1 ? 'door1' : n === 2 ? 'door2' : 'doorN') : row.type;
+  const typeOpts = [['door1', 'Door'], ['door2', 'Pair of doors'], ...(n > 2 && row.type === 'door' ? [['doorN', `${n} doors`]] : []), ['drawer', n > 1 ? `${n} drawers side by side` : 'Drawer'], ['false', 'False front'], ['open', 'Open']];
   return `<div class="psec box qe-open">${secHead('face', `Opening ${i + 1} of ${rows.length}`, 'violet')}
     <div class="note">${f ? `${fmtLen(f.x1 - f.x0, 1)} wide × ${fmtLen(f.z1 - f.z0, 1)} high${n > 1 ? `, ${n} side by side` : ''}` : ''}${fr.overfull ? ' · The openings add up to more than the cabinet. Make one shorter or use * on one.' : ''}</div>
-    ${face ? `${seg('type', QE_TYPES, row.type)}
-    <div class="grid2">${fld('Height', R, i + '.h', row.h, 'rowh', { ph: '*' })}${row.type === 'open' ? '' : fld('Style', R, i + '.style', row.style || '', 'select', { options: styleOpts })}</div>
-    ${row.type === 'door' && n === 1 ? `<div class="qe-hinge"><span>Hinge</span>${seg('hinge', [['', 'Default'], ['L', 'Left'], ['R', 'Right']], row.hinge || '')}</div>` : ''}` : ''}
-    ${inner ? `<div class="stepper"><span>Shelves</span><button class="btn sm" data-act="qe-rowset" data-id="${i}:shelves:-1" aria-label="One less shelf"${sh ? '' : ' disabled'}>&minus;</button><b class="mono">${sh}</b><button class="btn sm" data-act="qe-rowset" data-id="${i}:shelves:1" aria-label="One more shelf">+</button>${own ? `<button class="linkbtn" data-act="qe-rowset" data-id="${i}:shelves:auto" title="Spread the cabinet's shelf count over its openings again">Auto</button>` : ''}</div>
-      ${i < rows.length - 1 ? `<label class="checkrow"><input type="checkbox" data-act="q-fixrow" data-id="${c.id}:${i}"${row.fixShelf ? ' checked' : ''}> Fixed shelf under this opening</label>` : ''}
-      ${ins.map(({ it, k }) => `<div class="qe-ins"><b>${esc(insertType(it.type).name)}</b>${insertType(it.type).fields.filter(fk => fk !== 'name' && fk !== 'x').map(fk => fld(fk === 'n' ? (it.type === 'traydiv' ? 'Dividers' : 'How many') : 'Box height', 'sub:inserts|cab:' + c.id, k + '.' + fk, it[fk], fk === 'n' ? 'int' : 'len')).join('')}<button class="btn sm" data-act="ins-del" data-ref="cab:${c.id}" data-i="${k}" aria-label="Remove">×</button></div>`).join('')}
-      <div class="insadd"><select class="instype" aria-label="Insert to add">${INSERT_TYPES.filter(t => t.id !== 'divider').map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select><button class="btn sm" data-act="ins-add" data-ref="cab:${c.id}" data-row="${i}">${icon('plus')}Add</button></div>` : ''}
+    <div class="qe-picks">
+    ${face ? `${pick('Type', 'type', typeOpts, typeNow)}
+      ${row.type === 'door' && n === 1 ? pick('Hinge', 'hinge', [['', 'Default'], ['L', 'Left'], ['R', 'Right']], row.hinge || '') : ''}
+      ${row.type === 'open' ? '' : `<label class="qe-pick"><span>Style</span>${fctl(R, i + '.style', row.style || '', 'select', { options: styleOpts, label: 'Style' })}</label>`}
+      <label class="qe-pick"><span>Height</span>${fctl(R, i + '.h', row.h, 'rowh', { ph: '*', label: 'Height' })}</label>` : ''}
+    ${inner ? intContents(c, i) : ''}
+    </div>
     ${part === 'inside' && !inside ? '<div class="note">Drawers and false fronts have nothing inside to set. Pick a door or open opening.</div>' : ''}
   </div>`;
 }
+// Dropdowns in the opening panel save as soon as they change.
+document.addEventListener('change', e => {
+  const el = e.target; if (!el.matches || !el.matches('select[data-qepick]')) return;
+  const c = qeCab(), [si, key] = el.dataset.qepick.split(':'), i = +si, row = c && c.rows && c.rows[i], v = el.value; if (!row) return;
+  mutate(() => {
+    if (key === 'type') {
+      if (v === 'door1' || v === 'door2') { row.type = 'door'; row.count = v === 'door2' ? 2 : 1; if (v === 'door2') delete row.hinge; }
+      else if (v !== 'doorN') { if (row.type === 'door' && (row.count | 0) > 1 && v !== 'drawer') row.count = 1; row.type = v; }
+    } else if (key === 'hinge') { if (v) row.hinge = v; else delete row.hinge; }
+  });
+});
 // The whole-box fittings: a full height divider and a finished interior. Shelves are set opening by opening.
 function qeInside(c) {
   const div = (c.inserts || []).map((it, k) => ({ it, k })).find(({ it }) => it.type === 'divider'), any = (c.inserts || []).length || c.finInt || qeRowsShelved(c);
@@ -904,7 +925,7 @@ document.addEventListener('click', e => {
     }
     case 'qe-finint-on': case 'qe-finint-off': { const c = cab(id); if (c) mutate(() => { c.finInt = a === 'qe-finint-on'; }); break; }
     case 'qe-clear-shelves': { const c = cab(id); if (c) mutate(() => { c.params = c.params || {}; c.params.shelfCount = 0; (c.rows || []).forEach(r => { delete r.shelves; }); }); flash('Adjustable shelves removed'); break; }
-    case 'qe-clear-all': { const c = cab(id); if (c) mutate(() => { c.params = c.params || {}; c.params.shelfCount = 0; (c.rows || []).forEach(r => { delete r.shelves; }); c.inserts = []; c.finInt = false; }); flash('Interior removed. Undo brings it back.'); break; }
+    case 'qe-clear-all': { const c = cab(id); if (c) mutate(() => { c.params = c.params || {}; c.params.shelfCount = 0; (c.rows || []).forEach(r => { delete r.shelves; delete r.fixShelf; }); c.inserts = []; c.finInt = false; }); flash('Interior cleared. Doors and drawers stay. Undo brings it back.'); break; }
     case 'qe-clear-row': {
       const c = qeCab(), i = +id; if (!c || !c.rows[i]) break;
       mutate(() => {
@@ -913,7 +934,7 @@ document.addEventListener('click', e => {
           const p = effParams(c), lay = interiorLayout(c, p, computeFronts(c, p)), n = Math.max(0, p.shelfCount | 0), zs = lay.shelfZones;
           zs.forEach((z, k) => { const r = c.rows[z.row]; if (r) r.shelves = Math.floor(n / zs.length) + (k < n % zs.length ? 1 : 0); });
         }
-        c.rows[i].shelves = 0;
+        c.rows[i].shelves = 0; delete c.rows[i].fixShelf;
         c.inserts = (c.inserts || []).filter(it => !(it.row !== undefined && it.row !== '' && +it.row === i));
       }); flash(`Opening ${i + 1} cleared`); break;
     }
@@ -930,6 +951,7 @@ document.addEventListener('click', e => {
       mutate(() => { [c.rows[a], c.rows[b]] = [c.rows[b], c.rows[a]]; (c.inserts || []).forEach(it => { if (it.row === a) it.row = b; else if (it.row === b) it.row = a; }); });
       ui.qeRow = b; renderQuick(); break;
     }
+    case 'int-add': case 'int-del': case 'int-fav': case 'int-fold': case 'int-sel': case 'int-delsel': intAct(a, id); break;
     case 'qe-divider': { const c = cab(id); if (c) mutate(() => { (c.inserts = c.inserts || []).push({ type: 'divider', ...clone(insertType('divider').def) }); }); break; }
     case 'ins-del': { const o = resolve(ref); if (o) mutate(() => o.inserts.splice(+el.dataset.i, 1)); break; }
     case 'des-view': ui.des3d = id === '3d'; renderDesigner(); break;
@@ -1019,7 +1041,13 @@ document.addEventListener('click', e => {
     case 'qe-close': closeQuick(); break;
     case 'qe-more': case 'ed-open': openEditor(id || ui.quick); break;
     case 'ed-quick': ui.qeBig = false; renderQuick(); break;
-    case 'ed-tab': ui.edTab = id; renderQuick(); break;
+    case 'ed-tab': {
+      ui.edTab = id;
+      // Interior opens on the first opening that has an inside (a door or open space), not a drawer.
+      const c = qeCab(), rows = (c && c.rows) || [], r = rows[ui.qeRow | 0];
+      if (id === 'interior' && r && !['door', 'open'].includes(r.type)) { const i = rows.findIndex(x => ['door', 'open'].includes(x.type)); if (i >= 0) ui.qeRow = i; }
+      renderQuick(); break;
+    }
     case 'ed-part': { if (e.target.closest('.pe-build')) break; const now = Date.now(), dbl = ui.edPartClick && ui.edPartClick.i === id && now - ui.edPartClick.t < 450; ui.edPartClick = { i: id, t: now }; ui.edPart = id; if (dbl && cab(ui.quick)) { openPartEdit(ui.quick, id); break; } renderQuick(); break; }
     case 'ed-step': edStep(+id); break;
     case 'ed-split': { const c = qeCab(), [i, n] = id.split(':').map(Number); if (c) mutate(() => edSplitRows(c, i, n)); break; }
@@ -1058,6 +1086,14 @@ document.addEventListener('click', e => {
       const c = cab(id), was = c.off;
       mutate(() => { centerCab(c, a === 'cab-center-open'); if (!settle(c)) c.off = was; });
       flash(Math.abs(c.off - was) > 0.001 ? (a === 'cab-center' ? 'Centered on the wall' : 'Centered in the opening') : 'It is already there, or there is no room to move it'); break;
+    }
+    case 'cab-autofill': {
+      // One click fills the empty space on this wall, at this cabinet's height, with cabinets like it.
+      const c = cab(id); if (!c || !c.wall) break;
+      if (c.corner) { flash('Pick a straight cabinet to autofill with, not a corner.'); break; }
+      let made = []; mutate(() => { made = autofillWall(c); });
+      flash(made.length ? `Added ${nCab(made.length)} like ${LBL[c.id] || 'this one'}` : 'No open space on this wall wide enough to fill');
+      break;
     }
     case 'cab-push-L': case 'cab-push-R': {
       // Slide it until it touches its neighbour (or the wall) on that side, like Mozaik's clearance arrows.

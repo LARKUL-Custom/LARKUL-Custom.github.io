@@ -709,6 +709,7 @@ function frontsSVG(c, ex, by, opts = {}) {
   lay.rollouts.forEach(ro => { s += `<rect class="ev-dbox nss" x="${X(t + lay.spacer + 0.5)}" y="${Y(ro.z + ro.h)}" width="${c.w - 2 * (t + lay.spacer + 0.5)}" height="${ro.h}"/>`; });
   lay.trays.forEach(tr => { for (let i = 1; i <= tr.n; i++) { const xx = t + (c.w - 2 * t) * i / (tr.n + 1); s += `<line class="ev-inner nss" x1="${X(xx)}" x2="${X(xx)}" y1="${Y(tr.z1 - 0.5)}" y2="${Y(tr.z0 + 0.5)}" stroke-width="2"/>`; } });
   lay.bins.forEach(bn => { const bh = Math.min(20, bn.z1 - bn.z0 - 2), iw = c.w - 2 * t; [0.06, 0.52].forEach(k => { s += `<rect class="ev-bin nss" x="${X(t + iw * k)}" y="${Y(bn.z0 + 0.5 + bh)}" width="${iw * 0.42}" height="${bh}" rx="1"/>`; }); });
+  (lay.pulls || []).forEach(pl => { const iw = c.w - 2 * t; s += `<rect class="ev-dbox nss" x="${X(t + iw * 0.3)}" y="${Y(pl.z1 - 1)}" width="${iw * 0.4}" height="${pl.z1 - pl.z0 - 2}" rx="0.5"/>`; for (let z = pl.z0 + 4; z < pl.z1 - 3; z += 6) s += `<line class="ev-inner nss" x1="${X(t + iw * 0.3)}" x2="${X(t + iw * 0.7)}" y1="${Y(z)}" y2="${Y(z)}"/>`; });
   lay.lazy.forEach(lz => [0.3, 0.72].forEach(k => { s += `<ellipse class="ev-dbox nss" cx="${X(c.w / 2)}" cy="${Y(lz.z0 + (lz.z1 - lz.z0) * k)}" rx="${(c.w - 2 * t) / 2 - 0.75}" ry="1.2"/>`; }));
   // A 45° or 90° corner's return leg comes out toward you, so its end panel covers that part of the box.
   // (A plain wood rectangle goes under it, in case the material's texture isn't in this drawing.)

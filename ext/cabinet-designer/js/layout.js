@@ -307,3 +307,34 @@ function centerCab(c, inOpening) {
   }
   c.off = r3((lo + hi) / 2 - c.w / 2);
 }
+
+/* ---------- Autofill (like Mozaik's) ---------- */
+// The empty stretches on cabinet c's wall side at c's height, as [start, end] along the wall,
+// keeping a filler's width clear at each wall that meets this one.
+function autofillSpans(c) {
+  const w = wall(c.wall); if (!w) return [];
+  const ly = lay(), L = wg(w).L, pad = o => o.kind === 'wall' && ly.autoFillers ? ly.fillerW : 0;
+  const obs = obstacles(c.wall, c.side, c, null).map(o => [o.a0 - pad(o), o.a1 + pad(o)]).sort((a, b) => a[0] - b[0]);
+  const out = []; let at = 0;
+  obs.forEach(([a0, a1]) => { if (a0 > at) out.push([at, Math.min(a0, L)]); at = Math.max(at, a1); });
+  if (at < L) out.push([at, L]);
+  return out.filter(([a, b]) => b - a > 0.01);
+}
+// Fills every empty stretch on c's wall side with copies of c, split evenly so each is between the
+// fit-opening min and max widths (Layout settings). Returns the new cabinets. Stretches too narrow are left.
+function autofillWall(c) {
+  const ly = lay(), min = ly.fitMin || 9, max = ly.fitMax || 36, made = [];
+  autofillSpans(c).forEach(([a, b]) => {
+    const span = b - a; if (span < min - 0.01) return;
+    const n = Math.max(1, Math.ceil(span / max - 0.001)), each = Math.floor(span / n * 16) / 16;
+    if (each < min - 0.01) return;
+    let off = a;
+    for (let i = 0; i < n; i++) {
+      const nc = clone(c); nc.id = uid('c'); nc.w = r3(i === n - 1 ? b - off : each); nc.off = r3(off);
+      off += nc.w;
+      if (conflicts(nc)) continue;
+      S.cabinets.push(nc); made.push(nc);
+    }
+  });
+  return made;
+}

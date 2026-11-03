@@ -20,6 +20,8 @@ function ctl(o, f, val, type, x = {}) {
   return `<input type="text" ${base} ${isNum ? 'inputmode="decimal" class="num"' : ''} value="${esc(shown ?? '')}" placeholder="${esc(x.ph || '')}" aria-label="${esc(x.label || f)}"${x.blank ? ' data-blank="1"' : ''}${x.list ? ` list="${esc(x.list)}"` : ''}>`;
 }
 const NUM_TYPES = ['len', 'int', 'num'];
+// A field control without its label, for rows that print their own.
+const fctl = (o, f, val, type, x = {}) => NUM_TYPES.includes(type) && !/^psh/.test(o) ? calcWrap(ctl(o, f, val, type, x), o, f) : ctl(o, f, val, type, x);
 const fld = (label, o, f, val, type, x = {}) => `<label class="f${x.wide ? ' wide' : ''}"><span>${label}</span>${NUM_TYPES.includes(type) && !/^psh/.test(o) ? calcWrap(ctl(o, f, val, type, { label, ...x }), o, f) : ctl(o, f, val, type, { label, ...x })}</label>`;
 const opts = (arr, filter) => arr.filter(filter || (() => true)).map(m => ({ v: m.id, l: m.name }));
 // Options for a pick that can follow the level above: cabinet follows its room, a room follows the job.
@@ -58,6 +60,7 @@ function resolve(ref) {
     case 'mtd': return S.matTemplates.drawer.find(d => d.id === id);
     case 'panel': return S.panels.find(p => p.id === id);
     case 'ff': return (S.faceFrames || []).find(f => f.id === id);
+    case 'ilib': return (S.interiorLib || []).find(x => x.id === id);
     case 'cabff': { const c = cab(id); return c && (c.ffSize = c.ffSize || {}); }
     // Insert library prices, and this job's own prices for library items: pov:<door|mat|ins>:<id>
     case 'insp': return ((S.insertPrices = S.insertPrices || {})[id] = S.insertPrices[id] || {});

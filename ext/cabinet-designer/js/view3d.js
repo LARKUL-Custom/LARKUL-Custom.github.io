@@ -197,6 +197,7 @@ function cabinetMeshes(c, opts = {}) {
   lay.bins.forEach(bn => { const bh = Math.min(20, bn.z1 - bn.z0 - 2); [0.27, 0.73].forEach(k => grp.add(box3(idx * 0.42, bh, inD * 0.7, flat3('#8d949a'), ix0 + idx * k, bn.z0 + bh / 2 + 0.5, p.backInset + bt + inD * 0.45))); });
   // On a corner the susan sits in the corner of the L, pie cut on a 90° corner.
   const lzAt = angledCorner(c) ? cornerSusan(c, p, t, bt) : null;
+  (lay.pulls || []).forEach(pl => grp.add(box3(idx * 0.4, pl.z1 - pl.z0 - 2, inD * 0.85, flat3('#9aa1a7'), ix0 + idx / 2, (pl.z0 + pl.z1) / 2, p.backInset + bt + inD * 0.45)));
   lay.lazy.forEach(lz => { const r = lzAt ? lzAt.r : Math.min(W - 2 * t, inD) / 2 - 0.75; [0.3, 0.72].forEach(k => { const m = new THREE.Mesh(lzAt && lzAt.pie !== null ? new THREE.CylinderGeometry(r, r, 0.6, 40, 1, false, lzAt.pie, Math.PI * 1.5) : new THREE.CylinderGeometry(r, r, 0.6, 40), flat3('#d9cfbf')); m.position.set(lzAt ? lzAt.cx : W / 2, lz.z0 + (lz.z1 - lz.z0) * k, lzAt ? lzAt.cz : p.backInset + bt + inD / 2); grp.add(m); }); });
   fronts.forEach(f => {
     if (f.type === 'open') return;

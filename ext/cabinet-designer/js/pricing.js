@@ -128,7 +128,9 @@ const matSqIn = (m, ps) => matCost(m) / (((m.sheetW || 49) * (m.sheetL || 97)) |
 const insLib = type => (S.insertPrices || {})[type] || {};
 function insertPrice(it) {
   const t = insertType(it.type), lib = insLib(t.id), o = jobOver('ins', t.id), n = t.fields.includes('n') ? Math.max(0, +it.n || 0) : 0;
-  return pick(o, 'each', lib.each) + n * pick(o, 'per', lib.per);
+  // A library product with its own price uses it in place of the insert's price.
+  const x = it.item && typeof intItem === 'function' && intItem(it.item), own = x && x.price !== '' && x.price !== undefined && x.price !== null && !isNaN(+x.price);
+  return (own ? +x.price : pick(o, 'each', lib.each)) + n * pick(o, 'per', lib.per);
 }
 const panelAdd = (ps, cat) => +((ps.panelAdd || {})[cat === 'Wall' || cat === 'Tall' ? cat : 'Base']) || 0;
 // The door style applied end panels are made and priced as: the job or room pick, or else the cabinet's own door.
@@ -466,5 +468,5 @@ function renderInserts() {
       <td style="width:120px">${per ? ctl(R, 'per', l.per ?? 0, 'num', { label: t.name + ' price per piece' }) : '<span class="muted">–</span>'}</td></tr>`;
   }).join('');
   $('#tab-inserts').innerHTML = `<div class="pagehead"><div><h2>Inserts</h2><p>What each insert adds to a cabinet's price. Roll-outs and trays can also add a price for every piece in them. A job can use its own prices under Pricing › Edit prices.</p></div></div>
-  <div class="card">${cardHead('Insert prices', '<span class="note">Used counts every cabinet in this job</span>')}<div class="tscroll"><table class="t"><thead><tr><th>Insert</th><th class="r">Used</th><th>Price each</th><th>Plus per piece</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  ${typeof interiorLibCard === 'function' ? interiorLibCard() : ''}<div class="card">${cardHead('Insert prices', '<span class="note">Used counts every cabinet in this job</span>')}<div class="tscroll"><table class="t"><thead><tr><th>Insert</th><th class="r">Used</th><th>Price each</th><th>Plus per piece</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
