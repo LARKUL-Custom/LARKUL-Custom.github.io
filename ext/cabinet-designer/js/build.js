@@ -517,7 +517,7 @@ function buildParts(c) {
       addB(slideBomName(sl, nominal), 1);
       addB(sl.bomExtra, 1);
       if (ffSp > 0.03) {
-        if (Math.abs(ffSp - t) > 0.07 && !warn.some(w => w.startsWith('Drawer spacers'))) warn.push(`Drawer spacers need to be ${fmtLen(ffSp, 1)} thick to bring the runners out to the face frame; the box material is ${fmtLen(t, 1)}.`);
+        if (false && Math.abs(ffSp - t) > 0.07 && !warn.some(w => w.startsWith('Drawer spacers'))) warn.push(`Drawer spacers need to be ${fmtLen(ffSp, 1)} thick to bring the runners out to the face frame; the box material is ${fmtLen(t, 1)}.`);
         part('Drawer slide spacer', cm, inD, 2.5, { qty: 2, kind: 'spacer', ops: (sl.cabHoles || []).filter(h => slideHoleY(sl, nominal, h) !== null).map(h => ({ type: 'bore', x: slideHoleY(sl, nominal, h), y: 1.25, dia: h.dia * MM, depth: h.depth * MM, face: 'inside', why: sl.name + ' runner' })) });
       } else (sl.cabHoles || []).forEach(h => {
         if (slideHoleY(sl, nominal, h) === null) return;
@@ -605,7 +605,7 @@ function buildParts(c) {
   } else part('Top', cm, inW, D, { kind: 'topbot', ops: [{ ...panelGroove }] });
   part('Back', bm, (zIn1 - zIn0) + 2 * p.dadoDepth, inW + 2 * p.dadoDepth, { kind: 'back' });
   if (tk && p.toeSkin !== 'off') part(feet ? 'Toe skin' : 'Toe kick', tkm, W, tk, { kind: 'toekick' });
-  if (ffr) ffParts(c, p, ffr, part, addB, warn);
+  // Face frame parts stay off the cut list for now (Ayden, 2026-11-03); ffParts in faceframe.js builds them when wanted.
   // A front, side or top shape cuts the box panels to it.
   if (hasCabShape(c)) applyCabShape(c, parts, { p, t, bt, tk, sh, D, dd: p.dadoDepth, warn });
   if ((cabTopShape(c) || {}).edges && typeof edgeParts === 'function') edgeParts(c, parts, { t, bt, sh, warn }, part, cm);
