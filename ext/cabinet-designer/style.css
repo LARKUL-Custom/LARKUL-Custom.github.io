@@ -266,6 +266,12 @@ svg text{font-family:var(--f-label)}
 .ct-outline{fill:none;stroke:var(--muted);stroke-dasharray:2 3}
 .ct-solid{fill:#5f8aa6;stroke:#2f566f;stroke-width:1.2px;pointer-events:none}
 .ct-lbl{fill:#fff;font-weight:600;pointer-events:none}
+.ctj{cursor:pointer}
+.ctj-seam{stroke:#fff;stroke-width:2px;stroke-dasharray:4 3;pointer-events:none}
+.ctj-hit{stroke:transparent;pointer-events:stroke}
+.ctj-dot{fill:#f59e0b;stroke:#fff;stroke-width:2px}
+.ctj-ico{stroke:#fff;stroke-width:2px;fill:none;pointer-events:none}
+.ctj:hover .ctj-dot{fill:#d97706}
 :root[data-theme="dark"] .ct-solid{fill:#4c7590;stroke:#9cc3db}
 .apanel{fill:var(--wood-edge);stroke:var(--wood-edge)}
 .ghost{fill:var(--accent);fill-opacity:.2;stroke:var(--accent);stroke-dasharray:4 3}
@@ -1618,9 +1624,11 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .itembar{display:flex;flex-direction:column;gap:12px}
 .ib-f{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--muted);min-width:0}
 .ib-f input{width:100%}
-.ib-pos{display:grid;grid-template-columns:minmax(0,1fr) 32px minmax(0,1fr);gap:6px 8px;align-items:end}
+.ib-pos{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px 8px;align-items:end}
 .ib-ctr{width:32px;height:34px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-ink);font-weight:700;cursor:pointer}
 .ib-ctr:disabled{opacity:.45}
+.ib-ctrs{display:flex;justify-content:center;gap:4px}
+.ib-ctr svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
 .ib-slidewrap{grid-column:1 / -1}.ib-slide{width:100%;accent-color:var(--accent)}
 .ib-size{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 8px}
 .ib-size .ib-gap{display:block}
@@ -1759,11 +1767,17 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   .ib-f input{height:calc(52 * var(--u));width:calc(144 * var(--u));padding:0 calc(12 * var(--u));border:1px solid var(--d-fline);border-radius:calc(6 * var(--u));background:var(--d-field);color:var(--d-fieldink);font:500 calc(20 * var(--u)) var(--f-field);box-shadow:none}
   .ib-f input:disabled{opacity:.55}
   .ib-f input:focus{outline:2px solid var(--d-primary);outline-offset:1px}
-  .ib-pos{display:grid;grid-template-columns:calc(138 * var(--u)) calc(32 * var(--u)) calc(138 * var(--u));gap:calc(6 * var(--u)) calc(14 * var(--u));align-items:end}
+  .ib-pos{display:grid;grid-template-columns:calc(138 * var(--u)) calc(108 * var(--u)) calc(138 * var(--u));gap:calc(6 * var(--u)) calc(14 * var(--u));align-items:end}
   .ib-pos .ib-f input{width:100%;border-width:2px;border-radius:calc(9 * var(--u));font-size:calc(24 * var(--u))}
   .ib-ctr{width:calc(32 * var(--u));height:calc(32 * var(--u));margin-bottom:calc(10 * var(--u));border:0;border-radius:calc(6 * var(--u));background:var(--d-primary);color:var(--d-onprimary);font:700 calc(15 * var(--u)) var(--f-field);cursor:pointer;padding:0}
   .ib-ctr:disabled{opacity:.45;cursor:default}
   .ib-ctr:not(:disabled):hover{filter:brightness(1.1)}
+  .ib-ctrs{display:flex;justify-content:center;gap:calc(4 * var(--u))}
+  .ib-ctr svg{width:70%;height:70%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
+  .itembar.ib-empty{align-items:center}
+  .ib-hint{max-width:calc(560 * var(--u));font:500 calc(22 * var(--u))/1.35 var(--f-field);color:var(--d-lbl)}
+  .ib-hint b{color:var(--d-primary);font-weight:700}
+  .ib-empty .ib-togs{flex-direction:row;padding-top:0}
   .ib-slidewrap{grid-column:1 / -1;padding-top:calc(2 * var(--u))}
   .ib-slide{width:100%;height:calc(22 * var(--u));margin:0;accent-color:var(--d-primary)}
   .ib-size{display:grid;grid-template-columns:repeat(3,calc(144 * var(--u)));gap:calc(6 * var(--u)) calc(24 * var(--u))}
@@ -1911,3 +1925,55 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .fx-lbl{fill:var(--muted);font-weight:600;letter-spacing:.04em}
 .fx-ico{fill:none;stroke:var(--t-teal);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
 .lg-fixt{--tone:#0d9488}
+
+/* ---------- Carve tab (V-carving) ---------- */
+#tab-carve{display:flex;flex-direction:column;gap:12px}
+.vc-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:start}
+.vc-stage{padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.vc-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vc-stats{color:var(--muted);font-size:13px}
+.vc-view{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:18px;display:flex;justify-content:center;align-items:center;min-height:320px;max-height:calc(100vh - 230px);overflow:hidden}
+.vc-wrap{position:relative;width:100%;max-height:calc(100vh - 270px);max-width:100%;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.vc-wrap canvas,.vc-wrap svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.vc-wrap svg{overflow:visible;touch-action:none}
+.vc-it rect{fill:transparent;stroke:transparent;stroke-width:.04;vector-effect:non-scaling-stroke;cursor:grab}
+.vc-it:hover rect{stroke:var(--accent);stroke-dasharray:4 3;stroke-width:1.5}
+.vc-it.on rect{stroke:var(--sel);stroke-width:2;stroke-dasharray:6 3}
+.vc-side{padding:12px;display:flex;flex-direction:column;gap:10px}
+.vc-add .row-actions{flex-wrap:wrap;gap:6px}
+.vc-add select{padding:4px 8px;border:2px solid var(--field-line,var(--line));border-radius:5px;background:var(--panel)}
+.vc-list{display:flex;flex-wrap:wrap;gap:6px}
+.vc-li{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:3px 11px;font-size:13px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vc-li.on{background:var(--sel);border-color:var(--sel);color:#fff}
+.vc-form{border:1px solid var(--line-strong);border-radius:8px;padding:10px;background:var(--panel)}
+.vc-formhead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.vc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;align-items:end}
+.vc-grid .f input,.vc-grid .f select,.vc-grid textarea,.vc-sec .f input,.vc-sec .f select{width:100%}
+.vc-grid textarea{resize:vertical;min-height:52px;border:2px solid var(--field-line,var(--line));border-radius:5px;padding:5px 7px;background:var(--panel)}
+.vc-wide{grid-column:1/-1}
+.vc-row2{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+.vc-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 10px;align-items:end}
+.vc-hint{color:var(--muted);font-size:14px}
+.vc-small{font-size:13px}
+.vc-sec{border:1px solid var(--line-strong);border-radius:8px;background:var(--panel)}
+.vc-sech{display:flex;gap:8px;align-items:center;width:100%;border:0;background:none;padding:8px 10px;font-weight:600;cursor:pointer;text-align:left}
+.vc-secb{padding:0 10px 10px;display:flex;flex-direction:column;gap:6px}
+.vc-empty{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+@media (max-width: 1000px){.vc-layout{grid-template-columns:minmax(0,1fr)}.vc-view{max-height:none;min-height:0;padding:10px}}
+.vc-side .f:not(.chk){grid-template-columns:minmax(0,1fr);gap:3px}
+/* Face frame library card: labels above their boxes, like the cabinet editor. */
+.ffcard{max-width:640px;grid-column:1/-1;width:100%}
+.ffcard .cardsplit{grid-template-columns:minmax(0,1fr) 190px}
+.ffcard .f{grid-template-columns:minmax(0,1fr);gap:4px}
+.ffcard .grid2{gap:10px 12px}
+.ffcard .ffpic{width:100%;height:auto}
+
+/* Product picture above the library tree (Mozaik-style preview). */
+.libpeek{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:150px;margin:0 0 8px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel, #fff);text-align:center}
+.libpeek .lp-pic{width:100%;display:flex;justify-content:center}
+.libpeek .lp-pic svg{width:100%;height:120px}
+.libpeek .lp-name{font-weight:700;font-size:15px;line-height:1.2}
+.libpeek .lp-dim{font-size:13px;color:var(--muted)}
+.libpeek .lp-empty{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);font-size:14px;font-weight:600}
+.libpeek .lp-empty svg{width:40px;height:40px;fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+:root[data-libsize="s"] .rail .libpeek{display:none}

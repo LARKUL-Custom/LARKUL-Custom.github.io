@@ -122,6 +122,18 @@ function box3(w, h, d, material, x, y, z, edges = true) {
   return mesh;
 }
 // Group whose local axes are: x from the viewer's left end, y up, z out from the wall face.
+// A countertop slab from its plan outline (corners can miter or cut it), thickness down from its top.
+function ctTop3(r, tm) {
+  const sh = new THREE.Shape(r.poly.map(p => new THREE.Vector2(p.x, p.y)));
+  const g = new THREE.ExtrudeGeometry(sh, { depth: r.thick, bevelEnabled: false, curveSegments: 1 });
+  const k = (tm.userData && tm.userData.texScale) || 24, uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / k, uv.getY(i) / k);
+  const mesh = new THREE.Mesh(g, tm);
+  if (!R3) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat3()));
+  // Shape y is the plan y (3D z); turned flat, the extrusion goes down.
+  mesh.rotation.x = Math.PI / 2; mesh.position.y = r.top + r.thick;
+  return mesh;
+}
 function wallGroup(w, side, leftAlong, out = 0) {
   const g = wg(w), xdir = side === 1 ? g.u : { x: -g.u.x, y: -g.u.y };
   const P = wallPt(w, g, side, leftAlong, w.thick / 2 + out);
@@ -135,11 +147,13 @@ function cabinetMeshes(c, opts = {}) {
   const p = effParams(c), mt = cabMatT(cabSet(c, 'cabMatT'));
   const cm = mat(mt.carcass) || S.materials[0], bm = mat(mt.back) || cm, t = cm.thick, bt = bm.thick;
   const M = m => mat3(m, opts);
-  const W = c.w, H = c.h, D = c.d, tk = hasToe(c) ? p.toeKickHeight : 0, sb = tk ? p.toeKickSetback : 0;
+  // A face frame takes its thickness off the front of the box.
+  const W = c.w, H = c.h, D = c.d - ffThick(c), tk = hasToe(c) ? p.toeKickHeight : 0, sb = tk ? p.toeKickSetback : 0;
   const cmM = M(cm);
+  ffMeshes(c, p, M, o => grp.add(o));
   const feet = onFeet(c, p);
   if (hasCabShape(c)) cabShape3d(c, p, t, bt, tk, feet ? tk : 0, cmM, M(bm), o => grp.add(o));
-  if (((c.shape || {}).top || {}).edges && typeof edgeParts3d === 'function') { const dp = buildParts(c).parts.find(q => q.cabId === c.id && / door$/.test(q.name)); edgeParts3d(c, o => grp.add(o), t, feet ? tk : 0, { box: cmM, back: M(bm), door: dp ? M(mat(dp.mat)) : cmM }); }
+  if ((cabTopShape(c) || {}).edges && typeof edgeParts3d === 'function') { const dp = buildParts(c).parts.find(q => q.cabId === c.id && / door$/.test(q.name)); edgeParts3d(c, o => grp.add(o), t, feet ? tk : 0, { box: cmM, back: M(bm), door: dp ? M(mat(dp.mat)) : cmM }); }
   else {
     [t / 2, W - t / 2].forEach(x => {
       if (tk && !feet) grp.add(box3(t, tk, D - sb, cmM, x, tk / 2, (D - sb) / 2));
@@ -152,17 +166,21 @@ function cabinetMeshes(c, opts = {}) {
     } else grp.add(box3(W - 2 * t, t, D, cmM, W / 2, H - t / 2, D / 2));
     grp.add(box3(W - 2 * t, H - tk - 2 * t, bt, M(bm), W / 2, tk + H / 2 - tk / 2, p.backInset + bt / 2, false));
   }
-  if (tk && p.toeSkin !== 'off') grp.add(box3(W, tk, t, M(mat(mt.toeKick) || cm), W / 2, tk / 2, D - sb - t / 2));
+  if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, M(mat(mt.toeKick) || cm), o => grp.add(o)); else grp.add(box3(W, tk, t, M(mat(mt.toeKick) || cm), W / 2, tk / 2, D - sb - t / 2)); }
+  // A blind corner's blind panel, flush with the front of the box.
+  if (blindCorner(c)) { const bw = blindWidth(c), x0 = cornerSide(c) === 'L' ? t : W - bw; grp.add(box3(bw - t, H - tk - 2 * t, t, cmM, x0 + (bw - t) / 2, tk + t + (H - tk - 2 * t) / 2, D - t / 2)); }
   if (feet) {
     const n = feetCount(c, p), per = Math.ceil(n / 2), leg = R3 ? metal3('#2b2f33') : flat3('#2b2f33');
-    for (let i = 0; i < per; i++) { const x = per > 1 ? 3 + (W - 6) * i / (per - 1) : W / 2; [D - sb - t - 1.5, 3].forEach(z => grp.add(box3(1.6, tk, 1.6, leg, x, tk / 2, z, false))); }
+    if (angledCorner(c)) cornerLegSpots(c, p).forEach(q => grp.add(box3(1.6, tk, 1.6, leg, q.x, tk / 2, q.y, false)));
+    else for (let i = 0; i < per; i++) { const x = per > 1 ? 3 + (W - 6) * i / (per - 1) : W / 2; [D - sb - t - 1.5, 3].forEach(z => grp.add(box3(1.6, tk, 1.6, leg, x, tk / 2, z, false))); }
   }
   if (c.addParts && c.addParts.length && typeof addedParts3d === 'function') addedParts3d(c, grp, M);
   const fronts = computeFronts(c, p), lay = interiorLayout(c, p, fronts);
   const inD = D - p.backInset - bt, sm = M(mat(mt.shelf) || cm);
   // shelves, split by a divider when there is one
   const spans = lay.divX !== null ? [[t, lay.divX - t / 2], [lay.divX + t / 2, W - t]] : [[t, W - t]];
-  shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => spans.forEach(([a, b]) => grp.add(box3(b - a - 0.06, t, inD - p.shelfFrontSetback, sm, (a + b) / 2, z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2))));
+  if (angledCorner(c)) shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => grp.add(cornerShelf3d(c, p, t, bt, z, sm)));
+  else shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => spans.forEach(([a, b]) => grp.add(box3(b - a - 0.06, t, inD - p.shelfFrontSetback, sm, (a + b) / 2, z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2))));
   if (lay.divX !== null) grp.add(box3(t, lay.zIn1 - lay.zIn0, inD, cmM, lay.divX, (lay.zIn0 + lay.zIn1) / 2, p.backInset + bt + inD / 2));
   // inserts
   const dmt = drawerMatT(cabSet(c, 'drawerMatT')), dbx = M(mat(dmt.sides) || cm);
@@ -177,9 +195,14 @@ function cabinetMeshes(c, opts = {}) {
   lay.rollouts.forEach(ro => trayBox(ix0 + 0.5, ix1 - 0.5, ro.z, ro.h, inD - 1.5, p.backInset + bt + 0.5));
   lay.trays.forEach(tr => { for (let i = 1; i <= tr.n; i++) grp.add(box3(0.25, tr.z1 - tr.z0 - 1, inD - 1, M(bm), t + (W - 2 * t) * i / (tr.n + 1), (tr.z0 + tr.z1) / 2, p.backInset + bt + (inD - 1) / 2)); });
   lay.bins.forEach(bn => { const bh = Math.min(20, bn.z1 - bn.z0 - 2); [0.27, 0.73].forEach(k => grp.add(box3(idx * 0.42, bh, inD * 0.7, flat3('#8d949a'), ix0 + idx * k, bn.z0 + bh / 2 + 0.5, p.backInset + bt + inD * 0.45))); });
-  lay.lazy.forEach(lz => { const r = Math.min(W - 2 * t, inD) / 2 - 0.75; [0.3, 0.72].forEach(k => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.6, 40), flat3('#d9cfbf')); m.position.set(W / 2, lz.z0 + (lz.z1 - lz.z0) * k, p.backInset + bt + inD / 2); grp.add(m); }); });
+  // On a corner the susan sits in the corner of the L, pie cut on a 90° corner.
+  const lzAt = angledCorner(c) ? cornerSusan(c, p, t, bt) : null;
+  lay.lazy.forEach(lz => { const r = lzAt ? lzAt.r : Math.min(W - 2 * t, inD) / 2 - 0.75; [0.3, 0.72].forEach(k => { const m = new THREE.Mesh(lzAt && lzAt.pie !== null ? new THREE.CylinderGeometry(r, r, 0.6, 40, 1, false, lzAt.pie, Math.PI * 1.5) : new THREE.CylinderGeometry(r, r, 0.6, 40), flat3('#d9cfbf')); m.position.set(lzAt ? lzAt.cx : W / 2, lz.z0 + (lz.z1 - lz.z0) * k, lzAt ? lzAt.cz : p.backInset + bt + inD / 2); grp.add(m); }); });
   fronts.forEach(f => {
     if (f.type === 'open') return;
+    // A corner's fronts are built on their own face (x along it, z out of it), so here D is that face.
+    const host = f.face ? cornerFaceGroup(f) : grp, D = f.face ? 0 : c.d;
+    if (f.face) grp.add(host);
     const { ds, framed } = frontStyle(c, f), fm = mat(ds.mat) || cm, ft = fm.thick, fmM = M(fm);
     const fw = f.x1 - f.x0, fh = f.z1 - f.z0, cx = f.x0 + fw / 2, cy = f.z0 + fh / 2;
     // Each front lives in its own group so it can swing on its hinge or slide out.
@@ -192,23 +215,24 @@ function cabinetMeshes(c, opts = {}) {
       if (!pp.hw.ccMM) add(box3(L, L, 0.9, pm, px, py, pz - 0.1, false), 'pulls');
       else add(box3(pp.vertical ? 0.45 : L, pp.vertical ? L : 0.45, 0.45, pm, px, py, pz, false), 'pulls');
     }
-    if (f.type === 'drawer') {
-      const ox0 = f.n > 1 ? f.x0 + 0.5 : t + 0.5, ox1 = f.n > 1 ? f.x1 - 0.5 : W - t - 0.5, bd = Math.min(inD - 1, 21);
-      trayBox(ox0 + 0.2, ox1 - 0.2, Math.max(f.z0, tk + t) + 0.5, Math.max(2.5, fh - 2.5), bd, D - bd, fg);
+    if (f.type === 'drawer' && f.face) host.add(fg);
+    else if (f.type === 'drawer') {
+      const bl = blindCorner(c), fo = f.open && !bl, ox0 = fo ? f.open.x0 : f.n > 1 || bl ? f.x0 + 0.5 : t + 0.5, ox1 = fo ? f.open.x1 : f.n > 1 || bl ? f.x1 - 0.5 : W - t - 0.5, bd = Math.min(inD - 1, 21);
+      trayBox(ox0 + 0.2, ox1 - 0.2, Math.max(f.z0, tk + t) + 0.5, Math.max(2.5, fh - 2.5), bd, D - ffThick(c) - bd, fg);
       fg.userData.open = { kind: 'drawer', travel: drawerTravel(c) };
-      grp.add(fg);
+      host.add(fg);
     } else if (f.type === 'door') {
       const hx = f.hinge === 'R' ? f.x1 : f.x0, pivot = new THREE.Group();
       pivot.position.set(hx, 0, D); fg.position.set(-hx, 0, -D); pivot.add(fg);
       pivot.userData.open = { kind: 'door', sign: f.hinge === 'R' ? 1 : -1, f };
-      grp.add(pivot);
-    } else grp.add(fg);
+      host.add(pivot);
+    } else host.add(fg);
   });
   const ps = panelFor(c), pmM = M(mat(ps.mat) || cm), pt = panelThick(c);
-  const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pd = D + ps.frontOverhang;
+  const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pdL = endDepth(c, 'L') + ps.frontOverhang, pdR = endDepth(c, 'R') + ps.frontOverhang;
   const pL = hasPanel(c, 'L'), pR = hasPanel(c, 'R');
-  if (pL) grp.add(box3(pt, ph, pd, pmM, -pt / 2, py0 + ph / 2, pd / 2));
-  if (pR) grp.add(box3(pt, ph, pd, pmM, W + pt / 2, py0 + ph / 2, pd / 2));
+  if (pL) grp.add(box3(pt, ph, pdL, pmM, -pt / 2, py0 + ph / 2, pdL / 2));
+  if (pR) grp.add(box3(pt, ph, pdR, pmM, W + pt / 2, py0 + ph / 2, pdR / 2));
   // Fillers to the wall, flush with the fronts, with a short return behind them.
   const flm = mat(fillerMat(c)) || cm, flM = M(flm), fy0 = c.cat === 'Wall' ? 0 : tk;
   fillersOf(c).forEach(fl => {
@@ -538,7 +562,9 @@ function buildRoomScene(v) {
     if (ui.dims.fronts && !R3 && L.labels && L.fronts) computeFronts(c, p).filter(f => f.type !== 'open').forEach(f => {
       const fw = f.x1 - f.x0, fh = f.z1 - f.z0, ft = (mat(frontStyle(c, f).ds.mat) || { thick: 0.75 }).thick;
       const sp = textSprite(`${fmtLen(fw)} × ${fmtLen(fh)}`, Math.min(2.1 * k, fh * 0.3, fw / 6), { onTop: true });
-      sp.position.set(f.x0 + fw / 2, f.type === 'drawer' && fh < 12 ? f.z0 + fh * 0.72 : f.z0 + fh / 2, D + ft + 1); m.add(sp);
+      const fy = f.type === 'drawer' && fh < 12 ? f.z0 + fh * 0.72 : f.z0 + fh / 2;
+      if (f.face) { const q = facePt(f.face, f.x0 + fw / 2, ft + 1); sp.position.set(q.x, fy, q.z); } else sp.position.set(f.x0 + fw / 2, fy, D + ft + 1);
+      m.add(sp);
     });
     if ((ui.dims.cab && !R3 && L.labels) || hot) {
       const sp = textSprite(`${LBL[c.id] || ''}  ${fmtLen(c.w)} × ${fmtLen(c.h)}`, 2.6 * k, hot ? { onTop: true, bg: hot, color: '#ffffff' } : { onTop: true });
@@ -560,7 +586,8 @@ function buildRoomScene(v) {
   if (L.tops) countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), a = r.start - r.ovS, b = r.end + r.ovE;
     const grp = wallGroup(w, r.side, r.side === 1 ? a : b), tm = mat3(mat(r.tpl.mat));
-    grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
+    if (r.poly) v.root.add(ctTop3(r, tm));
+    else grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
     if (r.tpl.backsplash > 0) { const off = r.side === 1 ? r.ovS : r.ovE; grp.add(box3(r.end - r.start, r.tpl.backsplash, 0.75, tm, off + (r.end - r.start) / 2, r.top + r.thick + r.tpl.backsplash / 2, 0.375)); }
     v.root.add(grp);
   });

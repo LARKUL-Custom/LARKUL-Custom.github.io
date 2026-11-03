@@ -19,10 +19,11 @@ const CAB_SHAPE_PRESETS = {
   ],
 };
 const cabShapeDims = (c, v) => v === 'front' ? [c.w, c.h] : v === 'side' ? [c.d, c.h] : [c.w, c.d];
-const hasCabShape = c => !!c.shape && CAB_VIEWS.some(([v]) => ((c.shape[v] || {}).pts || []).length);
+const hasCabShape = c => angledCorner(c) || (!!c.shape && CAB_VIEWS.some(([v]) => ((c.shape[v] || {}).pts || []).length));
+const cabShapeOf = (c, v) => v === 'top' ? cabTopShape(c) : (c.shape || {})[v];
 // The drawn points stretched to the cabinet's size now.
 function cabShapePts(c, v) {
-  const s = (c.shape || {})[v]; if (!s || !(s.pts || []).length) return null;
+  const s = cabShapeOf(c, v); if (!s || !(s.pts || []).length) return null;
   const [W, H] = cabShapeDims(c, v), kx = s.w > 0 ? W / s.w : 1, ky = s.h > 0 ? H / s.h : 1;
   return s.pts.map(p => ({ ...p, x: p.x * kx, y: p.y * ky }));
 }
@@ -189,7 +190,7 @@ const edgeTypeName = v => (EDGE_TYPES.find(x => x[0] === (v || '')) || EDGE_TYPE
 // The top shape's edges at the cabinet's size now: from, to, length and the outward normal (x across, y out from the wall).
 function cabTopEdges(c) {
   const pts = cabShapePts(c, 'top'); if (!pts) return [];
-  const ccw = shapeArea2(pts) > 0, types = ((c.shape.top || {}).edges) || [];
+  const ccw = shapeArea2(pts) > 0, types = ((cabTopShape(c) || {}).edges) || [];
   return pts.map((a, i) => { const b = pts[(i + 1) % pts.length], L = Math.hypot(b.x - a.x, b.y - a.y), n = edgeOut(a, b, ccw); return { i, a, b, L, n, type: types[i] || '', curved: !!a.b }; });
 }
 // Edges the plain box does not already close: off the box lines, or cutting across it.

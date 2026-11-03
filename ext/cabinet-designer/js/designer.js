@@ -13,14 +13,14 @@ function blankDesign(cat = 'Base') {
 function designFromLib(l) {
   return { ...blankDesign(l.cat), sourceLib: l.id, name: l.name, cat: l.cat, w: l.w, h: l.h, d: l.d, elev: l.elev, rows: clone(l.rows), params: clone(l.params || {}),
     construction: clone(l.construction || defaultConstruction(l.cat)), cabMatT: l.cabMatT || '', drawerMatT: l.drawerMatT || '',
-    doorT: l.doorT || '', slide: l.slide || '', hinge: l.hinge || '', partT: l.partT || '', appliedL: !!l.appliedL, appliedR: !!l.appliedR, custom: clone(l.custom || []), inserts: clone(l.inserts || []) };
+    doorT: l.doorT || '', slide: l.slide || '', hinge: l.hinge || '', partT: l.partT || '', appliedL: !!l.appliedL, appliedR: !!l.appliedR, custom: clone(l.custom || []), inserts: clone(l.inserts || []), ...(l.corner ? { corner: clone(l.corner), folder: l.folder } : {}) };
 }
 function designCab() {
   const d = S.designer;
   return { id: '_designer', libId: d.sourceLib, name: d.name, cat: d.cat, w: d.w, h: d.h, d: d.d, elev: d.elev, wall: null, side: 1, off: 0,
     cabMatT: d.cabMatT, drawerMatT: d.drawerMatT, doorT: d.doorT, slide: d.slide, hinge: d.hinge, partT: d.partT || '', pull: '', panelStyle: '',
     appliedL: d.appliedL, appliedR: d.appliedR, molding: null, construction: d.construction, rows: d.rows, libParams: {}, params: d.params, custom: d.custom, inserts: d.inserts || [],
-    finInt: d.finInt, grainMatch: d.grainMatch, vars: d.vars };
+    finInt: d.finInt, grainMatch: d.grainMatch, vars: d.vars, ...(d.corner ? { corner: d.corner } : {}) };
 }
 // The design as a cabinet whose changes write back into the design.
 function desCabLive() {
@@ -34,7 +34,7 @@ function desCabLive() {
 }
 function designToLib(d, id) {
   return { id, name: d.name, cat: d.cat, w: d.w, h: d.h, d: d.d, elev: d.elev, rows: clone(d.rows), params: clone(d.params), construction: clone(d.construction),
-    cabMatT: d.cabMatT, drawerMatT: d.drawerMatT, doorT: d.doorT, slide: d.slide, hinge: d.hinge, partT: d.partT || '', appliedL: d.appliedL, appliedR: d.appliedR, custom: clone(d.custom), inserts: clone(d.inserts || []), finInt: d.finInt, grainMatch: d.grainMatch };
+    cabMatT: d.cabMatT, drawerMatT: d.drawerMatT, doorT: d.doorT, slide: d.slide, hinge: d.hinge, partT: d.partT || '', appliedL: d.appliedL, appliedR: d.appliedR, custom: clone(d.custom), inserts: clone(d.inserts || []), finInt: d.finInt, grainMatch: d.grainMatch, ...(d.corner ? { corner: clone(d.corner), folder: d.folder || 'Corner' } : {}) };
 }
 // A folded section of the designer form; it stays open or shut as you left it.
 function desFold(k, title, body) {

@@ -44,7 +44,7 @@ function resolve(ref) {
     case 'room': return id ? roomById(id) : curRoom();
     case 'rset': { const r = roomById(id); return r && (r.settings = r.settings || {}); }
     case 'roomp': { const r = roomById(id); return r && (r.params = r.params || {}); }
-    case 'cab': case 'cabpos': case 'cabgap': return cab(id); case 'cabp': { const c = cab(id); return c && c.params; }
+    case 'cab': case 'cabpos': case 'cabgap': return cab(id); case 'cabk': { const c = cab(id); return c && c.corner; } case 'cabp': { const c = cab(id); return c && c.params; }
     case 'cabc': { const c = cab(id); return c && (c.construction = c.construction || defaultConstruction(c.cat)); }
     case 'wall': return wall(id);
     case 'wcapx': { const [wid, cid] = id.split(':'), w = wall(wid); return w && (w.caps || []).find(x => x.id === cid) || null; }
@@ -57,6 +57,8 @@ function resolve(ref) {
     case 'mtc': return S.matTemplates.cabinet.find(d => d.id === id);
     case 'mtd': return S.matTemplates.drawer.find(d => d.id === id);
     case 'panel': return S.panels.find(p => p.id === id);
+    case 'ff': return (S.faceFrames || []).find(f => f.id === id);
+    case 'cabff': { const c = cab(id); return c && (c.ffSize = c.ffSize || {}); }
     // Insert library prices, and this job's own prices for library items: pov:<door|mat|ins>:<id>
     case 'insp': return ((S.insertPrices = S.insertPrices || {})[id] = S.insertPrices[id] || {});
     case 'pov': { const [g, iid] = id.split(':'), o = (S.job.priceOver = S.job.priceOver || {}); o[g] = o[g] || {}; return (o[g][iid] = o[g][iid] || {}); }
@@ -146,6 +148,8 @@ document.addEventListener('change', e => {
       if (old && nn && old !== nn) Object.keys(S.formulas || {}).forEach(k => { S.formulas[k] = S.formulas[k].replace(new RegExp('\\b' + old + '\\b(?!\\.)', 'g'), nn); });
       return;
     }
+    // The job's construction swaps every cabinet in the job between frameless and face frame.
+    if (ref === 'jobd' && field === 'faceFrame') { o[field] = v || 'none'; ffSwapAll(); note = `Every cabinet in the job is now ${ffJobName().replace(/^Face/, 'face')}`; return; }
     // A slab turned into a framed door gets stiles and rails; a two-piece door gets the 3/8 HDF panel.
     if (ref.startsWith('door:') && field === 'type') {
       o.type = v;

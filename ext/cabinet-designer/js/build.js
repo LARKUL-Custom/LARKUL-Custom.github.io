@@ -26,7 +26,7 @@ function panelSpans(c, explicitOnly) {
 function panelPolys(c, explicitOnly) {
   const w = wall(c.wall); if (!w) return [];
   const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), depth = c.d + panelFor(c).frontOverhang;
-  return panelSpans(c, explicitOnly).map(({ a: [a0, a1] }) => [wallPt(w, g, s, a0, f), wallPt(w, g, s, a1, f), wallPt(w, g, s, a1, f + depth), wallPt(w, g, s, a0, f + depth)]);
+  return panelSpans(c, explicitOnly).map(({ end, a: [a0, a1] }) => { const dp = depth - c.d + endDepth(c, end); return [wallPt(w, g, s, a0, f), wallPt(w, g, s, a1, f), wallPt(w, g, s, a1, f + dp), wallPt(w, g, s, a0, f + dp)]; });
 }
 // Filler strips in plan: flush with the fronts, across the gap to the wall.
 function fillerPolys(c) {
@@ -83,15 +83,23 @@ const elevX = (c, L) => c.side === 1 ? c.off : L - c.off - c.w;
 /* ---------- Fronts ---------- */
 function computeFronts(c, p) {
   p = p || effParams(c);
+  // Face frame cabinets: fronts overlay the frame's openings.
+  const ffr = faceFrame(c); if (ffr) return ffFronts(c, p, ffr);
   const tk = hasToe(c) ? p.toeKickHeight : 0;
   const zb = tk + p.frontBottomReveal, zt = c.h - p.frontTopReveal;
-  const xl = p.frontSideReveal, xr = c.w - p.frontSideReveal, gap = p.frontGap;
+  const gap = p.frontGap, bw = blindCorner(c) ? blindWidth(c) : 0;
+  // A blind corner's fronts only cover the open part; the blind side has its blind panel.
+  const xl = bw && cornerSide(c) === 'L' ? bw + gap : p.frontSideReveal, xr = bw && cornerSide(c) === 'R' ? c.w - bw - gap : c.w - p.frontSideReveal;
   const rows = c.rows || [];
   const fixed = rows.reduce((a, r) => a + (r.h === '*' ? 0 : (+r.h || 0)), 0);
   const stars = rows.filter(r => r.h === '*').length;
   const avail = (zt - zb) - gap * Math.max(0, rows.length - 1);
   const starH = stars ? Math.max(0, (avail - fixed) / stars) : 0;
   const out = []; let z = zt;
+  if (angledCorner(c)) {
+    const zs = rows.map(r => { const h = r.h === '*' ? starH : (+r.h || 0), z1 = z; z = z1 - h - gap; return [z1 - h, z1]; });
+    return Object.assign(cornerFronts(c, p, rows, zs), { overfull: fixed > avail + 0.001 });
+  }
   rows.forEach((r, ri) => {
     const h = r.h === '*' ? starH : (+r.h || 0), z1 = z, z0 = z - h;
     const n = Math.max(1, r.count | 0), fw = ((xr - xl) - gap * (n - 1)) / n;
@@ -115,6 +123,7 @@ const segHit = (a, b, c, d) => { const o = (p, q, r) => (q.x - p.x) * (r.y - p.y
 // The widest a door can swing (radians, up to 1.75) before it runs into a wall, a cabinet that sticks out past it,
 // or an open drawer at the same height. Plan geometry; heights only decide what is in the way.
 function doorLimit(c, f) {
+  if (f.face) return 1.75;
   const key = c.id + ':' + f.row + ':' + f.idx; if (key in doorLimCache) return doorLimCache[key];
   const MAX = 1.75, w = wall(c.wall); if (!w) return (doorLimCache[key] = MAX);
   const g = wg(w), fb = w.thick / 2 + (c.outset || 0) + c.d + 0.75, z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1;
@@ -302,7 +311,7 @@ function interiorLayout(c, p, fronts) {
   const zones = doorZones.length ? doorZones : (fronts.length ? [] : [[zIn0, zIn1]]);
   const low = zones.length ? zones[zones.length - 1] : null, ins = c.inserts || [];
   const hasDoors = fronts.some(f => f.type === 'door');
-  const out = { t, zIn0, zIn1, inW, zones, low, spacer: hasDoors ? 1 : 0, divX: null, rollouts: [], trays: [], bins: [], lazy: [], bom: [] };
+  const out = { t, zIn0, zIn1, inW, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? 1 : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], bom: [] };
   // An insert goes in the door opening it names (it.row), or else the bottom one.
   const used = new Set();
   ins.forEach(it => {
@@ -361,7 +370,8 @@ function buildParts(c) {
   const cm = mat(mt.carcass) || S.materials[0], t = cm.thick;
   const bm = mat(mt.back) || cm, bt = bm.thick, sm = mat(mt.shelf) || cm, tkm = mat(mt.toeKick) || cm;
   const pin = hwPick(roomSet('shelfpin'), 'shelfpin'), hg = hwPick(cabSet(c, 'hinge'), 'hinge'), sl = hwPick(cabSet(c, 'slide'), 'slide');
-  const W = c.w, H = c.h, D = c.d, tk = hasToe(c) ? p.toeKickHeight : 0;
+  // A face frame is part of the cabinet's depth, so the box behind it is that much shallower.
+  const ffr = faceFrame(c), W = c.w, H = c.h, D = c.d - (ffr ? ffr.thick : 0), tk = hasToe(c) ? p.toeKickHeight : 0;
   const parts = [], bom = {}, warn = [], ptT = partTpl(cabSet(c, 'partT'));
   const addB = (k, q) => { if (k) bom[k] = (bom[k] || 0) + q; };
   const part = (name, m, L, Wd, o = {}) => {
@@ -385,8 +395,11 @@ function buildParts(c) {
       const n = fh <= hg.max2 ? 2 : fh <= hg.max3 ? 3 : 4;
       const a = p.hingeInset, b = fh - p.hingeInset;
       for (let i = 0; i < n; i++) hinges.push(a + (b - a) * i / (n - 1));
-      addB(hg.name, n); addB(hg.name + ' mounting plate', n);
-      hinges.forEach(hp => {
+      const hk = cornerHinge(c, f, hg);
+      // On a face frame the plates screw to the frame's stile, so the box sides get no plate holes.
+      addB(hk.name, n); if (hk.plate) addB(hk.name + (ffr ? ' face frame mounting plate' : ' mounting plate'), n);
+      // Plates on a corner's faces go on the box beside the door, not on its sides; that drilling is not made yet.
+      if (!f.face && !ffr) hinges.forEach(hp => {
         const z = f.z0 + hp, ops = f.hinge === 'L' ? leftOps : rightOps;
         hg.plateHoles.forEach(ph => ops.push({ type: 'bore', x: z + ph.dz * MM, y: ph.y * MM, dia: ph.dia * MM, depth: ph.depth * MM, face: 'inside', why: 'hinge plate' }));
       });
@@ -467,17 +480,25 @@ function buildParts(c) {
     else if (f.type === 'false') frontPart('False front', f);
     else if (f.type === 'drawer') {
       frontPart('Drawer front', f);
+      if (f.face) { if (!warn.some(w => w.startsWith('Drawers on a corner'))) warn.push('Drawers on a corner\'s angled faces get their fronts only; build the drawer boxes by hand.'); return; }
       if (!sl) { warn.push('No drawer slide in the hardware library.'); return; }
       const dm = mat(dmt.sides) || cm, dbm = mat(dmt.bottom) || bm, st = dm.thick;
       if (Math.abs(st - sl.sideThickMM * MM) > 0.03 && !warn.some(w => w.startsWith('Drawer box material')))
         warn.push(`Drawer box material is ${fmtLen(st, 1)} but ${sl.name} expects ${fmtLen(sl.sideThickMM * MM, 1)} sides.`);
       const nominal = nominalFor(sl, inD);
       if (!nominal) { warn.push(`No ${sl.name} length fits ${fmtLen(inD, 1)} inside depth.`); return; }
-      const z0 = Math.max(f.z0, zIn0), z1 = Math.min(f.z1, zIn1);
+      // A face frame drawer fits between the rails of its opening.
+      const ffOpen = !!(ffr && f.open && !blindCorner(c));
+      const z0 = Math.max(ffOpen ? f.open.z0 : f.z0, zIn0), z1 = Math.min(ffOpen ? f.open.z1 : f.z1, zIn1);
       const boxBot = z0 + sl.bottomClearMM * MM;
       const bh = Math.floor(((z1 - z0) - (sl.bottomClearMM + sl.topClearMM) * MM) * 4) / 4;
       if (bh < 2.5) { warn.push(`Drawer opening at ${fmtLen(f.z0, 1)} is too short for a drawer box.`); return; }
-      const openW = f.n > 1 ? (inW - (f.n - 1) * t) / f.n : inW;
+      // A blind corner's drawer runs beside the blind side, on a partition the height of its opening.
+      const bwD = blindCorner(c) ? blindWidth(c) : 0;
+      if (bwD) part('Drawer partition', cm, r3(z1 - z0), r3(inD), { kind: 'divider' });
+      // Behind a face frame the drawer fits the frame's opening; spacers on the sides bring the runners out to it.
+      const openW = ffOpen ? f.open.x1 - f.open.x0 : bwD ? W - t - bwD : f.n > 1 ? (inW - (f.n - 1) * t) / f.n : inW;
+      const ffSp = ffOpen && f.n === 1 ? Math.max(ffr.ls, ffr.rs) - t : 0;
       if (f.n > 1 && f.idx === 0) warn.push('Side-by-side drawers need a center divider. Dividers are not generated yet.');
       const ow = openW - sl.widthDeductMM * MM, rec = sl.bottomRecessMM * MM, bdT = dbm.thick, bd = p.drawerBottomDado;
       const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: bdT, depth: bd, face: 'inside', why: 'drawer bottom' });
@@ -495,7 +516,10 @@ function buildParts(c) {
       part('Drawer bottom', dbm, nominal - st + bd, ow - 2 * st + 2 * bd, { kind: 'drawerBottom', ops: bottomOps });
       addB(slideBomName(sl, nominal), 1);
       addB(sl.bomExtra, 1);
-      (sl.cabHoles || []).forEach(h => {
+      if (ffSp > 0.03) {
+        if (Math.abs(ffSp - t) > 0.07 && !warn.some(w => w.startsWith('Drawer spacers'))) warn.push(`Drawer spacers need to be ${fmtLen(ffSp, 1)} thick to bring the runners out to the face frame; the box material is ${fmtLen(t, 1)}.`);
+        part('Drawer slide spacer', cm, inD, 2.5, { qty: 2, kind: 'spacer', ops: (sl.cabHoles || []).filter(h => slideHoleY(sl, nominal, h) !== null).map(h => ({ type: 'bore', x: slideHoleY(sl, nominal, h), y: 1.25, dia: h.dia * MM, depth: h.depth * MM, face: 'inside', why: sl.name + ' runner' })) });
+      } else (sl.cabHoles || []).forEach(h => {
         if (slideHoleY(sl, nominal, h) === null) return;
         const op = { type: 'bore', x: boxBot + h.z * MM, y: slideHoleY(sl, nominal, h), dia: h.dia * MM, depth: h.depth * MM, face: 'inside', why: sl.name + ' runner' };
         leftOps.push(op); rightOps.push({ ...op });
@@ -581,14 +605,22 @@ function buildParts(c) {
   } else part('Top', cm, inW, D, { kind: 'topbot', ops: [{ ...panelGroove }] });
   part('Back', bm, (zIn1 - zIn0) + 2 * p.dadoDepth, inW + 2 * p.dadoDepth, { kind: 'back' });
   if (tk && p.toeSkin !== 'off') part(feet ? 'Toe skin' : 'Toe kick', tkm, W, tk, { kind: 'toekick' });
+  if (ffr) ffParts(c, p, ffr, part, addB, warn);
   // A front, side or top shape cuts the box panels to it.
   if (hasCabShape(c)) applyCabShape(c, parts, { p, t, bt, tk, sh, D, dd: p.dadoDepth, warn });
-  if (((c.shape || {}).top || {}).edges && typeof edgeParts === 'function') edgeParts(c, parts, { t, bt, sh, warn }, part, cm);
+  if ((cabTopShape(c) || {}).edges && typeof edgeParts === 'function') edgeParts(c, parts, { t, bt, sh, warn }, part, cm);
+  if (isCorner(c)) cornerParts(c, parts, { p, t, bt, tk, feet: onFeet(c, p), part, cm, sm, warn, addB, ptT });
   // Legs press into holes on the underside of the bottom (the flip side on the CNC), laid out from the leg's insets.
   if (feet) {
     const leg = hw(roomSet('leg')) || S.hardware.find(h => h.feet), bot = parts.find(q => q.cabId === c.id && q.name === 'Bottom');
     let n = feetCount(c, p);
-    if (leg && leg.kind === 'leg' && bot) {
+    if (leg && leg.kind === 'leg' && bot && angledCorner(c)) {
+      // A corner gets a leg in from each corner of its footprint (ops measured from the bottom's front edge).
+      const spots = cornerLegSpots(c, p), pat = (leg.holesMM || []).length ? leg.holesMM : [{ x: 0, y: 0 }];
+      spots.forEach(q => pat.forEach(o => { const dx = (+o.x || 0) * MM * (q.x > W / 2 ? -1 : 1), dy = (+o.y || 0) * MM;
+        bot.ops.push({ type: 'bore', x: r3(q.x + dx - t), y: r3(D - q.y + dy), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name }); }));
+      n = spots.length;
+    } else if (leg && leg.kind === 'leg' && bot) {
       const xl = endFinished(c, 'L') ? +leg.inFin : +leg.inUnfin, xr = W - (endFinished(c, 'R') ? +leg.inFin : +leg.inUnfin), span = xr - xl;
       const per = +leg.maxSep > 0 ? Math.ceil(span / +leg.maxSep) + 1 : (p.feetCount | 0) > 0 ? Math.max(2, Math.ceil((p.feetCount | 0) / (leg.noBack ? 1 : 2))) : W > 36 ? 3 : 2;
       const xs = Array.from({ length: per }, (_, i) => xl + span * i / Math.max(1, per - 1)), ys = leg.noBack ? [+leg.inToe] : [+leg.inToe, D - +leg.inBack];
@@ -650,7 +682,7 @@ function buildParts(c) {
   const ps = panelFor(c), pm = mat(ps.mat) || cm;
   ['L', 'R'].forEach(sd => {
     if (!hasPanel(c, sd)) return;
-    const L = c.cat === 'Wall' ? H : (ps.toFloor ? H : H - tk), Wd = D + ps.frontOverhang + ps.scribe;
+    const L = c.cat === 'Wall' ? H : (ps.toFloor ? H : H - tk), Wd = endDepth(c, sd) + ps.frontOverhang + ps.scribe;
     const ops = (ps.type === 'routed' && ps.frame > 0) ? [{ type: 'pocket', x: ps.frame, y: ps.frame + ps.scribe, w: L - 2 * ps.frame, h: Wd - 2 * ps.frame - ps.scribe, depth: ps.pocketDepth, face: 'show', why: 'panel recess' }] : [];
     part(`Applied end panel (${sd})`, pm, L, Wd, { kind: 'applied', ops });
   });
@@ -731,6 +763,8 @@ function countertopRuns() {
     const tpl = countertop(g.top || roomSet('countertop')), start = +g.off || 0, len = Math.max(0.25, +g.len || 0), depth = +g.depth || 25.5;
     runs.push({ generic: g.id, key: 'gen:' + g.id, name: g.name, wall: g.wall, side: +g.side || 1, start, end: start + len, top: +g.z || 0, bottom: +g.z || 0, d: depth - tpl.frontOverhang, cabs: [], o: {}, tpl, on: true, ovS: 0, ovE: 0, len, depth, thick: +g.thick || tpl.thick });
   });
+  // Corners where two tops meet: mitered or one running through (ctjoint.js). Reshapes the tops and their lengths.
+  runs.corners = typeof ctjApply === 'function' ? ctjApply(runs) : [];
   return runs;
 }
 

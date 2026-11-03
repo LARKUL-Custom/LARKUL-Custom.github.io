@@ -95,7 +95,7 @@ function edTab(c, tab, qr) {
   const warns = `${b.warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}${conflicts(c) ? '<div class="warnbox">This cabinet runs into a wall or another cabinet. Drag it, or change its width, to clear it.</div>' : ''}`;
   switch (tab) {
     case 'size': return `${warns}<div class="psec box">${secHead('ruler', 'Size', 'teal')}${fld('Name', R, 'name', c.name, 'text', { wide: true })}${fld('Description', R, 'desc', c.desc || '', 'text', { wide: true, ph: (libItem(c.libId) || {}).name || '' })}
-        <div class="grid4">${fld('Width', R, 'w', c.w, 'len')}${fld('Height', R, 'h', c.h, 'len')}${fld('Depth', R, 'd', c.d, 'len')}${fld('Elevation', R, 'elev', c.elev, 'len')}</div></div>
+        <div class="grid4">${fld('Width', R, 'w', c.w, 'len')}${fld('Height', R, 'h', c.h, 'len')}${fld('Depth', R, 'd', c.d, 'len')}${fld('Elevation', R, 'elev', c.elev, 'len')}</div></div>${cornerBox(c)}
       <div class="psec box">${secHead('magnet', 'Position on the wall', 'blue')}
         <div class="grid4">${fld('From left', 'cabpos:' + id, 'L', r3(fromEnd(c, 'L')), 'len')}${fld('From right', 'cabpos:' + id, 'R', r3(fromEnd(c, 'R')), 'len')}${fld('Outset', R, 'outset', c.outset || 0, 'len')}</div>
         <div class="row-actions"><button class="btn sm" data-act="cab-center" data-id="${id}">${icon('ends')}Center on wall</button><button class="btn sm" data-act="cab-center-open" data-id="${id}">${icon('ends')}Center in opening</button></div></div>${typeof qSizeExtras === 'function' ? qSizeExtras(c) : ''}`;
@@ -103,7 +103,7 @@ function edTab(c, tab, qr) {
       return `${qeOpening(c, qr, 'face')}
         <div class="psec box">${secHead('door', 'Doors and drawers', 'violet')}
           <div class="grid2">${fld('Door template', R, 'doorT', c.doorT || '', 'select', { options: setOpts('doorT', opts(S.doorTemplates), 'cab') })}${fld('Pulls', R, 'pull', c.pull || '', 'select', { options: setOpts('pull', opts(hwOf('pull')), 'cab') })}
-          ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}</div></div>`;
+          ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}</div></div>${ffBox(c)}`;
     }
     case 'interior': return `${qeOpening(c, qr, 'inside')}${qeInside(c)}${typeof qInteriorExtras === 'function' ? qInteriorExtras(c) : ''}`;
     case 'materials': return `<div class="psec box">${secHead('palette', 'Materials and hardware', 'amber')}${dockBody('cab-tpl')}

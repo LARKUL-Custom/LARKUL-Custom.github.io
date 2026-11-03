@@ -44,7 +44,7 @@ function multiProps() {
     <div class="row-actions"><button class="btn sm" data-act="multi-none">Select none</button><button class="btn sm danger" data-act="multi-del">Delete ${ids.length}</button></div>
     <div class="note">Shift or Ctrl click adds or removes a cabinet; Shift-drag in the plan selects a box. A change here goes to every selected cabinet.</div></div>
   <div class="psec box">${secHead('palette', 'Materials and fronts', 'amber')}<div class="mgrid">
-    ${sel('Cabinet materials', 'cabMatT', so('cabMatT', opts(S.matTemplates.cabinet)))}${sel('Drawer materials', 'drawerMatT', so('drawerMatT', opts(S.matTemplates.drawer)))}
+    ${sel('Construction', 'faceFrame', so('faceFrame', ffOpts()))}${sel('Cabinet materials', 'cabMatT', so('cabMatT', opts(S.matTemplates.cabinet)))}${sel('Drawer materials', 'drawerMatT', so('drawerMatT', opts(S.matTemplates.drawer)))}
     ${sel('Door template', 'doorT', so('doorT', opts(S.doorTemplates)))}${sel('Applied panel fit', 'panelStyle', so('panelStyle', opts(S.panels)))}
     ${sel('Part template', 'partT', so('partT', opts(S.partTemplates)))}${sel('Top molding', 'molding', [{ v: '', l: 'None' }, ...opts(S.moldings)])}
     ${sel('Finished interior', 'finInt', yn, c => c.finInt ? 'yes' : 'no')}</div></div>

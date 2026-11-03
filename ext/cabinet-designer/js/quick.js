@@ -103,7 +103,7 @@ function qEqualize() {
 }
 
 /* ----- Q19: copy and paste a cabinet's settings ----- */
-const SET_KEYS = ['cabMatT', 'drawerMatT', 'doorT', 'panelStyle', 'partT', 'pull', 'slide', 'hinge', 'jointU', 'jointF', 'finInt', 'molding', 'grainMatch'];
+const SET_KEYS = ['cabMatT', 'drawerMatT', 'doorT', 'panelStyle', 'partT', 'pull', 'slide', 'hinge', 'jointU', 'jointF', 'finInt', 'molding', 'grainMatch', 'faceFrame'];
 let setClip = null;
 function qCopySettings() {
   const id = multiIds().length > 1 ? multiIds()[0] : ui.sel && ui.sel.type === 'cab' ? ui.sel.id : ui.quick, c = cab(id); if (!c) return;

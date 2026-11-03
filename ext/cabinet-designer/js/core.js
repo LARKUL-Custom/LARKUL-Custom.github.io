@@ -118,6 +118,7 @@ const PART_KINDS = [
   { id: 'spacer', name: 'Roll-out spacers', edges: { L1: 'Bottom', L2: 'Top', W1: 'Front end', W2: 'Back end' } },
   { id: 'applied', name: 'Applied end panels', edges: { L1: 'Long edge 1', L2: 'Long edge 2', W1: 'Bottom', W2: 'Top' } },
   { id: 'filler', name: 'Fillers', edges: { L1: 'Long edge 1', L2: 'Long edge 2', W1: 'Bottom', W2: 'Top' } },
+  { id: 'faceFrame', name: 'Face frame stiles and rails', edges: { L1: 'Inside edge', L2: 'Outside edge', W1: 'End 1', W2: 'End 2' } },
 ];
 const partKind = id => PART_KINDS.find(k => k.id === id) || PART_KINDS[0];
 function defaultEdgebands() {
@@ -319,6 +320,7 @@ function seed() {
       lib('w-2d', 'Wall 2 Door', 'Wall', 30, 36, 12, 54, FACE_PRESETS[1].rows, { shelfCount: 2 }),
       lib('w-hood', 'Wall Hood Cabinet', 'Wall', 30, 18, 24, 66, FACE_PRESETS[1].rows, { shelfCount: 0 }),
       lib('t-pantry', 'Tall Pantry', 'Tall', 24, 90, 24, 0, FACE_PRESETS[9].rows, { shelfCount: 4 }),
+      ...cornerLibItems(),
     ],
     rooms: [
       newRoom('r1', 'Kitchen', [
@@ -336,7 +338,7 @@ function seed() {
   };
   // The sample shows its tops already built.
   S.rooms.forEach(r => { r.autoTops = true; });
-  ensureEdgeLibs(S); ensureJoinery(S); attachRoom(S);
+  ensureEdgeLibs(S); ensureJoinery(S); ensureFaceFrames(S); attachRoom(S);
   S.shapeLib = defaultShapeLib(S); S.formulas = {}; S.job.vars = [];
   const put = (libId, wall, off, o = {}) => S.cabinets.push(Object.assign(newCab(S, S.library.find(l => l.id === libId), wall, 1, off), o));
   // Runs start a filler's width off the wall (see LAYOUT_DEFAULTS); open ends get panels automatically.
@@ -375,6 +377,7 @@ function newCab(S, lib, wallId, side, off) {
     panelL: lib.appliedL ? 'on' : '', panelR: lib.appliedR ? 'on' : '', molding: null,
     construction: clone(lib.construction || defaultConstruction(lib.cat)),
     rows: clone(lib.rows), libParams: { ...(lib.params || {}) }, params: {}, custom: clone(lib.custom || []), vars: clone(lib.vars || []), inserts: clone(lib.inserts || []),
+    ...(lib.corner ? { corner: clone(lib.corner) } : {}),
   };
 }
 
@@ -394,7 +397,7 @@ function attachRoom(st) {
   });
   return st;
 }
-const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'doorT', 'pull', 'slide', 'hinge', 'panelStyle', 'panelDoor', 'partT', 'jointU', 'jointF'];
+const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'doorT', 'pull', 'slide', 'hinge', 'panelStyle', 'panelDoor', 'partT', 'jointU', 'jointF', 'faceFrame'];
 // Older saves had one room and stored the job default on every cabinet. Blank those so cabinets follow room settings.
 // Blum TANDEM plus BLUMOTION 563H, frameless, from Blum's 563H/563 installation sheet (2016).
 // Runner screws: top row 37 mm above the runner bottom (the opening bottom), the box sits 14 mm above it, so 23 mm above the box bottom.
@@ -451,7 +454,7 @@ function migrate(s) {
   (s.moldings || []).forEach(m => { if (m.profile === 'shape' && !(m.pts || []).length) { const l = s.shapeLib.find(x => x.id === m.shape); m.pts = l ? clone(l.pts) : moldStartPts(); } delete m.shape; });
   s.shapeLib = s.shapeLib.filter(l => l.id !== 'sh-crown');
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
-  return attachRoom(ensureJoinery(ensureEdgeLibs(s)));
+  return attachRoom(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))));
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
 // The open job lives in its own file (see jobs.js); browser storage keeps a working copy too.

@@ -12,7 +12,7 @@ const defaultCncTools = () => [
   { id: '3_8COMP', number: 2, dia: 9.525, type: 'pocket', passDepth: 12, stepover: 70, plunge: 4000, feed: 10000, thruExtra: 0.3 },
   { id: '1_4SPDN', number: 3, dia: 6.11, type: 'pocket', passDepth: 8, stepover: 60, plunge: 3000, feed: 8000, thruExtra: 0.3 },
   { id: '1_8DOWN', number: 4, dia: 3.175, type: 'engrave', passDepth: 4, stepover: 50, plunge: 2000, feed: 5000, thruExtra: 0.3 },
-  { id: '90SHARP', number: 5, dia: 12.7, type: 'vbit', passDepth: 0, stepover: 0, plunge: 2000, feed: 6000, thruExtra: 0 },
+  { id: '90SHARP', number: 5, dia: 12.7, type: 'vbit', angle: 90, passDepth: 0, stepover: 0, plunge: 2000, feed: 6000, thruExtra: 0 },
 ];
 const defaultMachine = () => ({ edgeDrill: false, tabs: false, tabLen: 10, tabH: 3, tabsUnder: 0.25, onion: 0, ramp: true, rampLen: 50, climb: true,
   bradTip: 0, forstnerTip: 0, fileName: '{JOB} parts', cixName: '{JOB} {MATERIAL} {SHEET}', pass2: false, pass2Climb: false, returnSkin: false, stayDown: false, remnantMin: 0 });
@@ -40,11 +40,11 @@ function cncPasses(toolId, depth) {
 
 function renderCncTools() {
   const T = CNC_LIB.tools, m = CNC_LIB.machine, n = (k, v, step = 'any') => `<input type="number" step="${step}" class="ct-in" data-k="${k}" value="${esc(String(v ?? ''))}" aria-label="${k}">`;
-  $('#tab-cnctools').innerHTML = `<div class="pagehead"><div><h2>CNC tools</h2><p>Every tool the part editor and the CNC file can use. Sizes in millimeters, rates in mm a minute. Pass depth splits deep cuts into passes; 0 cuts the full depth at once. These are kept for every job.</p></div>
+  $('#tab-cnctools').innerHTML = `<div class="pagehead"><div><h2>CNC tools</h2><p>Every tool the part editor, the Carve tab and the CNC file can use. Sizes in millimeters, rates in mm a minute. Pass depth splits deep cuts into passes; 0 cuts the full depth at once. These are kept for every job.</p></div>
     <div class="row-actions"><button class="btn primary" data-act="ct-add">${icon('plus')}Add tool</button><button class="btn" data-act="ct-reset">Back to the starting tools</button></div></div>
-    <div class="card tscroll"><table class="t cttab"><thead><tr><th>Name</th><th class="r">Number</th><th>Type</th><th class="r">Diameter</th><th class="r">Pass depth</th><th class="r">Stepover %</th><th class="r">Plunge rate</th><th class="r">Feed rate</th><th class="r">Through-cut extra</th><th></th></tr></thead><tbody>
+    <div class="card tscroll"><table class="t cttab"><thead><tr><th>Name</th><th class="r">Number</th><th>Type</th><th class="r">Diameter</th><th class="r">Pass depth</th><th class="r">Stepover %</th><th class="r">Plunge rate</th><th class="r">Feed rate</th><th class="r">Through-cut extra</th><th class="r" title="V-bits only: the angle of the V">V angle°</th><th class="r">Spindle RPM</th><th></th></tr></thead><tbody>
     ${T.map((t, i) => `<tr data-i="${i}"><td><input class="ct-in" data-k="id" value="${esc(t.id)}" aria-label="Tool name"></td><td>${n('number', t.number, 1)}</td><td><select class="ct-in" data-k="type" aria-label="Tool type">${CNC_TOOL_TYPES.map(([v, l]) => `<option value="${v}"${t.type === v ? ' selected' : ''}>${l}</option>`).join('')}</select></td>
-      <td>${n('dia', t.dia)}</td><td>${n('passDepth', t.passDepth)}</td><td>${n('stepover', t.stepover, 1)}</td><td>${n('plunge', t.plunge, 1)}</td><td>${n('feed', t.feed, 1)}</td><td>${n('thruExtra', t.thruExtra)}</td>
+      <td>${n('dia', t.dia)}</td><td>${n('passDepth', t.passDepth)}</td><td>${n('stepover', t.stepover, 1)}</td><td>${n('plunge', t.plunge, 1)}</td><td>${n('feed', t.feed, 1)}</td><td>${n('thruExtra', t.thruExtra)}</td><td>${t.type === 'vbit' ? n('angle', t.angle ?? 90) : ''}</td><td>${n('rpm', t.rpm ?? 18000, 100)}</td>
       <td><button class="btn sm danger" data-act="ct-del" data-id="${i}"${T.length < 2 ? ' disabled' : ''} aria-label="Delete ${esc(t.id)}">×</button></td></tr>`).join('')}</tbody></table></div>
     <div class="card cardbody"><h3>Machine settings</h3><div class="note">Sent with the parts file so CNC Cutlist can use them when it cuts the parts out.</div>
       <div class="grid4 ctmach">

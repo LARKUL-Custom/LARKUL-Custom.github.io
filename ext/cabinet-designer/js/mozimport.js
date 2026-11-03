@@ -126,7 +126,9 @@ function mozCat(p) {
 }
 // Closest library product: same type, then most words and door/drawer counts in common, then nearest width.
 function mozLib(p, cat) {
-  const libs = S.library.filter(l => l.cat === cat); if (!libs.length) return S.library[0];
+  // Corner products only match Mozaik corners (not BF/WF corner fillers).
+  const cornerOk = /blind|susan|corner/i.test(p.name || '') && !/^(bf|wf)\d*\b/i.test(p.name || '');
+  const libs = S.library.filter(l => l.cat === cat && (cornerOk || !l.corner)); if (!libs.length) return S.library[0];
   const words = s => new Set(s.toLowerCase().replace(/(\d)\s*(drw|drawers?)\b/g, '$1drawer').replace(/(\d)\s*(dr|doors?)\b/g, '$1door').split(/[^a-z0-9]+/).filter(Boolean));
   const pw = words(p.name + ' ' + p.desc);
   const score = l => { let s = 0; words(l.name).forEach(x => { if (pw.has(x)) s += /\d/.test(x) ? 3 : 1; }); return s - Math.abs(l.w - p.w) / 100; };
@@ -246,7 +248,9 @@ function mozRooms(data) {
       if (isFiller(p) || isEndPanel(p)) { extras.push({ p, at }); return; }
       const cat = mozCat(p), lib = mozLib(p, cat), c = newCab(S, lib, at.wall, at.side, at.off);
       Object.assign(c, { name: p.name || lib.name, w: p.w, h: p.h, d: p.d, elev: p.elev, fromMozaik: true });
-      const rows = mozRows(p, sz); if (rows) c.rows = rows;
+      // Corner products keep their own fronts; Mozaik's name says which end goes in the corner.
+      if (c.corner) { if (/right|\(r\)/i.test(p.name)) c.corner.side = 'R'; else if (/left|\(l\)/i.test(p.name)) c.corner.side = 'L'; }
+      const rows = angledCorner(c) ? null : mozRows(p, sz); if (rows) c.rows = rows;
       if (p.outset) c.outset = p.outset;
       if (p.num) c.num = p.num;
       if (p.inserts.length) c.inserts = p.inserts.map(mozInsert);

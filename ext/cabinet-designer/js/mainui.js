@@ -34,7 +34,12 @@ function setOpenGap(c, end, v) { c.off = r3(c.off - gapDir(c, end) * (v - openGa
 function itemBar(c) {
   const L = lay(), id = c && c.id, onWall = !!(c && c.wall);
   const posOk = onWall, pos = (label, ref, end, val) => `<label class="ib-f"><span>${label}</span>${posOk ? ctl(ref + id, end, r3(val), 'len', { label }) : `<input type="text" disabled aria-label="${label}">`}</label>`;
-  const ctr = (act, n, t) => `<button class="ib-ctr" data-act="${act}" data-id="${id || ''}" title="${t}" aria-label="${t}"${posOk ? '' : ' disabled'}>${n}</button>`;
+  // Push left, center, push right: small drawn arrows that say what they do (Mozaik's |<- T ->| buttons).
+  const PUSH = {
+    L: '<path d="M3 3v14M17 10H7m4-4-4 4 4 4"/>', R: '<path d="M17 3v14M3 10h10m-4-4 4 4-4 4"/>',
+    O: '<path d="M2 4v12M18 4v12M10 5v10M6 10H4m12 0h-2"/>', W: '<path d="M2 3v14M18 3v14M5 10h10m-7-3-3 3 3 3m4-6 3 3-3 3"/>'
+  };
+  const ctr = (act, k, t) => `<button class="ib-ctr" data-act="${act}" data-id="${id || ''}" title="${t}" aria-label="${t}"${posOk ? '' : ' disabled'}><svg viewBox="0 0 20 20" aria-hidden="true">${PUSH[k]}</svg></button>`;
   let slide = '';
   if (posOk) {
     const { lo, hi } = runLimits(c), span = Math.max(0, r3(hi - lo - c.w));
@@ -43,16 +48,24 @@ function itemBar(c) {
   const R = c ? 'cab:' + id : '';
   const sz = (label, f) => `<label class="ib-f"><span>${label}</span>${c ? ctl(R, f, f === 'outset' ? c.outset || 0 : c[f], 'len', { label }) : `<input type="text" disabled aria-label="${label}">`}</label>`;
   const tog = (k, label) => `<label class="ib-tog"><span>${label}</span>${ctl('layout', k, L[k], 'bool', { label })}<i aria-hidden="true"></i></label>`;
-  return `<div class="itembar${c ? '' : ' none'}">
+  // Nothing picked: no empty boxes, just what to do next (Mozaik shows only its item picker here).
+  if (!c) {
+    const n = multiIds().length;
+    return `<div class="itembar none ib-empty">
+    <div class="ib-hint">${n > 1 ? `<b>${n} items picked.</b> Edit them together in the side panel.` : S.cabinets.length ? '<b>Click a cabinet</b> to size and place it, or <b>drag a product</b> from the library onto the drawing.' : (S.walls.length ? '<b>Drag a product</b> from the library onto a wall to start.' : '<b>Draw the walls</b> first (W), then drag products from the library onto them.')}</div>
+    <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}</div>
+  </div>`;
+  }
+  return `<div class="itembar">
     <div class="ib-pos">
-      ${pos('Left opening', 'cabgap:', 'L', c ? openGap(c, 'L') : 0)}${ctr('cab-center-open', 1, 'Center it in the opening')}${pos('Right opening', 'cabgap:', 'R', c ? openGap(c, 'R') : 0)}
-      ${pos('From left wall', 'cabpos:', 'L', c ? fromEnd(c, 'L') : 0)}${ctr('cab-center', 2, 'Center it on the whole wall')}${pos('From right wall', 'cabpos:', 'R', c ? fromEnd(c, 'R') : 0)}
+      ${pos('Left opening', 'cabgap:', 'L', c ? openGap(c, 'L') : 0)}<span class="ib-ctrs">${ctr('cab-push-L', 'L', 'Push it left, against its neighbour')}${ctr('cab-center-open', 'O', 'Center it in the opening')}${ctr('cab-push-R', 'R', 'Push it right, against its neighbour')}</span>${pos('Right opening', 'cabgap:', 'R', c ? openGap(c, 'R') : 0)}
+      ${pos('From left wall', 'cabpos:', 'L', c ? fromEnd(c, 'L') : 0)}<span class="ib-ctrs">${ctr('cab-center', 'W', 'Center it on the whole wall')}</span>${pos('From right wall', 'cabpos:', 'R', c ? fromEnd(c, 'R') : 0)}
       <div class="ib-slidewrap">${slide}</div>
     </div>
     <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}<span class="ib-gap"></span>${sz('Depth', 'd')}${sz('Outset', 'outset')}</div>
     <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}</div>
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
-      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
+      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}${cornerBtn(c)}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
       : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
   </div>`;
 }

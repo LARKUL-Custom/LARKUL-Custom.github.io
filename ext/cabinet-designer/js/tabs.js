@@ -141,7 +141,7 @@ function libButton(l, act, on) {
 function miniFront(l) {
   const fake = { ...l, construction: l.construction || defaultConstruction(l.cat), libParams: l.params, params: {} };
   const fr = computeFronts(fake), s = Math.max(l.w, l.h);
-  return `<svg viewBox="${-(s - l.w) / 2 - 1} -1 ${s + 2} ${s + 2}" aria-hidden="true"><g transform="translate(0 ${s - l.h})"><rect class="ev-box nss${l.cat === 'Wall' ? ' wallc' : ''}" x="0" y="0" width="${l.w}" height="${l.h}"/>${fr.filter(f => f.type !== 'open').map(f => `<rect class="ev-front nss" x="${f.x0}" y="${l.h - f.z1}" width="${f.x1 - f.x0}" height="${f.z1 - f.z0}"/>`).join('')}</g></svg>`;
+  return `<svg viewBox="${-(s - l.w) / 2 - 1} -1 ${s + 2} ${s + 2}" aria-hidden="true"><g transform="translate(0 ${s - l.h})"><rect class="ev-box nss${l.cat === 'Wall' ? ' wallc' : ''}" x="0" y="0" width="${l.w}" height="${l.h}"/>${fr.filter(f => f.type !== 'open').map(f => { const [a, b] = frontEX(f); return b - a < 0.25 ? '' : `<rect class="ev-front nss" x="${a}" y="${l.h - f.z1}" width="${b - a}" height="${f.z1 - f.z0}"/>`; }).join('')}</g></svg>`;
 }
 
 /* ---------- Materials ---------- */
@@ -782,7 +782,7 @@ function cutScope() {
   rooms.forEach(rm => withRoom(rm, () => {
     S.cabinets.forEach(c => { cabs.push({ c, room: rm }); if (!c.noCut) buildParts(c).parts.forEach(p => { if (cutKeep(cutPartKey(p))) parts.push({ ...p, room: rm.name }); }); });
     shapeParts().forEach(p => { if (cutKeep(cutPartKey(p))) parts.push({ ...p, room: rm.name }); });
-    countertopRuns().filter(r => r.on).forEach(r => tops.push({ ...r, room: rm.name, wallN: wallName(wall(r.wall)) }));
+    countertopRuns().filter(r => r.on).forEach(r => tops.push({ ...r, room: rm.name, wallN: wallName(wall(r.wall)) + (typeof ctjNote === 'function' ? ctjNote(r) : '') }));
     moldingRuns().forEach(r => molds.push({ ...r, room: rm.name, wallN: wallName(wall(r.wall)) }));
   }));
   return { rooms, parts, tops, molds, cabs };

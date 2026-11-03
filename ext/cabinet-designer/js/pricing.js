@@ -7,7 +7,7 @@ const PRICE_ADDERS = [['perDrawer', 'Each drawer (box and slides labor)'], ['per
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
-const PAINT_PARTS = [['fronts', 'Doors and drawer fronts'], ['panels', 'Applied end panels'], ['fillers', 'Fillers'], ['toe', 'Toe skins'], ['interior', 'Finished interiors']];
+const PAINT_PARTS = [['fronts', 'Doors and drawer fronts'], ['panels', 'Applied end panels'], ['fillers', 'Fillers and face frames'], ['toe', 'Toe skins'], ['interior', 'Finished interiors']];
 const paintOf = ps => (ps.paint = { rate: 0, bothSides: true, fronts: true, panels: true, fillers: true, toe: true, interior: true, ...(ps.paint || {}) });
 const sqft = v => (Math.round(v * 10) / 10).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 function paintCab(c, ps, b, fr) {
@@ -16,7 +16,7 @@ function paintCab(c, ps, b, fr) {
   b.parts.forEach(pt => {
     if (pt.cabId !== c.id) return;
     if (pt.kind === 'applied') sq.panels += area(pt);
-    else if (pt.kind === 'filler') sq.fillers += area(pt);
+    else if (pt.kind === 'filler' || pt.kind === 'faceFrame') sq.fillers += area(pt);
     else if (pt.kind === 'toekick') sq.toe += area(pt);
     // A finished interior paints the inside face of the box, and both faces of shelves and dividers.
     else if (c.finInt && ['side', 'topbot', 'back'].includes(pt.kind)) sq.interior += area(pt);

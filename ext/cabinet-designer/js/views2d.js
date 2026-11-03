@@ -10,24 +10,30 @@ function renderPlan() {
   const v = ui.view; v.h = v.w * sz.h / sz.w; ui.px = v.w / sz.w; const px = ui.px;
   svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
   let s = `<defs><pattern id="gmin" width="1" height="1" patternUnits="userSpaceOnUse"><path class="g-minor nss" d="M1 0H0V1"/></pattern><pattern id="gmaj" width="12" height="12" patternUnits="userSpaceOnUse"><path class="g-major nss" d="M12 0H0V12"/></pattern></defs>`;
-  if (px < 0.12) s += `<rect x="${v.x}" y="${v.y}" width="${v.w}" height="${v.h}" fill="url(#gmin)"/>`;
-  s += `<rect x="${v.x}" y="${v.y}" width="${v.w}" height="${v.h}" fill="url(#gmaj)"/>`;
+  // Plain white paper like Mozaik: the grid only shows while drawing walls, where its snaps help.
+  if (ui.drawWalls) {
+    if (px < 0.12) s += `<rect x="${v.x}" y="${v.y}" width="${v.w}" height="${v.h}" fill="url(#gmin)"/>`;
+    s += `<rect x="${v.x}" y="${v.y}" width="${v.w}" height="${v.h}" fill="url(#gmaj)"/>`;
+  }
   const fs = 13 * px;
   // Base and tall first, uppers over them; the selected cabinet last so its outline is never hidden.
   const hot = c => (ui.sel && ui.sel.id === c.id) || ui.dropCab === c.id;
   const order = [...S.cabinets].sort((a, b) => ((a.cat === 'Wall') - (b.cat === 'Wall')) || (hot(a) - hot(b)));
+  planLabelBuf = [];
   order.filter(c => c.cat !== 'Wall' && !hot(c)).forEach(c => { s += cabPlanSVG(c); });
   s += fixtPlanSVG(true);
   // Countertops: solid, in their own color, over the base cabinets, so you can see which tops there are and where.
   if (topOp() > 0) countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), g = wg(w), f = w.thick / 2;
-    const poly = [wallPt(w, g, r.side, r.start - r.ovS, f), wallPt(w, g, r.side, r.end + r.ovE, f), wallPt(w, g, r.side, r.end + r.ovE, f + r.depth), wallPt(w, g, r.side, r.start - r.ovS, f + r.depth)];
+    const poly = r.poly || [wallPt(w, g, r.side, r.start - r.ovS, f), wallPt(w, g, r.side, r.end + r.ovE, f), wallPt(w, g, r.side, r.end + r.ovE, f + r.depth), wallPt(w, g, r.side, r.start - r.ovS, f + r.depth)];
     const mx = poly.reduce((a, p) => a + p.x, 0) / 4, my = poly.reduce((a, p) => a + p.y, 0) / 4;
     let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;
     s += `<polygon class="ct-solid nss" style="fill-opacity:${topOp()}" points="${polyPts(poly)}"/>`;
-    if (r.len > 8) s += `<text class="lbl ct-lbl" x="${mx}" y="${my}" font-size="${fs * 0.9}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${mx} ${my})">${esc(r.generic ? r.name : (r.tpl && r.tpl.name) || 'Top')} · ${fmtLen(r.len, 1)}</text>`;
+    // The top's name only while drawing tops; otherwise its color says it is there and labels stay clear.
+    if (r.len > 8 && ui.drawMold === 'top') s += `<text class="lbl ct-lbl" x="${mx}" y="${my}" font-size="${fs * 0.9}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${mx} ${my})">${esc(r.generic ? r.name : (r.tpl && r.tpl.name) || 'Top')} · ${fmtLen(r.len, 1)}</text>`;
   });
   order.filter(c => c.cat === 'Wall' || hot(c)).forEach(c => { s += cabPlanSVG(c); });
+  s += `<g class="cab-lbls" pointer-events="none">${planLabelBuf.join('')}</g>`; planLabelBuf = null;
   s += shapesPlanSVG();
   s += lightsPlanSVG(px);
   // walls
@@ -58,6 +64,8 @@ function renderPlan() {
     const w = wall(r.wall), g = wg(w), f = w.thick / 2 + r.d;
     s += `<polygon class="mold-outline nss" points="${polyPts([wallPt(w, g, r.side, r.start, f), wallPt(w, g, r.side, r.end, f), wallPt(w, g, r.side, r.end, f + r.m.d), wallPt(w, g, r.side, r.start, f + r.m.d)])}"/>`;
   });
+  // Countertop corners: click the joint to miter it or pick which top runs through.
+  if (topOp() > 0 && typeof ctjPlanSVG === 'function' && !ui.drawWalls && !ui.placing) s += ctjPlanSVG(px);
   if (ui.drawWalls) s += wallDrawSVG(fs, px);
   if (ui.drawMold && ui.mouse) {
     const to = moldSnap(ui.mouse);
@@ -94,10 +102,11 @@ function wallDrawSVG(fs, px) {
 }
 // A point in a cabinet's own frame: a along its wall from the cabinet's start, b out from the wall face.
 function cabPt(c, a, b) { const w = wall(c.wall), g = wg(w); return wallPt(w, g, c.side, c.off + a, w.thick / 2 + (c.outset || 0) + b); }
+let planLabelBuf = null;
 function cabPlanSVG(c) {
   const box = cabPoly(c); if (!box) return '';
   // A top shape draws its own outline: x across from the cabinet's left, y out from the wall.
-  const poly = (c.shape || {}).top ? cabOutline(c, 'top').map(q => cabPt(c, c.side === 1 ? q.x : c.w - q.x, q.y)) : box;
+  const poly = cabTopShape(c) ? cabOutline(c, 'top').map(q => cabPt(c, c.side === 1 ? q.x : c.w - q.x, q.y)) : box;
   const px = ui.px, isSel = (ui.sel && ui.sel.type === 'cab' && ui.sel.id === c.id) || inMulti(c.id), isDrop = ui.dropCab === c.id;
   const cls = c.cat === 'Wall' ? 'c-wall' : c.cat === 'Tall' ? 'c-tall' : 'c-base';
   let s = panelPolys(c).map(pp => `<polygon class="apanel nss" points="${polyPts(pp)}"/>`).join('');
@@ -111,8 +120,10 @@ function cabPlanSVG(c) {
   // Uppers are labeled near the wall and bases near the front, so a stacked pair never prints on top of each other.
   const fs = Math.min(13 * px, c.w * 0.32, c.d * 0.3), at = cabPt(c, c.w / 2, c.cat === 'Wall' ? c.d * 0.36 : c.d * 0.62);
   const showW = ui.dims.cab && c.w / px > 34;
-  s += `<text class="lbl ${c.cat === 'Wall' ? 'lbl-up' : ''}" x="${at.x}" y="${at.y - (showW ? fs * 0.15 : -fs * 0.35)}" font-size="${fs}" text-anchor="middle" font-weight="600">${LBL[c.id] || ''}</text>`;
-  if (showW) s += `<text class="lbl-m" x="${at.x}" y="${at.y + fs * 0.95}" font-size="${fs * 0.85}" text-anchor="middle">${fmtLen(c.w)}</text>`;
+  let t = `<text class="lbl ${c.cat === 'Wall' ? 'lbl-up' : ''}" x="${at.x}" y="${at.y - (showW ? fs * 0.15 : -fs * 0.35)}" font-size="${fs}" text-anchor="middle" font-weight="600">${LBL[c.id] || ''}</text>`;
+  if (showW) t += `<text class="lbl-m" x="${at.x}" y="${at.y + fs * 0.95}" font-size="${fs * 0.85}" text-anchor="middle">${fmtLen(c.w)}</text>`;
+  // In the room plan the labels are drawn last, so tops and uppers never cover a cabinet's number.
+  if (planLabelBuf) planLabelBuf.push(t); else s += t;
   return s;
 }
 // Closed fronts in plan, like Mozaik: the door and drawer front thickness on the cabinet face, joints between them,
@@ -122,6 +133,7 @@ function planFrontsSVG(c) {
   const g = wg(w), fr = computeFronts(c).filter(f => f.type !== 'open'); if (!fr.length) return '';
   const ft = (mat(frontStyle(c, fr[0]).ds.mat) || {}).thick || 0.75, fb = w.thick / 2 + (c.outset || 0) + c.d, up = c.cat === 'Wall' ? ' up' : '', open = !!ui.open[c.id];
   const P = (x, b) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, fb + b);
+  if (fr[0].face) return cornerPlanFronts(c, fr, (x, z) => cabPt(c, c.side === 1 ? x : c.w - x, z), ft, up);
   const cols = new Map();
   fr.forEach(f => { const k = f.x0.toFixed(2) + '|' + f.x1.toFixed(2); const e = cols.get(k) || { x0: f.x0, x1: f.x1, door: null, drawer: false }; if (f.type === 'door' && !e.door) e.door = f; if (f.type === 'drawer' || f.type === 'false') e.drawer = e.drawer || f.type === 'drawer'; cols.set(k, e); });
   let s = '';
@@ -148,6 +160,7 @@ function planOpenSVG(c) {
   const P = (x, b) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, fb + b);
   let s = '';
   fr.forEach(f => {
+    if (f.face) return;
     const key = f.type + f.x0.toFixed(2) + f.x1.toFixed(2); if (seen.has(key)) return; seen.add(key);
     if (f.type === 'door') {
       const R = f.hinge === 'R', hx = R ? f.x1 : f.x0, fw = f.x1 - f.x0, dir = R ? -1 : 1, a = doorLimit(c, f);
@@ -454,6 +467,8 @@ function initPlan() {
     if (ui.placeLight === 'strip' && e.button === 0) { const h = hitCabs(p); if (h.length) toggleStrip(h[0]); return; }
     if (ui.placeLight && e.button === 0) { placeLightAt(p); return; }
     if (e.button === 2 && ui.placing) { placeMode(null); return; }
+    const cj = e.button === 0 && !ui.topEdit && e.target.closest && e.target.closest('[data-ctj]');
+    if (cj) { ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); return; }
     const teEl = ui.topEdit && e.target.closest && e.target.closest('[data-te]');
     if (teEl && topEditDown(teEl.dataset.te, e, p)) return;
     if (e.button === 1 || e.button === 2) { ui.drag = { mode: 'pan', vx: ui.view.x, vy: ui.view.y }; return; }
@@ -695,8 +710,18 @@ function frontsSVG(c, ex, by, opts = {}) {
   lay.trays.forEach(tr => { for (let i = 1; i <= tr.n; i++) { const xx = t + (c.w - 2 * t) * i / (tr.n + 1); s += `<line class="ev-inner nss" x1="${X(xx)}" x2="${X(xx)}" y1="${Y(tr.z1 - 0.5)}" y2="${Y(tr.z0 + 0.5)}" stroke-width="2"/>`; } });
   lay.bins.forEach(bn => { const bh = Math.min(20, bn.z1 - bn.z0 - 2), iw = c.w - 2 * t; [0.06, 0.52].forEach(k => { s += `<rect class="ev-bin nss" x="${X(t + iw * k)}" y="${Y(bn.z0 + 0.5 + bh)}" width="${iw * 0.42}" height="${bh}" rx="1"/>`; }); });
   lay.lazy.forEach(lz => [0.3, 0.72].forEach(k => { s += `<ellipse class="ev-dbox nss" cx="${X(c.w / 2)}" cy="${Y(lz.z0 + (lz.z1 - lz.z0) * k)}" rx="${(c.w - 2 * t) / 2 - 0.75}" ry="1.2"/>`; }));
+  // A 45° or 90° corner's return leg comes out toward you, so its end panel covers that part of the box.
+  // (A plain wood rectangle goes under it, in case the material's texture isn't in this drawing.)
+  const solid = (x, y, w, h) => `<rect class="ev-box nss" x="${x}" y="${y}" width="${w}" height="${h}"/><rect ${fillFor(cm, 'ev-box')} x="${x}" y="${y}" width="${w}" height="${h}"/>`;
+  if (angledCorner(c)) { const a = cornerLeg(c); s += solid(X(cornerSide(c) === 'L' ? 0 : c.w - a), Y(c.h), a, c.h - tk); }
+  // A blind corner's blind panel, in the box material.
+  if (blindCorner(c) && !faceFrame(c)) { const bw = blindWidth(c); s += solid(X(cornerSide(c) === 'L' ? t : c.w - bw), Y(lay.zIn1 + t), bw - t, lay.zIn1 - lay.zIn0 + 2 * t); }
+  // Face frame members, in front of the box and behind the doors.
+  s += ffSVG(c, ex, Y, mats);
   fr.forEach(f => {
-    const x = ex + f.x0, y = Y(f.z1), w = f.x1 - f.x0, h = f.z1 - f.z0;
+    // A corner's fronts are drawn as seen from this wall: the angled face narrower, the return face not at all.
+    const [fx0, fx1] = frontEX(f); if (fx1 - fx0 < 0.25) return;
+    const x = ex + fx0, y = Y(f.z1), w = fx1 - fx0, h = f.z1 - f.z0;
     if (f.type === 'open' || opts.noFronts) {
       // Inside view (no fronts): the opening outline, and the drawer box where a drawer is.
       if (opts.noFronts && f.type === 'drawer' && h > 2.5 && w > 2) s += `<rect class="ev-dbox nss" x="${x + 0.75}" y="${y + 1}" width="${w - 1.5}" height="${h - 2}"/>`;
@@ -725,11 +750,11 @@ function frontsSVG(c, ex, by, opts = {}) {
     const pp = pullPlacement(c, f);
     if (opts.dims) {
       // Finished front size, centered (drawers: above the pull so both stay readable).
-      const t = `${fmtLen(w)} × ${fmtLen(h)}`, fz = Math.min(opts.dims, h * 0.3, w * 0.86 / (t.length * 0.6)), ty = f.type === 'drawer' && h < 12 ? y + h * 0.28 : y + h / 2;
+      const t = `${fmtLen(f.x1 - f.x0)} × ${fmtLen(h)}`, fz = Math.min(opts.dims, h * 0.3, w * 0.86 / (t.length * 0.6)), ty = f.type === 'drawer' && h < 12 ? y + h * 0.28 : y + h / 2;
       if (fz > 0.5) s += `<text class="lbl dimtxt fdim" x="${x + w / 2}" y="${ty}" font-size="${fz}" text-anchor="middle" dominant-baseline="middle" pointer-events="none">${t}</text>`;
     }
     if (pp) {
-      const L = Math.max(pp.hw.lengthMM * MM, 1), px = x + pp.x, py = y + h - pp.z, th = 0.5;
+      const L = Math.max(pp.hw.lengthMM * MM, 1), px = x + pp.x * w / ((f.x1 - f.x0) || 1), py = y + h - pp.z, th = 0.5;
       s += pp.hw.ccMM ? (pp.vertical ? `<rect class="ev-pull" x="${px - th / 2}" y="${py - L / 2}" width="${th}" height="${L}" rx="${th / 2}" style="fill:${esc(pp.hw.finish)}"/>` : `<rect class="ev-pull" x="${px - L / 2}" y="${py - th / 2}" width="${L}" height="${th}" rx="${th / 2}" style="fill:${esc(pp.hw.finish)}"/>`) : `<circle class="ev-pull" cx="${px}" cy="${py}" r="${L / 2}" style="fill:${esc(pp.hw.finish)}"/>`;
     }
   });
@@ -802,7 +827,7 @@ function renderElev() {
   });
   // countertops and moldings on this wall side
   countertopRuns().filter(rn => rn.on && rn.wall === w.id && rn.side === side).forEach(rn => {
-    const a = side === 1 ? rn.start - rn.ovS : L - rn.end - rn.ovE, m = mat(rn.tpl.mat); mats.push(m && m.id);
+    const a = side === 1 ? ctX0(rn) : L - ctX1(rn), m = mat(rn.tpl.mat); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-top')} x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}"/>`;
     if (rn.tpl.backsplash > 0) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? rn.start : L - rn.end}" y="${-(rn.top + rn.thick + rn.tpl.backsplash)}" width="${rn.end - rn.start}" height="${rn.tpl.backsplash}" opacity=".75"/>`;
   });
@@ -849,7 +874,7 @@ function elevMeasure(x, z) {
     spans.push([a, b]);
   });
   capsOf(w).filter(cp => cp.side === side && at(0, cp.height)).forEach(cp => { const a = side === 1 ? cp.a0 : L - cp.a1; spans.push([a, a + cp.t]); });
-  countertopRuns().filter(rn => rn.on && rn.wall === w.id && rn.side === side && at(rn.top, rn.top + rn.thick)).forEach(rn => { const a = side === 1 ? rn.start - rn.ovS : L - rn.end - rn.ovE; spans.push([a, a + rn.len]); });
+  countertopRuns().filter(rn => rn.on && rn.wall === w.id && rn.side === side && at(rn.top, rn.top + rn.thick)).forEach(rn => { const a = side === 1 ? ctX0(rn) : L - ctX1(rn); spans.push([a, a + rn.len]); });
   if (spans.some(([a, b]) => x > a && x < b)) return null;
   const a = Math.max(0, ...spans.filter(sp => sp[1] <= x + 0.01).map(sp => sp[1])), b = Math.min(L, ...spans.filter(sp => sp[0] >= x - 0.01).map(sp => sp[0]));
   return b - a > 0.05 ? { wall: w.id, side, z, a, b } : null;

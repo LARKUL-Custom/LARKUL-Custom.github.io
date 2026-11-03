@@ -9,8 +9,8 @@ const ui = {
 };
 // Main toolbar, in Mozaik's order, then the libraries that sit behind the Libraries menu.
 // Shop order, left to right: set up the job, draw it, dress it, then order, price and cut it.
-const MAIN_TABS = [['job', 'Job'], ['settings', 'Settings'], ['room', 'Room'], ['countertops', 'Tops'], ['moldings', 'Molding'], ['pricing', 'Pricing'], ['cutlist', 'Cutlist']];
-const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['inserts', 'Inserts'], ['panels', 'Applied panels'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['rules', 'Rules'], ['remnants', 'Remnants']];
+const MAIN_TABS = [['job', 'Job'], ['settings', 'Settings'], ['room', 'Room'], ['countertops', 'Tops'], ['moldings', 'Molding'], ['pricing', 'Pricing'], ['cutlist', 'Cutlist'], ['carve', 'Carve']];
+const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['inserts', 'Inserts'], ['panels', 'Applied panels'], ['faceframes', 'Face frames'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['rules', 'Rules'], ['remnants', 'Remnants']];
 // The Designer opens from Products (and from a cabinet); it has no button of its own.
 const HIDDEN_TABS = [['designer', 'Designer'], ['shop', 'Shop view'], ['export', 'Order']];
 const TABS = [...MAIN_TABS, ...LIB_TABS, ...HIDDEN_TABS];
@@ -23,13 +23,14 @@ const TAB_ICONS = {
   countertops: '<path d="M2 8h16v3H2zM4 11v6M16 11v6"/>',
   moldings: '<path d="M3 4h14v3c-3 0-4 2-4 4H3z"/><path d="M3 15h14"/>',
   cutlist: '<rect x="3" y="3" width="14" height="14" rx="1"/><path d="M3 9h14M9 3v14"/>',
+  carve: '<path d="M4 4l6 12 6-12"/><path d="M7 4h6"/>',
   pricing: '<path d="M3 10.5V3.5h7l7 7-7 7z"/><circle cx="7" cy="7.5" r="1.3"/>',
   export: '<path d="M3 4h2l2 9h9l1.5-6H6"/><circle cx="8" cy="16" r="1.3"/><circle cx="14.5" cy="16" r="1.3"/>',
   libs: '<path d="M4 3v14M8 3v14M12 4l3.5 12.5"/>',
 };
-const TAB_TONES = { job: 'indigo', settings: 'slate', room: 'teal', library: 'amber', designer: 'violet', countertops: 'stone', moldings: 'rose', cutlist: 'green', pricing: 'teal', export: 'blue', libs: 'amber', materials: 'amber', doors: 'violet', hardware: 'slate', panels: 'stone', parts: 'green' };
+const TAB_TONES = { job: 'indigo', settings: 'slate', room: 'teal', library: 'amber', designer: 'violet', countertops: 'stone', moldings: 'rose', cutlist: 'green', carve: 'rose', pricing: 'teal', export: 'blue', libs: 'amber', materials: 'amber', doors: 'violet', hardware: 'slate', panels: 'stone', parts: 'green' };
 const tabIcon = k => `<span class="tabic tone-${TAB_TONES[k] || 'slate'}"><svg viewBox="0 0 20 20" aria-hidden="true">${TAB_ICONS[k]}</svg></span>`;
-const RENDER = () => ({ job: renderJob, settings: renderSettings, room: renderRoom, designer: renderDesigner, library: renderLibrary, materials: renderMaterials, doors: renderDoors, hardware: renderHardware, countertops: renderCountertops, moldings: renderMoldings, panels: renderPanels, inserts: renderInserts, parts: renderPartTemplates, cnctools: renderCncTools, rules: renderRules, remnants: renderRemnants, shop: renderShop, cutlist: renderCutlist, pricing: renderPricing, export: renderExport });
+const RENDER = () => ({ job: renderJob, settings: renderSettings, room: renderRoom, designer: renderDesigner, library: renderLibrary, materials: renderMaterials, doors: renderDoors, hardware: renderHardware, countertops: renderCountertops, moldings: renderMoldings, panels: renderPanels, faceframes: renderFaceFrames, inserts: renderInserts, parts: renderPartTemplates, cnctools: renderCncTools, rules: renderRules, remnants: renderRemnants, shop: renderShop, cutlist: renderCutlist, carve: renderCarve, pricing: renderPricing, export: renderExport });
 function fixSel() {
   if (ui.sel && ui.sel.type === 'cab' && !cab(ui.sel.id)) ui.sel = null;
   if (ui.sel && ui.sel.type === 'wall' && !wall(ui.sel.id)) ui.sel = null;
@@ -94,7 +95,7 @@ function libFolder(l) {
   if (l.folder) return l.folder;
   const n = l.name || '';
   if (/sink/i.test(n)) return 'Sink Bases';
-  if (/corner|lazy|blind/i.test(n)) return 'Corner Cabinets';
+  if (/corner|lazy|blind/i.test(n)) return 'Corner';
   if (/oven|micro|fridge|refrig|dishw|appliance/i.test(n)) return 'Appliance';
   if (/pantry|broom|utility/i.test(n)) return 'Pantries';
   if (l.cat === 'Base' && /drawer/i.test(n) && !/door/i.test(n)) return 'Base Drawers';
@@ -128,10 +129,25 @@ function productTree() {
       : folders.map(f => { const fk = g + '/' + f, fs = !q && fold[fk], fi = items.filter(x => x.f === f); return `<div class="lfold">${head(fk, esc(f), fi.length, fs, 'lfold-h')}${fs ? '' : `<div class="grp">${fi.map(wrap).join('')}</div>`}</div>`; }).join('');
     return `<div class="lgrp lg-${g}">${head(g, gl, items.length, shut, 'lgrp-h')}${shut ? '' : inner}</div>`;
   }).join('');
-  return `<input id="libfind" type="search" placeholder="Search…" value="${esc(ui.libFind || '')}" aria-label="Search products">`
+  return `<div class="libpeek" id="libpeek">${libPeekHTML(ui.libPeek || ui.placing)}</div>`
+    + `<input id="libfind" type="search" placeholder="Search…" value="${esc(ui.libFind || '')}" aria-label="Search products">`
     + `<div class="ptree">${favGrp}${body || '<div class="note show">No products match.</div>'}</div>`
     + `<div class="row-actions libnew"><button class="btn sm" data-act="designer-new">${icon('plus')}New cabinet</button><button class="btn sm" data-act="shape-new">${icon('plus')}New shape</button></div>`;
 }
+// Picture of the product under the mouse (or the one being placed) above the tree, like Mozaik's preview.
+// With nothing to show it says how to start: drag a product onto the drawing.
+function libPeekHTML(id) {
+  const l = id && typeof id === 'string' && !id.includes(':') && libItem(id);
+  if (!l || l.cat === 'Shape') return `<div class="lp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1"/><path d="M14 7h7m-3-3 3 3-3 3M7 14v7m-3-3 3 3 3-3"/></svg><span>Drag a product onto the drawing</span></div>`;
+  let pic = '';
+  try { const c = newCab(S, l, null, 1, 0); c.id = '_peek'; pic = frontPreviewSVG(c, 150); } catch (_) { pic = miniFront(l); }
+  return `<div class="lp-pic">${pic}</div><div class="lp-name">${esc(l.name)}</div><div class="lp-dim">${fmtLen(l.w)} × ${fmtLen(l.h)} × ${fmtLen(l.d)}</div>`;
+}
+document.addEventListener('mouseover', e => {
+  const b = e.target.closest && e.target.closest('.ptree .libitem[data-id]'); if (!b) return;
+  const el = document.getElementById('libpeek'); if (!el || ui.libPeek === b.dataset.id) return;
+  ui.libPeek = b.dataset.id; el.innerHTML = libPeekHTML(ui.libPeek);
+});
 function renderSources() {
   renderRail();
   const SRC_IC = { cabinets: 'box', faces: 'face', doors: 'door', materials: 'palette', hardware: 'sliders', moldings: 'stack' };
@@ -393,7 +409,7 @@ const QE_TYPES = [['door', 'Door'], ['drawer', 'Drawer'], ['false', 'False front
 // The front view with every opening clickable; the opening being edited is outlined.
 function qeFaceSVG(c, qr, maxH = 340, inside = false) {
   const svg = frontPreviewSVG(c, maxH, Math.max(c.w, c.h) / 22, ui.open[c.id], inside), fr = computeFronts(c);
-  const hits = fr.map(f => `<rect class="qe-hit${f.row === qr ? ' on' : ''}" data-act="qe-row" data-id="${f.row}" x="${f.x0}" y="${-f.z1}" width="${f.x1 - f.x0}" height="${f.z1 - f.z0}"><title>Opening ${f.row + 1}</title></rect>`).join('');
+  const hits = fr.map(f => { const [a, b] = frontEX(f); return b - a < 0.25 ? '' : `<rect class="qe-hit${f.row === qr ? ' on' : ''}" data-act="qe-row" data-id="${f.row}" x="${a}" y="${-f.z1}" width="${b - a}" height="${f.z1 - f.z0}"><title>Opening ${f.row + 1}</title></rect>`; }).join('');
   return svg.replace(/<\/svg>$/, hits + '</svg>');
 }
 // Shelves an opening gets: its own count, or its share of the cabinet's shelf count.
@@ -756,6 +772,7 @@ document.addEventListener('click', e => {
   if (/^cut-pk-/.test(a) && cutPickAct(a)) return;
   if (/^pe-/.test(a) && typeof partsTabAct === 'function' && partsTabAct(a, id)) return;
   if (/^ct-/.test(a) && typeof cncToolsAct === 'function' && cncToolsAct(a, id)) return;
+  if (/^vc-/.test(a) && typeof vcAct === 'function' && vcAct(a, id)) return;
   if (/^q-/.test(a) && typeof quickAct === 'function' && quickAct(a, id, el)) return;
   if (/^jt-/.test(a) && typeof jtAct === 'function' && jtAct(a, id, el)) return;
   if (/^(mp|rem|rc|sv|mt)-/.test(a) && typeof libs2Act === 'function' && libs2Act(a, id)) return;
@@ -764,6 +781,7 @@ document.addEventListener('click', e => {
   if (/^(rl|rvar|jfield|fx)-/.test(a) && typeof fxAct === 'function' && fxAct(a, id, el)) return;
   if (/^te-/.test(a) && typeof topEditAct === 'function' && topEditAct(a, id)) return;
   if (/^fixt-/.test(a) && typeof fixtAct === 'function' && fixtAct(a, id)) return;
+  if (/^ctj-/.test(a) && typeof ctjAct === 'function' && ctjAct(a, id)) return;
   switch (a) {
     case 'tab': goTab(id); break;
     case 'walls-draw': if (ui.drawWalls) stopWalls(); else startWalls(); break;
@@ -1038,6 +1056,12 @@ document.addEventListener('click', e => {
       mutate(() => { centerCab(c, a === 'cab-center-open'); if (!settle(c)) c.off = was; });
       flash(Math.abs(c.off - was) > 0.001 ? (a === 'cab-center' ? 'Centered on the wall' : 'Centered in the opening') : 'It is already there, or there is no room to move it'); break;
     }
+    case 'cab-push-L': case 'cab-push-R': {
+      // Slide it until it touches its neighbour (or the wall) on that side, like Mozaik's clearance arrows.
+      const c = cab(id), was = c.off, end = a.slice(-1);
+      mutate(() => { setOpenGap(c, end, 0); if (!settle(c)) c.off = was; });
+      if (Math.abs(c.off - was) < 0.001) flash('It is already against that side'); break;
+    }
     case 'cab-flip': {
       if ((cab(id) || {}).noMirror) { flash('Flip is turned off for this cabinet (Info tab).'); break; }
       const c = cab(id), off = findFree(c, c.wall, -c.side, c.off, c.id);
@@ -1214,7 +1238,7 @@ function setView(id) {
 document.addEventListener('pointerdown', e => { const m = $('#libmenu'); if (!m.hidden && !e.target.closest('#libmenu,#libbtn')) { m.hidden = true; const b = $('#libbtn'); if (b) b.setAttribute('aria-expanded', 'false'); } });
 function designCabFrom(c) {
   return { sourceLib: c.libId, name: c.name, cat: c.cat, w: c.w, h: c.h, d: c.d, elev: c.elev, rows: clone(c.rows), params: { ...(c.libParams || {}), ...(c.params || {}) },
-    construction: clone(c.construction || defaultConstruction(c.cat)), cabMatT: c.cabMatT, drawerMatT: c.drawerMatT, doorT: c.doorT, slide: c.slide, hinge: c.hinge, partT: c.partT || '', appliedL: panelMode(c, 'L') === 'on', appliedR: panelMode(c, 'R') === 'on', custom: clone(c.custom || []), inserts: clone(c.inserts || []) };
+    construction: clone(c.construction || defaultConstruction(c.cat)), cabMatT: c.cabMatT, drawerMatT: c.drawerMatT, doorT: c.doorT, slide: c.slide, hinge: c.hinge, partT: c.partT || '', appliedL: panelMode(c, 'L') === 'on', appliedR: panelMode(c, 'R') === 'on', custom: clone(c.custom || []), inserts: clone(c.inserts || []), ...(c.corner ? { corner: clone(c.corner) } : {}) };
 }
 document.addEventListener('toggle', e => { if (e.target.id === 'rowsdetails') ui.rowsOpen = e.target.open; if (e.target.id === 'qelayouts') ui.qeLayouts = e.target.open; }, true);
 document.addEventListener('change', e => {

@@ -90,6 +90,7 @@ const SETTINGS = [
   { k: 'leg', label: 'Legs', list: () => opts(hwOf('leg')), tab: 'hardware' },
   { k: 'panelDoor', label: 'Applied end panel door style', list: () => opts(S.doorStyles), tab: 'doors', blank: 'Same as the doors' },
   { k: 'panelStyle', label: 'Applied end panel fit', list: () => opts(S.panels), tab: 'panels' },
+  { k: 'faceFrame', label: 'Construction', list: () => ffOpts(), tab: 'faceframes' },
   { k: 'partT', label: 'Part template (edgebanding)', list: () => opts(S.partTemplates), tab: 'parts' },
   { k: 'countertop', label: 'Countertop', list: () => opts(S.countertops), tab: 'countertops' },
   { k: 'molding', label: 'Quick molding', list: () => opts(S.moldings), tab: 'moldings' },
@@ -106,7 +107,7 @@ function settingPreview(k, id) {
 const TPL_CATS = [
   ['fronts', 'Doors and fronts', ['doorT', 'dt.door', 'dt.wallDoor', 'dt.drawerTop', 'dt.drawer', 'dt.drawerBot', 'dt.falseFront', 'pull', 'hinge']],
   ['drawers', 'Drawers', ['drawerMatT', 'slide']],
-  ['box', 'Box and panels', ['cabMatT', 'panelDoor', 'panelStyle', 'shelfpin', 'jointU', 'jointF', 'leg', 'partT']],
+  ['box', 'Box and panels', ['faceFrame', 'cabMatT', 'panelDoor', 'panelStyle', 'shelfpin', 'jointU', 'jointF', 'leg', 'partT']],
   ['tops', 'Tops and molding', ['countertop', 'molding']],
   ['walls', 'Walls', ['wallThick', 'wallHeight']],
 ];
@@ -134,6 +135,7 @@ function tplPic(k, id) {
   }
   if (k === 'panelDoor') { const ds = id ? doorStyle(id) : doorStyle(doorTpl(S.job.defaults.doorT).door), c = col(mat(ds.mat)); return svg(`<rect x="44" y="4" width="32" height="82" fill="${c}" stroke="#555"/>${ds.type !== 'slab' ? '<rect x="50" y="12" width="20" height="66" fill="none" stroke="#555" stroke-opacity=".55"/>' : ''}`); }
   if (k === 'panelStyle') return svg('<rect x="44" y="4" width="32" height="82" fill="#e8e1d2" stroke="#555"/><path d="M76 10 h14 M76 80 h14" stroke="var(--accent)" stroke-width="2"/>');
+  if (k === 'faceFrame') { const t = (S.faceFrames || []).find(f => f.id === id); return t ? ffPic(t) : svg('<rect x="38" y="8" width="44" height="74" fill="#e8e1d2" stroke="#555"/><rect x="40" y="10" width="40" height="70" fill="none" stroke="#555" stroke-opacity=".4"/>'); }
   if (k === 'partT') return svg('<rect x="20" y="30" width="80" height="30" fill="#e8e1d2" stroke="#555"/><rect x="20" y="56" width="80" height="4" fill="var(--accent)"/><text x="60" y="80" text-anchor="middle" font-size="10" fill="currentColor">banded edge</text>');
   if (k === 'countertop') { const t = countertop(id), c = col(mat(t.mat)); return svg(`<path d="M10 40 L40 26 L112 26 L82 40 Z" fill="${c}" stroke="#555"/><path d="M10 40 L82 40 L82 48 L10 48 Z" fill="${c}" stroke="#555"/><path d="M82 40 L112 26 L112 34 L82 48 Z" fill="#000" fill-opacity=".15" stroke="#555"/>`); }
   if (k === 'molding') { const m = S.moldings.find(x => x.id === id); return m ? svg(`<path d="M40 76 L40 60 C 52 58 58 46 60 34 C 62 22 72 16 84 14 L84 76 Z" fill="${col(mat(m.mat))}" stroke="#555"/>`) : svg('<text x="60" y="50" text-anchor="middle" font-size="11" fill="currentColor">None</text>'); }
