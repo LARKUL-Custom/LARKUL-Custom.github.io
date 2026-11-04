@@ -1250,6 +1250,11 @@ document.addEventListener('click', e => {
     case 'mold-clear': mutate(() => S.cabinets.forEach(c => { c.molding = null; })); break;
     case 'exp-fmt': ui.exportFmt = id; renderExport(); break;
     case 'exp-units': ui.exportUnits = id; renderExport(); break;
+    case 'door-export': mutate(() => { S.doorExport = id; }); flash(`Buyout doors export for ${(DOOR_EXPORTS.find(x => x.v === id) || {}).l}`); break;
+    case 'exp-download': {
+      const name = exportFileName(), ln = document.createElement('a'), u = URL.createObjectURL(new Blob([$('#exptext').value], { type: /\.csv$/.test(name) ? 'text/csv' : 'application/json' }));
+      ln.href = u; ln.download = name; document.body.appendChild(ln); ln.click(); ln.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); break;
+    }
     case 'copy': {
       const ta = $('#exptext'), note = $('#copynote');
       const fallback = () => { ta.focus(); ta.select(); note.textContent = 'Selected. Press Ctrl+C (Cmd+C) to copy.'; };
@@ -1257,8 +1262,7 @@ document.addEventListener('click', e => {
       break;
     }
     case 'save-files': {
-      const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job';
-      const ext = { cnc: 'json', json: 'json', cut: 'csv', labels: 'csv', ops: 'csv', doors: 'csv', buyout: 'csv' }[ui.exportFmt], name = `${job} ${{ cnc: 'parts', json: 'job', cut: 'cut list', labels: 'labels', ops: 'machining', doors: 'door order', buyout: 'buyout doors' }[ui.exportFmt]}.${ext}`;
+      const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job', name = exportFileName();
       // The parts file goes next to the CIX files CNC Cutlist writes for the job.
       const folder = ui.exportFmt === 'cnc' ? `CNC/${job}` : 'Cabinet Designer';
       Hub.files.upload(new File([$('#exptext').value], name), folder).then(() => flash(`Saved to Files › ${folder.replace('/', ' › ')}`), err => flash('Could not save: ' + err.message));

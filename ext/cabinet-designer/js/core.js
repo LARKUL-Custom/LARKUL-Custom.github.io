@@ -175,6 +175,20 @@ function doorCat(d) {
 }
 const DOOR_SOURCES = [{ v: 'make', l: 'Made in shop (cut list and CNC)' }, { v: 'buyout', l: 'Buyout (ordered from a door maker)' }];
 const VENDOR_HINGE = [{ v: 'none', l: 'None' }, { v: 'bored', l: 'Door maker bores the cups' }];
+// How buyout doors are exported (S.doorExport): Bywater's CSV import, or the door maker order form layout.
+const DOOR_EXPORTS = [{ v: 'bywater', l: 'Bywater' }, { v: 'form', l: 'Order form' }];
+const doorExportOf = s => DOOR_EXPORTS.some(x => x.v === s.doorExport) ? s.doorExport : 'bywater';
+// Bywater's dropdown values, letter for letter (their import fails on anything else). First of each list is the shop standard.
+const BYWATER = {
+  product: ['Engineered Panel', 'Hardwood Slab'],
+  folder: ['Left'],
+  wood: ['Oak White', 'Oak White (Rift)', 'Oak White (Qtr Sawn)', 'Oak White (Rustic)', 'Oak Red', 'Maple', 'Maple Soft (Paint Grade)', 'Alder', 'Black Walnut', 'Cherry', 'Hickory Calico', 'Poplar', 'Sapele'],
+  face: ['Vertical Grain', 'Horizontal Grain', 'V-Groove 2" Apart', '1/8" Square Groove 2" Apart'],
+  profile: ['P4- 1/4" Flat Panel', 'P3- 3/8" Flat Panel', 'P2- 4 Step', 'P5- Scoop', 'P27- Ogee'],
+  panel: ['1/4" Oak White Veneer', '1/4" MDF No Veneer', '3/8" MDF No Veneer', '3/4" HDM No Veneer', '1/4" Oak White (Rift) Veneer', '1/4" Maple Veneer'],
+  sr: ['SR3- Square', 'SR1- 1/4" Bead', 'SR4- Bevel', 'SR6- Centered Square', 'SR22- Inverted Square'],
+  edge: ['E2- None', 'E4- Eased Top', 'E5- 1/4" Bevel', 'E7- 1/4" Round', 'E18- 1/8" Radius'],
+};
 const DOOR_TYPES = [{ v: 'slab', l: 'Slab (one flat piece)' }, { v: 'routed', l: 'One-piece routed (CNC carves the frame look)' }, { v: 'twopiece', l: 'Two-piece (CNC cuts the 3/4 frame, separate recessed panel)' }, { v: 'fivepiece', l: 'Stiles and rails with a separate panel' }];
 // Doors whose frame is cut from one sheet on the CNC.
 const cncFramed = ds => ds.type === 'routed' || ds.type === 'twopiece';

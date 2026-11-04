@@ -94,7 +94,7 @@ function edTab(c, tab, qr) {
   const warns = `${b.warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}${conflicts(c) ? '<div class="warnbox">This cabinet runs into a wall or another cabinet. Drag it, or change its width, to clear it.</div>' : ''}`;
   switch (tab) {
     case 'size': return `${warns}<div class="psec box">${secHead('ruler', 'Product size', 'teal')}
-        <div class="grid4">${fld('Width', R, 'w', c.w, 'len')}${fld('Height', R, 'h', c.h, 'len')}${fld('Depth', R, 'd', c.d, 'len')}${fld('Elevation', R, 'elev', c.elev, 'len')}</div></div>${cornerBox(c)}
+        <div class="grid4">${fld('Width', R, 'w', c.w, 'len')}${fld('Height', R, 'h', c.h, 'len')}${fld('Depth', R, 'd', c.d, 'len')}${fld('Elevation', R, 'elev', c.elev, 'len')}</div></div>${cornerBox(c)}${typeof mozBox === 'function' ? mozBox(c) : ''}
       <div class="psec box">${secHead('magnet', 'Position on the wall', 'blue')}
         <div class="grid4">${fld('From left', 'cabpos:' + id, 'L', r3(fromEnd(c, 'L')), 'len')}${fld('From right', 'cabpos:' + id, 'R', r3(fromEnd(c, 'R')), 'len')}${fld('Outset', R, 'outset', c.outset || 0, 'len')}</div>
         <div class="row-actions"><button class="btn sm" data-act="cab-center" data-id="${id}">${icon('ends')}Center on wall</button><button class="btn sm" data-act="cab-center-open" data-id="${id}">${icon('ends')}Center in opening</button></div></div>${typeof qSizeExtras === 'function' ? qSizeExtras(c) : ''}`;

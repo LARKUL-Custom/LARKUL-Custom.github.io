@@ -63,7 +63,7 @@ function mozParseProduct(text, lib) {
     return {
       n: (a.Name || '').trim(), t: (a.Type || '').toUpperCase(), lay: +a.Layer || 0, q: nv(a.Quan, a.Q_EQ),
       l: nv(a.L, a.L_EQ), w: nv(a.W, a.W_EQ), x: nv(a.X, a.X_EQ), y: nv(a.Y, a.Y_EQ), z: nv(a.Z, a.Z_EQ),
-      a: [nv(a.A1, a.A1_EQ), nv(a.A2, a.A2_EQ), nv(a.A3, a.A3_EQ)], r: (a.R1 || '') + (a.R2 || '') + (a.R3 || ''),
+      a: [nv(a.A1, a.A1_EQ), nv(a.A2, a.A2_EQ), nv(a.A3, a.A3_EQ)], r: [a.R1, a.R2, a.R3].map(v => v || ' ').join('').replace(/ +$/, ''),
       ...(a.Comment ? { note: a.Comment } : {}), sh: shape(mozKid(p, 'PartShapeXml')), ops: ops ? ops.k.map(op) : [],
     };
   });
@@ -160,7 +160,8 @@ function mozVal0(v, env, fb, bad) {
   const [saved, eq] = v, parts = String(eq).split('|');
   if (/^\s*If\b/i.test(parts[0])) parts.unshift('');
   try {
-    let val = parts[0].trim() ? mozCompile(parts[0].trim())(env) : (fb ? fb(saved) : saved);
+    // A formula that is only Ifs starts from 0 (Mozaik's own: a part whose quantity is " | If 1fin = 1*tomm Then Quan= 1" is 0 otherwise).
+    let val = parts[0].trim() ? mozCompile(parts[0].trim())(env) : 0;
     for (let k = 1; k < parts.length; k++) {
       const st = parts[k].trim(); if (!st) continue;
       const m = /^If\s+([\s\S]+?)\s+Then\s+([^=]*?)=\s*([\s\S]*)$/i.exec(st);
@@ -200,6 +201,14 @@ function mozBuild(def, size, opts = {}) {
   };
   const anchor = (v0, old, now) => (old > 0 && v0 > old / 2 + 1e-6 ? v0 + now - old : v0);
   const out = [];
+  // A shape point saved without a formula that lies off its own part is a slip in the library (one of the compound
+  // curve hood's angled ribs has one). When a part of the same name has a formula for that point, that one is used.
+  const offPart = (v, n) => !Array.isArray(v) && (v < -1 || v > n + 1);
+  const fixPt = (p, s, j, l0, w0) => {
+    if (!offPart(s.x, l0) && !offPart(s.y, w0)) return s;
+    const o = def.parts.filter(q => q !== p && q.n === p.n && q.sh && q.sh.p.length === p.sh.p.length).map(q => q.sh.p[j]).find(t => Array.isArray(t.x) && Array.isArray(t.y));
+    return o ? { ...s, x: o.x, y: o.y } : s;
+  };
   def.parts.forEach(p => {
     const name = p.n || p.t, bad = (eq, m) => warn.push(`${def.n} · ${name}: "${eq}" did not work (${m}); its saved value is used.`);
     const T = (opts.thickPart && opts.thickPart(p)) || thick(p.t), own = { partth: T, partt: T }; mozWhere = name;
@@ -220,7 +229,7 @@ function mozBuild(def, size, opts = {}) {
     const ang = p.a.map(a => mozVal(a, env, null, bad));
     const X = v => mozVal(v, env, v0 => anchor(v0, l0, L), bad), Y = v => mozVal(v, env, v0 => anchor(v0, w0, Wd), bad);
     const pts = p.sh.t === 1 || p.sh.p.length < 3 ? [{ x: 0, y: 0 }, { x: L, y: 0 }, { x: L, y: Wd }, { x: 0, y: Wd }]
-      : p.sh.p.map(s => ({ x: X(s.x), y: Y(s.y), k: s.k, d: mozVal(s.d, env, null, bad) }));
+      : p.sh.p.map((s0, j) => { const s = fixPt(p, s0, j, l0, w0); return { x: X(s.x), y: Y(s.y), k: s.k, d: mozVal(s.d, env, null, bad) }; });
     const outline = mozOutline(pts, true);
     const ops = [];
     p.ops.forEach((o, oi) => {
@@ -230,7 +239,10 @@ function mozBuild(def, size, opts = {}) {
       // over (PartW - y) and a worked out angle reversed; saved numbers are already as the part is machined.
       const fy = o.flip ? v => { if (!Array.isArray(v)) return Y(v); mozQuiet = true; const r = Wd - Y(v); mozQuiet = false; if (mozTrace) mozTrace(v, r, mozWhere); return r; } : Y;
       const fa = v => { if (!o.flip || !Array.isArray(v)) return mozVal(v, env, null, bad); mozQuiet = true; const r = -mozVal(v, env, null, bad); mozQuiet = false; return r; };
-      const face = o.flip ? 'bottom' : 'top', depth = mozVal(o.dp, env, null, bad), ox = X(o.x), oy = fy(o.y), id = oi;
+      // The same slip happens on operations: an X saved as a plain number (one of the Sheppard shelf's bracket slots)
+      // takes the formula of an operation of the same kind on this part that was saved at the same place.
+      const twin = Array.isArray(o.x) ? null : p.ops.find(t => t !== o && t.t === o.t && Array.isArray(t.x) && Math.abs(t.x[0] - o.x) < 0.01);
+      const face = o.flip ? 'bottom' : 'top', depth = mozVal(o.dp, env, null, bad), ox = X(twin ? twin.x : o.x), oy = fy(o.y), id = oi;
       if (o.t === 'groove') {
         const len = mozVal(o.len, env, v0 => anchor(v0, Math.abs(Math.cos((Array.isArray(o.ang) ? o.ang[0] : o.ang) * Math.PI / 180)) > 0.5 ? l0 : w0, Math.abs(Math.cos((Array.isArray(o.ang) ? o.ang[0] : o.ang) * Math.PI / 180)) > 0.5 ? L : Wd), bad);
         const a = fa(o.ang) * Math.PI / 180, wd = mozVal(o.w, env, null, bad);
@@ -242,7 +254,8 @@ function mozBuild(def, size, opts = {}) {
         const n = Math.max(0, Math.round(mozVal(o.n, env, null, bad))), a = fa(o.ang) * Math.PI / 180, dia = mozVal(o.dia, env, null, bad);
         for (let k = 0; k < n; k++) ops.push({ type: 'bore', x: ox + Math.cos(a) * 32 * k, y: oy + Math.sin(a) * 32 * k, dia, depth, face, id, line: 1 });
       } else if (o.t === 'path' || o.t === 'pocket') {
-        const np = o.pts.map(s => ({ x: ox + X(s.x), y: oy + fy(s.y) - (o.flip && Array.isArray(s.y) && Array.isArray(o.y) ? Wd : 0), k: s.k, d: mozVal(s.d, env, null, bad) }));
+        // The nodes are where they are on the part (the operation's own X, Y is its first node), not offsets from it.
+        const np = o.pts.map(s => ({ x: X(s.x), y: fy(s.y), k: s.k, d: mozVal(s.d, env, null, bad) }));
         if (np.length < 2) return;
         const closed = o.t === 'pocket' || !!o.closed;
         ops.push({ type: 'path', pts: mozOutline(np, closed), closed, pocket: o.t === 'pocket', depth, tool: o.tool, face, id, ...(o.tg ? { tg: o.tg } : {}), ...(o.prof ? { prof: o.prof } : {}) });
@@ -303,7 +316,7 @@ function mozArc(a, b, s) {
 function mozRot(ang, axes) {
   let M = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
   for (let k = 0; k < 3; k++) {
-    const ax = (axes || '')[k], a = (ang[k] || 0) * Math.PI / 180; if (!ax || !a) continue;
+    const ax = (axes || '')[k], a = (ang[k] || 0) * Math.PI / 180; if (!ax || ax === ' ' || !a) continue;
     const c = Math.cos(a), s = Math.sin(a);
     const Rm = ax === 'X' ? [[1, 0, 0], [0, c, -s], [0, s, c]] : ax === 'Y' ? [[c, 0, s], [0, 1, 0], [-s, 0, c]] : [[c, -s, 0], [s, c, 0], [0, 0, 1]];
     M = Rm.map(row => [0, 1, 2].map(j => row[0] * M[0][j] + row[1] * M[1][j] + row[2] * M[2][j]));
@@ -337,12 +350,23 @@ function mozRun(c) {
   let r = mozCache.get(key); if (r) return r;
   const thByType = {}; def.parts.forEach((q, i) => { if (mats[i] && !(q.t in thByType)) thByType[q.t] = mats[i].thick * 25.4; });
   const prm = {}; Object.entries(c.mozPrm || {}).forEach(([k, v]) => { prm[k] = +v * 25.4; });
+  const bk = mozBracket(c); if (bk && bk.auto) prm[bk.k] = bk.now * 25.4;
+  // The rod slots go where that bracket's rods are, unless the cabinet sets them itself.
+  const rods = bk && SHEPPARD_RODS[bk.now];
+  if (rods) [['edgebracket', rods[0]], ['bracketspace', rods[1]]].forEach(([n, v]) => { const k = mozPrmKey(def, n); if (k && !(k in prm)) prm[k] = v * 25.4; });
   r = mozBuild(def, { W: c.w * 25.4, H: c.h * 25.4, D: c.d * 25.4 }, {
     libPrm: MOZ_LIB.libs[def.lib] || {}, prm,
     thick: t => thByType[t] || (def.th && def.th[t]) || 19.05,
     thickPart: q => { const m = mats[def.parts.indexOf(q)]; return m ? m.thick * 25.4 : q.mt; },
   });
   r.mats = mats; r.def = def;
+  // Mozaik only hides the shelf's rod slots by shelf width, so a shorter bracket would leave slots past its end.
+  // A slot is kept only where it lands on the bracket (the long back groove is the bracket's backplate).
+  if (bk) r.parts.forEach(q => {
+    const bp = q.ops.find(o => o.type === 'groove' && Math.abs(o.y2 - o.y1) < 1 && Math.abs(Math.abs(o.x2 - o.x1) - (bk.now + 1) * 25.4) < 1); if (!bp) return;
+    const lo = Math.min(bp.x1, bp.x2), hi = Math.max(bp.x1, bp.x2);
+    q.ops = q.ops.filter(o => !(o.type === 'groove' && Math.abs(o.x2 - o.x1) < 1 && Math.abs(o.y2 - o.y1) < q.W - 1 && (o.x1 < lo || o.x1 > hi)));
+  });
   if (mozCache.size > 200) mozCache.clear();
   mozCache.set(key, r); return r;
 }
@@ -392,27 +416,111 @@ function mozPlace(q, T) {
   const R = mozRot(q.ang, q.axes), P = q.pos;
   return (x, y, z) => ({ x: (R[0][0] * x + R[0][1] * y + R[0][2] * z + P.x) / 25.4, y: (R[1][0] * x + R[1][1] * y + R[1][2] * z + P.y) / 25.4, z: (R[2][0] * x + R[2][1] * y + R[2][2] * z + P.z) / 25.4 });
 }
+// A kerfed skin is saved flat (that is how it is cut), but on the hood it is bent over the ribs. Its bent shape is
+// the ribs' outside edge, from the top down for the skin's length, as thick as the skin. The front skin runs between
+// the side skins' outside faces, and the side skins run from behind the front skin to the wall.
+// Gives the skin as slices up its height, each the four corners (inside and outside at both ends) in mm, product frame.
+const mozSideOf = n => /front/i.test(n) ? 'F' : /left/i.test(n) ? 'L' : /right/i.test(n) ? 'R' : null;
+function mozRibEdge(r, side, Wmm) {
+  const polys = [];
+  r.parts.forEach(o => {
+    if (!/rib/i.test(o.name) || /angled/i.test(o.name) || !(o.qty > 0) || o.outline.length < 3) return;
+    const M = mozRot(o.ang, o.axes), pt = p => ({ x: M[0][0] * p.x + M[0][1] * p.y + o.pos.x, y: M[1][0] * p.x + M[1][1] * p.y + o.pos.y, z: M[2][0] * p.x + M[2][1] * p.y + o.pos.z });
+    const P = o.outline.map(pt), span = k => Math.max(...P.map(p => p[k])) - Math.min(...P.map(p => p[k])), mid = k => P.reduce((a, p) => a + p[k], 0) / P.length;
+    if (side === 'F' ? span('x') > 40 : span('y') > 40) return;
+    if (side === 'L' && mid('x') > Wmm / 2) return; if (side === 'R' && mid('x') < Wmm / 2) return;
+    polys.push(P.map(p => ({ u: side === 'F' ? p.y : p.x, z: p.z })));
+  });
+  if (!polys.length) return null;
+  const out = side === 'R' ? 1 : -1, all = polys.flat(), z0 = Math.min(...all.map(p => p.z)), z1 = Math.max(...all.map(p => p.z));
+  const at = z => { let best = null; polys.forEach(P => P.forEach((a, i) => { const b = P[(i + 1) % P.length]; if ((a.z - z) * (b.z - z) > 0 || a.z === b.z) return; const u = a.u + (z - a.z) / (b.z - a.z) * (b.u - a.u); if (best === null || u * out > best * out) best = u; })); return best; };
+  return { out, z0, z1, at };
+}
+function mozKerf(r, q, Wmm, Dmm) {
+  if (!/kerf/i.test(q.name)) return null;
+  const side = mozSideOf(q.name); if (!side) return null;
+  const key = '_kerf' + side; if (r[key] !== undefined) return r[key];
+  const E = mozRibEdge(r, side, Wmm); if (!E) return (r[key] = null);
+  const skinT = o => { const k = r.parts.find(x => x.qty > 0 && /kerf/i.test(x.name) && mozSideOf(x.name) === o); return k ? k.T : 0; };
+  // The rib edge from the top down, for the skin's length.
+  const edge = [];
+  for (let z = E.z1 - 0.01; z >= E.z0 + 0.01; z -= 3) { const u = E.at(z); if (u !== null) edge.push({ u, z }); }
+  const pts = edge.slice(0, 1); let left = q.L;
+  for (let i = 1; i < edge.length && left > 0; i++) {
+    const a = edge[i - 1], b = edge[i], d = Math.hypot(b.u - a.u, b.z - a.z);
+    if (d >= left) { const t = left / d; pts.push({ u: a.u + (b.u - a.u) * t, z: a.z + (b.z - a.z) * t }); left = 0; } else { pts.push(b); left -= d; }
+  }
+  if (pts.length < 2) return (r[key] = null);
+  const T = q.T, outer = pts.map((p, i) => {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], tu = b.u - a.u, tz = b.z - a.z, l = Math.hypot(tu, tz) || 1;
+    let nu = tz / l, nz = -tu / l; if (nu * E.out < 0) { nu = -nu; nz = -nz; }
+    return { u: p.u + nu * T, z: p.z + nz * T };
+  });
+  // Where the skin stops along the hood at a height: the other skins' faces, or the product's own ends.
+  const other = {}; ['F', 'L', 'R'].filter(o => o !== side).forEach(o => { const e = mozRibEdge(r, o, Wmm), t = skinT(o); if (e && t) other[o] = { e, t }; });
+  const lim = (o, z, fb) => { const k = other[o]; if (!k) return fb; const u = k.e.at(Math.min(k.e.z1 - 0.01, Math.max(k.e.z0 + 0.01, z))); return u === null ? fb : u + k.e.out * (o === 'F' ? 0 : k.t); };
+  const P3 = (a, b, e) => side === 'F' ? { x: e, y: a, z: b } : { x: a, y: e, z: b };
+  const slices = pts.map((p, i) => {
+    const o = outer[i], z = (p.z + o.z) / 2;
+    const e0 = side === 'F' ? lim('L', z, (Wmm - q.W) / 2) : lim('F', z, 0), e1 = side === 'F' ? lim('R', z, (Wmm + q.W) / 2) : Dmm;
+    return [P3(p.u, p.z, e0), P3(o.u, o.z, e0), P3(o.u, o.z, e1), P3(p.u, p.z, e1)];
+  });
+  return (r[key] = { side, slices });
+}
+// The bent skin as a closed solid between its slices.
+function mozKerfGeo(kf, D) {
+  const S = kf.slices, pos = [], uv = [], k = 24 * 25.4;
+  const V = p => [p.x / 25.4, p.z / 25.4, D - p.y / 25.4];
+  const tri = (a, b, c) => [a, b, c].forEach(p => { pos.push(...V(p)); uv.push((p.x + p.y) / k, p.z / k); });
+  const quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
+  for (let i = 1; i < S.length; i++) { const A = S[i - 1], B = S[i]; for (let j = 0; j < 4; j++) quad(A[j], A[(j + 1) % 4], B[(j + 1) % 4], B[j]); }
+  [S[0], S[S.length - 1]].forEach(A => quad(A[0], A[1], A[2], A[3]));
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals();
+  return g;
+}
+// Seen from the front: the front skin as the face it covers, a side skin as its curved edge.
+function mozKerfFace(kf) {
+  const S = kf.slices, F = kf.side === 'F';
+  const a = S.map(s => F ? s[1] : s[0]), b = S.map(s => F ? s[2] : s[1]).reverse();
+  return a.concat(b).map(p => ({ x: p.x / 25.4, y: p.y / 25.4, z: p.z / 25.4 }));
+}
+// A part's Mozaik turn and place (mm, product frame) as a matrix into the cabinet group's frame
+// (x right, y up, z out to the front, inches).
+function mozMtx(R, P, D) {
+  const s = 1 / 25.4;
+  return new THREE.Matrix4().set(
+    R[0][0] * s, R[0][1] * s, R[0][2] * s, P.x * s,
+    R[2][0] * s, R[2][1] * s, R[2][2] * s, P.z * s,
+    -R[1][0] * s, -R[1][1] * s, -R[1][2] * s, D - P.y * s,
+    0, 0, 0, 1);
+}
 // 3D: every part as its real outline, cut to its thickness, turned and placed as Mozaik places it.
 function mozMeshes(c, opts = {}) {
   const grp = new THREE.Group(), r = mozRun(c); if (!r) return grp;
   const D = c.d;
   // A mitre fold part is drawn flat in Mozaik's file; once folded it is the product's box, so that is what is shown.
-  if (mozFolded(r)) { const m = r.mats.find(Boolean); grp.add(box3(c.w, c.h, c.d, mat3(m, opts), c.w / 2, c.h / 2, c.d / 2)); grp.traverse(o => { o.userData.cabId = c.id; }); return grp; }
+  if (mozFolded(r)) {
+    const F = mozFoldModel(r, c);
+    if (F) { mozFold3d(F, r, c, opts).forEach(o => grp.add(o)); grp.traverse(o => { o.userData.cabId = c.id; }); return grp; }
+    const m = r.mats.find(Boolean); grp.add(box3(c.w, c.h, c.d, mat3(m, opts), c.w / 2, c.h / 2, c.d / 2)); grp.traverse(o => { o.userData.cabId = c.id; }); return grp;
+  }
   r.parts.forEach((q, i) => {
     if (!(q.qty > 0) || q.outline.length < 3) return;
     const m0 = r.mats[i], T = q.group === 'metal' ? q.T : (m0 ? m0.thick * 25.4 : q.T);
     const M = q.group === 'metal' ? (typeof metal3 === 'function' && R3 ? metal3('#8a9096') : flat3('#8a9096')) : mat3(m0, opts);
+    const kf = q.group === 'metal' ? null : mozKerf(r, q, c.w * 25.4, D * 25.4);
+    if (kf) {
+      const g = mozKerfGeo(kf, D), Md = M.clone(); Md.side = THREE.DoubleSide;
+      const mesh = new THREE.Mesh(g, Md); if (!R3) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat3()));
+      mesh.userData.part = q.name; grp.add(mesh); return;
+    }
     const sh = new THREE.Shape(q.outline.map(p => new THREE.Vector2(p.x, p.y)));
     const g = new THREE.ExtrudeGeometry(sh, { depth: T, bevelEnabled: false, curveSegments: 1 });
     const k = ((M.userData && M.userData.texScale) || 24) * 25.4, uv = g.attributes.uv;
     if (uv) for (let j = 0; j < uv.count; j++) uv.setXY(j, uv.getX(j) / k, uv.getY(j) / k);
     // Mozaik's frame (X right, Y back from the front, Z up, mm) into the cabinet group's (x right, y up, z out to the front, inches).
-    const R = mozRot(q.ang, q.axes), P = q.pos, s = 1 / 25.4;
-    const mtx = new THREE.Matrix4().set(
-      R[0][0] * s, R[0][1] * s, R[0][2] * s, P.x * s,
-      R[2][0] * s, R[2][1] * s, R[2][2] * s, P.z * s,
-      -R[1][0] * s, -R[1][1] * s, -R[1][2] * s, D - P.y * s,
-      0, 0, 0, 1);
+    const mtx = mozMtx(mozRot(q.ang, q.axes), q.pos, D);
     const mesh = new THREE.Mesh(g, M); mesh.applyMatrix4(mtx);
     if (!R3) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat3()));
     mesh.userData.part = q.name; grp.add(mesh);
@@ -421,6 +529,128 @@ function mozMeshes(c, opts = {}) {
   grp.traverse(o => { o.userData.cabId = c.id; });
   return grp;
 }
+// The plan footprint when Mozaik drew the product as more than a box (the corner filler's notch). Points near an edge
+// stay that far from it as the product is resized, so a 3" notch stays 3". x across from the left, y out from the wall.
+function mozTopShape(c) {
+  const d = c && c.moz && mozDef(c.moz), t = d && d.top; if (!t || t.length < 3) return null;
+  const W = d.W, D = d.D, rect = t.length === 4 && t.every(([x, y]) => (Math.abs(x) < 0.5 || Math.abs(x - W) < 0.5) && (Math.abs(y) < 0.5 || Math.abs(y - D) < 0.5));
+  if (rect) return null;
+  const k = (v, n, N) => (v <= n / 2 ? v : N - (n - v)) / 25.4, w = c.w * 25.4, dd = c.d * 25.4;
+  return { pts: t.map(([x, y]) => ({ x: r3(k(x, W, w)), y: r3(c.d - k(y, D, dd)) })), w: c.w, h: c.d, moz: true };
+}
+// A mitre fold part folded up: the flat part is split along its V-groove fold lines (Mozaik's tool 197 paths, or any
+// open line cut most of the way through), each piece turned up 90° about its fold so the grooved face ends up inside,
+// and the folded part turned over and set in the product's box. Each piece's inside face is cut back at its folds,
+// so the mitres show. Gives the pieces (bottom and inside outlines and their 4×4 turn), in mm.
+function mozFoldModel(r, c) {
+  if (r._fold !== undefined) return r._fold;
+  r._fold = null;
+  const i = r.parts.findIndex(q => q.qty > 0 && q.outline.length >= 3 && q.group !== 'metal'); if (i < 0 || typeof THREE === 'undefined') return null;
+  const q = r.parts[i], m = r.mats[i], T = m ? m.thick * 25.4 : q.T, O = q.outline;
+  const cr = (u, v) => u.x * v.y - u.y * v.x, sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+  const area = P => P.reduce((a, p, k) => a + cr(p, P[(k + 1) % P.length]), 0) / 2;
+  const segDist = (p, a, b) => { const d = sub(b, a), l2 = d.x * d.x + d.y * d.y || 1, t = Math.max(0, Math.min(1, ((p.x - a.x) * d.x + (p.y - a.y) * d.y) / l2)); return Math.hypot(p.x - a.x - d.x * t, p.y - a.y - d.y * t); };
+  const onEdge = (p, P) => P.some((a, k) => segDist(p, a, P[(k + 1) % P.length]) < 0.5);
+  const vlines = q.ops.filter(o => o.type === 'path' && !o.closed && !o.pocket && o.pts.length === 2 && (o.tool === 197 || o.depth >= 0.6 * T)).map(o => {
+    const a = o.pts[0], b = o.pts[1], len = Math.hypot(b.x - a.x, b.y - a.y); return { a, u: { x: (b.x - a.x) / len, y: (b.y - a.y) / len }, len };
+  }).filter(f => f.len > 1);
+  // V lines along the part's own edge bevel that edge; the others are folds.
+  const folds = vlines.filter(f => ![0.1, 0.3, 0.5, 0.7, 0.9].every(t => onEdge({ x: f.a.x + f.u.x * f.len * t, y: f.a.y + f.u.y * f.len * t }, O)));
+  if (!folds.length) return null;
+  const side = (f, p) => cr(f.u, sub(p, f.a));
+  const clip = (P, f, sg) => { const out = []; P.forEach((a, k) => { const b = P[(k + 1) % P.length], sa = sg * side(f, a), sb = sg * side(f, b); if (sa >= -1e-6) out.push(a); if ((sa > 1e-6 && sb < -1e-6) || (sa < -1e-6 && sb > 1e-6)) { const t = sa / (sa - sb); out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); } }); return out; };
+  // Split every piece a fold line runs across (only where the cut actually is).
+  let regs = [O.map(p => ({ x: p.x, y: p.y }))];
+  folds.forEach(f => {
+    const next = [];
+    regs.forEach(P => {
+      const sd = P.map(p => side(f, p));
+      if (!(Math.max(...sd) > 0.5 && Math.min(...sd) < -0.5)) { next.push(P); return; }
+      const ts = []; P.forEach((a, k) => { const b = P[(k + 1) % P.length], sa = side(f, a), sb = side(f, b); if (Math.abs(sa) < 1e-6) ts.push((a.x - f.a.x) * f.u.x + (a.y - f.a.y) * f.u.y); if (sa * sb < 0) { const t = sa / (sa - sb), x = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; ts.push((x.x - f.a.x) * f.u.x + (x.y - f.a.y) * f.u.y); } });
+      const t0 = Math.min(...ts), t1 = Math.max(...ts);
+      if (Math.min(t1, f.len) - Math.max(t0, 0) < 1) { next.push(P); return; }
+      next.push(clip(P, f, 1), clip(P, f, -1));
+    });
+    regs = next.filter(P => P.length >= 3 && Math.abs(area(P)) > 1);
+  });
+  // Clipping can leave the same corner twice in a row, which would spoil the mitre at it.
+  const dedupe = P => P.filter((p, k) => { const n = P[(k + 1) % P.length]; return Math.hypot(n.x - p.x, n.y - p.y) > 0.01; });
+  regs = regs.map(dedupe).filter(P => P.length >= 3).map(P => (area(P) < 0 ? P.slice().reverse() : P));
+  // Which pieces meet at which fold.
+  const onLine = (f, a, b) => Math.abs(side(f, a)) < 0.5 && Math.abs(side(f, b)) < 0.5;
+  const foldEdges = regs.map(P => P.map((a, k) => folds.findIndex(f => onLine(f, a, P[(k + 1) % P.length]))));
+  const span = (f, P, k) => { const a = P[k], b = P[(k + 1) % P.length], ta = (a.x - f.a.x) * f.u.x + (a.y - f.a.y) * f.u.y, tb = (b.x - f.a.x) * f.u.x + (b.y - f.a.y) * f.u.y; return [Math.min(ta, tb), Math.max(ta, tb)]; };
+  const meets = (A, B, fi) => foldEdges[A].some((g, k) => g === fi && foldEdges[B].some((h, j) => { if (h !== fi) return false; const s1 = span(folds[fi], regs[A], k), s2 = span(folds[fi], regs[B], j); return Math.min(s1[1], s2[1]) - Math.max(s1[0], s2[0]) > 1; }));
+  // The first piece across the profile (the top) stays put; the others fold up from it.
+  const minY = Math.min(...O.map(p => p.y)), cand = regs.map((P, k) => k).filter(k => Math.min(...regs[k].map(p => p.y)) < minY + 1);
+  const base = (cand.length ? cand : regs.map((P, k) => k)).sort((a, b) => Math.abs(area(regs[b])) - Math.abs(area(regs[a])))[0];
+  const M = regs.map(() => null); M[base] = new THREE.Matrix4(); const todo = [base];
+  while (todo.length) {
+    const A = todo.shift();
+    regs.forEach((P, B) => {
+      if (M[B]) return; const fi = folds.findIndex((f, k) => meets(A, B, k)); if (fi < 0) return;
+      const f = folds[fi], cc = P.reduce((a, p) => ({ x: a.x + p.x / P.length, y: a.y + p.y / P.length }), { x: 0, y: 0 });
+      const th = side(f, cc) > 0 ? Math.PI / 2 : -Math.PI / 2;
+      const R = new THREE.Matrix4().makeTranslation(f.a.x, f.a.y, 0).multiply(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(f.u.x, f.u.y, 0), th)).multiply(new THREE.Matrix4().makeTranslation(-f.a.x, -f.a.y, 0));
+      M[B] = M[A].clone().multiply(R); todo.push(B);
+    });
+  }
+  // Inside face: cut back by the thickness along each fold, so the pieces meet in mitres.
+  const inset = (P, d) => P.map((p, k) => {
+    const n = P.length, a = P[(k - 1 + n) % n], b = P[(k + 1) % n];
+    const e1 = sub(p, a), e2 = sub(b, p), l1 = Math.hypot(e1.x, e1.y) || 1, l2 = Math.hypot(e2.x, e2.y) || 1;
+    const n1 = { x: -e1.y / l1, y: e1.x / l1 }, n2 = { x: -e2.y / l2, y: e2.x / l2 }, d1 = d[(k - 1 + n) % n], d2 = d[k];
+    const p1 = { x: p.x + n1.x * d1, y: p.y + n1.y * d1 }, p2 = { x: p.x + n2.x * d2, y: p.y + n2.y * d2 }, den = cr(e1, e2);
+    if (Math.abs(den) < 1e-9) return { x: p.x + n2.x * Math.max(d1, d2), y: p.y + n2.y * Math.max(d1, d2) };
+    const t = cr(sub(p2, p1), e2) / den; return { x: p1.x + e1.x / l1 * l1 * t, y: p1.y + e1.y / l1 * l1 * t };
+  });
+  // Every edge along a V line (a fold, or a V-cut edge where the piece meets another end) is mitred: its inside face
+  // stops the thickness short of it.
+  const onV = (a, b) => vlines.some(f => { if (!onLine(f, a, b)) return false; const ta = (a.x - f.a.x) * f.u.x + (a.y - f.a.y) * f.u.y, tb = (b.x - f.a.x) * f.u.x + (b.y - f.a.y) * f.u.y; return Math.min(Math.max(ta, tb), f.len) - Math.max(Math.min(ta, tb), 0) > 1; });
+  const pieces = regs.map((P, k) => M[k] && { P, top: inset(P, P.map((a, j) => (onV(a, P[(j + 1) % P.length]) ? T : 0))), M: M[k] }).filter(Boolean);
+  // Turned over (the grooved face goes inside, under the top), then set at the product's corner.
+  const flip = new THREE.Matrix4().makeRotationX(Math.PI), bb = new THREE.Box3();
+  pieces.forEach(pc => { pc.M = flip.clone().multiply(pc.M); pc.P.forEach(p => [0, T].forEach(z => bb.expandByPoint(new THREE.Vector3(p.x, p.y, z).applyMatrix4(pc.M)))); });
+  const sh = new THREE.Matrix4().makeTranslation(-bb.min.x, -bb.min.y, -bb.min.z);
+  pieces.forEach(pc => { pc.M = sh.clone().multiply(pc.M); });
+  r._fold = { pieces, T, q, i, size: bb.getSize(new THREE.Vector3()) };
+  return r._fold;
+}
+// The folded pieces as solids, and the part's grooves, holes and pockets drawn on the faces they are cut in.
+function mozFold3d(F, r, c, opts) {
+  const D = c.d, out = [], m = r.mats[F.i], M0 = mat3(m, opts), Md = M0.clone(); Md.side = THREE.DoubleSide;
+  const toG = v => new THREE.Vector3(v.x / 25.4, v.z / 25.4, D - v.y / 25.4);
+  const opM = new THREE.MeshBasicMaterial({ color: 0x5b6170, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  F.pieces.forEach(pc => {
+    const n = pc.P.length, pos = [], uv = [], k = 24 * 25.4;
+    const V = (p, z) => toG(new THREE.Vector3(p.x, p.y, z).applyMatrix4(pc.M));
+    const push = (p, z) => { const v = V(p, z); pos.push(v.x, v.y, v.z); uv.push(p.x / k, p.y / k); };
+    const caps = THREE.ShapeUtils.triangulateShape(pc.P.map(p => new THREE.Vector2(p.x, p.y)), []);
+    caps.forEach(t => { t.forEach(j => push(pc.P[j], 0)); t.forEach(j => push(pc.top[j], F.T)); });
+    for (let j = 0; j < n; j++) { const a = j, b = (j + 1) % n; [[pc.P[a], 0], [pc.P[b], 0], [pc.top[b], F.T], [pc.P[a], 0], [pc.top[b], F.T], [pc.top[a], F.T]].forEach(([p, z]) => push(p, z)); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals();
+    const mesh = new THREE.Mesh(g, Md); if (!R3) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat3())); mesh.userData.part = F.q.name; out.push(mesh);
+  });
+  // Operations: each drawn on the piece it falls in, on the face it is cut from (top = inside once folded).
+  const inPoly = (p, P) => { let c = false; for (let a = 0, b = P.length - 1; a < P.length; b = a++) { if ((P[a].y > p.y) !== (P[b].y > p.y) && p.x < (P[b].x - P[a].x) * (p.y - P[a].y) / (P[b].y - P[a].y) + P[a].x) c = !c; } return c; };
+  const clipTo = (S, P) => { let o = S; P.forEach((a, k) => { const b = P[(k + 1) % P.length], e = { x: b.x - a.x, y: b.y - a.y }, sd = p => e.x * (p.y - a.y) - e.y * (p.x - a.x), I = o; o = []; I.forEach((p, j) => { const q2 = I[(j + 1) % I.length], s1 = sd(p), s2 = sd(q2); if (s1 >= 0) o.push(p); if (s1 * s2 < 0) { const t = s1 / (s1 - s2); o.push({ x: p.x + (q2.x - p.x) * t, y: p.y + (q2.y - p.y) * t }); } }); }); return o; };
+  const marks = [];
+  F.q.ops.forEach(o => {
+    if (o.type === 'groove') { const dx = o.x2 - o.x1, dy = o.y2 - o.y1, l = Math.hypot(dx, dy) || 1, nx = -dy / l * o.width / 2, ny = dx / l * o.width / 2; marks.push({ S: [{ x: o.x1 + nx, y: o.y1 + ny }, { x: o.x2 + nx, y: o.y2 + ny }, { x: o.x2 - nx, y: o.y2 - ny }, { x: o.x1 - nx, y: o.y1 - ny }], face: o.face }); }
+    else if (o.type === 'bore') { const S = []; for (let k = 0; k < 16; k++) S.push({ x: o.x + Math.cos(k * Math.PI / 8) * o.dia / 2, y: o.y + Math.sin(k * Math.PI / 8) * o.dia / 2 }); marks.push({ S, face: o.face }); }
+    else if (o.type === 'path' && (o.closed || o.pocket) && o.pts.length > 2) marks.push({ S: o.pts, face: o.face });
+  });
+  marks.forEach(mk => F.pieces.forEach(pc => {
+    let S = mk.S; if (area2(S) < 0) S = S.slice().reverse();
+    // Inside operations only show on the inside face, which stops short of each mitre.
+    S = clipTo(S, mk.face === 'bottom' ? pc.P : pc.top); if (S.length < 3) return;
+    const z = mk.face === 'bottom' ? -0.3 : F.T + 0.3, tri = THREE.ShapeUtils.triangulateShape(S.map(p => new THREE.Vector2(p.x, p.y)), []), pos = [];
+    tri.forEach(t => t.forEach(j => { const v = toG(new THREE.Vector3(S[j].x, S[j].y, z).applyMatrix4(pc.M)); pos.push(v.x, v.y, v.z); }));
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.push(new THREE.Mesh(g, opM));
+  }));
+  return out;
+}
+const area2 = P => P.reduce((a, p, k) => { const n = P[(k + 1) % P.length]; return a + p.x * n.y - n.x * p.y; }, 0);
 const mozFolded = r => r.def.group === 'shelf' || r.def.group === 'mantel';
 // Elevation: each part's outline seen from the front, back parts first, so the drawing has the product's real shape.
 function mozFrontSVG(c, ex, by, opts = {}) {
@@ -430,7 +660,8 @@ function mozFrontSVG(c, ex, by, opts = {}) {
   const faces = [];
   r.parts.forEach((q, i) => {
     if (!(q.qty > 0) || q.outline.length < 3) return;
-    const m = r.mats[i], T = m ? m.thick * 25.4 : q.T, f = mozPlace(q, T);
+    const m = r.mats[i], T = m ? m.thick * 25.4 : q.T, kf = q.group === 'metal' ? null : mozKerf(r, q, c.w * 25.4, c.d * 25.4), f = mozPlace(q, T);
+    if (kf) { const pts = mozKerfFace(kf); faces.push({ y: Math.min(...pts.map(p => p.y)), pts, m }); return; }
     [0, T].forEach(z => {
       const pts = q.outline.map(p => f(p.x, p.y, z)), ys = pts.map(p => p.y);
       const area = pts.reduce((a, p, k) => { const n = pts[(k + 1) % pts.length]; return a + p.x * n.z - n.x * p.z; }, 0);
@@ -439,10 +670,60 @@ function mozFrontSVG(c, ex, by, opts = {}) {
     });
   });
   faces.sort((a, b) => b.y - a.y);
-  faces.forEach(F => { mats.push(F.m && F.m.id); s += `<polygon ${F.metal ? 'class="ev-box nss" style="fill:#9aa0a6"' : fillFor(F.m, 'ev-box')} points="${F.pts.map(p => `${r3(ex + p.x)},${r3(by - p.z)}`).join(' ')}"/>`; });
+  // A product with a notch in its footprint (the corner filler) stands in a corner: what sits in front of the notch's
+  // face line is hidden by the cabinets on the other wall, so it is drawn as a dashed outline.
+  const top = mozTopShape(c), front = top ? Math.max(...top.pts.map(p => c.d - p.y).filter(v => v < c.d / 2)) : 0;
+  faces.forEach(F => {
+    if (front > 0.1 && F.y < front - 0.1) { s += `<polygon class="nss" style="fill:none;stroke:#8a8f98;stroke-width:0.25;stroke-dasharray:1.5 1" points="${F.pts.map(p => `${r3(ex + p.x)},${r3(by - p.z)}`).join(' ')}"/>`; return; }
+    mats.push(F.m && F.m.id); s += `<polygon ${F.metal ? 'class="ev-box nss" style="fill:#9aa0a6"' : fillFor(F.m, 'ev-box')} points="${F.pts.map(p => `${r3(ex + p.x)},${r3(by - p.z)}`).join(' ')}"/>`
+  });
   return opts.withDefs ? { svg: s, mats } : s;
 }
 
+// Mozaik products that come in versions picked by their own settings. The mitre fold shelves: both ends finished,
+// one finished and one cleated, or both cleated (Mozaik's 1Fin and BothFin, 1" meaning yes).
+const MOZ_ENDS = [['both', 'Both finished'], ['one', 'One finished, one cleated'], ['none', 'Both cleated']];
+const mozPrmKey = (d, n) => d && Object.keys(d.prm || {}).find(k => k.toLowerCase() === n);
+function mozEnds(c) {
+  const d = mozDef(c.moz), k1 = mozPrmKey(d, '1fin'), kb = mozPrmKey(d, 'bothfin'); if (!k1 || !kb) return null;
+  const v = k => { const o = (c.mozPrm || {})[k]; return o !== undefined ? +o * 25.4 : d.prm[k]; };
+  return { k1, kb, now: v(kb) > 0 ? 'both' : v(k1) > 0 ? 'one' : 'none' };
+}
+// Sheppard rod brackets come in these backplate lengths (sheppardbrackets.com). Left on Auto, the shelf takes the
+// longest one at least 2" shorter than the shelf, as Sheppard advises; the slots are laid out from it.
+const SHEPPARD_SIZES = [10, 16, 22, 28, 34, 40, 46, 58, 70, 82];
+// Where the rods are on each bracket, from Ayden's Sheppard sheet: first rod in from the end, and between rods.
+const SHEPPARD_RODS = { 10: [2, 6], 16: [2, 12], 22: [2, 18], 28: [2, 12], 34: [5, 12], 40: [2, 12], 46: [5, 12], 58: [5, 12], 70: [5, 12], 82: [5, 12] };
+const sheppardFit = w => SHEPPARD_SIZES.filter(s => s <= w - 2).pop() || SHEPPARD_SIZES[0];
+function mozBracket(c) {
+  const d = mozDef(c.moz), k = mozPrmKey(d, 'bracketsize'); if (!k) return null;
+  const o = (c.mozPrm || {})[k], auto = o === undefined || o === null;
+  return { k, auto, fit: sheppardFit(c.w), now: auto ? sheppardFit(c.w) : +o };
+}
+function mozBox(c) {
+  if (!isMoz(c)) return ''; const e = mozEnds(c), b = mozBracket(c); let s = '';
+  if (e) s += `<div class="psec box">${secHead('plan', 'Ends', 'violet')}<div class="seg" role="group" aria-label="Ends">${MOZ_ENDS.map(([v, l]) => `<button data-act="moz-ends" data-id="${c.id}:${v}" aria-pressed="${e.now === v}">${l}</button>`).join('')}</div></div>`;
+  if (b) s += `<div class="psec box">${secHead('plan', 'Bracket', 'violet')}<select data-act="moz-bracket" data-id="${c.id}" aria-label="Bracket size"><option value="auto"${b.auto ? ' selected' : ''}>Auto (${b.fit}")</option>${SHEPPARD_SIZES.map(z => `<option value="${z}"${!b.auto && b.now === z ? ' selected' : ''}>${z}"${z > c.w - 2 ? ' (too long)' : ''}</option>`).join('')}</select></div>`;
+  return s;
+}
+function setMozBracket(c, v) {
+  const b = mozBracket(c); if (!b) return;
+  mutate(() => { const p = { ...(c.mozPrm || {}) }; if (v === 'auto') delete p[b.k]; else p[b.k] = +v; c.mozPrm = p; if (typeof cabLog === 'function') cabLog(c, 'Bracket: ' + (v === 'auto' ? 'Auto' : v + '"')); });
+}
+if (typeof document !== 'undefined') document.addEventListener('change', ev => {
+  const t = ev.target; if (!t.matches || !t.matches('[data-act="moz-bracket"]')) return;
+  ev.stopPropagation(); const c = cab(t.dataset.id); if (c) setMozBracket(c, t.value);
+  if (ui.quick && typeof renderQuick === 'function') renderQuick();
+}, true);
+function setMozEnds(c, v) {
+  const e = mozEnds(c); if (!e || e.now === v) return;
+  mutate(() => { c.mozPrm = { ...(c.mozPrm || {}), [e.k1]: v === 'one' ? 1 : 0, [e.kb]: v === 'both' ? 1 : 0 }; if (typeof cabLog === 'function') cabLog(c, 'Ends: ' + MOZ_ENDS.find(x => x[0] === v)[1]); });
+}
+if (typeof document !== 'undefined') document.addEventListener('click', ev => {
+  const b = ev.target.closest && ev.target.closest('[data-act="moz-ends"]'); if (!b) return;
+  ev.stopPropagation(); const [id, v] = b.dataset.id.split(':'), c = cab(id); if (c) setMozEnds(c, v);
+  if (ui.quick && typeof renderQuick === 'function') renderQuick();
+}, true);
 // The products go into the job's own library once each (a product deleted from the library stays deleted).
 function ensureMozLib(s) {
   if (typeof MOZ_LIB === 'undefined' || !s) return s;

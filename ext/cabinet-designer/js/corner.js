@@ -46,7 +46,7 @@ function cornerTop(c) {
   return { pts: pts.map(([x, y]) => ({ x: r3(x), y: r3(y) })), w: W, h: D, edges: L ? ['', '', '', '', 'unfin', ''] : ['', '', '', 'unfin', ''], corner: true };
 }
 // The top shape the box is built from: a corner's own, or the one drawn in the Shape tab.
-const cabTopShape = c => angledCorner(c) ? cornerTop(c) : ((c && c.shape) || {}).top;
+const cabTopShape = c => angledCorner(c) ? cornerTop(c) : (c && c.moz && typeof mozTopShape === 'function' && mozTopShape(c)) || ((c && c.shape) || {}).top;
 // Edges of the corner's top shape that hold fronts (the angled face, or the two faces of the L).
 const cornerFaceEdges = c => c.corner.type === 'l' ? [2, 3] : [2];
 

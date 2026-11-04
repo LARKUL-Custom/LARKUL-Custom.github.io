@@ -440,7 +440,7 @@ function doorDesigner() {
         ${fld('Construction', R, 'type', d.type, 'select', { options: DOOR_TYPES, wide: true })}
         ${fld('Material', R, 'mat', d.mat, 'select', { options: matOpts('sheet'), wide: true })}
         ${fld('Outside edge', R, 'edgeProfile', d.edgeProfile, 'select', { options: EDGE_PROFILES })}</div>
-      ${buyout ? `<div class="dsec">${secHead('list', 'Door maker order', 'amber')}
+      ${buyout && doorExportOf(S) === 'bywater' ? bywaterStyleFields(d, R, framedT) : ''}${buyout && doorExportOf(S) !== 'bywater' ? `<div class="dsec">${secHead('list', 'Door maker order', 'amber')}
         <div class="note">What goes on the buyout door order. Blank boxes use this style's own settings.</div>
         ${fld('Their door name', R, 'vName', d.vName || '', 'text', { wide: true, ph: d.name })}
         ${fld('Wood', R, 'vWood', d.vWood || '', 'text', { wide: true, ph: m ? m.name : '' })}${fld('Panel face', R, 'vFace', d.vFace || '', 'text', { wide: true, ph: 'Vertical grain' })}
@@ -867,6 +867,12 @@ function exportData(units) {
   };
 }
 const csvq = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+// File name for the format on screen; the Bywater file says Bywater so it is easy to find on upload.
+function exportFileName() {
+  const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job', f = ui.exportFmt;
+  const what = f === 'buyout' && doorExportOf(S) === 'bywater' ? 'Bywater doors' : { cnc: 'parts', json: 'job', cut: 'cut list', labels: 'labels', ops: 'machining', doors: 'door order', buyout: 'buyout doors' }[f];
+  return `${job} ${what}.${f === 'cnc' || f === 'json' ? 'json' : 'csv'}`;
+}
 function exportText() {
   if (ui.exportFmt === 'cnc') return JSON.stringify(cncPartFile().file, null, 2);
   const d = exportData(ui.exportUnits);
@@ -883,7 +889,7 @@ function exportText() {
     return rows.map(r => r.map(csvq).join(',')).join('\n');
   }
   if (ui.exportFmt === 'doors') return doorOrderCSV(d.units);
-  if (ui.exportFmt === 'buyout') return buyoutOrderCSV(d.units);
+  if (ui.exportFmt === 'buyout') return doorExportOf(S) === 'bywater' ? bywaterCSV() : buyoutOrderCSV(d.units);
   const rows = [['Room', 'Cabinet', 'Part', 'Op', 'X', 'Y', 'X2', 'Y2', 'W', 'H', 'Dia', 'Width', 'Depth', 'Face', 'For']];
   d.rooms.forEach(rm => rm.cabinets.forEach(c => c.parts.forEach(p => p.ops.forEach(o => rows.push([rm.name, c.label, p.name, o.type, o.x ?? o.x1, o.y ?? o.y1, o.x2, o.y2, o.w, o.h, o.dia, o.width, o.depth, o.face || o.edge, o.why])))));
   return rows.map(r => r.map(csvq).join(',')).join('\n');
@@ -947,6 +953,56 @@ function buyoutOrderCSV(units) {
   if (!rows.length) rows.push(['No buyout doors in this job. Set a door style to Buyout in Door styles.']);
   return [[`Buyout door order for ${S.job.name}`], head, ...rows].map(r => r.map(csvq).join(',')).join('\n');
 }
+// Bywater's door CSV import (Ayden's Bywater Door CSV Export Guide): no header row, 14 columns in a fixed order,
+// width before height in fractions, dropdown values copied letter for letter. Rows: doors, then 5-piece drawer fronts, then slabs.
+// One row per room, size and style; Cab # is "R2:202(2),204" (room, then each cabinet with its count when more than one).
+function bywaterStyle(ds, framed) {
+  const slab = !framed, pick = (k, d) => String(ds['bw' + k] || '').trim() || d;
+  return { product: pick('Product', slab ? 'Hardwood Slab' : BYWATER.product[0]), folder: pick('Folder', BYWATER.folder[0]), wood: pick('Wood', BYWATER.wood[0]),
+    face: pick('Face', slab ? 'Horizontal Grain' : BYWATER.face[0]),
+    // Hardwood Slab has no panel or stile and rail fields, so those columns stay empty.
+    profile: slab ? '' : pick('Profile', BYWATER.profile[0]), panel: slab ? '' : pick('Panel', BYWATER.panel[0]), sr: slab ? '' : pick('SR', BYWATER.sr[0]),
+    edge: pick('Edge', BYWATER.edge[0]) };
+}
+function bywaterRows() {
+  const lines = new Map();
+  S.rooms.forEach((rm, ri) => withRoom(rm, () => S.cabinets.forEach(c => computeFronts(c).forEach(fr => {
+    if (fr.type === 'open') return;
+    const { ds, framed } = frontStyle(c, fr); if (ds.source !== 'buyout') return;
+    const door = fr.type === 'door', b = bywaterStyle(ds, framed), w = fmtLen(fr.x1 - fr.x0), h = fmtLen(fr.z1 - fr.z0);
+    const row = [w, h, door ? 'Door' : 'Drawer Front', b.product, b.folder, b.wood, b.face, b.profile, b.panel, b.sr, b.edge, door ? '4" on center' : 'None'];
+    const key = ri + '|' + row.join('|'), e = lines.get(key) || { row, qty: 0, room: rm.block || ri + 1, cabs: new Map(), order: door ? 0 : framed ? 1 : 2, W: fr.x1 - fr.x0, H: fr.z1 - fr.z0, ri };
+    const cn = String(LBL[c.id] || '').replace(/^#/, '');
+    e.qty++; e.cabs.set(cn, (e.cabs.get(cn) || 0) + 1); lines.set(key, e);
+  }))));
+  return [...lines.values()].sort((a, b) => a.order - b.order || a.ri - b.ri || a.row[3].localeCompare(b.row[3]) || b.H - a.H || b.W - a.W)
+    .map(e => [e.qty, e.row[0], e.row[1], e.row[2], `R${e.room}:` + [...e.cabs].map(([n, q]) => q > 1 ? `${n}(${q})` : n).join(','), ...e.row.slice(3)]);
+}
+const bywaterCSV = () => bywaterRows().map(r => r.map(csvq).join(',')).join('\n');
+// Values that aren't on Bywater's dropdown lists, so Ayden can check them before uploading.
+function bywaterOddValues() {
+  const cols = [[5, 'product'], [6, 'folder'], [7, 'wood'], [8, 'face'], [9, 'profile'], [10, 'panel'], [11, 'sr'], [12, 'edge']], out = new Set();
+  bywaterRows().forEach(r => cols.forEach(([i, k]) => { if (r[i] && !BYWATER[k].includes(r[i])) out.add(r[i]); }));
+  return [...out];
+}
+// Bywater values for a buyout door style. Pick from Bywater's own wording; blank uses the shop standard shown.
+function bywaterStyleFields(d, R, framed) {
+  const b = bywaterStyle({}, framed), dl = k => `<datalist id="bw-${k}">${BYWATER[k].map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
+  const f = (label, key, k) => fld(label, R, 'bw' + key, d['bw' + key] || '', 'text', { wide: true, ph: b[k], list: 'bw-' + k });
+  return `<div class="dsec">${secHead('list', 'Bywater order', 'amber')}
+    <div class="note">Goes on the Bywater CSV. Pick from the list so it matches Bywater's dropdown exactly. Blank uses the value shown.${framed ? '' : ' Slabs have no panel or stile and rail columns.'}</div>
+    ${f('Product', 'Product', 'product')}${f('Folder', 'Folder', 'folder')}${f('Wood', 'Wood', 'wood')}${f('Panel face', 'Face', 'face')}
+    ${framed ? f('Panel profile', 'Profile', 'profile') + f('Panel material', 'Panel', 'panel') + f('Stile and rail profile', 'SR', 'sr') : ''}${f('Edge profile', 'Edge', 'edge')}
+    <div class="note">Hinge boring is 4" on center on doors and None on drawer fronts. Rail and stile widths are set on Bywater's form.</div>
+    ${['product', 'folder', 'wood', 'face', 'profile', 'panel', 'sr', 'edge'].map(dl).join('')}</div>`;
+}
+// Buyout doors: pick the door maker's format. The choice is saved with the job and libraries and can be swapped any time.
+function buyoutExportBar() {
+  const how = doorExportOf(S), odd = how === 'bywater' ? bywaterOddValues() : [], n = how === 'bywater' ? bywaterRows().length : 0;
+  return `<div class="row-actions"><span class="note">Door maker</span><div class="seg" role="group" aria-label="Door maker format">${DOOR_EXPORTS.map(x => `<button data-act="door-export" data-id="${x.v}" aria-pressed="${how === x.v}">${x.l}</button>`).join('')}</div></div>
+    ${how === 'bywater' ? (n ? `<div class="note">Bywater's CSV import: no header row, 14 columns, inches as fractions. Download it and upload the .csv on Bywater's order page. Set each style's Bywater values in Door styles under Bywater order.</div>` : '<div class="note">No buyout doors in this job. Set a door style\'s Made by to Buyout in Door styles.</div>')
+      + (odd.length ? `<div class="warnbox">Not on Bywater's dropdown lists, check the spelling: ${odd.map(esc).join(', ')}</div>` : '') : ''}`;
+}
 // What the Scheduler extension needs to plan the job: counts by room, and how many cabinets are painted.
 const SCHED_FOLDER = 'Schedules/From Cabinet Designer';
 function scheduleSummary() {
@@ -986,15 +1042,16 @@ function renderExport() {
   $('#tab-export').innerHTML = exportHTML(true);
 }
 function exportHTML(withHead) {
-  const txt = exportText();
+  const txt = exportText(), bw = ui.exportFmt === 'buyout' && doorExportOf(S) === 'bywater';
   return `${withHead ? '' : '<h3 class="ordh">Files to send</h3>'}<div class="pagehead"${withHead ? '' : ' hidden'}><div><h2>Order and export</h2><p>CNC Cutlist parts is the file CNC Cutlist opens to nest the job and write the Rover programs. It is always in millimeters. The other formats are a neutral job file, the cut list, labels and machining.</p></div></div>
   <div class="card cardbody">
     <div class="row-actions">
       <div class="seg" role="group" aria-label="Format">${[['cnc', 'CNC Cutlist parts'], ['json', 'Job JSON'], ['cut', 'Cut list CSV'], ['labels', 'Labels CSV'], ['ops', 'Machining CSV'], ['doors', 'Door order CSV'], ['buyout', 'Buyout doors CSV']].map(([k, l]) => `<button data-act="exp-fmt" data-id="${k}" aria-pressed="${ui.exportFmt === k}">${l}</button>`).join('')}</div>
-      <div class="seg" role="group" aria-label="Units">${[['in', 'Inches'], ['mm', 'Millimeters']].map(([k, l]) => `<button data-act="exp-units" data-id="${k}" aria-pressed="${ui.exportUnits === k}">${l}</button>`).join('')}</div>
-      <button class="btn primary" data-act="copy">Copy</button>${inHub() ? '<button class="btn" data-act="save-files">Save to hub Files</button>' : ''}<span class="note" id="copynote">${txt.length.toLocaleString()} characters</span>
+      ${bw ? '' : `<div class="seg" role="group" aria-label="Units">${[['in', 'Inches'], ['mm', 'Millimeters']].map(([k, l]) => `<button data-act="exp-units" data-id="${k}" aria-pressed="${ui.exportUnits === k}">${l}</button>`).join('')}</div>`}
+      <button class="btn primary" data-act="copy">Copy</button><button class="btn" data-act="exp-download">Download</button>${inHub() ? '<button class="btn" data-act="save-files">Save to hub Files</button>' : ''}<span class="note" id="copynote">${txt.length.toLocaleString()} characters</span>
     </div>
     ${ui.exportFmt === 'cnc' ? cncSkippedNote() : ''}
+    ${ui.exportFmt === 'buyout' ? buyoutExportBar() : ''}
     ${ui.exportFmt === 'doors' ? '<div class="note">Every door, drawer front and false front in the job, with identical ones grouped. Send this to your door supplier, or tell us their order format and we will add an export that matches it.</div>' : ''}
     <textarea class="out" id="exptext" readonly spellcheck="false" aria-label="Export output">${esc(txt)}</textarea>
   </div>
