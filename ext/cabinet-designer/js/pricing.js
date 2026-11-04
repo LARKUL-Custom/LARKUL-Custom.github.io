@@ -220,7 +220,8 @@ function priceJob(ps) {
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));
     // Installation by the foot of each type, like Mozaik's per-length install rows.
-    const inst = CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((ps.install || {})[cat]) || 0;
+    // A job can leave installation out (the customer installs, or it's a pickup).
+    const inst = S.job.noInstall ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((ps.install || {})[cat]) || 0;
       return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r } : null; }).filter(Boolean);
     const lines = [...tops, ...molds, ...priceShapes(ps), ...inst, ...xs];
     return { r, cabs, lines, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
@@ -280,7 +281,7 @@ function priceQuote(ps) {
     <div class="qtile grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${q.rooms.reduce((a, R) => a + R.cabs.length, 0)} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>
     ${q.perFt.map(t => `<div class="qtile cat-${t.cat}"><span>${t.name}</span><b>${t.n ? money(t.rate) + '<em>/ft</em>' : '–'}</b><small>${t.n ? `${ftLen(t.ft)} ft · ${money(t.total)}` : 'None in this job'}</small></div>`).join('')}
     </div>
-    <div class="row-actions quotebar"><button class="btn primary" data-act="quote-print">${icon('print')}Print or save quote</button><button class="btn" data-act="quote-copy">${icon('copy')}Copy quote CSV</button>${inHub() ? `<button class="btn" data-act="quote-save">${icon('folder')}Save quote CSV to Files</button>` : ''}<span class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</span></div>
+    <div class="row-actions quotebar">${toggleBtn('quote-install', !S.job.noInstall, S.job.noInstall ? 'No installation' : 'Installation added')}<button class="btn primary" data-act="quote-print">${icon('print')}Print or save quote</button><button class="btn" data-act="quote-copy">${icon('copy')}Copy quote CSV</button>${inHub() ? `<button class="btn" data-act="quote-save">${icon('folder')}Save quote CSV to Files</button>` : ''}<span class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</span></div>
     ${q.rooms.map(room).join('')}
     ${paintCard(ps, q)}
     <div class="card totals"><table class="t"><tbody>
@@ -310,7 +311,7 @@ function priceEditor(ps) {
   <div class="card"><div class="cardhead"><h3>${icon('tag')}Sheet</h3></div><div class="cardbody">
     ${fld('Name', R, 'name', ps.name, 'text', { wide: true })}${fld('Markup %', R, 'markup', ps.markup, 'num')}${fld('Tax %', R, 'tax', ps.tax, 'num')}
     <div class="note">Markup on top of each group's cost, inside the cabinet prices:</div>${GROUP_MARKUPS.map(([k, l]) => fld(l + ' markup %', P('groupMarkup'), k, (ps.groupMarkup || {})[k] ?? 0, 'num')).join('')}</div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('home')}Installation</h3><span class="note">Per foot of cabinet width</span></div><div class="cardbody">${CAT_FT.map(([k, l]) => fld(l + ' ($/ft)', P('install'), k, (ps.install || {})[k] ?? 0, 'num')).join('')}</div></div>
+  <div class="card"><div class="cardhead"><h3>${icon('home')}Installation</h3><span class="note">Per foot of cabinet width. Turn it off for a job on its Quote.</span></div><div class="cardbody">${CAT_FT.map(([k, l]) => fld(l + ' ($/ft)', P('install'), k, (ps.install || {})[k] ?? 0, 'num')).join('')}</div></div>
   <div class="card"><div class="cardhead"><h3>${icon('box')}Cabinets by type</h3><span class="note">Base price plus a price per foot of width</span></div><div class="tscroll"><table class="t"><thead><tr><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${['Base', 'Wall', 'Tall'].map(cat => `<tr><td><span class="catpill cat-${cat}">${cat}</span></td><td style="width:110px">${num(P('cab.' + cat), 'base', ps.cab[cat].base)}</td><td style="width:110px">${num(P('cab.' + cat), 'perFt', ps.cab[cat].perFt)}</td></tr>`).join('')}</tbody></table></div></div>
   <div class="card wide"><div class="cardhead"><h3>${icon('stack')}Products</h3><span class="note">Give any library cabinet its own price. Blank uses its type.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Hide' : `Show all ${S.library.length}`}</button></div>${showProd ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
@@ -385,6 +386,7 @@ function priceAction(a, id) {
     case 'ps-paint': { const po = paintOf(ps); po[id] = !po[id]; break; }
     case 'ps-export': saveFile(new Blob([JSON.stringify({ cabinetDesignerPriceSheet: 1, sheet: ps }, null, 2)], { type: 'application/json' }), `${fileSafe(ps.name)} price sheet.json`, 'Cabinet Designer/Price sheets'); return;
     case 'quote-print': showQuoteSheet(); return;
+    case 'quote-install': mutate(() => { if (S.job.noInstall) delete S.job.noInstall; else S.job.noInstall = true; }); flash(S.job.noInstall ? 'Installation left out of this job' : 'Installation added to this job'); return;
     case 'qs-print': window.print(); return;
     case 'qs-save': saveFile(new Blob([quoteFile(ps)], { type: 'text/html' }), `${fileSafe(S.job.name) || 'job'} quote.html`, 'Cabinet Designer'); return;
     case 'qs-close': closeQuoteSheet(); return;
