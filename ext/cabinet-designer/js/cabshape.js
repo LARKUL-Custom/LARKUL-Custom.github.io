@@ -110,17 +110,36 @@ function cabShapeSVG(c, v, size = 150) {
   const Y = y => flip ? H - y : y;
   return `<svg viewBox="${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad}" style="max-height:${size}px;max-width:100%" aria-hidden="true"><rect class="cs-box nss" x="0" y="0" width="${W}" height="${H}"/><polygon class="cs-shape nss" points="${o.map(p => `${r3(p.x)},${r3(Y(p.y))}`).join(' ')}"/></svg>`;
 }
+// One view drawn big, like Mozaik's Shape tab: the wall behind it (top view), the plain box dashed, and every edge's length.
+function cabShapeBig(c, v) {
+  const [W, H] = cabShapeDims(c, v), o = cabOutline(c, v), k = Math.max(W, H), pad = k * 0.14, flip = v !== 'top', fs = k / 26;
+  const Y = y => flip ? H - y : y, P = o.map(p => ({ x: p.x, y: Y(p.y) })), cx = P.reduce((a, p) => a + p.x, 0) / P.length, cy = P.reduce((a, p) => a + p.y, 0) / P.length;
+  let dims = '';
+  P.forEach((a, i) => { const b = P[(i + 1) % P.length], L = Math.hypot(b.x - a.x, b.y - a.y); if (L < 0.2 || (v === 'top' && Math.abs(a.y) < 0.01 && Math.abs(b.y) < 0.01)) return; let nx = -(b.y - a.y) / L, ny = (b.x - a.x) / L; const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2; if (nx * (mx - cx) + ny * (my - cy) < 0) { nx = -nx; ny = -ny; } dims += `<text class="cs-dim" x="${r3(mx + nx * fs * 1.1)}" y="${r3(my + ny * fs * 1.1)}" font-size="${r3(fs)}" text-anchor="middle" dominant-baseline="central">${fmtLen(L, 1)}</text>`; });
+  const wall = v === 'top' ? `<rect class="cs-wall" x="${r3(-pad * 0.8)}" y="${r3(-pad * 0.75)}" width="${r3(W + pad * 1.6)}" height="${r3(pad * 0.75)}"/><text class="cs-wlbl" x="${r3(W / 2)}" y="${r3(-pad * 0.37)}" font-size="${r3(fs * 0.9)}" text-anchor="middle" dominant-baseline="central">Wall</text>`
+    : v === 'side' ? `<rect class="cs-wall" x="${r3(-pad * 0.75)}" y="${r3(-pad * 0.4)}" width="${r3(pad * 0.75)}" height="${r3(H + pad * 0.8)}"/>` : '';
+  const floor = v !== 'top' ? `<line class="cs-floor" x1="${r3(-pad)}" x2="${r3(W + pad)}" y1="${r3(H)}" y2="${r3(H)}"/>` : '';
+  return `<svg class="cs-big" viewBox="${r3(-pad)} ${r3(-pad)} ${r3(W + 2 * pad)} ${r3(H + 2 * pad)}" preserveAspectRatio="xMidYMid meet" aria-label="${v} shape">${wall}${floor}<rect class="cs-box nss" x="0" y="0" width="${W}" height="${H}"/><polygon class="cs-shape big nss" points="${P.map(p => `${r3(p.x)},${r3(p.y)}`).join(' ')}"/>${dims}</svg>`;
+}
+// A preset as a small picture button.
+function cabPresetPic(c, v, pr) {
+  const [W, H] = cabShapeDims(c, v), pts = pr[2](W, H), k = Math.max(W, H), flip = v !== 'top';
+  return `<svg viewBox="${-k * 0.05} ${-k * 0.05} ${W + k * 0.1} ${H + k * 0.1}" aria-hidden="true"><polygon points="${pts.map(p => `${r3(p.x)},${r3(flip ? H - p.y : p.y)}`).join(' ')}"/></svg>`;
+}
 function cabShapeTab(c) {
-  const sh = c.shape || {};
-  return `<div class="note">Change the cabinet's outline from the front, the side or the top. The sides, bottom, top, stretchers and back are cut to it in the cut list, the CNC file and 3D, like a U in the front for a farm sink.</div>
-  <div class="cs-grid">${CAB_VIEWS.map(([v, l, hint]) => {
-    const on = !!(sh[v] && (sh[v].pts || []).length);
-    return `<div class="psec box cs-card">${secHead(v === 'top' ? 'plan' : v === 'side' ? 'ends' : 'face', `${l} shape`, on ? 'violet' : 'slate')}
-      <div class="cs-prev">${cabShapeSVG(c, v)}</div><div class="note">${hint}</div>
-      <label class="f wide"><span>Start from</span><select class="cs-preset" data-id="${c.id}:${v}" aria-label="${l} shape preset"><option value="">${on ? 'Custom' : 'Standard box'}</option>${CAB_SHAPE_PRESETS[v].map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('')}</select></label>
-      <div class="row-actions"><button class="btn sm primary" data-act="cab-shape-edit" data-id="${c.id}:${v}">${icon('ruler')}Edit in the shape editor</button>${v === 'top' ? `<button class="btn sm" data-act="te-start" data-id="${c.id}">Edit on the floor plan</button>` : ''}${on ? `<button class="btn sm" data-act="cab-shape-clear" data-id="${c.id}:${v}">Back to a plain box</button>` : ''}</div>
-      ${v === 'top' && on ? cabEdgeTypes(c) : ''}</div>`;
-  }).join('')}</div>`;
+  const sh = c.shape || {}, v = CAB_VIEWS.some(([k]) => k === ui.csView) ? ui.csView : 'top', [, l, hint] = CAB_VIEWS.find(([k]) => k === v), on = !!(sh[v] && (sh[v].pts || []).length);
+  return `<div class="cs-wrap"><div class="cs-tabs" role="tablist">${[['top', 'Top'], ['front', 'Front'], ['side', 'Side']].map(([k, n]) => `<button role="tab" data-act="cs-view" data-id="${k}" aria-selected="${v === k}">${n}${(sh[k] && (sh[k].pts || []).length) ? ' •' : ''}</button>`).join('')}</div>
+    <div class="cs-main"><div class="cs-draw"><div class="cs-cap">${l} shape <span class="muted">${esc(hint)}</span></div>${cabShapeBig(c, v)}</div>
+    <div class="cs-side"><div class="row-actions"><button class="btn primary" data-act="cab-shape-edit" data-id="${c.id}:${v}">${icon('ruler')}Edit ${l.toLowerCase()} shape</button>${v === 'top' ? `<button class="btn" data-act="te-start" data-id="${c.id}">Edit on the floor plan</button>` : ''}</div>
+      <div class="eyebrow">Start from</div><div class="cs-presets"><button class="cs-pre${on ? '' : ' on'}" data-act="cab-shape-clear" data-id="${c.id}:${v}" title="Plain box"><svg viewBox="-1 -1 12 9" aria-hidden="true"><polygon points="0,0 10,0 10,7 0,7"/></svg><span>Plain box</span></button>${CAB_SHAPE_PRESETS[v].map(pr => `<button class="cs-pre${on && sh[v].preset === pr[0] ? ' on' : ''}" data-act="cs-preset" data-id="${c.id}:${v}:${pr[0]}" title="${esc(pr[1])}">${cabPresetPic(c, v, pr)}<span>${esc(pr[1])}</span></button>`).join('')}</div>
+      ${v === 'top' && on ? cabEdgeTypes(c) : ''}
+      <div class="note">The sides, bottom, top, stretchers and back are cut to the shape in the cut list, the CNC file and 3D.</div></div></div></div>`;
+}
+function cabPresetApply(id) {
+  const [cid, v, k] = id.split(':'), c = cab(cid), pr = c && (CAB_SHAPE_PRESETS[v] || []).find(x => x[0] === k); if (!pr) return;
+  const [W, H] = cabShapeDims(c, v);
+  mutate(() => { c.shape = c.shape || {}; c.shape[v] = { pts: pr[2](W, H).map(p => ({ ...p, x: r3(p.x), y: r3(p.y) })), w: W, h: H, preset: pr[0] }; });
+  if (ui.quick) renderQuick();
 }
 
 document.addEventListener('change', e => {

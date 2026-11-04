@@ -9,7 +9,7 @@ const SIZE_F = { w: 'Width', h: 'Height', d: 'Depth' };
 /* ----- Q4: size limits. A locked size can't change; min and max clamp it. ----- */
 function qSizeRule(c, f, v) {
   const F = f.toUpperCase(), name = SIZE_F[f];
-  if (c['no' + F] && Math.abs(v - c[f]) > 1e-6) return { refuse: true, note: `${name} is locked on ${LBL[c.id] || c.name}. Untick "${name} locked" under Size limits in its Size tab.` };
+  if (c['no' + F] && Math.abs(v - c[f]) > 1e-6) return { refuse: true, note: `${name} is locked on ${LBL[c.id] || c.name}. Untick ${name} Locked under Stretching in its Size tab.` };
   const mn = +c['min' + F], mx = +c['max' + F];
   if (mn > 0 && v < mn - 1e-6) return { v: mn, note: `${name} can't go under ${fmtLen(mn, 1)} on this cabinet, so it was set to that.` };
   if (mx > 0 && v > mx + 1e-6) return { v: mx, note: `${name} can't go over ${fmtLen(mx, 1)} on this cabinet, so it was set to that.` };
@@ -120,7 +120,10 @@ function qPasteSettings() {
 function qSizeExtras(c) {
   const R = 'cab:' + c.id, lim = f => `<div class="q-lim"><label class="checkrow">${ctl(R, 'no' + f.toUpperCase(), !!c['no' + f.toUpperCase()], 'bool', { label: `${SIZE_F[f]} locked` })} <span>${SIZE_F[f]} locked</span></label>${fld('Smallest', R, 'min' + f.toUpperCase(), c['min' + f.toUpperCase()] || '', 'len', { blank: true, ph: 'none' })}${fld('Largest', R, 'max' + f.toUpperCase(), c['max' + f.toUpperCase()] || '', 'len', { blank: true, ph: 'none' })}</div>`;
   return `<div class="psec box">${secHead('magnet', 'Height on the wall', 'blue')}<div class="grid2"><label class="f"><span>Snap to</span><select class="q-snap-one" data-id="${c.id}" aria-label="Snap to a height"><option value="">Pick a height…</option>${qSnapSpots(c).map(s => `<option value="${s.k}">${s.l} · ${fmtLen(s.z, 1)}</option>`).join('')}</select></label>${growSeg()}</div></div>
-    <details class="psec box q-limits"${['W', 'H', 'D'].some(F => c['no' + F] || c['min' + F] || c['max' + F]) ? ' open' : ''}><summary>${icon('ruler')}<b>Size limits</b> <span class="muted">stop a size being changed, or keep it in a range</span></summary>${['w', 'h', 'd'].map(lim).join('')}</details>`;
+    <div class="psec box q-limits">${secHead('ruler', 'Stretching', 'teal')}<table class="t q-limt"><thead><tr><th></th>${['w', 'h', 'd'].map(f => `<th>${SIZE_F[f]}</th>`).join('')}</tr></thead><tbody>
+      <tr><td>Locked</td>${['w', 'h', 'd'].map(f => `<td><label class="checkrow">${ctl(R, 'no' + f.toUpperCase(), !!c['no' + f.toUpperCase()], 'bool', { label: `${SIZE_F[f]} locked` })}</label></td>`).join('')}</tr>
+      <tr><td>Largest</td>${['w', 'h', 'd'].map(f => `<td>${ctl(R, 'max' + f.toUpperCase(), c['max' + f.toUpperCase()] || '', 'len', { blank: true, ph: 'none', label: `Largest ${SIZE_F[f].toLowerCase()}` })}</td>`).join('')}</tr>
+      <tr><td>Smallest</td>${['w', 'h', 'd'].map(f => `<td>${ctl(R, 'min' + f.toUpperCase(), c['min' + f.toUpperCase()] || '', 'len', { blank: true, ph: 'none', label: `Smallest ${SIZE_F[f].toLowerCase()}` })}</td>`).join('')}</tr></tbody></table></div>`;
 }
 
 /* ----- Face and Interior extras: lock a section (Q8), fixed shelf on a split (Q9), Clear and Reset (Q10) ----- */

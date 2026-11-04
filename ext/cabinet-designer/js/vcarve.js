@@ -319,9 +319,11 @@ function vcSize(b) {
   if (b.part) { const p = vcRoomParts().find(x => x.v === b.part); if (p) return { L: p.p.L, W: p.p.W, T: p.p.T, outline: p.p.outline || null, name: p.l }; }
   return { L: +b.L || 24, W: +b.W || 12, T: +b.T || 0.75, outline: null };
 }
+// The bit that clears wide floors on a new sign: the smallest straight bit of 1/8" or more.
+const vcDefClear = () => (vcStraights().find(t => t.dia >= 3) || vcStraights()[0] || {}).id || '';
 function vcNewBoard() {
   const n = vcBoards().length + 1, vb = vcVbits()[0];
-  return { id: uid('vc'), name: 'Sign ' + n, L: 24, W: 12, T: 0.75, part: '', vbit: vb ? vb.id : '', depth: 0, clear: '', cutout: false, cutTool: vcCutTool(),
+  return { id: uid('vc'), name: 'Sign ' + n, L: 24, W: 12, T: 0.75, part: '', vbit: vb ? vb.id : '', depth: 0, clear: vcDefClear(), cutout: false, cutTool: vcCutTool(),
     items: [{ id: uid('vi'), kind: 'text', text: 'YOUR TEXT', font: 'Georgia', bold: true, italic: false, h: 2, x: 12, y: 6, angle: 0 }] };
 }
 function vcBoardPlan(b) {
@@ -475,8 +477,8 @@ function renderCarve() {
   if (b && ui.vcBoard !== b.id) ui.vcBoard = b.id;
   const head = `<div class="pagehead"><div><h2>Carve</h2><p class="note">V-carve signs, logos, text and shapes, then save G-code for the router. Carve a part from this room the same way, like a door.</p></div>
     <div class="row-actions">${B.length ? `<select class="vc-pick" aria-label="Board">${B.map(x => `<option value="${x.id}"${x.id === (b && b.id) ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : ''}
-    <button class="btn" data-act="vc-new">${icon('plus')}New sign</button>${b ? `<button class="btn" data-act="vc-del" title="Delete this sign">${icon('trash')}</button><button class="btn primary" data-act="vc-gcode">${icon('download')}Save G-code</button>` : ''}</div></div>`;
-  if (!b) { el.innerHTML = `${head}<div class="card cardbody vc-empty"><h3>Nothing to carve yet</h3><p>Start a sign, then add text in any font on this computer, a picture or logo, a DXF drawing or a shape.</p><button class="btn primary" data-act="vc-new">${icon('plus')}New sign</button></div>`; return; }
+    <button class="btn" data-act="vc-new">${icon('plus')}New sign</button><button class="btn" data-act="vc-import" title="A picture or logo (PNG, JPG, SVG) or a DXF. You can also drop a file on the board.">${icon('upload')}Import picture, logo or DXF</button>${b ? `<button class="btn" data-act="vc-del" title="Delete this sign">${icon('trash')}</button><button class="btn primary" data-act="vc-gcode">${icon('download')}Save G-code</button>` : ''}</div></div>`;
+  if (!b) { el.innerHTML = `${head}<div class="card cardbody vc-empty"><h3>Nothing to carve yet</h3><p>Start a sign, then add text in any font on this computer, a picture or logo, a DXF drawing or a shape.</p><div class="row-actions"><button class="btn primary" data-act="vc-new">${icon('plus')}New sign</button><button class="btn" data-act="vc-import">${icon('upload')}Import picture, logo or DXF</button></div></div>`; return; }
   const sel = (b.items || []).find(i => i.id === ui.vcSel), sz = vcSize(b), vb = vcVbits(), st = vcStraights();
   if (!vb.length) b.vbit = '';
   const vbOpts = vb.length ? vb.map(t => ({ v: t.id, l: `${t.id} (${vcAngle(t)}°, ${fmtLen(t.dia / 25.4, 1)})` })) : [{ v: '', l: 'Add a V-bit in Libraries › CNC tools' }];
@@ -507,8 +509,6 @@ function renderCarve() {
       <div class="card vc-side">
         <div class="vc-add"><span class="eyebrow">Add</span><div class="row-actions">
           <button class="btn sm" data-act="vc-add" data-id="text">Text</button>
-          <button class="btn sm" data-act="vc-add" data-id="art">Picture or logo</button>
-          <button class="btn sm" data-act="vc-add" data-id="dxf">DXF</button>
           <select class="vc-addshape" aria-label="Add a shape"><option value="">Shape…</option>${VC_SHAPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}${(S.shapeLib || []).length ? `<optgroup label="Shape library">${S.shapeLib.map(l => `<option value="lib:${esc(l.id)}">${esc(l.name)}</option>`).join('')}</optgroup>` : ''}</select></div>
           <div class="note">Put a shape around text to carve the background and leave the letters raised.</div></div>
         ${list}
@@ -540,7 +540,7 @@ function vcItemForm(it) {
     <div class="vc-grid">${f}
       ${vcIn(it.kind === 'text' ? 'Letter height' : 'Height', k + 'h', +it.h || '')}${vcIn('Width', k + 'w', it.kind === 'shape' ? +it.w || '' : r3(sz.w))}
       ${vcIn('Across (middle)', k + 'x', +it.x || 0)}${vcIn('Up (middle)', k + 'y', +it.y || 0)}
-      ${vcNum('Angle°', k + 'angle', +it.angle || 0)}${vcChk('Mirror', k + 'flip', it.flip)}</div>
+      ${vcNum('Angle°', k + 'angle', +it.angle || 0)}${vcChk('Mirror', k + 'flip', it.flip)}${vcChk('Keep proportions', k + 'keep', it.keep !== false)}</div>
     <div class="row-actions"><button class="btn sm" data-act="vc-center" data-id="x">Center across</button><button class="btn sm" data-act="vc-center" data-id="y">Center up</button>${it.kind !== 'shape' ? '<button class="btn sm" data-act="vc-fit">Fit the board</button>' : ''}<button class="btn sm" data-act="vc-dup">Duplicate</button><span class="grow"></span><button class="btn sm danger" data-act="vc-rm">Delete</button></div>`;
 }
 // Works out the carving and draws it. Big designs take a moment, so it runs after the page is drawn.
@@ -561,11 +561,11 @@ function vcPaint() {
     $('#vc-stats').textContent = r.ops.length ? `${fmtLen(r.plan.deep, 1)} deep · ${tl.join(', ')} · about ${T < 1 ? '1' : Math.round(T)} min` : 'Nothing to carve';
     const warn = [];
     if (!vcVbits().length) warn.push('There is no V-bit in Libraries › CNC tools. Add one with its angle.');
-    if (r.plan.huge) warn.push('Some areas are very wide for the V-bit alone: it clears only near the edges. Pick a bit to clear wide areas.');
+    if (r.plan.flat && !b.clear && vcDefClear()) warn.push(`Wide areas are cleared by the V-bit alone, which is slow and leaves fine ridges${r.plan.huge ? ' (the widest middles are left standing)' : ''}. <button class="btn sm" data-act="vc-useclear">Clear them with ${esc(vcDefClear())}</button>`);
     const off = (b.items || []).some(it => { if (it.off) return false; const L = vcItemLoops(it), bx = vcBox(L); return L.length && (bx.x0 < -1e-3 || bx.y0 < -1e-3 || bx.x1 > sz.L + 1e-3 || bx.y1 > sz.W + 1e-3); });
     if (off) warn.push('A design runs off the board.');
     if (r.plan.deep > sz.T * 0.8) warn.push(`The carving goes ${fmtLen(r.plan.deep, 1)} deep, close to the board's ${fmtLen(sz.T, 1)} thickness. Set a max depth.`);
-    $('#vc-warn').innerHTML = warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('');
+    $('#vc-warn').innerHTML = warn.map(w => `<div class="warnbox">${/^<|<button/.test(w) ? w : esc(w)}</div>`).join('');
   }, 0);
 }
 
@@ -585,8 +585,16 @@ function vcSetVal(k, raw, t) {
     }
     else {
       const it = (b.items || []).find(i => i.id === ui.vcSel); if (!it) return;
-      if (f === 'w' && it.kind !== 'shape') { it.w = val === '' ? '' : r3(val); if (val !== '' && !(+it.h > 0)) it.h = 1; }
-      else if (f === 'h' && it.kind !== 'shape' && val !== '' && +it.w > 0) { const k2 = val / (+it.h || 1); it.w = r3(it.w * k2); it.h = r3(val); }
+      // Keep proportions (on unless unticked): a new width or height scales the other side the same amount.
+      const keep = it.keep !== false, cur = vcItemSize(it);
+      if ((f === 'w' || f === 'h') && val !== '' && val > 0) {
+        const k2 = f === 'w' ? val / (cur.w || 1) : val / (cur.h || 1);
+        if (it.kind === 'shape') { if (keep) { it.w = r3((+it.w || cur.w) * k2); it.h = r3((+it.h || cur.h) * k2); } else it[f] = r3(val); }
+        else if (keep) { it.h = r3((+it.h || 1) * k2); if (+it.w > 0) it.w = r3(it.w * k2); }
+        else if (f === 'w') it.w = r3(val);
+        else { if (!(+it.w > 0)) it.w = r3(cur.w); it.h = r3(val); }
+      }
+      else if (f === 'w' || f === 'h') { if (f === 'w' && it.kind !== 'shape') it.w = ''; }
       else it[f] = typeof val === 'number' ? r3(val) : val;
       if (it.kind === 'art' && (f === 'th' || f === 'invert') && vcLastImg && vcLastImg.id === it.id) { const tr = vcTraceImage(vcLastImg.im, it.th, it.invert); it.loops = vcRound4(tr.loops); it.bw = r3(tr.bw); it.bh = 1; }
     }
@@ -623,23 +631,11 @@ function vcAct(a, id) {
     case 'vc-dup': if (it) { const c = clone(it); c.id = uid('vi'); c.x = r3((+c.x || 0) + 0.5); c.y = r3((+c.y || 0) - 0.5); if (vcLastImg && vcLastImg.id === it.id) vcLastImg = null; mutate(() => { b.items.push(c); ui.vcSel = c.id; }); } return true;
     case 'vc-center': if (it) { const sz = vcSize(b); mutate(() => { it[id] = r3((id === 'x' ? sz.L : sz.W) / 2); }); } return true;
     case 'vc-fit': if (it) { const sz = vcSize(b), s = vcItemSize(it), m = Math.min(sz.L, sz.W) * 0.08, k = Math.min((sz.L - 2 * m) / (s.w || 1), (sz.W - 2 * m) / (s.h || 1)); mutate(() => { it.h = r3((+it.h || 1) * k); if (+it.w > 0) it.w = r3(it.w * k); it.x = r3(sz.L / 2); it.y = r3(sz.W / 2); it.angle = 0; }); } return true;
+    case 'vc-useclear': if (b) mutate(() => { b.clear = vcDefClear(); }); return true;
+    case 'vc-import': vcPickFile('image/*,.svg,.dxf', vcImportFile); return true;
     case 'vc-add': {
       if (!b) return true; const sz = vcSize(b);
       if (id === 'text') vcAddItem({ id: uid('vi'), kind: 'text', text: 'TEXT', font: 'Georgia', bold: true, h: r3(Math.max(0.25, Math.min(sz.W / 4, 3))), angle: 0 });
-      else if (id === 'art') vcPickFile('image/*,.svg', async f => {
-        try { const { im, url } = await vcLoadImage(f), tr = vcTraceImage(im, '', false), nid = uid('vi'); URL.revokeObjectURL(url);
-          if (!tr.loops.length) { flash('Nothing dark enough to carve in that picture.'); return; }
-          vcLastImg = { id: nid, im }; const h = r3(Math.min(sz.W * 0.6, (sz.L * 0.6) / (tr.bw || 1)));
-          vcAddItem({ id: nid, kind: 'art', src: 'img', name: f.name, loops: vcRound4(tr.loops), bw: r3(tr.bw), bh: 1, th: r3(tr.th), h, angle: 0 });
-          flash(`Traced ${tr.loops.length} outline${tr.loops.length === 1 ? '' : 's'} from ${f.name}`);
-        } catch (e) { flash('Could not open that picture: ' + e.message); }
-      });
-      else if (id === 'dxf') vcPickFile('.dxf', f => f.text().then(t => {
-        let d; try { d = vcDxfShape(t); } catch (e) { flash('This DXF could not be read: ' + e.message); return; }
-        if (!d.loops.length) { flash('No closed shapes in this DXF. Carving needs closed outlines.'); return; }
-        vcAddItem({ id: uid('vi'), kind: 'art', src: 'dxf', name: f.name, loops: vcRound4(d.loops), bw: r3(d.bw), bh: 1, h: r3(d.h > 0 ? d.h : 2), angle: 0 });
-        if (d.open) flash(`${d.open} open line${d.open === 1 ? '' : 's'} left out; only closed shapes carve.`);
-      }));
       else if (String(id).startsWith('lib:')) { const l = (S.shapeLib || []).find(x => x.id === id.slice(4)); if (l) { const n = vcNorm([shapeOutline(l.pts)]), bx = shapeBox(l.pts); vcAddItem({ id: uid('vi'), kind: 'art', src: 'shape', name: l.name, loops: vcRound4(n.loops), bw: r3(n.bw), bh: 1, h: r3(Math.min(bx.h, sz.W * 0.8)), angle: 0 }); } }
       else { const w = r3(sz.L * 0.5), h = r3(sz.W * 0.5); vcAddItem({ id: uid('vi'), kind: 'shape', shape: id, w: id === 'border' ? r3(sz.L - 1) : id === 'oval' || id === 'star' || id === 'heart' ? Math.min(w, h) : w, h: id === 'border' ? r3(sz.W - 1) : h, angle: 0, ...(id === 'border' ? { band: 0.5 } : {}) }); }
       return true;
@@ -647,6 +643,28 @@ function vcAct(a, id) {
   }
   return false;
 }
+// Import: a picture or logo (PNG, JPG, SVG…) is traced into outlines; a DXF brings its closed shapes. Makes a sign first if there is none.
+async function vcImportFile(f) {
+  if (!vcBoard()) { const nb = vcNewBoard(); nb.items = []; mutate(() => { (S.job.carves = S.job.carves || []).push(nb); ui.vcBoard = nb.id; }); }
+  const sz = vcSize(vcBoard());
+  if (/\.dxf$/i.test(f.name)) {
+    let d; try { d = vcDxfShape(await f.text()); } catch (e) { flash('This DXF could not be read: ' + e.message); return; }
+    if (!d.loops.length) { flash('No closed shapes in this DXF. Carving needs closed outlines.'); return; }
+    vcAddItem({ id: uid('vi'), kind: 'art', src: 'dxf', name: f.name, loops: vcRound4(d.loops), bw: r3(d.bw), bh: 1, h: r3(d.h > 0 ? d.h : 2), angle: 0 });
+    if (d.open) flash(`${d.open} open line${d.open === 1 ? '' : 's'} left out; only closed shapes carve.`);
+    return;
+  }
+  try {
+    const { im, url } = await vcLoadImage(f), tr = vcTraceImage(im, '', false), nid = uid('vi'); URL.revokeObjectURL(url);
+    if (!tr.loops.length) { flash('Nothing dark enough to carve in that picture.'); return; }
+    vcLastImg = { id: nid, im }; const h = r3(Math.min(sz.W * 0.6, (sz.L * 0.6) / (tr.bw || 1)));
+    vcAddItem({ id: nid, kind: 'art', src: 'img', name: f.name, loops: vcRound4(tr.loops), bw: r3(tr.bw), bh: 1, th: r3(tr.th), h, angle: 0 });
+    flash(`Traced ${tr.loops.length} outline${tr.loops.length === 1 ? '' : 's'} from ${f.name}`);
+  } catch (e) { flash('Could not open that file: ' + e.message + '. Use a PNG, JPG, SVG or DXF.'); }
+}
+// Drop a file on the board to import it.
+document.addEventListener('dragover', ev => { if (ev.target.closest && ev.target.closest('#tab-carve') && ev.dataTransfer && [...ev.dataTransfer.types].includes('Files')) ev.preventDefault(); });
+document.addEventListener('drop', ev => { if (!(ev.target.closest && ev.target.closest('#tab-carve'))) return; const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) { ev.preventDefault(); vcImportFile(f); } });
 const confirmDel = name => window.confirm(`Delete ${name}?`);
 // Click a design to pick it; drag it to move it (snaps to 1/16").
 let vcDrag = null;

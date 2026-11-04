@@ -29,6 +29,34 @@ function paintCab(c, ps, b, fr) {
 const CAT_FT = [['Base', 'Base cabinets'], ['Wall', 'Wall cabinets'], ['Tall', 'Tall and pantry']];
 const ftLen = v => (Math.round(v * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const addSq = list => PAINT_PARTS.concat([['total']]).reduce((o, [k]) => (o[k] = list.reduce((a, x) => a + x[k], 0), o), {});
+// Set values copied from Ayden's Mozaik pricing sheet (Detailed Pricing.mzkprice), turned from metric to feet:
+// finishing $53.82/sq m = $5/sq ft, install $131.23/m = $40/ft (base, wall) and $328.08/m = $100/ft (tall).
+const MZK = {
+  groupMarkup: { doors: 15, materials: 10, hardware: 0 },
+  install: { Base: 40, Wall: 40, Tall: 100 },
+  paintRate: 5,
+  extras: [{ name: 'Fuel and delivery', amount: 1.5, per: 'pct' }, { name: 'Marketing', amount: 0.5, per: 'pct' }, { name: 'Designer commission', amount: 1, per: 'pct' }],
+  payments: [{ name: 'Due at design confirmation', pct: 60 }, { name: 'Due at delivery', pct: 30 }, { name: 'Due at job completion', pct: 10 }],
+};
+const GROUP_MARKUPS = [['doors', 'Doors and fronts'], ['materials', 'Materials'], ['hardware', 'Hardware']];
+// Sheets made before the Mozaik values get the ones they are missing, once. Prices already set are kept.
+function ensureMzk(ps) {
+  if (ps.mzk) return false;
+  if (!ps.groupMarkup) ps.groupMarkup = { ...MZK.groupMarkup };
+  if (!ps.install) ps.install = { ...MZK.install };
+  if (!ps.payments) ps.payments = MZK.payments.map(x => ({ ...x }));
+  const po = paintOf(ps); if (!+po.rate) po.rate = MZK.paintRate;
+  // Install is now by the foot and delivery is a percent, so an empty "Delivery and install" charge goes.
+  ps.extras = (ps.extras || []).filter(x => !(x.name === 'Delivery and install' && !+x.amount));
+  MZK.extras.forEach(x => { if (!ps.extras.some(y => String(y.name).toLowerCase() === x.name.toLowerCase())) ps.extras.push({ ...x }); });
+  ps.mzk = 1; return true;
+}
+// Dollars of edge banding on one part: each banded edge's length at its roll's price per foot.
+function bandCost(pt) {
+  return EDGE_KEYS.reduce((a, k) => { const b = pt.band && pt.band[k] && edgeband(pt.band[k]); if (!b) return a;
+    const per = (+(b.rollCost ?? EB_ROLL.cost) || 0) / (+(b.rollFt ?? EB_ROLL.ft) || 1); return a + (k[0] === 'L' ? pt.L : pt.W) / 12 * per; }, 0);
+}
+const gMark = (ps, g) => 1 + (+((ps.groupMarkup || {})[g]) || 0) / 100;
 // A starting sheet: rough shop numbers to edit, with doors, hardware and materials priced from this job's libraries.
 function defaultPriceSheet(name = 'Standard pricing') {
   // Hardware with its own price (Ayden's Mozaik prices) starts there; the rest get rough shop numbers.
@@ -41,7 +69,9 @@ function defaultPriceSheet(name = 'Standard pricing') {
   const hardware = {};
   if (S) allCabs().forEach(c => inRoomOf(c, () => Object.keys(buildParts(c).bom).forEach(k => { if (!(k in hardware)) hardware[k] = hwPrice(k); })));
   return {
-    id: uid('ps'), name, markup: 0, tax: 0,
+    id: uid('ps'), name, markup: 0, tax: 0, mzk: 1,
+    // Set values from Ayden's Mozaik "Detailed Pricing" sheet.
+    groupMarkup: { ...MZK.groupMarkup }, install: { ...MZK.install }, payments: MZK.payments.map(x => ({ ...x })),
     cab: { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } },
     products: {},
     adders: { perDrawer: 35, perShelf: 12, perFiller: 25 },
@@ -50,8 +80,8 @@ function defaultPriceSheet(name = 'Standard pricing') {
     materials: { on: false, waste: 15 },
     hardware: { on: true, items: hardware },
     tops: Object.fromEntries((S ? S.countertops : []).map(t => [t.id, 55])), molds: Object.fromEntries((S ? S.moldings : []).map(m => [m.id, 9])),
-    extras: [{ name: 'Delivery and install', amount: 0, per: 'job' }],
-    paint: { rate: 0, bothSides: true, fronts: true, panels: true, fillers: true, toe: true, interior: true },
+    extras: MZK.extras.map(x => ({ ...x })),
+    paint: { rate: MZK.paintRate, bothSides: true, fronts: true, panels: true, fillers: true, toe: true, interior: true },
   };
 }
 const priceSheet = () => PRICES.find(p => p.id === S.job.priceSheet) || PRICES[0];
@@ -60,6 +90,7 @@ async function loadPrices() {
   if (PRICES.value) PRICES = PRICES.value;
   if (!Array.isArray(PRICES)) PRICES = [];
   if (!PRICES.length) { PRICES.push(defaultPriceSheet()); savePrices(); }
+  else if (PRICES.map(ensureMzk).some(Boolean)) savePrices();
 }
 let priceTimer = null;
 function savePrices() {
@@ -82,21 +113,25 @@ function priceCab(c, ps) {
     const { ds } = frontStyle(c, f);
     doors += priceFront(ds, (f.x1 - f.x0) * (f.z1 - f.z0) / 144, ps).total;
   });
+  doors *= gMark(ps, 'doors');
   const ad = ps.adders, ins = c.inserts || [], p = effParams(c);
   const nDr = fr.filter(f => f.type === 'drawer').length;
   // Each insert has its own price in the insert library (a lazy susan is not a tray divider).
   const extras = nDr * (+ad.perDrawer || 0) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied');
-  const ends = panelParts.reduce((a, pt) => a + pt.qty * ((ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps).total : 0) + panelAdd(ps, c.cat)), 0) + fillersOf(c).length * (+ad.perFiller || 0);
+  const ends = panelParts.reduce((a, pt) => a + pt.qty * ((ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps).total * gMark(ps, 'doors') : 0) + panelAdd(ps, c.cat)), 0) + fillersOf(c).length * (+ad.perFiller || 0);
   let hardware = 0;
   if (ps.hardware.on) Object.entries(b.bom).forEach(([k, q]) => { hardware += q * (+ps.hardware.items[k] || 0); });
+  hardware *= gMark(ps, 'hardware');
   let materials = 0;
   if (ps.materials.on) b.parts.forEach(pt => {
     // Door parts are paid for by the door's own material cost.
     const m = mat(pt.mat); if (!m || (ps.doors.on && (FRONT_KINDS.includes(pt.kind) || pt.kind === 'applied'))) return;
-    materials += pt.L * pt.W * pt.qty * matSqIn(m, ps);
+    // Edge banding, priced by the roll in Libraries › Edgebanding, rides with the materials.
+    materials += pt.L * pt.W * pt.qty * matSqIn(m, ps) + bandCost(pt) * pt.qty;
   });
+  materials *= gMark(ps, 'materials');
   const sq = paintCab(c, ps, b, fr), paint = sq.total * (+paintOf(ps).rate || 0);
   // Per-cabinet extras from its Price tab: price per foot and per square foot of face, then an upcharge on the lot.
   const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = box + doors + extras + ends + hardware + materials + paint + custom, upcharge = base * (+c.pxUp || 0) / 100;
@@ -184,15 +219,23 @@ function priceJob(ps) {
     const molds = moldingRuns().map(m => ({ name: `Molding, ${wallName(wall(m.wall))} (${m.m.name})`, amount: m.len / 12 * (+ps.molds[m.m.id] || 0) }));
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));
-    const lines = [...tops, ...molds, ...priceShapes(ps), ...xs];
+    // Installation by the foot of each type, like Mozaik's per-length install rows.
+    const inst = CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((ps.install || {})[cat]) || 0;
+      return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r } : null; }).filter(Boolean);
+    const lines = [...tops, ...molds, ...priceShapes(ps), ...inst, ...xs];
     return { r, cabs, lines, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
   }));
   const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 }));
-  const sub = rooms.reduce((a, r) => a + r.total, 0) + jobLines.reduce((a, k) => a + k.amount, 0);
+  // Percent charges (fuel and delivery, commission) are taken on everything above them, before markup and tax.
+  const base = rooms.reduce((a, r) => a + r.total, 0) + jobLines.reduce((a, k) => a + k.amount, 0);
+  const pct = ps.extras.filter(x => x.per === 'pct' && +x.amount).map(x => ({ name: `${x.name} ${+x.amount}%`, amount: base * +x.amount / 100 }));
+  jobLines.push(...pct);
+  const sub = base + pct.reduce((a, k) => a + k.amount, 0);
   const markup = sub * (+ps.markup || 0) / 100, tax = (sub + markup) * (+ps.tax || 0) / 100;
   // Linear feet and cabinet total by type, for a price per foot. Cabinets only: tops, molding and charges are left out.
   const perFt = CAT_FT.map(([cat, name]) => { const ks = rooms.flatMap(R => R.cabs).filter(k => k.c.cat === cat && !k.c.noCount), ft = ks.reduce((a, k) => a + k.c.w, 0) / 12, total = ks.reduce((a, k) => a + k.total, 0); return { cat, name, n: ks.length, ft, total, rate: ft ? total / ft : 0 }; });
-  return { rooms, jobLines, sub, markup, tax, total: sub + markup + tax, sq: addSq(rooms.map(R => R.sq)), perFt };
+  const total = sub + markup + tax, payments = (ps.payments || []).filter(x => +x.pct).map(x => ({ name: x.name, pct: +x.pct, amount: total * x.pct / 100 }));
+  return { rooms, jobLines, sub, markup, tax, total, payments, sq: addSq(rooms.map(R => R.sq)), perFt };
 }
 function quoteCSV(ps) {
   const q = priceJob(ps), rows = [['Room', 'Cabinet', 'Name', 'Size', 'Cabinet', 'Doors and fronts', 'Drawers, shelves, inserts', 'Panels and fillers', 'Hardware', 'Materials', 'Paint', 'Paint sq ft', 'Total']], m = v => (Math.round(v * 100) / 100).toFixed(2);
@@ -206,6 +249,7 @@ function quoteCSV(ps) {
   if (q.markup) end(`Markup ${ps.markup}%`, m(q.markup));
   if (q.tax) end(`Tax ${ps.tax}%`, m(q.tax));
   end('Total', m(q.total));
+  q.payments.forEach(x => end(`${x.name} (${x.pct}%)`, m(x.amount)));
   q.perFt.filter(t => t.n).forEach(t => rows.push(['', '', `${t.name}: ${ftLen(t.ft)} ft, ${m(t.rate)} per ft`, '', '', '', '', '', '', '', '', '', m(t.total)]));
   return rows.map(r => r.map(csvq).join(',')).join('\n');
 }
@@ -236,14 +280,15 @@ function priceQuote(ps) {
     <div class="qtile grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${q.rooms.reduce((a, R) => a + R.cabs.length, 0)} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>
     ${q.perFt.map(t => `<div class="qtile cat-${t.cat}"><span>${t.name}</span><b>${t.n ? money(t.rate) + '<em>/ft</em>' : '–'}</b><small>${t.n ? `${ftLen(t.ft)} ft · ${money(t.total)}` : 'None in this job'}</small></div>`).join('')}
     </div>
-    <div class="row-actions quotebar"><button class="btn primary" data-act="quote-print">${icon('print')}Print or save quote</button><button class="btn" data-act="quote-copy">${icon('copy')}Copy quote CSV</button>${inHub() ? `<button class="btn" data-act="quote-save">${icon('folder')}Save quote CSV to Files</button>` : ''}<span class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding and extra charges are not in it.</span></div>
+    <div class="row-actions quotebar"><button class="btn primary" data-act="quote-print">${icon('print')}Print or save quote</button><button class="btn" data-act="quote-copy">${icon('copy')}Copy quote CSV</button>${inHub() ? `<button class="btn" data-act="quote-save">${icon('folder')}Save quote CSV to Files</button>` : ''}<span class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</span></div>
     ${q.rooms.map(room).join('')}
     ${paintCard(ps, q)}
     <div class="card totals"><table class="t"><tbody>
       ${q.jobLines.map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}
       <tr><td>Subtotal</td><td class="n">${money(q.sub)}</td></tr>
       ${ps.markup ? `<tr><td>Markup ${ps.markup}%</td><td class="n">${money(q.markup)}</td></tr>` : ''}${ps.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="n">${money(q.tax)}</td></tr>` : ''}
-      <tr class="grand"><td>Total for ${esc(S.job.name)}</td><td class="n">${money(q.total)}</td></tr></tbody></table></div>`;
+      <tr class="grand"><td>Total for ${esc(S.job.name)}</td><td class="n">${money(q.total)}</td></tr>
+      ${q.payments.map(x => `<tr class="pay"><td>${esc(x.name)} (${x.pct}%)</td><td class="n">${money(x.amount)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 // Paint total for the job, with switches for which surfaces count.
 function paintCard(ps, q) {
@@ -263,7 +308,9 @@ function priceEditor(ps) {
   const hwNames = [...new Set([...Object.keys(used), ...Object.keys(ps.hardware.items)])].sort();
   return `${jobPriceCard(ps)}<div class="pricegrid">
   <div class="card"><div class="cardhead"><h3>${icon('tag')}Sheet</h3></div><div class="cardbody">
-    ${fld('Name', R, 'name', ps.name, 'text', { wide: true })}${fld('Markup %', R, 'markup', ps.markup, 'num')}${fld('Tax %', R, 'tax', ps.tax, 'num')}</div></div>
+    ${fld('Name', R, 'name', ps.name, 'text', { wide: true })}${fld('Markup %', R, 'markup', ps.markup, 'num')}${fld('Tax %', R, 'tax', ps.tax, 'num')}
+    <div class="note">Markup on top of each group's cost, inside the cabinet prices:</div>${GROUP_MARKUPS.map(([k, l]) => fld(l + ' markup %', P('groupMarkup'), k, (ps.groupMarkup || {})[k] ?? 0, 'num')).join('')}</div></div>
+  <div class="card"><div class="cardhead"><h3>${icon('home')}Installation</h3><span class="note">Per foot of cabinet width</span></div><div class="cardbody">${CAT_FT.map(([k, l]) => fld(l + ' ($/ft)', P('install'), k, (ps.install || {})[k] ?? 0, 'num')).join('')}</div></div>
   <div class="card"><div class="cardhead"><h3>${icon('box')}Cabinets by type</h3><span class="note">Base price plus a price per foot of width</span></div><div class="tscroll"><table class="t"><thead><tr><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${['Base', 'Wall', 'Tall'].map(cat => `<tr><td><span class="catpill cat-${cat}">${cat}</span></td><td style="width:110px">${num(P('cab.' + cat), 'base', ps.cab[cat].base)}</td><td style="width:110px">${num(P('cab.' + cat), 'perFt', ps.cab[cat].perFt)}</td></tr>`).join('')}</tbody></table></div></div>
   <div class="card wide"><div class="cardhead"><h3>${icon('stack')}Products</h3><span class="note">Give any library cabinet its own price. Blank uses its type.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Hide' : `Show all ${S.library.length}`}</button></div>${showProd ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
@@ -276,7 +323,7 @@ function priceEditor(ps) {
     <div class="note">Each door style's price per sq ft and minimum are set in the door designer (Libraries › Doors). Change them for this job only under Library prices on this job.</div></div></div>
   <div class="card"><div class="cardhead"><h3>${icon('palette')}Materials</h3>${toggleBtn('ps-mats', ps.materials.on, ps.materials.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
     <div class="note">Each material's price per sheet is set in Libraries › Materials. Each cabinet pays for the part of a sheet its parts use, plus waste.</div>
-    ${fld('Waste %', P('materials'), 'waste', ps.materials.waste, 'num')}</div></div>
+    ${fld('Waste %', P('materials'), 'waste', ps.materials.waste, 'num')}<div class="note">Edge banding is priced by the roll in Libraries › Edgebanding.</div></div></div>
   <div class="card"><div class="cardhead"><h3>${icon('sliders')}Hardware</h3>${toggleBtn('ps-hw', ps.hardware.on, ps.hardware.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
     <div class="note">Price each, for every hardware line on the cabinets' lists.</div>${hwNames.map(n => fld(esc(n), P('hardware.items'), n, ps.hardware.items[n] ?? 0, 'num')).join('')}</div></div>
   <div class="card"><div class="cardhead"><h3>${icon('palette')}Paint</h3></div><div class="cardbody">
@@ -284,7 +331,9 @@ function priceEditor(ps) {
   <div class="card"><div class="cardhead"><h3>${icon('ruler')}Tops and molding</h3></div><div class="cardbody">
     ${S.countertops.map(t => fld(esc(t.name) + ' ($/sq ft)', P('tops'), t.id, ps.tops[t.id] ?? 0, 'num')).join('')}${S.moldings.map(m => fld(esc(m.name) + ' ($/ft)', P('molds'), m.id, ps.molds[m.id] ?? 0, 'num')).join('')}</div></div>
   <div class="card wide"><div class="cardhead"><h3>${icon('plus')}Extra charges</h3><button class="btn sm" data-act="ps-x-add">${icon('plus')}Add charge</button></div><div class="cardbody">
-    ${ps.extras.map((x, i) => `<div class="xrow">${ctl(P('extras.' + i), 'name', x.name, 'text', { label: 'Charge name' })}${ctl(P('extras.' + i), 'amount', x.amount, 'num', { label: 'Amount' })}${ctl(P('extras.' + i), 'per', x.per, 'select', { label: 'Per', options: [{ v: 'job', l: 'Per job' }, { v: 'room', l: 'Per room' }, { v: 'cabinet', l: 'Per cabinet' }] })}<button class="btn sm danger" data-act="ps-x-del" data-id="${i}" aria-label="Remove charge">${icon('trash')}</button></div>`).join('') || '<div class="note">None</div>'}</div></div>
+    ${ps.extras.map((x, i) => `<div class="xrow">${ctl(P('extras.' + i), 'name', x.name, 'text', { label: 'Charge name' })}${ctl(P('extras.' + i), 'amount', x.amount, 'num', { label: 'Amount' })}${ctl(P('extras.' + i), 'per', x.per, 'select', { label: 'Per', options: [{ v: 'job', l: 'Per job' }, { v: 'room', l: 'Per room' }, { v: 'cabinet', l: 'Per cabinet' }, { v: 'pct', l: '% of the job' }] })}<button class="btn sm danger" data-act="ps-x-del" data-id="${i}" aria-label="Remove charge">${icon('trash')}</button></div>`).join('') || '<div class="note">None</div>'}</div></div>
+  <div class="card wide"><div class="cardhead"><h3>${icon('list')}Payment schedule</h3>${(() => { const t = (ps.payments || []).reduce((a, x) => a + (+x.pct || 0), 0); return `<span class="note"${t !== 100 ? ' style="color:var(--danger,#c62828)"' : ''}>Adds up to ${t}%</span>`; })()}<button class="btn sm" data-act="ps-pay-add">${icon('plus')}Add payment</button></div><div class="cardbody">
+    ${(ps.payments || []).map((x, i) => `<div class="xrow pay">${ctl(P('payments.' + i), 'name', x.name, 'text', { label: 'Payment' })}${ctl(P('payments.' + i), 'pct', x.pct, 'num', { label: 'Percent of total' })}<button class="btn sm danger" data-act="ps-pay-del" data-id="${i}" aria-label="Remove payment">${icon('trash')}</button></div>`).join('') || '<div class="note">None</div>'}</div></div>
   </div>`;
 }
 // What this job uses from the door, insert and material libraries, at the library's price, with a box to change it for this job.
@@ -344,6 +393,8 @@ function priceAction(a, id) {
     case 'pov-clear': mutate(() => { delete S.job.priceOver; }); flash('This job uses the library prices again'); return;
     case 'ps-x-add': ps.extras.push({ name: 'New charge', amount: 0, per: 'job' }); break;
     case 'ps-x-del': ps.extras.splice(+id, 1); break;
+    case 'ps-pay-add': (ps.payments = ps.payments || []).push({ name: 'Payment', pct: 0 }); break;
+    case 'ps-pay-del': (ps.payments || []).splice(+id, 1); break;
     case 'quote-copy': { const t = quoteCSV(ps); try { navigator.clipboard.writeText(t).then(() => flash('Quote copied'), () => flash('Could not copy')); } catch (_) { flash('Could not copy'); } return; }
     case 'quote-save': Hub.files.upload(new File([quoteCSV(ps)], `${S.job.name.replace(/[^\w -]/g, '') || 'job'} quote.csv`), 'Cabinet Designer').then(() => flash('Saved to Files › Cabinet Designer'), e => flash('Could not save: ' + e.message)); return;
   }
@@ -366,6 +417,7 @@ function importPriceSheet(file) {
     if (!sh || typeof sh !== 'object' || !sh.cab || !sh.doors) throw new Error('not a Cabinet Designer price sheet');
     const base = defaultPriceSheet(), n = { ...base, ...sh, id: uid('ps'), name: String(sh.name || 'Price sheet') + (PRICES.some(p => p.name === sh.name) ? ' (opened)' : '') };
     ['cab', 'adders', 'doors', 'materials', 'hardware', 'paint'].forEach(k => { n[k] = { ...base[k], ...(sh[k] || {}) }; });
+    if (!sh.mzk) { delete n.mzk; ['groupMarkup', 'install', 'payments'].forEach(k => { if (!(k in sh)) delete n[k]; }); n.extras = sh.extras || []; ensureMzk(n); }
     PRICES.push(n); S.job.priceSheet = n.id; save(); savePrices(); renderPricing(); flash(`Opened ${n.name}`);
   }).catch(e => flash('Could not open that file: ' + e.message));
 }
@@ -417,6 +469,7 @@ function quoteDoc(ps, detail, showPaint) {
   <table class="qp-totals"><tbody>${q.jobLines.map(l => `<tr><td>${esc(l.name)}</td><td class="r">${mm(l.amount)}</td></tr>`).join('')}
     <tr><td>Subtotal</td><td class="r">${mm(q.sub)}</td></tr>${q.markup && detail ? `<tr><td>Markup ${ps.markup}%</td><td class="r">${money(q.markup)}</td></tr>` : ''}${q.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="r">${money(q.tax)}</td></tr>` : ''}
     <tr class="grand"><td>Total</td><td class="r">${money(q.total)}</td></tr></tbody></table>
+  ${q.payments.length ? `<table class="qp-totals"><thead><tr><th>Payment schedule</th><th class="r">Amount</th></tr></thead><tbody>${q.payments.map(x => `<tr><td>${esc(x.name)} (${x.pct}%)</td><td class="r">${money(x.amount)}</td></tr>`).join('')}</tbody></table>` : ''}
   ${types.length ? `<section class="qp-side"><h2>Price per foot</h2><table><thead><tr><th>Type</th><th class="r">Linear ft</th><th class="r">Total</th><th class="r">Per ft</th></tr></thead><tbody>
     ${types.map(t => `<tr><td>${t.name}</td><td class="r">${ftLen(t.ft)}</td><td class="r">${mm(t.total)}</td><td class="r">${mm(t.rate)}</td></tr>`).join('')}</tbody></table></section>` : ''}
   ${paint}

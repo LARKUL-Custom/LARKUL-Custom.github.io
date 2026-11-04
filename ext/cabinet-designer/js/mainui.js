@@ -116,8 +116,8 @@ function applyDockH() {
 }
 // The panel keeps its normal size whatever its height: a taller panel shows more, a shorter one
 // scrolls. Its contents wrap to the width so nothing runs off the side.
-function fitDock() {
-  const el = document.getElementById('dock'); if (!el || !deskUI() || ui.tab !== 'room') return;
+function fitDock(el = document.getElementById('dock')) {
+  if (!el || !deskUI() || ui.tab !== 'room') return;
   const body = el.querySelector('.dockbody'), inner = body && body.firstElementChild;
   if (body && inner) {
     let fit = body.querySelector(':scope > .dockfit');
@@ -128,10 +128,12 @@ function fitDock() {
   }
   const tabs = el.querySelector('.dockhead .docktabs'); if (tabs) tabs.style.zoom = '';
 }
-function dockExtras(el) {
+// tmp is the panel's new content built off screen; it gets the same wrapping fitDock gives the real one.
+function dockExtras(tmp, el = tmp) {
   applyDockH();
-  if (!el.querySelector('.dockgrip')) el.insertAdjacentHTML('afterbegin', '<div class="dockgrip" title="Drag to resize this panel. Double-click to reset." aria-hidden="true"></div>');
-  requestAnimationFrame(fitDock);
+  if (!tmp.querySelector('.dockgrip')) tmp.insertAdjacentHTML('afterbegin', '<div class="dockgrip" title="Drag to resize this panel. Double-click to reset." aria-hidden="true"></div>');
+  if (tmp !== el) fitDock(tmp);
+  requestAnimationFrame(() => fitDock());
 }
 document.addEventListener('pointerdown', e => {
   const g = e.target.closest && e.target.closest('.dockgrip'); if (!g || !deskUI()) return;
@@ -230,16 +232,9 @@ function editWallsShape() {
 }
 function wallShapePage(d, selBox, rows, b) {
   const open = !d.forWalls.closed;
-  return `<div class="pagehead"><div><button class="linkbtn back" data-act="se-walls-cancel">${icon('back')}Back to the room</button><h2>Walls of ${esc(curRoom().name)}</h2><p>Each point is a corner and each edge is a wall, seen from above. Drag corners or type exact wall lengths. A point added on an edge splits that wall in two.${open ? ` The edge from the last point back to point 1 is the open side of the room, not a wall.` : ''} Round corners and bulges are ignored.</p></div>
+  return `<div class="pagehead"><div><button class="linkbtn back" data-act="se-walls-cancel">${icon('back')}Back to the room</button><h2>Walls of ${esc(curRoom().name)}</h2><p>Each point is a corner and each edge is a wall, seen from above.${open ? ` The dashed edge is the open side of the room.` : ''}</p></div>
     <div class="row-actions"><button class="btn" data-act="se-walls-cancel">Cancel</button><button class="btn primary" data-act="se-walls-save">${icon('check')}Save walls</button></div></div>
-  <div class="designer shapedes">
-    <div class="card stack cardbody des-form">${selBox}
-      <div class="eyebrow">Corners and walls</div>
-      <div class="tscroll"><table class="t setable"><thead><tr><th>Pt</th><th>x</th><th>y</th><th>Round</th><th>Edge</th><th>Length</th><th>Bulge</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="row-actions"><button class="btn sm" data-act="se-split" data-id="${d.pts.length - 1}">${icon('plus')}Add a corner</button></div>
-    </div>
-    <div class="stack"><div class="card cardbody stack"><div class="se-stage">${shapeEditorSVG(d)}</div><div class="note">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} overall</div></div></div>
-  </div>`;
+  ${seMz(d, '', rows, b, selBox, '', 'Corners and walls', `${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} overall`)}`;
 }
 function saveWallsShape() {
   const d = S.shapeDesign, fw = d && d.forWalls; if (!fw) return;

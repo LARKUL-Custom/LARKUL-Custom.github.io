@@ -76,7 +76,7 @@ function renderPlan() {
   s += resizeHandlesPlan();
   if (typeof topEditSVG === 'function') s += topEditSVG();
   s += boxSVG();
-  svg.innerHTML = s;
+  setHTML(svg, s);
   renderHint();
 }
 // Preview of the wall being drawn: dashed segment, live length, snap marker and alignment guides.
@@ -655,8 +655,10 @@ function elevSide(w) {
   const g = wg(w); return (cx - (w.x1 + w.x2) / 2) * g.n.x + (cy - (w.y1 + w.y2) / 2) * g.n.y < -0.01 ? -1 : 1;
 }
 const fillFor = (m, cls) => { if (!m) return `class="${cls} nss"`; const tx = texURL(m); return tx ? `class="${cls} nss" style="fill:url(#tx-${m.id})"` : `class="${cls} nss" style="fill:${esc(m.color || '')}"`; };
+// The texture patterns live once in the page (texPatterns in morph.js), so redrawing never reloads the pictures.
 function texDefs(ids) {
-  return [...new Set(ids)].map(id => { const m = mat(id), tx = texURL(m); if (!tx) return ''; const k = m.texScale || 24; return `<pattern id="tx-${m.id}" patternUnits="userSpaceOnUse" width="${k}" height="${k}"><image href="${tx}" width="${k}" height="${k}" preserveAspectRatio="none"/></pattern>`; }).join('');
+  texPatterns([...new Set(ids)].map(id => { const m = mat(id), tx = texURL(m); return tx ? ['tx-' + m.id, tx, m.texScale || 24] : null; }).filter(Boolean));
+  return '';
 }
 // Face of one front in elevation: frame joints, panels by type, and the panel design. (x, y) is the top-left corner.
 function doorFaceSVG(ds, framed, x, y, w, h) {
@@ -763,7 +765,7 @@ function frontsSVG(c, ex, by, opts = {}) {
 }
 function renderElev() {
   const svg = $('#elev'), w = wall(ui.elevWall), note = $('#elevnote');
-  if (!w) { svg.innerHTML = ''; note.textContent = 'Draw a wall to see its elevation.'; return; }
+  if (!w) { setHTML(svg, ''); note.textContent = 'Draw a wall to see its elevation.'; return; }
   const g = wg(w), L = g.L, H = w.height, side = elevSide(w);
   const cs = S.cabinets.filter(c => c.wall === w.id && c.side === side);
   note.textContent = cs.length ? `${cs.length} cabinet${cs.length > 1 ? 's' : ''}. Drag a cabinet to move it.` : 'No cabinets on this side yet';
@@ -860,7 +862,7 @@ function renderElev() {
   }
   const rc = rzShow(); if (rc && rc.wall === w.id && rc.side === side) labels += resizeHandlesElev(rc, elevX(rc, L), L);
   if (typeof vChainSVG === 'function') labels += vChainSVG(w, side, fs, px);
-  svg.innerHTML = `<defs>${texDefs(mats.filter(Boolean))}</defs>` + body + labels;
+  setHTML(svg, `<defs>${texDefs(mats.filter(Boolean))}</defs>` + body + labels);
 }
 // The open span at elevation point (x, z): out to the nearest thing at that height on each side, or the wall ends.
 // Spans are in elevation x, so they match what is drawn whichever side of the wall is shown.

@@ -664,6 +664,24 @@ function view3dPreset(v, k) {
 // Library picture: the product drawn in 3D once, off screen, and kept as an image (like Mozaik's preview
 // above its product tree). One small hidden viewer does every picture; textures that load late redraw it once.
 let peekViewer = null; const peekPics = {};
+// A 3D picture of one placed cabinet (the cabinet editor's header, like Mozaik's product picture), kept until it changes.
+function cabPic3D(c, onLate) {
+  if (!has3D() || !c) return null;
+  const json = JSON.stringify(c), key = 'cab|' + c.id + '|' + json.length + '|' + [...json].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 0) + '|' + document.documentElement.dataset.theme;
+  if (peekPics[key]) return peekPics[key];
+  if (!libPeek3D({ id: '_warm', w: 1, h: 1, d: 1 }) && !peekViewer) return null;
+  const v = peekViewer; if (!v || !v.ok) return null;
+  const shot = () => {
+    v.scene.background = new THREE.Color(cssVar('--panel')); v.clear();
+    const m = cabinetMeshes(c); m.position.x = -c.w / 2; v.root.add(m);
+    v.resize(); v.look({ x: -0.8, y: 0.5, z: 1.4 }); v.draw();
+    return v.renderer.domElement.toDataURL('image/png');
+  };
+  let url = null;
+  try { url = peekPics[key] = shot(); } catch (_) { return null; }
+  setTimeout(() => { try { peekPics[key] = shot(); if (onLate) onLate(peekPics[key]); } catch (_) {} }, 700);
+  return url;
+}
 function libPeek3D(l, onLate) {
   if (!has3D() || !l) return null;
   const key = l.id + '|' + [l.w, l.h, l.d].join('x') + '|' + (S.roomId || '') + '|' + document.documentElement.dataset.theme;

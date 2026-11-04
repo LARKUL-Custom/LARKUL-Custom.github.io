@@ -122,6 +122,7 @@ const PART_KINDS = [
   { id: 'faceFrame', name: 'Face frame stiles and rails', edges: { L1: 'Inside edge', L2: 'Outside edge', W1: 'End 1', W2: 'End 2' } },
 ];
 const partKind = id => PART_KINDS.find(k => k.id === id) || PART_KINDS[0];
+const EB_ROLL = { cost: 25, ft: 600 };
 function defaultEdgebands() {
   return [
     { id: 'eb-maple', name: 'Maple veneer 0.5 mm', thickMM: 0.5, width: 0.875, color: '#e2c896' },
@@ -145,6 +146,8 @@ function defaultPartTemplates() {
 // Older saves get the edgebanding library and a job default.
 function ensureEdgeLibs(s) {
   if (!Array.isArray(s.edgebands)) s.edgebands = defaultEdgebands();
+  // Each band is priced by the roll: Ayden's white banding is $25 for a 600 ft roll.
+  s.edgebands.forEach(b => { if (b.rollCost == null) b.rollCost = EB_ROLL.cost; if (b.rollFt == null) b.rollFt = EB_ROLL.ft; });
   if (!Array.isArray(s.partTemplates) || !s.partTemplates.length) s.partTemplates = defaultPartTemplates();
   if (s.job && s.job.defaults && !s.job.defaults.partT) s.job.defaults.partT = s.partTemplates[0].id;
   return s;

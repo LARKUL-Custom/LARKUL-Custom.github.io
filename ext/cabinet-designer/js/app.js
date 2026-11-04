@@ -46,11 +46,11 @@ function render() {
   LBL = labels(); fixSel();
   const libOn = LIB_TABS.some(([k]) => k === ui.tab) || ui.tab === 'designer';
   document.body.classList.toggle('room-on', ui.tab === 'room');
-  $('#tabs').innerHTML = MAIN_TABS.map(([k, l]) => `<button role="tab" data-act="tab" data-id="${k}" aria-selected="${ui.tab === k}">${tabIcon(k)}<span>${l}</span></button>`).join('')
-    + `<button data-act="libmenu" id="libbtn" aria-haspopup="menu" aria-expanded="${!$('#libmenu').hidden}" aria-selected="${libOn}">${tabIcon('libs')}<span>${libOn ? [...LIB_TABS, ...HIDDEN_TABS].find(([k]) => k === ui.tab)[1] : 'Libraries'} ▾</span></button>`;
-  $('#libmenu').innerHTML = LIB_TABS.map(([k, l]) => `<button role="menuitem" data-act="tab" data-id="${k}" aria-current="${ui.tab === k}">${l}</button>`).join('');
+  setHTML($('#tabs'), MAIN_TABS.map(([k, l]) => `<button role="tab" data-act="tab" data-id="${k}" aria-selected="${ui.tab === k}">${tabIcon(k)}<span>${l}</span></button>`).join('')
+    + `<button data-act="libmenu" id="libbtn" aria-haspopup="menu" aria-expanded="${!$('#libmenu').hidden}" aria-selected="${libOn}">${tabIcon('libs')}<span>${libOn ? [...LIB_TABS, ...HIDDEN_TABS].find(([k]) => k === ui.tab)[1] : 'Libraries'} ▾</span></button>`);
+  setHTML($('#libmenu'), LIB_TABS.map(([k, l]) => `<button role="menuitem" data-act="tab" data-id="${k}" aria-current="${ui.tab === k}">${l}</button>`).join(''));
   const jn = $('#jobname'); if (document.activeElement !== jn) jn.value = S.job.name;
-  $('#roomsel').innerHTML = S.rooms.map((r, i) => `<option value="${r.id}"${r.id === S.roomId ? ' selected' : ''}>${i + 1}. ${esc(r.name)}</option>`).join('') + '<option value="__add">+ Add room</option>';
+  setHTML($('#roomsel'), S.rooms.map((r, i) => `<option value="${r.id}"${r.id === S.roomId ? ' selected' : ''}>${i + 1}. ${esc(r.name)}</option>`).join('') + '<option value="__add">+ Add room</option>');
   TABS.forEach(([k]) => { $('#tab-' + k).hidden = ui.tab !== k; });
   if (ui.tab !== 'room') $('#quickedit').hidden = true;
   if (ui.tab !== 'room') $('#dock').innerHTML = '';
@@ -154,7 +154,7 @@ document.addEventListener('mouseover', e => {
 function renderSources() {
   renderRail();
   const SRC_IC = { cabinets: 'box', faces: 'face', doors: 'door', materials: 'palette', hardware: 'sliders', moldings: 'stack' };
-  $('#srctabs').innerHTML = SOURCES.map(([k, l]) => `<button data-act="src" data-id="${k}" aria-pressed="${ui.src === k}" title="${l}">${icon(SRC_IC[k])}<span>${l}</span></button>`).join('');
+  setHTML($('#srctabs'), SOURCES.map(([k, l]) => `<button data-act="src" data-id="${k}" aria-pressed="${ui.src === k}" title="${l}">${icon(SRC_IC[k])}<span>${l}</span></button>`).join(''));
   const item = (drag, inner, title) => `<button class="srcitem" data-act="src-apply" data-drag="${drag}" title="${esc(title || '')}">${inner}</button>`;
   let h = '';
   if (ui.src === 'shapes') ui.src = 'cabinets';
@@ -164,7 +164,7 @@ function renderSources() {
   else if (ui.src === 'materials') h = `<div class="eyebrow">Cabinet materials</div>${S.matTemplates.cabinet.map(t => item('cabMatT:' + t.id, `${swatch(mat(t.carcass), 26)}<span><span class="nm">${esc(t.name)}</span></span>`)).join('')}<div class="eyebrow">Drawer materials</div>${S.matTemplates.drawer.map(t => item('drawerMatT:' + t.id, `${swatch(mat(t.sides), 26)}<span><span class="nm">${esc(t.name)}</span></span>`)).join('')}<button class="btn sm" data-act="tab" data-id="materials">Edit materials</button>`;
   else if (ui.src === 'hardware') h = HW_KINDS.filter(([k]) => ['slide', 'hinge', 'pull'].includes(k)).map(([k, l]) => `<div class="eyebrow">${l}</div>${hwOf(k).map(x => item('hw:' + x.id, `<span class="hwdot ${k}"${k === 'pull' ? ` style="background:${esc(x.finish)}"` : ''}></span><span><span class="nm">${esc(x.name)}</span></span>`)).join('')}`).join('') + `<button class="btn sm" data-act="tab" data-id="hardware">Edit hardware</button>`;
   else if (ui.src === 'moldings') h = S.moldings.map(m => item('mold:' + m.id, `${swatch(mat(m.mat), 26)}<span><span class="nm">${esc(m.name)}</span><span class="dm">${fmtLen(m.h)} × ${fmtLen(m.d)}</span></span>`)).join('') + item('mold:', '<span class="sw none"></span><span><span class="nm">No molding</span></span>') + `<button class="btn sm" data-act="tab" data-id="moldings">Quick molding</button>`;
-  $('#srclist').innerHTML = `<div class="note">${ui.src === 'cabinets' ? (isPhone() ? 'Tap one, then tap near a wall.' : 'Drag onto a wall, or click and then click a wall.') : 'Drag onto a cabinet in any view, or click to apply to the selected cabinet.'}</div>` + h;
+  setHTML($('#srclist'), `<div class="note">${ui.src === 'cabinets' ? (isPhone() ? 'Tap one, then tap near a wall.' : 'Drag onto a wall, or click and then click a wall.') : 'Drag onto a cabinet in any view, or click to apply to the selected cabinet.'}</div>` + h);
 }
 // Room viewer: the same live 3D view on the whole screen with a list of views down the side, like Mozaik's.
 // Clicking and double-clicking cabinets still works in it.
@@ -173,10 +173,10 @@ function renderLayers3d() {
   const el = $('#layerpop'); if (!el) return;
   const L = layers3d(), pct = Math.round((ui.wallOp ?? 1) * 100), off = LAYERS3D.filter(([k]) => !L[k]).length;
   $('#layers3d summary').innerHTML = `${icon('stack')}Layers${off ? ` <span class="ct">${off} off</span>` : ''}`;
-  el.innerHTML = `<div class="eyebrow">Show</div>${LAYERS3D.map(([k, l]) => `<label class="chk"><input type="checkbox" data-layer="${k}"${L[k] ? ' checked' : ''}>${l}</label>`).join('')}
+  setHTML(el, `<div class="eyebrow">Show</div>${LAYERS3D.map(([k, l]) => `<label class="chk"><input type="checkbox" data-layer="${k}"${L[k] ? ' checked' : ''}>${l}</label>`).join('')}
     <div class="eyebrow">Walls</div><label class="wallop">Opacity <input type="range" id="wallop" min="0" max="100" step="5" value="${pct}" aria-label="Wall opacity"><b id="wallopv">${pct}%</b></label>
     <label class="chk"><input type="checkbox" data-layer="_cutaway"${ui.cutaway ? ' checked' : ''}>Cut away walls in front of the camera</label>
-    <div class="row-actions"><button class="btn sm" data-act="layers-all">Show everything</button><button class="btn sm" data-act="layers-faces">Faces only</button><button class="btn sm" data-act="layers-inside">Inside only</button></div>`;
+    <div class="row-actions"><button class="btn sm" data-act="layers-all">Show everything</button><button class="btn sm" data-act="layers-faces">Faces only</button><button class="btn sm" data-act="layers-inside">Inside only</button></div>`);
 }
 function saveLayers3d() { try { localStorage.setItem(KEY + '.layers', JSON.stringify({ layers: ui.layers, wallOp: ui.wallOp, cutaway: ui.cutaway })); } catch (_) {} if (roomViewer) buildRoom3D(); renderLayers3d(); }
 document.addEventListener('change', e => {
@@ -222,18 +222,18 @@ function renderRoom() {
   LBL = labels();
   renderSources();
   // View bar pills, from the main screen design: views, Draw, dimensions, open all.
-  $('#viewmode').innerHTML = [['plan', 'Plan view (1)', 'Plan'], ['elev', 'Elevation view (2)', 'Elevation'], ['3d', '3D view (3)', '3D']].map(([k, l, ic]) => `<button data-act="viewmode" data-id="${k}" aria-pressed="${ui.viewMode === k}" title="${l}" aria-label="${l}">${vic(ic)}</button>`).join('');
-  $('#dimctl').innerHTML = `<span class="seglbl" title="Dimensions">${vic('Dimensions')}</span>` + [['cab', 'Cabinet', 'Show cabinet sizes'], ['fronts', 'Door', 'Show door and drawer front sizes']].map(([k, l, t]) => `<button data-act="dims" data-id="${k}" aria-pressed="${!!ui.dims[k]}" title="${t}">${l}</button>`).join('') + (typeof vChainBtn === 'function' ? vChainBtn() : '');
+  setHTML($('#viewmode'), [['plan', 'Plan view (1)', 'Plan'], ['elev', 'Elevation view (2)', 'Elevation'], ['3d', '3D view (3)', '3D']].map(([k, l, ic]) => `<button data-act="viewmode" data-id="${k}" aria-pressed="${ui.viewMode === k}" title="${l}" aria-label="${l}">${vic(ic)}</button>`).join(''));
+  setHTML($('#dimctl'), `<span class="seglbl" title="Dimensions">${vic('Dimensions')}</span>` + [['cab', 'Cabinet', 'Show cabinet sizes'], ['fronts', 'Door', 'Show door and drawer front sizes']].map(([k, l, t]) => `<button data-act="dims" data-id="${k}" aria-pressed="${!!ui.dims[k]}" title="${t}">${l}</button>`).join('') + (typeof vChainBtn === 'function' ? vChainBtn() : ''));
   const anyOpen = S.cabinets.some(c => ui.open[c.id]), dm = ui.drawMold;
   const drawBtn = (act, on, ic, l, t) => `<button data-act="${act}" aria-pressed="${on}" title="${t}" class="drawbtn">${on ? icon('check') : vic(ic)}<span>${on ? 'Done' : l}</span></button>`;
-  $('#drawctl').innerHTML = `<span class="seglbl">Draw</span>${drawBtn('walls-draw', !!ui.drawWalls, 'Walls', 'Walls', 'Draw walls (W). Right-click or Esc stops.')}${drawBtn(dm === true ? 'gmold-stop' : 'gmold-draw', dm === true, 'Molding', 'Molding', 'Draw molding runs along the walls. Right-click or Esc stops.')}${drawBtn(dm === 'top' ? 'gmold-stop' : 'gtop-draw', dm === 'top', 'Tops', 'Tops', 'Draw countertops along the walls. Right-click or Esc stops.')}`;
+  setHTML($('#drawctl'), `<span class="seglbl">Draw</span>${drawBtn('walls-draw', !!ui.drawWalls, 'Walls', 'Walls', 'Draw walls (W). Right-click or Esc stops.')}${drawBtn(dm === true ? 'gmold-stop' : 'gmold-draw', dm === true, 'Molding', 'Molding', 'Draw molding runs along the walls. Right-click or Esc stops.')}${drawBtn(dm === 'top' ? 'gmold-stop' : 'gtop-draw', dm === 'top', 'Tops', 'Tops', 'Draw countertops along the walls. Right-click or Esc stops.')}`);
   const oc = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id), ocOn = oc && openable(oc);
-  $('#openctl').innerHTML = `<button data-act="open-all" aria-pressed="${anyOpen}" title="Open or close every door and drawer in this room">${vic('Open all')}<span>${anyOpen ? 'Close All' : 'Open All'}</span></button>`
-    + `<button data-act="open-toggle" data-id="${ocOn ? oc.id : ''}" aria-pressed="${!!(ocOn && ui.open[oc.id])}"${ocOn ? '' : ' disabled'} title="${ocOn ? 'Open or close the doors and drawers of the selected cabinet (O)' : 'Select a cabinet with doors or drawers to open it'}">${vic('Open all')}<span>${ocOn && ui.open[oc.id] ? 'Close Cabinet' : 'Open Cabinet'}</span></button>`;
+  setHTML($('#openctl'), `<button data-act="open-all" aria-pressed="${anyOpen}" title="Open or close every door and drawer in this room">${vic('Open all')}<span>${anyOpen ? 'Close All' : 'Open All'}</span></button>`
+    + `<button data-act="open-toggle" data-id="${ocOn ? oc.id : ''}" aria-pressed="${!!(ocOn && ui.open[oc.id])}"${ocOn ? '' : ' disabled'} title="${ocOn ? 'Open or close the doors and drawers of the selected cabinet (O)' : 'Select a cabinet with doors or drawers to open it'}">${vic('Open all')}<span>${ocOn && ui.open[oc.id] ? 'Close Cabinet' : 'Open Cabinet'}</span></button>`);
   // Every cabinet and shape in the room by name and number, grouped by wall, to select without clicking it.
   const cur = ui.sel && (ui.sel.type === 'cab' ? ui.sel.id : ui.sel.type === 'shape' ? 'shape:' + ui.sel.id : '');
   const byWall = w => [...S.cabinets.filter(c => c.wall === w.id).sort((a, b) => a.off - b.off).map(c => [c.id, `${c.name} ${LBL[c.id]}`]), ...(S.shapes || []).filter(x => x.wall === w.id).map(x => ['shape:' + x.id, x.name || 'Shape'])];
-  $('#itemsel').innerHTML = `<option value="">Select item…</option>` + S.walls.map(w => { const it = byWall(w); return it.length ? `<optgroup label="${wallName(w)}">${it.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>` : ''; }).join('');
+  setHTML($('#itemsel'), `<option value="">Select item…</option>` + S.walls.map(w => { const it = byWall(w); return it.length ? `<optgroup label="${wallName(w)}">${it.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>` : ''; }).join(''));
   $('#views').dataset.mode = ui.viewMode;
   $('#v3sel').disabled = !(ui.sel && ui.sel.type === 'cab');
   const wi = S.walls.findIndex(w => w.id === ui.elevWall), nb = d => S.walls.length > 1 && wi >= 0 ? S.walls[((wi + d) % S.walls.length + S.walls.length) % S.walls.length] : null;
@@ -244,7 +244,7 @@ function renderRoom() {
   $('[data-act=snap3d]').innerHTML = `${icon('camera')}Save image`;
   renderFull3d();
   const sel = $('#elevwall');
-  sel.innerHTML = S.walls.map(w => `<option value="${w.id}"${w.id === ui.elevWall ? ' selected' : ''}>${wallName(w)} · ${fmtLen(wg(w).L, 1)}</option>`).join('') || '<option>No walls yet</option>';
+  setHTML(sel, S.walls.map(w => `<option value="${w.id}"${w.id === ui.elevWall ? ' selected' : ''}>${wallName(w)} · ${fmtLen(wg(w).L, 1)}</option>`).join('') || '<option>No walls yet</option>');
   if (ui.viewMode === 'plan') renderPlan();
   if (ui.viewMode === 'elev') renderElev();
   renderProps(); renderDock(); renderQuick();
@@ -278,11 +278,14 @@ const propsShut = () => !!ui.propsShut && !wideQuery.matches && !(ui.sel && (ui.
 function renderProps() {
   const el = $('#props'), room = $('#tab-room'), shut = propsShut();
   if (room && room.classList.contains('props-shut') !== shut) { room.classList.toggle('props-shut', shut); requestAnimationFrame(redrawView); }
-  if (shut) { el.innerHTML = `<button class="railtab pstrip" data-act="props-toggle" title="Show the side panel" aria-expanded="false">${icon('chevl')}<span>${ui.sel && ui.sel.type === 'cab' ? 'Cabinet' : 'Room'} details</span></button>`; return; }
-  renderPropsBody();
-  if (!el || !el.innerHTML) return;
+  if (shut) { setHTML(el, `<button class="railtab pstrip" data-act="props-toggle" title="Show the side panel" aria-expanded="false">${icon('chevl')}<span>${ui.sel && ui.sel.type === 'cab' ? 'Cabinet' : 'Room'} details</span></button>`); return; }
+  // Built off screen, then only the changes go into the panel, so it does not flash or lose its scroll.
+  const tmp = el.cloneNode(false); tmp.removeAttribute('id');
+  renderPropsBody(tmp);
+  if (!tmp.innerHTML) return setHTML(el, '');
   const hid = look.help !== 'show';
-  el.insertAdjacentHTML('beforeend', `<div class="notesw"><button class="linkbtn" data-act="look" data-id="help:${hid ? 'show' : 'hide'}">${icon('eye')}${hid ? 'Show help text' : 'Hide help text'}</button>${wideQuery.matches ? '' : `<button class="linkbtn" data-act="props-toggle" title="Fold this panel to give the drawing more room">${icon('chevr')}Hide panel</button>`}</div>`);
+  tmp.insertAdjacentHTML('beforeend', `<div class="notesw"><button class="linkbtn" data-act="look" data-id="help:${hid ? 'show' : 'hide'}">${icon('eye')}${hid ? 'Show help text' : 'Hide help text'}</button>${wideQuery.matches ? '' : `<button class="linkbtn" data-act="props-toggle" title="Fold this panel to give the drawing more room">${icon('chevr')}Hide panel</button>`}</div>`);
+  setHTML(el, tmp);
 }
 // Auto build countertops and molding, right on the Room screen next to the plan.
 function roomTopsMoldBoxes(rm) {
@@ -294,8 +297,7 @@ function roomTopsMoldBoxes(rm) {
     <div class="note qm-note" style="display:block">${auto ? `${on} run${on === 1 ? '' : 's'} built${(S.genTops || []).length ? ', plus ' + S.genTops.length + ' placed by hand' : ''}.` : 'Automatic tops are off in this room.'}</div></div>
   <div class="psec box">${secHead('stack', 'Molding', 'violet')}<div class="note">${mr} molding run${mr === 1 ? '' : 's'}${(S.genMolds || []).length ? `, plus ${S.genMolds.length} drawn by hand` : ''}.</div><div class="row-actions"><button class="btn" data-act="gmold-draw">${icon('ruler')}Draw molding</button><button class="btn" data-act="dock" data-id="molding">${icon('list')}Runs</button></div></div>`;
 }
-function renderPropsBody() {
-  const el = $('#props');
+function renderPropsBody(el = $('#props')) {
   if (multiIds().length > 1) { el.innerHTML = multiProps(); return; }
   if (ui.sel && ui.sel.type === 'cab') { const c = cab(ui.sel.id); if (c) { el.innerHTML = cabProps(c); return; } }
   if (ui.sel && ui.sel.type === 'wall') { const w = wall(ui.sel.id); if (w) { el.innerHTML = wallProps(w); return; } }
@@ -535,8 +537,11 @@ function renderDock() {
   // On the desktop main screen the panel under the drawing is always open.
   const open = ui.dockOpen || deskUI();
   el.classList.toggle('shut', !open);
-  el.innerHTML = head + (open ? `<div class="dockbody dock-${ui.dock}">${dockBody(ui.dock)}</div>` : '');
-  if (typeof dockExtras === 'function') dockExtras(el);
+  // Built off screen and laid out the same way, then only the changes go into the panel (no flash, scroll kept).
+  const tmp = el.cloneNode(false); tmp.removeAttribute('id');
+  tmp.innerHTML = head + (open ? `<div class="dockbody dock-${ui.dock}">${dockBody(ui.dock)}</div>` : '');
+  if (typeof dockExtras === 'function') dockExtras(tmp, el);
+  setHTML(el, tmp);
 }
 function dockBody(k) {
   const rm = curRoom(), c = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id);
@@ -959,7 +964,7 @@ document.addEventListener('click', e => {
     case 'pt-dup': { const t = partTpl(id); mutate(() => S.partTemplates.push({ ...clone(t), id: uid('pt'), name: t.name + ' copy' })); break; }
     case 'pt-del': mutate(() => { S.partTemplates = S.partTemplates.filter(x => x.id !== id); unsetPick('partT', id, S.partTemplates[0].id); }); break;
     case 'pt-kind': { const [tid, kind] = id.split(':'), v = el.dataset.v; mutate(() => { const t = partTpl(tid); t.rules = t.rules || {}; t.rules[kind] = v ? { L1: v, L2: v, W1: v, W2: v } : {}; }); break; }
-    case 'eb-add': mutate(() => S.edgebands.push({ id: uid('eb'), name: 'New edgeband', thickMM: 0.5, width: 0.875, color: '#d8c49a' })); break;
+    case 'eb-add': mutate(() => S.edgebands.push({ id: uid('eb'), name: 'New edgeband', thickMM: 0.5, width: 0.875, color: '#d8c49a', rollCost: EB_ROLL.cost, rollFt: EB_ROLL.ft })); break;
     case 'eb-del': mutate(() => {
       S.edgebands = S.edgebands.filter(x => x.id !== id);
       S.partTemplates.forEach(t => Object.values(t.rules || {}).forEach(r => EDGE_KEYS.forEach(k => { if (r[k] === id) r[k] = ''; })));
@@ -979,6 +984,20 @@ document.addEventListener('click', e => {
     case 'shape-dup': { const s = shapeById(id); let ns; mutate(() => { ns = { ...clone(s), id: uid('s'), off: r3(s.off + shapeBox(s.pts).w) }; S.shapes.push(ns); }); ui.sel = { type: 'shape', id: ns.id }; render(); break; }
     case 'shape-flip': { const s = shapeById(id); mutate(() => { s.side = -s.side; }); break; }
     case 'shape-to-lib': { const s = shapeById(id), nid = uid('sl'); mutate(() => { S.shapeLib.push(shapeToLib(s, nid)); s.libId = nid; }); flash('Saved to the shape library'); break; }
+    case 'hw-help': ui.hwHelp = !ui.hwHelp; render(); break;
+    case 'se-undo': case 'se-redo': undoRedo(a === 'se-undo' ? -1 : 1); break;
+    case 'se-pre': {
+      const [k, pid] = id.split(':'), d = S.shapeDesign; ui.shapeSel = null;
+      if (k === 'cab') { const fc = d.forCab, c = fc && cab(fc.id), pr = c && (CAB_SHAPE_PRESETS[fc.view] || []).find(x => x[0] === pid); if (!pr) break; const [W, H] = cabShapeDims(c, fc.view); mutate(() => { d.pts = pr[2](W, H).map(p => ({ ...p, x: r3(p.x), y: r3(p.y) })); }); break; }
+      mutate(() => { if (k === 'pre') S.shapeDesign = blankShapeDesign(pid); else { const l = shapeLibItem(pid); if (!l) return; S.shapeDesign = { ...clone(l), sourceLib: l.id, editShape: null }; delete S.shapeDesign.id; } });
+      break;
+    }
+    case 'se-nudge': {
+      const sel = ui.shapeSel, d = S.shapeDesign; if (!sel || !d.pts[sel.i]) break;
+      const [dx, dy] = id.split(',').map(Number), st = ui.seStep > 0 ? ui.seStep : 0.25, n = d.pts.length;
+      mutate(() => { (sel.kind === 'edge' ? [d.pts[sel.i], d.pts[(sel.i + 1) % n]] : [d.pts[sel.i]]).forEach(p => { p.x = r3(p.x + dx * st); p.y = r3(p.y + dy * st * (d.plane !== 'flat' ? 1 : -1)); }); });
+      break;
+    }
     case 'se-sel': { const [k, i] = id.split(':'); ui.shapeSel = { kind: k, i: +i }; renderShapeDesigner(); break; }
     case 'se-del': { const i = +id; if (S.shapeDesign.pts.length > 3) { ui.shapeSel = null; mutate(() => S.shapeDesign.pts.splice(i, 1)); } break; }
     case 'se-round': { const [i, r] = id.split(':'); mutate(() => { S.shapeDesign.pts[+i].r = +r; }); break; }
@@ -1041,6 +1060,9 @@ document.addEventListener('click', e => {
     case 'qe-close': closeQuick(); break;
     case 'qe-more': case 'ed-open': openEditor(id || ui.quick); break;
     case 'ed-quick': ui.qeBig = false; renderQuick(); break;
+    case 'cs-view': ui.csView = id; renderQuick(); break;
+    case 'cs-preset': cabPresetApply(id); break;
+    case 'ed-undo': case 'ed-redo': undoRedo(a === 'ed-undo' ? -1 : 1); if (ui.quick) renderQuick(); break;
     case 'ed-tab': {
       ui.edTab = id;
       // Interior opens on the first opening that has an inside (a door or open space), not a drawer.

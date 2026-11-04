@@ -292,7 +292,15 @@ const PE_SHAPES = [
   ['clip', 'Clipped corner', (L, W) => { const c = r3(Math.min(L, W) / 4); return [{ x: 0, y: 0 }, { x: 0, y: 0, ax: 'R' }, { x: 0, y: c, ax: 'R', ay: 'T' }, { x: c, y: 0, ax: 'R', ay: 'T' }, { x: 0, y: 0, ay: 'T' }]; }],
   ['arch', 'Arch top', (L, W) => { const a = r3(Math.min(L, W) / 4); return [{ x: 0, y: 0 }, { x: 0, y: 0, ax: 'R' }, { x: 0, y: a, ax: 'R', ay: 'T', b: a }, { x: 0, y: a, ay: 'T' }]; }],
   ['round', 'Round', (L, W) => { const r = r3(Math.min(L, W) / 2); return [{ x: 0, y: 0, r }, { x: 0, y: 0, ax: 'R', r }, { x: 0, y: 0, ax: 'R', ay: 'T', r }, { x: 0, y: 0, ay: 'T', r }]; }],
+  ['rc', 'One round corner', (L, W) => { const r = r3(Math.min(L, W) / 4); return [{ x: 0, y: 0 }, { x: 0, y: 0, ax: 'R' }, { x: 0, y: 0, ax: 'R', ay: 'T', r }, { x: 0, y: 0, ay: 'T' }]; }],
+  ['clip2', 'Two clipped corners', (L, W) => { const c = r3(Math.min(L, W) / 4); return [{ x: 0, y: 0 }, { x: 0, y: 0, ax: 'R' }, { x: 0, y: c, ax: 'R', ay: 'T' }, { x: c, y: 0, ax: 'R', ay: 'T' }, { x: c, y: 0, ay: 'T' }, { x: 0, y: c, ay: 'T' }]; }],
+  ['notch', 'Corner notch', (L, W) => { const a = r3(L / 6), b = r3(W / 4); return [{ x: 0, y: 0 }, { x: a, y: 0, ax: 'R' }, { x: a, y: b, ax: 'R' }, { x: 0, y: b, ax: 'R' }, { x: 0, y: 0, ax: 'R', ay: 'T' }, { x: 0, y: 0, ay: 'T' }]; }],
+  ['slope', 'Sloped top', (L, W) => { const b = r3(W / 3); return [{ x: 0, y: 0 }, { x: 0, y: 0, ax: 'R' }, { x: 0, y: b, ax: 'R', ay: 'T' }, { x: 0, y: 0, ay: 'T' }]; }],
+  ['tri', 'Triangle', () => [{ x: 0, y: 0 }, { x: 0, y: 0, ax: 'R' }, { x: 0, y: 0, ay: 'T' }]],
+  ['U', 'U cut-out (farm sink)', (L, W) => { const a = r3(L / 4), b = r3(W / 3); return [{ x: 0, y: 0 }, { x: 0, y: 0, ax: 'R' }, { x: 0, y: 0, ax: 'R', ay: 'T' }, { x: a, y: 0, ax: 'C', ay: 'T' }, { x: a, y: b, ax: 'C', ay: 'T' }, { x: -a, y: b, ax: 'C', ay: 'T' }, { x: -a, y: 0, ax: 'C', ay: 'T' }, { x: 0, y: 0, ay: 'T' }]; }],
 ];
+// Little pictures for the shape palette, drawn on a 40 × 30 box.
+const PE_SHAPE_PIC = { rect: 'M4 4h32v22H4z', L: 'M4 4h32v8H24v14H4z', clip: 'M4 4h24l8 8v14H4z', arch: 'M4 26V10q16-12 32 0v16z', round: 'M12 4h16a11 11 0 0 1 0 22H12a11 11 0 0 1 0-22z', rc: 'M4 4h24a8 8 0 0 1 8 8v14H4z', clip2: 'M12 4h16l8 8v14H4V12z', notch: 'M4 4h32v14h-8v8H4z', slope: 'M4 4l32 8v14H4z', tri: 'M4 4L36 26H4z', U: 'M4 4h10v8h12V4h10v22H4z' };
 
 // The drawing: the part, its operations (click one to pick it; it turns red), and the points of the picked one as numbered handles.
 function peSVG(q, e, s) {
@@ -313,14 +321,29 @@ function peSVG(q, e, s) {
   }
   if (s.tab === 'band') EDGE_KEYS.forEach(k => {
     const [x1, y1, x2, y2] = { L1: [0, 0, q.L, 0], L2: [0, q.W, q.L, q.W], W1: [0, 0, 0, q.W], W2: [q.L, 0, q.L, q.W] }[k], on = q.band && q.band[k];
-    h += `<g data-act="pe-edge" data-id="${k}" class="pe-edge${on ? ' on' : ''}"><line class="nss" x1="${r3(x1)}" y1="${r3(y1)}" x2="${r3(x2)}" y2="${r3(y2)}"/><text class="pe-elbl" x="${r3(k === 'W1' ? fs * 0.5 : k === 'W2' ? q.L - fs * 0.5 : q.L / 2)}" y="${r3(k === 'L1' ? fs * 1.1 : k === 'L2' ? q.W - fs * 0.5 : q.W / 2)}" font-size="${r3(fs * 0.75)}" text-anchor="${k === 'W1' ? 'start' : k === 'W2' ? 'end' : 'middle'}">${k}</text></g>`;
+    h += `<g data-act="pe-edge" data-id="${k}" class="pe-edge${on ? ' on' : ''}" style="--bc:${on ? peBandColor(on) : '#94a3b8'}"><line class="nss" x1="${r3(x1)}" y1="${r3(y1)}" x2="${r3(x2)}" y2="${r3(y2)}"/><text class="pe-elbl" x="${r3(k === 'W1' ? fs * 0.5 : k === 'W2' ? q.L - fs * 0.5 : q.L / 2)}" y="${r3(k === 'L1' ? fs * 1.1 : k === 'L2' ? q.W - fs * 0.5 : q.W / 2)}" font-size="${r3(fs * 0.75)}" text-anchor="${k === 'W1' ? 'start' : k === 'W2' ? 'end' : 'middle'}">${k}</text></g>`;
   });
   if (P.length > 1) {
-    if (s.tab === 'shape') P.forEach((p, i) => { const q2 = P[(i + 1) % P.length]; h += `<line class="pe-seg nss${i === s.seg ? ' on' : ''}" data-act="pe-seg" data-id="${i}" x1="${r3(p.x)}" y1="${r3(p.y)}" x2="${r3(q2.x)}" y2="${r3(q2.y)}"/>`; });
+    if (s.tab === 'shape') {
+      // Each edge's length beside it and the angle at any corner that isn't square, like Mozaik's shape view.
+      const cx = P.reduce((a, p) => a + p.x, 0) / P.length, cy = P.reduce((a, p) => a + p.y, 0) / P.length, n = P.length;
+      P.forEach((p, i) => {
+        const q2 = P[(i + 1) % n], dx = q2.x - p.x, dy = q2.y - p.y, len = Math.hypot(dx, dy);
+        h += `<line class="pe-seg nss${i === s.seg ? ' on' : ''}" data-act="pe-seg" data-id="${i}" x1="${r3(p.x)}" y1="${r3(p.y)}" x2="${r3(q2.x)}" y2="${r3(q2.y)}"/>`;
+        if (len < 0.05) return;
+        let nx = -dy / len, ny = dx / len; const mx = (p.x + q2.x) / 2, my = (p.y + q2.y) / 2; if (nx * (mx - cx) + ny * (my - cy) < 0) { nx = -nx; ny = -ny; }
+        h += `<text class="pe-dim" x="${r3(mx + nx * fs * 0.9)}" y="${r3(my + ny * fs * 0.9)}" font-size="${r3(fs * 0.62)}" text-anchor="middle" dominant-baseline="central">${fmtLen(len, 1)}</text>`;
+        const o = P[(i + n - 1) % n], a1 = Math.atan2(o.y - p.y, o.x - p.x), a2 = Math.atan2(q2.y - p.y, q2.x - p.x);
+        let ang = Math.abs((a1 - a2) * 180 / Math.PI) % 360; if (ang > 180) ang = 360 - ang;
+        if (Math.abs(ang - 90) > 0.5 && Math.abs(ang - 180) > 0.5 && ang > 0.5) { const bx = (Math.cos(a1) + Math.cos(a2)), by = (Math.sin(a1) + Math.sin(a2)), bl = Math.hypot(bx, by) || 1; h += `<text class="pe-ang" x="${r3(p.x + bx / bl * fs * 1.4)}" y="${r3(p.y + by / bl * fs * 1.4)}" font-size="${r3(fs * 0.55)}" text-anchor="middle" dominant-baseline="central">${+ang.toFixed(1)}°</text>`; }
+      });
+    }
     else h += `<${closed ? 'polygon' : 'polyline'} class="pe-line nss" points="${P.map(p => `${r3(p.x)},${r3(p.y)}`).join(' ')}"/>`;
   }
   const hc = s.tab === 'ops' ? ' op' : '';
   P.forEach((p, i) => { h += `<g class="pe-h${hc}${i === s.pt ? ' on' : ''}${p.fx ? ' fx' : ''}" data-pe-pt="${i}"><circle class="nss" cx="${r3(p.x)}" cy="${r3(p.y)}" r="${r}"/><text x="${r3(p.x + r * 1.3)}" y="${r3(p.y - r * 1.3)}" font-size="${fs * 0.8}">${i + 1}</text></g>`; });
+  // The shape view labels every edge itself, so the overall size labels would only sit on top of them.
+  if (s.tab === 'shape' && P.length > 1) svg = svg.replace(/<text class="lbl-m"[^>]*>[^<]*<\/text>/g, '');
   return svg.replace(/(<svg[^>]*>)/, `$1${under}`).replace('</svg>', h + '</svg>');
 }
 const PE_AX = [{ v: '', l: 'L' }, { v: 'R', l: 'R' }, { v: 'C', l: 'C' }], PE_AY = [{ v: '', l: 'B' }, { v: 'T', l: 'T' }, { v: 'M', l: 'M' }];
@@ -377,9 +400,9 @@ function peOpsTab(c, q, e, s) {
   const offBox = off.length ? `<details class="pe-gen"><summary>Turned off (${off.length})</summary><table class="t"><tbody>${off.join('')}</tbody></table></details>` : '';
   // Operations with nothing to draw (an edge profile) can still be picked here.
   const blind = gen.map((o, i) => o.type === 'edge' ? `<button class="btn sm${s.sel === 'g' + i ? ' on' : ''}" data-act="pe-pick" data-id="g${i}">${esc(o.why || opText(o))}</button>` : '').join('');
-  if (!sel) return `${bar}${legend}<div class="pe-empty">${shown ? `Click an operation in the drawing to change it. <span class="muted">${shown} on this part.</span>` : 'No operations on this part yet. Add one above.'}</div>
+  if (!sel) return `${legend}<div class="pe-empty">${shown ? `Click an operation in the drawing or the table to change it. <span class="muted">${shown} on this part.</span>` : 'No operations on this part yet. Click a button on the left to add one.'}</div>
     ${blind ? `<div class="pe-blind"><span class="muted">Not in the drawing:</span>${blind}</div>` : ''}${ops.length > 1 ? '<div class="row-actions"><button class="btn sm" data-act="pe-op-copyall">Copy all of this part\'s own operations</button></div>' : ''}${offBox}`;
-  return `${bar}${legend}${peOpForm(c, q, e, s, sel)}${offBox}`;
+  return `${legend}${peOpForm(c, q, e, s, sel)}${peNudgePad()}`;
 }
 // The picked operation's settings. One from the cabinet shows the same boxes; changing any of them makes it the part's own.
 function peOpForm(c, q, e, s, sel) {
@@ -395,7 +418,8 @@ function peOpForm(c, q, e, s, sel) {
   const P = sel.P, t = u.type, path = t === 'path' || t === 'pocket', made = gen ? [] : q.ops.filter(z => z.user === sel.i);
   const passes = Math.max(0, ...made.filter(z => z.passes).map(z => z.passes)), tools = peTools();
   const toolList = t === 'pocket' ? [{ v: 'auto', l: 'Auto (biggest bit that fits)' }, ...tools] : tools;
-  const toolSel = peSel('Tool', P + '.tool', u.tool || peDefTool(), toolList.some(x => x.v === u.tool) || !u.tool ? toolList : [...toolList, { v: u.tool, l: u.tool + ' (not in the tool library)' }]);
+  const curTool = u.tool || peDefTool(), curL = (toolList.find(x => x.v === curTool) || { l: curTool + ' (not in the tool library)' }).l;
+  const toolSel = `<div class="f pe-toolf"><span>Tool</span><button class="btn sm pe-toolbtn" data-act="pe-toolpick" aria-expanded="${!!ui.peToolPick}">${esc(curL)} ▾</button></div>${ui.peToolPick ? `<div class="pe-tools"><table class="t pe-tab"><thead><tr><th>Tool</th><th>Diameter</th></tr></thead><tbody>${toolList.map(x => `<tr class="${x.v === curTool ? 'on' : ''}" data-act="pe-tool" data-id="${esc(P + '.tool|' + x.v)}"><td>${esc(x.v === 'auto' ? x.l : x.v)}</td><td>${x.dia ? esc(fmtLen(x.dia, 1)) : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
   const fields = t === 'drill' ? peIn('Diameter', P + '.dia', u.dia)
     : t === 'groove' ? `${peIn('Width', P + '.width', u.width)}${peIn('Length (blank = to point 2)', P + '.len', u.len)}${peCount('Angle°', P + '.angle', u.angle)}`
     : t === 'linebore' ? `${peCount('Holes', P + '.count', u.count)}${peIn('Spacing', P + '.spacing', u.spacing)}${peCount('Angle°', P + '.angle', u.angle)}${peIn('Second row offset (0 = none)', P + '.row2', u.row2)}${peIn('Diameter', P + '.dia', u.dia)}`
@@ -418,19 +442,7 @@ function peShapeTab(c, q, e, s) {
   const vars = partVars(c, q), A = p && peXY(p, vars, q.L, q.W), B = p && peXY(pts[(i + 1) % n], vars, q.L, q.W);
   const len = p ? r3(Math.hypot(B.x - A.x, B.y - A.y)) : 0;
   const lib = PART_SHAPES.map(x => ({ v: x.id, l: x.name }));
-  return `<div class="pe-seg-row"><span class="eyebrow">Start from</span>${PE_SHAPES.map(([k, l]) => `<button class="btn sm" data-act="pe-preset" data-id="${k}">${l}</button>`).join('')}</div>
-    <div class="note">Click a point or an edge in the drawing. L/R/C and B/T/M say which end and edge a point is measured from, so it follows when the part changes size.</div>
-    ${pePtsTable(pts, 'pts', i)}
-    ${p ? `<div class="pe-ptbox"><div class="eyebrow">Point ${i + 1}, and the edge to point ${(i + 1) % n + 1}</div><div class="pe-grid">
-      ${peIn('Corner radius', `pts.${i}.r`, p.r ?? '', '0')}
-      <label class="f chk"><input type="checkbox" class="pe-in" data-path="pts.${i}.ri"${p.ri ? ' checked' : ''}> <span>Inside radius (cuts the corner away)</span></label>
-      ${peIn(`Bulge to point ${(i + 1) % n + 1} (+ out, − in)`, `pts.${i}.b`, p.b ?? '', '0 = straight')}
-      <label class="f"><span>Edge length to point ${(i + 1) % n + 1}</span><input class="pe-in" data-path="len.${i}" value="${esc(peShow(len))}" aria-label="Edge length"></label></div></div>` : ''}
-    <div class="row-actions">${e.pts ? '<button class="btn sm" data-act="pe-shape-reset">Back to the plain part</button>' : ''}</div>
-    <div class="eyebrow">Turn it</div>
-    <div class="row-actions"><button class="btn sm" data-act="pe-xf" data-id="mx" aria-pressed="${!!xf.mx}">Mirror left–right</button><button class="btn sm" data-act="pe-xf" data-id="my" aria-pressed="${!!xf.my}">Mirror top–bottom</button><button class="btn sm" data-act="pe-xf" data-id="rot" aria-pressed="${!!(xf.mx && xf.my)}">Rotate 180°</button><button class="btn sm" data-act="pe-xf" data-id="face" aria-pressed="${!!xf.face}">Flip over (machining to the other face)</button></div>
-    <div class="note">These turn the whole part, the cabinet's own drilling included.</div>
-    <div class="eyebrow">Stretch test <span class="muted">see how the shape and operations follow a size change; nothing is saved</span></div>
+  return `<div class="eyebrow">Stretch test <span class="muted">see how the shape and operations follow a size change; nothing is saved</span></div>
     <div class="pe-grid"><label class="f"><span>Length ${(s.st || {}).dl ? (s.st.dl > 0 ? '+' : '') + fmtLen(s.st.dl, 1) : ''}</span><input type="range" class="pe-stretch" data-k="dl" min="${-Math.floor(q.L * 0.6)}" max="${Math.ceil(q.L)}" step="0.5" value="${(s.st || {}).dl || 0}" aria-label="Stretch length"></label>
       <label class="f"><span>Width ${(s.st || {}).dw ? (s.st.dw > 0 ? '+' : '') + fmtLen(s.st.dw, 1) : ''}</span><input type="range" class="pe-stretch" data-k="dw" min="${-Math.floor(q.W * 0.6)}" max="${Math.ceil(q.W)}" step="0.5" value="${(s.st || {}).dw || 0}" aria-label="Stretch width"></label></div>
     ${s.st && (s.st.dl || s.st.dw) ? '<div class="row-actions"><button class="btn sm" data-act="pe-stretch-off">Back to the real size</button></div>' : ''}
@@ -487,6 +499,92 @@ const peViewBar = () => `<div class="seg sm" role="group" aria-label="Units">${[
   <label class="f inl"><span>Grid</span><select class="pe-grid-pick" aria-label="Grid">${[['', 'Off'], [1 / 16, '1/16"'], [1 / 8, '1/8"'], [1 / 4, '1/4"'], [1 / 2, '1/2"'], [1, '1"'], [2, '2"'], [5 / 25.4, '5 mm'], [10 / 25.4, '10 mm']].map(([v, l]) => `<option value="${v}"${String(ui.peGrid || '') === String(v) ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
   <label class="f inl chk"><input type="checkbox" class="pe-snap"${ui.peSnap === false ? '' : ' checked'}> <span>Snap</span></label>
   <span class="grow"></span><button class="btn sm" data-act="pe-sim" title="Runs the bit over every cut, in order">${icon('play')}Simulate</button>`;
+/* ----- Mozaik-style layout: a tool rail on the left, the drawing with a table under it, the picked item's settings on the right ----- */
+const PE_BAND_COLORS = ['#2dd4bf', '#f59e0b', '#e879f9', '#6d28d9', '#1d4ed8', '#22c55e', '#ef4444', '#0ea5e9', '#a16207', '#64748b'];
+const peBandColor = id => { const i = (S.edgebands || []).findIndex(b => b.id === id); return i < 0 ? '#94a3b8' : PE_BAND_COLORS[i % PE_BAND_COLORS.length]; };
+const PE_OP_BTNS = [['drill', 'Bore hole', '<circle cx="20" cy="15" r="7"/><circle cx="20" cy="15" r="2" class="f"/>'], ['groove', 'Cut groove', '<path d="M4 12h32v6H4z"/>'], ['linebore', '32mm line bore', '<circle cx="8" cy="15" r="3"/><circle cx="16" cy="15" r="3"/><circle cx="24" cy="15" r="3"/><circle cx="32" cy="15" r="3"/>'],
+  ['openpath', 'Tool path', '<path d="M4 24l10-14 10 10 12-14" class="o"/>'], ['closedpath', 'Closed path', '<path d="M6 6h28v18H6z" class="o"/>'], ['pocket', 'Pocket', '<path d="M8 7h24v16H8z" class="f2"/>'],
+  ['perimeter', 'Perimeter', '<path d="M4 4h32v22H4z" class="o"/><path d="M8 8h24v14H8z" class="o d"/>'], ['edgebore', 'Edge bore', '<path d="M4 6h32v18H4z" class="o"/><path d="M4 12h10M4 19h10"/>'], ['text', 'Engrave', '<text x="20" y="21" text-anchor="middle" font-size="15" font-weight="700">Ab</text>']];
+function peRail(c, q, e, s) {
+  if (s.tab === 'shape') return `<div class="pe-railh">Basic shapes</div><div class="pe-shapes">${PE_SHAPES.map(([k, l]) => `<button class="pe-shp" data-act="pe-preset" data-id="${k}" title="${esc(l)}" aria-label="${esc(l)}"><svg viewBox="0 0 40 30" aria-hidden="true"><path d="${PE_SHAPE_PIC[k] || PE_SHAPE_PIC.rect}"/></svg></button>`).join('')}</div>
+    ${PART_SHAPES.length ? `<div class="pe-railh">Saved</div>${PART_SHAPES.map(x => `<button class="pe-railbtn sm" data-act="pe-lib-use" data-id="${esc(x.id)}" title="Load ${esc(x.name)}">${esc(x.name)}</button>`).join('')}` : ''}`;
+  if (s.tab === 'ops') {
+    const tpls = typeof OP_TEMPLATES !== 'undefined' ? OP_TEMPLATES : [], clip = typeof opClip !== 'undefined' && opClip ? opClip : null;
+    return `<div class="pe-railh">Operations</div>${PE_OP_BTNS.map(([k, l, pic]) => `<button class="pe-railbtn" data-act="pe-op-add" data-id="${k}" title="Add a ${esc(l.toLowerCase())}"><svg viewBox="0 0 40 30" aria-hidden="true">${pic}</svg><span>${l}</span></button>`).join('')}
+      ${clip ? `<button class="pe-railbtn sm" data-act="pe-op-paste">Paste ${clip.length > 1 ? clip.length : ''}</button>` : ''}
+      ${tpls.length ? `<div class="pe-railh">Templates</div>${tpls.map(t => `<button class="pe-railbtn sm" data-act="pe-op-add" data-id="tpl:${esc(t.id)}">${esc(t.name)}</button>`).join('')}` : ''}`;
+  }
+  if (s.tab === 'band') {
+    const paint = ui.pePaint === undefined ? ((S.edgebands || [])[0] || {}).id || 'none' : ui.pePaint;
+    return `<div class="pe-railh">Banding</div>${(S.edgebands || []).map(b => `<button class="pe-paint${paint === b.id ? ' on' : ''}" data-act="pe-paint" data-id="${esc(b.id)}" style="--bc:${peBandColor(b.id)}" title="${esc(b.name)}"><span>${esc(b.name)}</span></button>`).join('')}
+      <button class="pe-paint none${paint === 'none' ? ' on' : ''}" data-act="pe-paint" data-id="none"><span>None</span></button><button class="pe-paint tpl${paint === 'tpl' ? ' on' : ''}" data-act="pe-paint" data-id="tpl"><span>From the template</span></button>`;
+  }
+  return '';
+}
+// One line of the operations table for a realised operation from the cabinet.
+function peGenRow(o, q) {
+  const Y = y => r3(q.W - y), th = o.through ? 'Thru' : o.depth;
+  if (o.type === 'bore') return ['Bore hole', o.x, Y(o.y), o.dia, '', th];
+  if (o.type === 'groove') return ['Groove', o.x1, Y(o.y1), o.width, r3(Math.hypot(o.x2 - o.x1, o.y2 - o.y1)), th];
+  if (o.type === 'pocket' || o.type === 'cutout') return [o.type === 'cutout' ? 'Cut-out' : 'Pocket', o.x, Y(o.y + o.h), o.w, o.h, o.type === 'cutout' ? 'Thru' : th];
+  if (o.type === 'path') return [o.pocket ? 'Pocket' : 'Tool path', (o.pts[0] || {}).x, Y((o.pts[0] || {}).y || 0), '', '', th];
+  if (o.type === 'edge') return ['Edge', '', '', '', '', ''];
+  if (o.type === 'hbore') return ['Edge bore', o.x, o.y, o.dia, '', o.depth];
+  if (o.type === 'linebore' || o.type === 'lbore') return ['Line bore', o.x, Y(o.y || 0), o.dia, '', th];
+  return [o.type, '', '', '', '', th];
+}
+function peOwnRow(u, c, q) {
+  const vars = partVars(c, q), n = v => { const x = peNum(v, vars); return isFinite(x) ? r3(x) : ''; }, P = (u.pts || []).map(p => peXY(p, vars, q.L, q.W)), p0 = P[0] || {};
+  const w = u.type === 'drill' || u.type === 'linebore' || u.type === 'edgebore' ? n(u.dia) : u.type === 'groove' ? n(u.width) : '';
+  const l = u.type === 'groove' ? (u.len ? n(u.len) : P[1] ? r3(Math.hypot(P[1].x - p0.x, P[1].y - p0.y)) : '') : '';
+  const d = n(u.depth), qty = u.type === 'drill' ? P.length : u.type === 'linebore' ? n(u.count) || 1 : 1;
+  return [peOpName(u), p0.x ?? '', p0.y ?? '', w, l, d === 0 ? 'Thru' : d, qty];
+}
+function peTable(c, q, e, s) {
+  const f = v => v === '' || v === undefined || v === null ? '' : typeof v === 'number' ? esc(peShow(v)) : esc(String(v));
+  if (s.tab === 'shape') {
+    const pts = e.pts || peStartPts(q), vars = partVars(c, q);
+    return `<table class="t pe-tab"><thead><tr><th>Point</th><th>X</th><th>Y</th><th>Radius</th><th>Measured from</th></tr></thead><tbody>${pts.map((p, i) => { const z = peView(peXY(p, vars, q.L, q.W), q, e); return `<tr class="${i === s.pt ? 'on' : ''}" data-act="pe-pt" data-id="${i}"><td>${i + 1}</td><td>${f(z.x)}</td><td>${f(z.y)}</td><td>${f(p.r ? peNum(p.r, vars) : 0)}${p.ri ? ' in' : ''}</td><td class="muted">${{ '': 'left', R: 'right', C: 'middle' }[p.ax || '']}, ${{ '': 'bottom', T: 'top', M: 'middle' }[p.ay || '']}${typeof p.x === 'string' || typeof p.y === 'string' ? ' · formula' : ''}</td></tr>`; }).join('')}</tbody></table>`;
+  }
+  if (s.tab === 'ops') {
+    const gen = peGen(q), ops = e.ops || [], rows = [];
+    gen.forEach((o, i) => { const r = peGenRow(o, q); rows.push({ key: 'g' + i, name: o.why || '', r: [...r, 1], hide: false }); });
+    ops.forEach((u, i) => rows.push({ key: 'u' + i, name: u.name && u.name !== peOpName(u) ? u.name : '', r: peOwnRow(u, c, q), hide: !!u.off, own: true }));
+    (e.hide || []).forEach((t, i) => rows.push({ key: 'h' + i, name: t, r: ['Turned off', '', '', '', '', '', ''], hide: true }));
+    if (!rows.length) return '<div class="note show">No operations yet. Click a button on the left to add one.</div>';
+    return `<table class="t pe-tab"><thead><tr><th>Type</th><th>Name</th><th>X</th><th>Y</th><th>Width</th><th>Length</th><th>Depth</th><th>Qty</th><th>Hide</th></tr></thead><tbody>${rows.map(x => `<tr class="${x.key === s.sel ? 'on' : ''}${x.own ? ' own' : ''}${x.hide ? ' off' : ''}"${x.key[0] === 'h' ? '' : ` data-act="pe-pick" data-id="${x.key}"`}><td>${esc(x.r[0])}</td><td class="muted">${esc(x.name)}</td>${x.r.slice(1, 7).map(v => `<td>${f(v)}</td>`).join('')}<td><input type="checkbox" class="pe-hidecb" data-id="${x.key}"${x.hide ? ' checked' : ''} aria-label="Hide this operation"></td></tr>`).join('')}</tbody></table>`;
+  }
+  if (s.tab === 'band') {
+    const k = partKind(q.kind), eb = [{ v: '', l: 'From the part template' }, { v: 'none', l: 'No banding' }, ...opts(S.edgebands || [])];
+    return `<table class="t pe-tab"><thead><tr><th>Edge</th><th>Edge type</th><th>Current band</th><th></th></tr></thead><tbody>${EDGE_KEYS.map(x => { const cur = q.band && q.band[x]; return `<tr><td><b>${x}</b></td><td>${esc(k.edges[x])}</td><td><i class="pe-sw" style="--bc:${cur ? peBandColor(cur) : 'transparent'}"></i>${esc((edgeband(cur) || {}).name || 'None')}</td><td><select class="pe-in" data-path="band.${x}" aria-label="Band for ${x}">${eb.map(o => `<option value="${esc(o.v)}"${String((e.band || {})[x] || '') === String(o.v) ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}</select></td></tr>`; }).join('')}</tbody></table>`;
+  }
+  return '';
+}
+// The arrow pad nudges the picked point (Shape) or the whole picked operation (Operations) by the step.
+const peNudgePad = () => `<div class="pe-nudge"><div class="eyebrow">Nudge</div><div class="pe-pad"><span></span><button class="btn sm" data-act="pe-nudge" data-id="0,1" aria-label="Up">▲</button><span></span><button class="btn sm" data-act="pe-nudge" data-id="-1,0" aria-label="Left">◀</button><input class="pe-step" value="${esc(peShow(ui.peStep ?? 0.0625))}" aria-label="Nudge step" title="Nudge step"><button class="btn sm" data-act="pe-nudge" data-id="1,0" aria-label="Right">▶</button><span></span><button class="btn sm" data-act="pe-nudge" data-id="0,-1" aria-label="Down">▼</button><span></span></div></div>`;
+function peShapePanel(c, q, e, s) {
+  const pts = e.pts || peStartPts(q), i = s.pt, p = pts[i], n = pts.length, xf = e.xf || {};
+  const vars = partVars(c, q), A = p && peXY(p, vars, q.L, q.W), B = p && peXY(pts[(i + 1) % n], vars, q.L, q.W);
+  const len = p ? r3(Math.hypot(B.x - A.x, B.y - A.y)) : 0;
+  const pt = p ? `<div class="pe-ptbox"><div class="eyebrow">Point ${i + 1}</div><div class="pe-grid">
+      <label class="f"><span>X</span><span class="pe-xy"><input class="pe-in${typeof p.x === 'string' ? ' fx' : ''}" data-path="pts.${i}.x" value="${esc(peShow(p.x))}" aria-label="X">${peAnc(`pts.${i}.ax`, p.ax, PE_AX, 'X measured from: left end, right end or middle')}</span></label>
+      <label class="f"><span>Y</span><span class="pe-xy"><input class="pe-in${typeof p.y === 'string' ? ' fx' : ''}" data-path="pts.${i}.y" value="${esc(peShow(p.y))}" aria-label="Y">${peAnc(`pts.${i}.ay`, p.ay, PE_AY, 'Y measured from: bottom edge, top edge or middle')}</span></label>
+      ${peIn('Radius', `pts.${i}.r`, p.r ?? '', '0')}
+      <label class="f"><span>Edge to ${(i + 1) % n + 1}</span><input class="pe-in" data-path="len.${i}" value="${esc(peShow(len))}" aria-label="Edge length"></label>
+      ${peIn(`Bulge to ${(i + 1) % n + 1}`, `pts.${i}.b`, p.b ?? '', '0 = straight')}
+      <label class="f chk"><input type="checkbox" class="pe-in" data-path="pts.${i}.ri"${p.ri ? ' checked' : ''}> <span>Inside radius</span></label></div>
+      <div class="row-actions"><button class="btn sm" data-act="pe-pt-add" data-id="pts:${i}">${icon('plus')}Add point</button><button class="btn sm danger" data-act="pe-pt-del" data-id="pts:${i}"${n < 4 ? ' disabled' : ''}>Delete point</button></div></div>${peNudgePad()}`
+    : '<div class="pe-empty">Click a point in the drawing or the table to change it. Drag points to move them.</div>';
+  return `${pt}<div class="eyebrow">Shape</div>
+    <div class="row-actions"><button class="btn sm" data-act="pe-xf" data-id="rot" aria-pressed="${!!(xf.mx && xf.my)}">Rotate 180°</button><button class="btn sm" data-act="pe-xf" data-id="mx" aria-pressed="${!!xf.mx}">Flip left–right</button><button class="btn sm" data-act="pe-xf" data-id="my" aria-pressed="${!!xf.my}">Flip top–bottom</button><button class="btn sm" data-act="pe-xf" data-id="face" aria-pressed="${!!xf.face}">Machine the other face</button>${e.pts ? '<button class="btn sm" data-act="pe-shape-reset">Plain part</button>' : ''}</div>
+    <details class="pe-more"${ui.peMore ? ' open' : ''}><summary data-act="pe-more">Stretch test, library, DXF and tracing</summary>${peShapeTab(c, q, e, s)}</details>`;
+}
+function peBandPanel(c, q, e) {
+  const paint = ui.pePaint === undefined ? ((S.edgebands || [])[0] || {}).id || 'none' : ui.pePaint, pb = edgeband(paint);
+  return `<div class="pe-empty">Pick a band on the left, then click edges in the drawing to put it on. <b>${paint === 'none' ? 'None' : paint === 'tpl' ? 'From the template' : esc((pb || {}).name || '')}</b> is picked.</div>
+    <div class="eyebrow">Legend</div><div class="pe-legend2">${(S.edgebands || []).map(b => `<div><i class="pe-sw" style="--bc:${peBandColor(b.id)}"></i>${esc(b.name)}</div>`).join('') || '<div class="muted">No edge bands in the library yet.</div>'}</div>
+    ${e.band ? '<div class="row-actions"><button class="btn sm" data-act="pe-band-reset">Back to the template banding</button></div>' : ''}`;
+}
 function renderPartEdit() {
   const s = ui.partEdit; let el = $('#partedit');
   if (!s) { if (el) el.remove(); return; }
@@ -495,12 +593,16 @@ function renderPartEdit() {
   if (!el) { el = document.createElement('div'); el.id = 'partedit'; el.className = 'pe-back'; document.body.appendChild(el); }
   const T = [['shape', 'Shape'], ['ops', 'Operations'], ['band', 'Banding'], ['details', 'Details']];
   const warn = b.warn.filter(w => w.startsWith(q.name + ':'));
-  el.innerHTML = `<div class="pe-win" role="dialog" aria-label="Part editor">
-    <div class="pe-top"><span class="pill">${esc(LBL[c.id] || '')}</span><b>${esc(q.name)}</b>${q.out || (b.removed || []).includes(q) ? '<span class="pill warn">Left out</span>' : ''}<span class="muted">${fmtLen(q.L, 1)} × ${fmtLen(q.W, 1)} × ${fmtLen(q.T, 1)}</span><span class="grow"></span><button class="btn primary" data-act="pe-close">Done</button></div>
-    <div class="pe-body"><div class="pe-left"><div class="pe-view">${peViewBar()}</div><div id="pe-drawwrap">${peDrawing(c, q, e, s)}</div></div>
-    <div class="pe-right"><div class="pe-tabs" role="tablist">${T.map(([k, l]) => `<button role="tab" data-act="pe-tab" data-id="${k}" aria-selected="${s.tab === k}">${l}</button>`).join('')}</div>
-      ${warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}
-      <div class="pe-pane">${s.tab === 'shape' ? peShapeTab(c, q, e, s) : s.tab === 'details' ? peDetailsTab(c, q, e, s) : s.tab === 'band' ? peBandTab(c, q, e) : peOpsTab(c, q, e, s)}</div></div></div></div>`;
+  const rail = peRail(c, q, e, s), table = peTable(c, q, e, s);
+  const panel = s.tab === 'shape' ? peShapePanel(c, q, e, s) : s.tab === 'details' ? peDetailsTab(c, q, e, s) : s.tab === 'band' ? peBandPanel(c, q, e) : peOpsTab(c, q, e, s);
+  const keep = el.querySelector('.pe-tablewrap'), keepTop = keep ? keep.scrollTop : 0;
+  el.innerHTML = `<div class="pe-win mz" role="dialog" aria-label="Part editor">
+    <div class="pe-top"><span class="pill">${esc(LBL[c.id] || '')}</span><b>${esc(q.name)}</b>${q.out || (b.removed || []).includes(q) ? '<span class="pill warn">Left out</span>' : ''}<span class="muted">${fmtLen(q.L, 1)} × ${fmtLen(q.W, 1)} × ${fmtLen(q.T, 1)}</span>
+      <div class="pe-tabs" role="tablist">${T.map(([k, l]) => `<button role="tab" data-act="pe-tab" data-id="${k}" aria-selected="${s.tab === k}">${l}</button>`).join('')}</div><span class="grow"></span><button class="btn sm" data-act="pe-undo" title="Undo (Ctrl Z)">↶ Undo</button><button class="btn sm" data-act="pe-redo" title="Redo (Ctrl Y)">↷ Redo</button><button class="btn primary" data-act="pe-close">Done</button></div>
+    <div class="pe-body${rail ? '' : ' norail'}">${rail ? `<div class="pe-rail">${rail}</div>` : ''}<div class="pe-left"><div class="pe-view">${peViewBar()}</div><div id="pe-drawwrap">${peDrawing(c, q, e, s)}</div>${table ? `<div class="pe-tablewrap">${table}</div>` : ''}<div class="pe-hint muted">Mouse wheel zooms the page; drag points to move them.</div></div>
+    <div class="pe-right">${warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}
+      <div class="pe-pane">${panel}</div></div></div></div>`;
+  const tw = el.querySelector('.pe-tablewrap'); if (tw) { tw.scrollTop = keepTop; const on = tw.querySelector('tr.on'); if (on && (on.offsetTop < tw.scrollTop || on.offsetTop > tw.scrollTop + tw.clientHeight - 30)) tw.scrollTop = on.offsetTop - 40; }
 }
 
 /* ----- Changing values ----- */
@@ -568,6 +670,24 @@ function peAct(a, id) {
   const edit = fn => { mutate(() => fn(peEdit(c, s.key))); renderPartEdit(); };
   switch (a) {
     case 'pe-close': closePartEdit(); return true;
+    case 'pe-undo': case 'pe-redo': undoRedo(a === 'pe-undo' ? -1 : 1); renderPartEdit(); return true;
+    case 'pe-more': ui.peMore = !ui.peMore; return false;
+    case 'pe-paint': ui.pePaint = id; renderPartEdit(); return true;
+    case 'pe-toolpick': ui.peToolPick = !ui.peToolPick; renderPartEdit(); return true;
+    case 'pe-tool': { const [path, v] = id.split('|'); ui.peToolPick = false; peChange(path, v, true); renderPartEdit(); return true; }
+    case 'pe-lib-use': { const it = PART_SHAPES.find(x => x.id === id); if (it) edit(e => { e.pts = clone(it.pts); if ((it.ops || []).length) e.ops = [...(e.ops || []), ...clone(it.ops)]; s.pt = -1; }); return true; }
+    case 'pe-nudge': {
+      const [dx, dy] = id.split(',').map(Number), st = typeof ui.peStep === 'number' && ui.peStep > 0 ? ui.peStep : 0.0625;
+      const e0 = (c.partEdits || {})[s.key] || {}, sel = s.tab === 'ops' ? peSelOp(c, q, e0, s) : null;
+      if (s.tab === 'shape' ? s.pt < 0 : !sel) return true;
+      edit(e => {
+        if (s.tab === 'shape' && !e.pts) e.pts = peStartPts(q);
+        const path = s.tab === 'shape' ? 'pts' : peRealPath(e, q, s, sel.P + '.pts'); if (!path) return;
+        const list = peGetPath(e, path) || [], vars = partVars(c, q), mx = (e.xf || {}).mx ? -1 : 1, my = (e.xf || {}).my ? -1 : 1;
+        (s.tab === 'shape' ? [list[s.pt]] : list).filter(Boolean).forEach(p => { const z = peXY(p, vars, q.L, q.W); peStore(p, r3(z.x + dx * st * mx), r3(z.y + dy * st * my), q.L, q.W); });
+      });
+      return true;
+    }
     case 'pe-tab': s.tab = id; s.pt = -1; renderPartEdit(); return true;
     case 'pe-pick': s.sel = id || ''; s.pt = -1; if (s.tab !== 'ops' && s.sel) s.tab = 'ops'; renderPartEdit(); return true;
     case 'pe-desel': s.sel = ''; s.pt = -1; renderPartEdit(); return true;
@@ -632,9 +752,9 @@ function peAct(a, id) {
     case 'pe-trace-new': if (s.tab === 'shape') edit(e => { e.pts = []; s.trace = true; s.pt = -1; }); return true;
     case 'pe-img-off': ui.peImg = null; s.trace = false; renderPartEdit(); return true;
     case 'pe-edge': {
-      const cur = q.band && q.band[id], others = EDGE_KEYS.map(k => q.band && q.band[k]).filter(Boolean), pick = others[0] || ((S.edgebands || [])[0] || {}).id;
-      if (!cur && !pick) return true;
-      edit(e => { e.band = e.band || {}; e.band[id] = cur ? 'none' : pick; });
+      // Paints the band picked on the left onto the edge, like Mozaik's banding buttons.
+      const paint = ui.pePaint === undefined ? ((S.edgebands || [])[0] || {}).id || 'none' : ui.pePaint;
+      edit(e => { e.band = e.band || {}; if (paint === 'tpl') delete e.band[id]; else e.band[id] = paint; if (!Object.keys(e.band).length) delete e.band; });
       return true;
     }
     case 'pe-del-added': mutate(() => { c.addParts = (c.addParts || []).filter(a => peKey(a.name) !== s.key); if (c.partEdits) delete c.partEdits[s.key]; }); closePartEdit(); return true;
@@ -642,6 +762,7 @@ function peAct(a, id) {
   return false;
 }
 document.addEventListener('click', ev => {
+  if (ev.target.classList && (ev.target.classList.contains('pe-hidecb') || ev.target.classList.contains('pe-step'))) return;
   const s = ui.partEdit, svg = s && s.trace && ev.target.closest && !ev.target.closest('[data-pe-pt]') && ev.target.closest('#partedit svg.pe-draw');
   if (svg) { peTraceClick(svg, ev); ev.stopPropagation(); return; }
   // Click an operation in the drawing to pick it; click the empty drawing to let it go.
@@ -661,6 +782,17 @@ document.addEventListener('keydown', ev => {
   }
 }, true);
 document.addEventListener('change', ev => { const t = ev.target; if (t.classList && t.classList.contains('pe-addtype') && t.value) peAct('pe-op-add', t.value); });
+// The Hide box in the operations table turns an operation off or back on; the step box sets the nudge distance.
+document.addEventListener('change', ev => {
+  const t = ev.target, s = ui.partEdit; if (!s || !t.classList) return;
+  if (t.classList.contains('pe-step')) { const v = peValue(t.value); if (typeof v === 'number' && v > 0) ui.peStep = v; renderPartEdit(); return; }
+  if (!t.classList.contains('pe-hidecb')) return;
+  const k = t.dataset.id, i = +k.slice(1), c = cab(s.cab); if (!c) return;
+  if (k[0] === 'g') { if (t.checked) peAct('pe-hide', String(i)); return; }
+  if (k[0] === 'h') { if (!t.checked) peAct('pe-unhide', String(i)); return; }
+  mutate(() => { const e = peEdit(c, s.key), u = (e.ops || [])[i]; if (!u) return; if (t.checked) u.off = true; else delete u.off; });
+  renderPartEdit();
+});
 
 // Dragging a numbered point in the drawing; it snaps to 1/16".
 let peDrag = null;

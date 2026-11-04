@@ -236,68 +236,61 @@ function renderShapeDesigner() {
   const src = d.sourceLib && shapeLibItem(d.sourceLib), inRoom = d.editShape && S.rooms.some(r => (r.shapes || []).some(x => x.id === d.editShape));
   const P = i => 'shdpt:' + i;
   const selBox = sel.kind === 'pt' && d.pts[sel.i] ? `<div class="psec box">${secHead('ruler', `Point ${sel.i + 1}`, 'teal')}<div class="grid3">${fld('Across (x)', P(sel.i), 'x', d.pts[sel.i].x, 'len')}${fld(d.plane === 'flat' ? 'Out (y)' : 'Up (y)', P(sel.i), 'y', d.pts[sel.i].y, 'len')}${fld('Round corner', P(sel.i), 'r', d.pts[sel.i].r || 0, 'len')}</div>
-      <div class="row-actions"><button class="btn sm" data-act="se-round" data-id="${sel.i}:0">Sharp</button><button class="btn sm" data-act="se-round" data-id="${sel.i}:1">1"</button><button class="btn sm" data-act="se-round" data-id="${sel.i}:3">3"</button><button class="btn sm" data-act="se-round" data-id="${sel.i}:6">6"</button><button class="btn sm danger" data-act="se-del" data-id="${sel.i}"${n <= 3 ? ' disabled' : ''}>${icon('trash')}Remove point</button></div></div>`
+      <div class="row-actions"><button class="btn sm" data-act="se-round" data-id="${sel.i}:0">Sharp</button><button class="btn sm" data-act="se-round" data-id="${sel.i}:1">1"</button><button class="btn sm" data-act="se-round" data-id="${sel.i}:3">3"</button><button class="btn sm" data-act="se-round" data-id="${sel.i}:6">6"</button></div></div>`
     : sel.kind === 'edge' && d.pts[sel.i] ? `<div class="psec box">${secHead('ruler', `Edge ${sel.i + 1} to ${(sel.i + 1) % n + 1}`, 'violet')}<div class="grid2">${fld('Length', P(sel.i), 'len', r3(edgeLen(d.pts, sel.i)), 'len')}${fld('Bulge', P(sel.i), 'b', d.pts[sel.i].b || 0, 'len')}</div>
-      <div class="note">Bulge is how far the middle of the edge sits out from a straight line. Negative curves it in.</div>
-      <div class="row-actions"><button class="btn sm" data-act="se-bulge" data-id="${sel.i}:0">Straight</button><button class="btn sm" data-act="se-bulge" data-id="${sel.i}:out">Gentle bow</button><button class="btn sm" data-act="se-bulge" data-id="${sel.i}:in">Curve in</button><button class="btn sm" data-act="se-bulge" data-id="${sel.i}:half">Half round</button><button class="btn sm" data-act="se-split" data-id="${sel.i}">${icon('plus')}Add point in the middle</button></div></div>`
-    : `<div class="note">Click a point or an edge to change it. Drag points to move them (they snap to 1/4"; hold Shift to line up with another point's x or y). Click a + on an edge to add a point there.</div>`;
+      <div class="row-actions"><button class="btn sm" data-act="se-bulge" data-id="${sel.i}:0">Straight</button><button class="btn sm" data-act="se-bulge" data-id="${sel.i}:out">Gentle bow</button><button class="btn sm" data-act="se-bulge" data-id="${sel.i}:in">Curve in</button><button class="btn sm" data-act="se-bulge" data-id="${sel.i}:half">Half round</button></div></div>`
+    : `<div class="note">Pick a point or an edge in the drawing or the table.</div>`;
   const rows = d.pts.map((p, i) => `<tr class="${sel.i === i ? 'on' : ''}"><td><button class="linkbtn" data-act="se-sel" data-id="pt:${i}">${i + 1}</button></td><td>${calcWrap(ctl(P(i), 'x', p.x, 'len', { label: `Point ${i + 1} x` }), P(i), 'x')}</td><td>${calcWrap(ctl(P(i), 'y', p.y, 'len', { label: `Point ${i + 1} y` }), P(i), 'y')}</td><td>${ctl(P(i), 'r', p.r || 0, 'len', { label: `Point ${i + 1} corner radius` })}</td>
     <td><button class="linkbtn" data-act="se-sel" data-id="edge:${i}">${i + 1}→${(i + 1) % n + 1}</button></td><td>${calcWrap(ctl(P(i), 'len', r3(edgeLen(d.pts, i)), 'len', { label: `Edge ${i + 1} length` }), P(i), 'len')}</td><td>${ctl(P(i), 'b', p.b || 0, 'len', { label: `Edge ${i + 1} bulge` })}</td><td><button class="btn sm" data-act="se-del" data-id="${i}" aria-label="Remove point ${i + 1}"${n <= 3 ? ' disabled' : ''}>×</button></td></tr>`).join('');
   const fm = d.forMold && molding(d.forMold), fc = d.forCab && cab(d.forCab.id);
   if (d.forWalls && typeof wallShapePage === 'function') { $('#tab-designer').innerHTML = wallShapePage(d, selBox, rows, b); initShapeEditor(); return; }
   if (fc) {
     const vl = (CAB_VIEWS.find(x => x[0] === d.forCab.view) || [])[2] || '', [cw, ch] = cabShapeDims(fc, d.forCab.view);
-    $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="se-cab-cancel">${icon('back')}Back to the room</button><h2>${esc(LBL[fc.id] || '')} ${esc(fc.name)}: ${d.forCab.view} shape</h2><p>${vl}. The dashed box is the cabinet, ${fmtLen(cw)} × ${fmtLen(ch)}. Cut it in where the cabinet should be cut away, like a U for a farm sink.</p></div>
+    const pal = `<button class="pe-railbtn" data-act="se-cab-reset" title="Plain box"><svg viewBox="-1 -1 12 9" aria-hidden="true"><polygon points="0,0 10,0 10,7 0,7"/></svg>Plain box</button>${(CAB_SHAPE_PRESETS[d.forCab.view] || []).map(pr => `<button class="pe-railbtn" data-act="se-pre" data-id="cab:${pr[0]}" title="${esc(pr[1])}">${cabPresetPic(fc, d.forCab.view, pr)}${esc(pr[1].replace(/ \(.*\)$/, ''))}</button>`).join('')}`;
+    $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="se-cab-cancel">${icon('back')}Back to the room</button><h2>${esc(LBL[fc.id] || '')} ${esc(fc.name)}: ${d.forCab.view} shape</h2><p>${vl}. Dashed box: the cabinet, ${fmtLen(cw)} × ${fmtLen(ch)}.</p></div>
     <div class="row-actions"><button class="btn" data-act="se-cab-cancel">Cancel</button><button class="btn primary" data-act="se-cab-save">${icon('check')}Save shape</button></div></div>
-  <div class="designer shapedes">
-    <div class="card stack cardbody des-form">${selBox}
-      <div class="eyebrow">Points and edges</div>
-      <div class="tscroll"><table class="t setable"><thead><tr><th>Pt</th><th>x</th><th>y</th><th>Round</th><th>Edge</th><th>Length</th><th>Bulge</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="row-actions"><button class="btn sm" data-act="se-split" data-id="${n - 1}">${icon('plus')}Add a point</button><button class="btn sm" data-act="se-cab-reset">Back to the plain box</button></div>
-    </div>
-    <div class="stack"><div class="card cardbody stack"><div class="se-stage">${shapeEditorSVG(d)}</div><div class="note">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)}</div></div></div>
-  </div>`;
+  ${seMz(d, pal, rows, b, selBox, '', 'Points and edges')}`;
     initShapeEditor(); return;
   }
-  $('#tab-designer').innerHTML = fm ? `<div class="pagehead"><div><button class="linkbtn back" data-act="se-mold-cancel">${icon('back')}Moldings</button><h2>Molding profile: ${esc(fm.name)}</h2><p>Draw the side profile of the molding. x is how far it sticks out from the cabinet, y is up from the bottom. Round corners and bulge edges for coves and ogees.</p></div>
+  if (fm) {
+    const mp = SHAPE_PRESETS.find(p => p.id === 'mold');
+    $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="se-mold-cancel">${icon('back')}Moldings</button><h2>Molding profile: ${esc(fm.name)}</h2><p>Side profile: x sticks out from the cabinet, y goes up from the bottom.</p></div>
     <div class="row-actions"><button class="btn" data-act="se-mold-cancel">Cancel</button><button class="btn primary" data-act="se-mold">${icon('check')}Save profile</button></div></div>
-  <div class="designer shapedes">
-    <div class="card stack cardbody des-form">
-      <div class="grid2">${fld('Projection', 'shd', 'bw', r3(b.w), 'len')}${fld('Height', 'shd', 'bh', r3(b.h), 'len')}</div>
-      ${selBox}
-      <div class="eyebrow">Points and edges</div>
-      <div class="tscroll"><table class="t setable"><thead><tr><th>Pt</th><th>x</th><th>y</th><th>Round</th><th>Edge</th><th>Length</th><th>Bulge</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="row-actions"><button class="btn sm" data-act="se-split" data-id="${n - 1}">${icon('plus')}Add a point</button><button class="btn sm" data-act="se-mold-reset">Start over from a crown</button></div>
-    </div>
-    <div class="stack"><div class="card cardbody stack"><div class="se-stage">${shapeEditorSVG(d)}</div>
-      <div class="note">${fmtLen(b.w, 1)} out × ${fmtLen(b.h, 1)} tall</div></div></div>
-  </div>` : `<div class="pagehead"><div><button class="linkbtn back" data-act="tab" data-id="library">${icon('back')}Products</button><h2>Shape editor</h2><p>Draw custom wood tops, shelves, panels and other parts point by point. Type exact edge lengths, round any corner, and bulge any edge into an arc.</p></div>
-    <div class="row-actions">${desModeSeg()}<select id="shape-load" aria-label="Start from" style="width:auto"><option value="">Start from…</option><optgroup label="Starting shapes">${SHAPE_PRESETS.filter(p => !p.moldOnly).map(p => `<option value="pre:${p.id}">${esc(p.name)}</option>`).join('')}</optgroup>${(S.shapeLib || []).length ? `<optgroup label="Shape library">${S.shapeLib.map(l => `<option value="lib:${l.id}">${esc(l.name)}</option>`).join('')}</optgroup>` : ''}</select>
-    ${inRoom ? `<button class="btn primary" data-act="se-apply">${icon('check')}Apply to the shape in the room</button>` : ''}${src ? `<button class="btn" data-act="se-update">Update “${esc(src.name)}”</button>` : ''}<button class="btn${inRoom ? '' : ' primary'}" data-act="se-save">Save to shape library</button></div></div>
-  <div class="designer shapedes">
-    <div class="card stack cardbody des-form">
-      ${inRoom ? '<div class="note">Editing a shape that is in a room. Apply sends the changes back to it.</div>' : src ? `<div class="note">Editing a copy of <b>${esc(src.name)}</b>.</div>` : '<div class="note">New shape, not saved yet.</div>'}
+  ${seMz(d, `<button class="pe-railbtn" data-act="se-mold-reset" title="Start over from a crown">${seThumb(mp.pts(), true)}Crown</button>`, rows, b, selBox, `<div class="grid2">${fld('Projection', 'shd', 'bw', r3(b.w), 'len')}${fld('Height', 'shd', 'bh', r3(b.h), 'len')}</div>`, 'Points and edges', `${fmtLen(b.w, 1)} out × ${fmtLen(b.h, 1)} tall`)}`;
+    initShapeEditor(); return;
+  }
+  const pal = SHAPE_PRESETS.filter(p => !p.moldOnly).map(p => `<button class="pe-railbtn" data-act="se-pre" data-id="pre:${p.id}" title="${esc(p.name)}">${seThumb(p.pts(), p.plane !== 'flat')}${esc(p.name)}</button>`).join('')
+    + ((S.shapeLib || []).length ? `<div class="eyebrow">Saved shapes</div>${S.shapeLib.map(l => `<button class="pe-railbtn${d.sourceLib === l.id ? ' on' : ''}" data-act="se-pre" data-id="lib:${l.id}" title="${esc(l.name)}">${seThumb(l.pts, l.plane !== 'flat')}${esc(l.name)}</button>`).join('')}` : '');
+  const fields = `${inRoom ? '<div class="note">Editing a shape that is in a room.</div>' : src ? `<div class="note">Editing a copy of <b>${esc(src.name)}</b>.</div>` : '<div class="note">New shape, not saved yet.</div>'}
       ${fld('Name', 'shd', 'name', d.name, 'text', { wide: true })}
-      <div class="grid2">${fld('Lies', 'shd', 'plane', d.plane, 'select', { options: [{ v: 'flat', l: 'Flat, like a top or shelf' }, { v: 'upright', l: 'Upright, like a panel' }] })}${fld('Thickness', 'shd', 'thick', d.thick, 'len')}
+      <div class="grid2">${fld('Lies', 'shd', 'plane', d.plane, 'select', { options: [{ v: 'flat', l: 'Flat (top, shelf)' }, { v: 'upright', l: 'Upright (panel)' }] })}${fld('Thickness', 'shd', 'thick', d.thick, 'len')}
       ${fld('Overall width', 'shd', 'bw', r3(b.w), 'len')}${fld(d.plane === 'flat' ? 'Overall depth' : 'Overall height', 'shd', 'bh', r3(b.h), 'len')}</div>
-      ${fld('Material', 'shd', 'mat', d.mat, 'select', { options: azOpts(S.materials), wide: true })}
-      ${selBox}
-      <div class="eyebrow">Points and edges</div>
-      <div class="tscroll"><table class="t setable"><thead><tr><th>Pt</th><th>x</th><th>y</th><th>Round</th><th>Edge</th><th>Length</th><th>Bulge</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="row-actions"><button class="btn sm" data-act="se-split" data-id="${n - 1}">${icon('plus')}Add a point</button><span class="note">Every x, y and length takes math or a formula, like =W/2. The calculator button opens the calculator.</span></div>
-    </div>
-    <div class="stack">
-      <div class="card cardbody stack"><div class="se-stage">${shapeEditorSVG(d)}</div>
-        <div class="note">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(d.thick, 1)} · ${r3(Math.abs(shapeArea2(o)) / 2 / 144)} sq ft · edge ${fmtLen(shapePerim(o), 1)} around</div></div>
-      <div class="card cardbody"><div class="row-actions"><button class="btn primary" data-act="se-place">${icon('plus')}Save and place in room</button><span class="note">Click near a wall in the plan to put it there.</span></div></div>
-    </div>
-  </div>`;
-  if ($('#shape-load')) $('#shape-load').addEventListener('change', e => {
-    const [k, id] = e.target.value.split(':'); if (!k) return;
-    ui.shapeSel = null;
-    mutate(() => { if (k === 'pre') S.shapeDesign = blankShapeDesign(id); else { const l = shapeLibItem(id); S.shapeDesign = { ...clone(l), sourceLib: l.id, editShape: null }; delete S.shapeDesign.id; } });
-  });
+      ${fld('Material', 'shd', 'mat', d.mat, 'select', { options: azOpts(S.materials), wide: true })}`;
+  $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="tab" data-id="library">${icon('back')}Products</button><h2>Shape editor</h2></div>
+    <div class="row-actions">${desModeSeg()}${inRoom ? `<button class="btn primary" data-act="se-apply">${icon('check')}Apply to the shape in the room</button>` : ''}${src ? `<button class="btn" data-act="se-update">Update “${esc(src.name)}”</button>` : ''}<button class="btn" data-act="se-save">Save to shape library</button><button class="btn${inRoom ? '' : ' primary'}" data-act="se-place">${icon('plus')}Save and place in room</button></div></div>
+  ${seMz(d, pal, rows, b, selBox, fields, 'Points and edges', `${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(d.thick, 1)} · ${r3(Math.abs(shapeArea2(o)) / 2 / 144)} sq ft · edge ${fmtLen(shapePerim(o), 1)} around`)}`;
   initShapeEditor();
+}
+// A small picture of a shape for the rail.
+function seThumb(pts, flip) {
+  const o = shapeOutline(pts), b = shapeBox(pts), k = Math.max(b.w, b.h) * 0.06 || 1;
+  return `<svg viewBox="${r3(b.x0 - k)} ${r3((flip ? -b.y1 : b.y0) - k)} ${r3(b.w + 2 * k)} ${r3(b.h + 2 * k)}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><polygon class="f2" style="stroke-width:${r3(k * 0.7)}" points="${o.map(p => `${r3(p.x)},${r3(flip ? -p.y : p.y)}`).join(' ')}"/></svg>`;
+}
+// The shape editor laid out like the part editor: shapes and tools on the left, the drawing over the points table, settings on the right.
+function seMz(d, pal, rows, b, selBox, fields, tTitle, size) {
+  const sel = ui.shapeSel || {}, n = d.pts.length, has = sel.kind && d.pts[sel.i];
+  const tools = `<div class="eyebrow">Tools</div>
+    <button class="pe-railbtn sm" data-act="se-undo" title="Undo">${icon('back')}Undo</button><button class="pe-railbtn sm" data-act="se-redo" title="Redo">Redo</button>
+    <button class="pe-railbtn sm" data-act="se-split" data-id="${sel.kind === 'edge' && has ? sel.i : n - 1}">${icon('plus')}Add point</button>
+    <button class="pe-railbtn sm" data-act="se-del" data-id="${sel.kind === 'pt' && has ? sel.i : ''}"${sel.kind === 'pt' && has && n > 3 ? '' : ' disabled'}>${icon('trash')}Delete point</button>`;
+  const nudge = `<div class="pe-nudge"><div class="eyebrow">Nudge ${sel.kind === 'edge' ? 'edge' : 'point'}</div><div class="pe-pad"><span></span><button class="btn sm" data-act="se-nudge" data-id="0,1" aria-label="Up"${has ? '' : ' disabled'}>▲</button><span></span><button class="btn sm" data-act="se-nudge" data-id="-1,0" aria-label="Left"${has ? '' : ' disabled'}>◀</button><input class="se-step" value="${esc(fmtLen(ui.seStep ?? 0.25, 1))}" aria-label="Nudge step" title="Nudge step"><button class="btn sm" data-act="se-nudge" data-id="1,0" aria-label="Right"${has ? '' : ' disabled'}>▶</button><span></span><button class="btn sm" data-act="se-nudge" data-id="0,-1" aria-label="Down"${has ? '' : ' disabled'}>▼</button><span></span></div></div>`;
+  return `<div class="se-mz">
+    <div class="pe-rail">${tools}${pal ? `<div class="eyebrow">Shapes</div>${pal}` : ''}</div>
+    <div class="se-center"><div class="se-stage">${shapeEditorSVG(d)}</div><div class="se-size">${size || `${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)}`}</div>
+      <div class="se-tablewrap"><table class="t setable"><thead><tr><th>Pt</th><th>X</th><th>Y</th><th>Round</th><th>Edge</th><th>Length</th><th>Bulge</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="se-panel">${fields}${selBox}${nudge}
+      <details class="pe-more"><summary>Tips</summary><div class="note">Drag points to move them (they snap to 1/4"; hold Shift to line up with another point). Click a + on an edge to add a point there. Any x, y or length takes math or a formula, like =W/2.</div></details></div>
+  </div>`;
 }
 const desModeSeg = () => `<div class="seg" role="group" aria-label="What to design">${[['cab', 'Cabinet', 'box'], ['shape', 'Custom shape', 'ruler']].map(([k, l, ic]) => `<button data-act="des-mode" data-id="${k}" aria-pressed="${(ui.desMode || 'cab') === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
 function shapeSvgPoint(e) {
@@ -372,3 +365,9 @@ function editMoldProfile(m) {
   ui.desMode = 'shape'; ui.shapeSel = null;
   S.shapeDesign = { sourceLib: null, editShape: null, forMold: m.id, name: m.name, plane: 'upright', pts: clone((m.pts || []).length ? m.pts : moldStartPts()), thick: 0.75, mat: m.mat };
 }
+
+// The step box beside the nudge arrows.
+document.addEventListener('change', ev => {
+  const t = ev.target; if (!t.classList || !t.classList.contains('se-step')) return;
+  const v = parseLen(t.value); if (v > 0) ui.seStep = v; renderShapeDesigner();
+});

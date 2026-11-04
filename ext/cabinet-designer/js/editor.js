@@ -63,22 +63,21 @@ function edParts(c, b) {
   // Every part, plus the ones left out, sortable like Mozaik's Parts tab. Colour shows what was changed by hand.
   const all = [...b.parts.filter(p => p.cabId === c.id || !p.cabId), ...(b.removed || []).map(p => ({ ...p, out: true }))];
   const bandTxt = p => EDGE_KEYS.filter(k => p.band && p.band[k]).join(' ') || '';
-  const cols = [['name', 'Part'], ['qty', 'Qty', 1], ['L', 'Length', 1], ['W', 'Width', 1], ['T', 'Thick', 1], ['mat', 'Material'], ['band', 'Banding'], ['ops', 'Ops', 1]];
+  const cols = [['name', 'Part'], ['qty', 'Qty', 1], ['W', 'Width', 1], ['L', 'Length', 1], ['mat', 'Material'], ['band', 'Banding'], ['ops', 'Ops', 1], ['note', 'Comment']];
   const sk = ui.edSort || { k: '', d: 1 }, val = (p, k) => k === 'mat' ? (mat(p.mat) || {}).name || '' : k === 'band' ? bandTxt(p) : k === 'ops' ? p.ops.length : p[k];
   const rows = sk.k ? [...all].sort((a, z) => { const x = val(a, sk.k), y = val(z, sk.k); return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * sk.d; }) : all;
   const K = p => peKeyOf(p), selName = all.some(p => K(p) === ui.edPart) ? ui.edPart : all[0] && K(all[0]), sel = all.find(p => K(p) === selName);
   const n = b.parts.reduce((a, p) => a + p.qty, 0), E = c.partEdits || {};
   const cls = p => { const e = E[K(p)] || {}; return [p.added ? 'pc-added' : '', e.pts ? 'pc-shape' : '', (e.ops || []).length || (e.hide || []).length ? 'pc-ops' : '', e.band ? 'pc-band' : '', e.mat ? 'pc-mat' : '', p.out ? 'pc-out' : ''].filter(Boolean).join(' '); };
   const legend = ui.edLegend ? `<div class="pc-legend"><span class="pc-shape">Shape changed</span><span class="pc-ops">Operations changed</span><span class="pc-band">Banding changed</span><span class="pc-mat">Material changed</span><span class="pc-added">Added by hand</span><span class="pc-out">Left out (not built)</span></div>` : '';
-  return `<div class="psec box">${secHead('list', `${n} parts`, 'teal')}
-    <div class="row-actions ed-ptools"><button class="btn sm primary" data-act="pe-add-part">${icon('plus')}Add part</button><button class="btn sm" data-act="pe-copy-part"${sel && !sel.out ? '' : ' disabled'}>Copy part</button><button class="btn sm" data-act="pe-open-name"${sel ? '' : ' disabled'}>Edit</button><button class="btn sm" data-act="pe-rebuild"${sel && E[K(sel)] ? '' : ' disabled'}>Rebuild</button>${sel && sel.added ? '<button class="btn sm danger" data-act="pe-del-part">Delete part</button>' : ''}<button class="btn sm${ui.edRebuildAll ? ' danger' : ''}" data-act="pe-rebuild-all"${Object.keys(E).length || (c.addParts || []).length ? '' : ' disabled'}>${ui.edRebuildAll ? 'Click again to rebuild every part' : 'Rebuild all parts'}</button><button class="btn sm" data-act="pe-legend" aria-pressed="${!!ui.edLegend}">Color codes</button></div>${legend}
+  return `<div class="ed-parts2"><div class="psec box">${secHead('list', `${n} parts`, 'teal')}
     <div class="tscroll ed-plist"><table class="t qe-parts"><thead><tr><th title="Parts to build">Build</th>${cols.map(([k, l, num]) => `<th class="sortable${num ? ' r' : ''}" data-act="pe-sort" data-id="${k}">${l}${sk.k === k ? (sk.d > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>
-    ${rows.map(p => `<tr class="click ${cls(p)}${K(p) === selName ? ' on' : ''}" data-act="ed-part" data-id="${esc(K(p))}" title="Double-click to open the part editor"><td><input type="checkbox" class="pe-build" data-id="${esc(K(p))}"${p.out ? '' : ' checked'} aria-label="Build ${esc(p.name)}"></td><td>${esc(p.name)}${p.report ? ` <span class="muted">(${esc(p.report)})</span>` : ''}${peBadges(E[K(p)])}</td><td class="n">${p.qty}</td>${['L', 'W'].map(k => { const f = (E[K(p)] || {})[k]; return typeof f === 'string' && f ? `<td class="n fxcell" title="${esc('= ' + f)}">${fmtLen(p[k])}<span class="fxtag">ƒ</span></td>` : `<td class="n">${fmtLen(p[k])}</td>`; }).join('')}<td class="n">${fmtLen(p.T)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td><td class="muted">${bandTxt(p)}</td><td class="n">${p.ops.length || ''}</td></tr>`).join('')}</tbody></table></div></div>
+    ${rows.map(p => `<tr class="click ${cls(p)}${K(p) === selName ? ' on' : ''}" data-act="ed-part" data-id="${esc(K(p))}" title="Double-click to open the part editor"><td><input type="checkbox" class="pe-build" data-id="${esc(K(p))}"${p.out ? '' : ' checked'} aria-label="Build ${esc(p.name)}"></td><td>${esc(p.name)}${p.report ? ` <span class="muted">(${esc(p.report)})</span>` : ''}${peBadges(E[K(p)])}</td><td class="n">${p.qty}</td>${['W', 'L'].map(k => { const f = (E[K(p)] || {})[k]; return typeof f === 'string' && f ? `<td class="n fxcell" title="${esc('= ' + f)}">${fmtLen(p[k])}<span class="fxtag">ƒ</span></td>` : `<td class="n">${fmtLen(p[k])}</td>`; }).join('')}<td>${esc((mat(p.mat) || {}).name || '')}</td><td class="muted">${bandTxt(p)}</td><td class="n">${p.ops.length || ''}</td><td class="muted">${esc(p.note || ((E[K(p)] || {}).note) || '')}</td></tr>`).join('')}</tbody></table></div><div class="row-actions ed-ptools"><button class="btn sm primary" data-act="pe-add-part">${icon('plus')}Add part</button><button class="btn sm" data-act="pe-copy-part"${sel && !sel.out ? '' : ' disabled'}>Copy part</button><button class="btn sm" data-act="pe-open-name"${sel ? '' : ' disabled'}>Edit</button><button class="btn sm" data-act="pe-rebuild"${sel && E[K(sel)] ? '' : ' disabled'}>Rebuild</button>${sel && sel.added ? '<button class="btn sm danger" data-act="pe-del-part">Delete part</button>' : ''}<button class="btn sm${ui.edRebuildAll ? ' danger' : ''}" data-act="pe-rebuild-all"${Object.keys(E).length || (c.addParts || []).length ? '' : ' disabled'}>${ui.edRebuildAll ? 'Click again to rebuild every part' : 'Rebuild all parts'}</button><button class="btn sm" data-act="pe-legend" aria-pressed="${!!ui.edLegend}">Color codes</button></div>${legend}</div>
     ${sel ? `<div class="psec box ed-part">${secHead('ruler', esc(sel.name), 'blue')}<div class="row-actions"><button class="btn primary sm" data-act="pe-open-name">Open part editor</button><span class="note">Shape, operations, banding and details. Or double-click the part.</span></div>
       <div class="note">${fmtLen(sel.L, 1)} × ${fmtLen(sel.W, 1)} × ${fmtLen(sel.T, 1)} · ${esc((mat(sel.mat) || {}).name || '')} · banded ${EDGE_KEYS.filter(k => sel.band && sel.band[k]).join(', ') || 'nowhere'}${sel.grain ? ' · grain along the length' : ''}${sel.out ? ' · <b>left out, not built</b>' : ''}</div>
       <div class="preview">${partSVG(sel, 300)}</div>
       <div class="eyebrow">Operations (${sel.ops.length})</div>
-      <div class="tscroll" style="max-height:220px;overflow:auto"><table class="t"><thead><tr><th>Operation</th><th>For</th></tr></thead><tbody>${sel.ops.map(o => `<tr><td>${esc(opText(o))}</td><td class="muted">${esc(o.why || '')}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No machining on this part</td></tr>'}</tbody></table></div></div>` : ''}`;
+      <div class="tscroll" style="max-height:220px;overflow:auto"><table class="t"><thead><tr><th>Operation</th><th>For</th></tr></thead><tbody>${sel.ops.map(o => `<tr><td>${esc(opText(o))}</td><td class="muted">${esc(o.why || '')}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No machining on this part</td></tr>'}</tbody></table></div></div>` : ''}</div>`;
 }
 function edPrice(c) {
   const ps = priceSheet(); if (!ps) return '<div class="note">No price sheet yet. Open Pricing to make one.</div>';
@@ -94,7 +93,7 @@ function edTab(c, tab, qr) {
   const b = buildParts(c);
   const warns = `${b.warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}${conflicts(c) ? '<div class="warnbox">This cabinet runs into a wall or another cabinet. Drag it, or change its width, to clear it.</div>' : ''}`;
   switch (tab) {
-    case 'size': return `${warns}<div class="psec box">${secHead('ruler', 'Size', 'teal')}${fld('Name', R, 'name', c.name, 'text', { wide: true })}${fld('Description', R, 'desc', c.desc || '', 'text', { wide: true, ph: (libItem(c.libId) || {}).name || '' })}
+    case 'size': return `${warns}<div class="psec box">${secHead('ruler', 'Product size', 'teal')}
         <div class="grid4">${fld('Width', R, 'w', c.w, 'len')}${fld('Height', R, 'h', c.h, 'len')}${fld('Depth', R, 'd', c.d, 'len')}${fld('Elevation', R, 'elev', c.elev, 'len')}</div></div>${cornerBox(c)}
       <div class="psec box">${secHead('magnet', 'Position on the wall', 'blue')}
         <div class="grid4">${fld('From left', 'cabpos:' + id, 'L', r3(fromEnd(c, 'L')), 'len')}${fld('From right', 'cabpos:' + id, 'R', r3(fromEnd(c, 'R')), 'len')}${fld('Outset', R, 'outset', c.outset || 0, 'len')}</div>
@@ -126,6 +125,30 @@ function edTab(c, tab, qr) {
   }
   return '';
 }
+// Tabs that need the room: no front drawing beside them, like Mozaik's Shape, Parts and Parameters tabs.
+const ED_WIDE = ['materials', 'shape', 'params', 'parts', 'price', 'info', 'notes'];
+// Mozaik's product log: what's wrong with the cabinet and what was changed by hand, always in sight.
+function edLog(c, b) {
+  const L = [], E = c.partEdits || {}, n = f => Object.values(E).filter(f).length;
+  b.warn.forEach(w => L.push(['warn', w]));
+  if (conflicts(c)) L.push(['warn', 'It runs into a wall or another cabinet.']);
+  const sh = n(e => e.pts), op = n(e => (e.ops || []).length || (e.hide || []).length), bd = n(e => e.band), mt = n(e => e.mat);
+  if (sh) L.push(['info', `${sh} part${sh > 1 ? 's have a' : ' has a'} changed shape`]);
+  if (op) L.push(['info', `${op} part${op > 1 ? 's have' : ' has'} changed operations`]);
+  if (bd) L.push(['info', `${bd} part${bd > 1 ? 's have' : ' has'} changed banding`]);
+  if (mt) L.push(['info', `${mt} part${mt > 1 ? 's have' : ' has a'} changed material`]);
+  if ((c.addParts || []).length) L.push(['info', `${c.addParts.length} part${c.addParts.length > 1 ? 's' : ''} added by hand`]);
+  const pk = Object.keys(c.params || {}).filter(k => c.params[k] !== undefined && c.params[k] !== ''); if (pk.length) L.push(['info', `${pk.length} parameter${pk.length > 1 ? 's' : ''} changed for this cabinet`]);
+  (c.rows || []).forEach((r, i) => { if (r.hinge) L.push(['info', `Hinge side set by hand on opening ${i + 1}`]); });
+  if (c.shape && Object.values(c.shape).some(v => v && (v.pts || []).length)) L.push(['info', 'The cabinet has a shaped outline']);
+  return L;
+}
+function edHead(c, b) {
+  const pic = typeof cabPic3D === 'function' ? cabPic3D(c, () => { const im = document.querySelector('.ed-pic img'); if (im && ui.quick) renderQuick(); }) : null, R = 'cab:' + c.id, log = edLog(c, b);
+  return `<div class="ed-head"><div class="ed-pic">${pic ? `<img src="${pic}" alt="">` : frontPreviewSVG(c, 90)}</div>
+    <div class="ed-ids">${fld('Name', R, 'name', c.name, 'text')}${fld('Description', R, 'desc', c.desc || '', 'text', { ph: (libItem(c.libId) || {}).name || '' })}<div class="ed-type muted">${esc(c.cat || '')}${c.corner ? ' · corner' : ''} · ${fmtLen(c.w, 1)} × ${fmtLen(c.h, 1)} × ${fmtLen(c.d, 1)}</div></div>
+    <div class="ed-log" role="log" aria-label="Product log"><div class="ed-logh">Product log</div>${log.map(([k, t]) => `<div class="ed-logl ${k}">${k === 'warn' ? '⚠' : 'ℹ'} ${esc(t)}</div>`).join('') || '<div class="ed-logl ok">✓ Nothing to check</div>'}</div></div>`;
+}
 function renderEditor(el, c) {
   const id = c.id, rows = c.rows || [], qr = Math.min(Math.max(0, ui.qeRow | 0), Math.max(0, rows.length - 1));
   if (!ED_TABS.some(([k]) => k === ui.edTab)) ui.edTab = 'size';
@@ -133,19 +156,21 @@ function renderEditor(el, c) {
   const keep = el.querySelector('.ed-main'), top = keep ? keep.scrollTop : 0;
   const act = (a, ic, l, x = '') => `<button class="btn${x}" data-act="${a}" data-id="${id}">${icon(ic)}${l}</button>`;
   el.hidden = false;
-  el.innerHTML = `<div class="qe big" role="dialog" aria-modal="true" aria-labelledby="qe-title">
+  // Only the changes go in (see morph.js), so the editor does not flash as you edit.
+  setHTML(el, `<div class="qe big" role="dialog" aria-modal="true" aria-labelledby="qe-title">
     <div class="qe-head"><span class="chip cab">${LBL[id] || ''}</span><b id="qe-title">${esc(c.name)}</b><span class="mono muted">${fmtLen(c.w, 1)} × ${fmtLen(c.h, 1)} × ${fmtLen(c.d, 1)}</span>
       <div class="ed-nav"><button class="btn sm" data-act="ed-step" data-id="-1" title="Previous cabinet">${icon('chevl')}Previous</button><span class="muted">${at} of ${list.length}</span><button class="btn sm" data-act="ed-step" data-id="1" title="Next cabinet">Next${icon('chevr')}</button></div>
       <button class="btn sm qe-x" data-act="qe-close" aria-label="Close the cabinet editor">${icon('close')}</button></div>
+    ${edHead(c, buildParts(c))}
     <div class="ed-tabs" role="tablist" aria-label="Cabinet editor">${ED_TABS.map(([k, l, ic]) => `<button role="tab" data-act="ed-tab" data-id="${k}" aria-selected="${ui.edTab === k}">${icon(ic)}${l}</button>`).join('')}</div>
-    <div class="ed-body">
-      <div class="qe-prev${ui.edTab === 'face' ? ' tools' : ''}">${ui.edTab === 'face' ? edTools(c, qr) : ''}<div class="preview pad">${qeFaceSVG(c, qr, 620, ui.edTab === 'interior')}</div><div class="note qe-tip">${ui.edTab === 'interior' ? 'Inside view, with the doors and drawer fronts off. ' : ''}${isPhone() ? 'Tap' : 'Click'} an opening to edit it.</div></div>
+    <div class="ed-body${ED_WIDE.includes(ui.edTab) ? ' wide' : ''}">
+      ${ED_WIDE.includes(ui.edTab) ? '' : `<div class="qe-prev${ui.edTab === 'face' ? ' tools' : ''}">${ui.edTab === 'face' ? edTools(c, qr) : ''}<div class="preview pad">${qeFaceSVG(c, qr, 620, ui.edTab === 'interior')}</div><div class="note qe-tip">${ui.edTab === 'interior' ? 'Inside view, with the doors and drawer fronts off. ' : ''}${isPhone() ? 'Tap' : 'Click'} an opening to edit it.</div></div>`}
       <div class="ed-main">${edTab(c, ui.edTab, qr)}</div>
-      <div class="ed-acts">${act('qe-close', 'check', 'Done', ' primary')}
+      <div class="ed-acts">${act('qe-close', 'check', 'Done', ' primary')}<div class="ed-undo"><button class="btn" data-act="ed-undo" title="Undo (Ctrl Z)">↶ Undo</button><button class="btn" data-act="ed-redo" title="Redo (Ctrl Y)">↷ Redo</button></div>
         ${openable(c) ? act('open-toggle', 'open', ui.open[id] ? 'Close fronts' : 'Open fronts', ui.open[id] ? ' on' : '') : ''}
         ${act('cab-dup', 'copy', 'Duplicate')}${act('cab-flip', 'flip', 'Flip')}${act('show-parts', 'list', 'View cut list')}${act('q-tolib', 'stack', 'Save to library')}${act('cab-to-designer', 'cube', 'Open in Designer')}${act('cab-zoom3d', 'cube', 'See it in 3D')}
         <span class="ed-gap"></span>${act('cab-del', 'trash', 'Delete', ' danger')}</div>
     </div>
-    <div class="qe-foot"><span class="note">Changes save as you go. Undo with Ctrl Z. Esc closes.</span></div></div>`;
+    <div class="qe-foot"><span class="note">Changes save as you go. Undo with Ctrl Z. Esc closes.</span></div></div>`);
   const m = el.querySelector('.ed-main'); if (m) m.scrollTop = top;
 }
