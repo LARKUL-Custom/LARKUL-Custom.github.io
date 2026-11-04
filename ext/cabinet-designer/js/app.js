@@ -85,7 +85,7 @@ function renderRail() {
 }
 phoneQuery.addEventListener('change', () => { ui.libOpen = false; if (ui.tab === 'room') renderRoom(); });
 // Products tree, like Mozaik's: top groups, then folders inside each. Shapes live here too.
-const LIB_GROUPS = [['base', 'Base Cabinets'], ['wall', 'Wall Cabinets'], ['tall', 'Tall Cabinets'], ['counter', 'Countertop Cabinets'], ['hood', 'Hoods'], ['shelf', 'Floating Shelves'], ['mantel', 'Fireplace Mantels'], ['special', 'Specialty']];
+const LIB_GROUPS = [['base', 'Base Cabinets'], ['wall', 'Wall Cabinets'], ['tall', 'Tall Cabinets'], ['filler', 'Fillers and Trim'], ['counter', 'Countertop Cabinets'], ['hood', 'Hoods'], ['shelf', 'Floating Shelves'], ['mantel', 'Fireplace Mantels'], ['special', 'Specialty']];
 function libGroup(l) {
   if (l.group) return l.group;
   if (l.cat === 'Wall') return /hood/i.test(l.name) ? 'hood' : 'wall';
@@ -130,6 +130,7 @@ function productTree() {
     return `<div class="lgrp lg-${g}">${head(g, gl, items.length, shut, 'lgrp-h')}${shut ? '' : inner}</div>`;
   }).join('');
   return `<div class="libpeek" id="libpeek">${libPeekHTML(ui.libPeek || ui.placing)}</div>`
+    + `<select id="libset" aria-label="Product library" title="Which product library to draw from">${PRODUCT_LIBS.map(x => `<option value="${x.id}"${(S.libSet || 'main') === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`
     + `<input id="libfind" type="search" placeholder="Search…" value="${esc(ui.libFind || '')}" aria-label="Search products">`
     + `<div class="ptree">${favGrp}${body || '<div class="note show">No products match.</div>'}</div>`
     + `<div class="row-actions libnew"><button class="btn sm" data-act="designer-new">${icon('plus')}New cabinet</button><button class="btn sm" data-act="shape-new">${icon('plus')}New shape</button></div>`;
@@ -137,6 +138,15 @@ function productTree() {
 // Picture of the product under the mouse (or the one being placed) above the tree, like Mozaik's preview.
 // With nothing to show it says how to start: drag a product onto the drawing.
 function libPeekHTML(id) {
+  // Appliances, fixtures and shapes get their picture and size too, not just cabinets.
+  if (typeof id === 'string' && id.startsWith('fixt:')) {
+    const d = fixtPreset(id.slice(5)), late = url => { const img = document.querySelector('#libpeek img[data-peek="' + id + '"]'); if (img) img.src = url; };
+    const url = d && typeof fixtPeek3D === 'function' ? fixtPeek3D(d, late) : null;
+    if (d) return `<div class="lp-pic lp-fx">${url ? `<img src="${url}" data-peek="${esc(id)}" alt="">` : `<svg viewBox="0 0 20 20" aria-hidden="true">${FIXT_ICON[d.kind === 'sink' && d.bowls > 1 ? 'sink2' : d.kind] || ''}</svg>`}</div><div class="lp-name">${esc(d.name)}</div><div class="lp-dim">${fmtLen(d.w)} × ${fmtLen(d.h)}${d.d ? ' × ' + fmtLen(d.d) : ''}</div>`;
+  }
+  if (typeof id === 'string' && id.startsWith('shape:')) {
+    const l = shapeLibItem(id.slice(6)); if (l) { const b = shapeBox(l.pts); return `<div class="lp-pic lp-shp">${seThumb(l.pts, l.plane !== 'flat')}</div><div class="lp-name">${esc(l.name)}</div><div class="lp-dim">${fmtLen(b.w)} × ${fmtLen(b.h)} × ${fmtLen(l.thick)}</div>`; }
+  }
   const l = id && typeof id === 'string' && !id.includes(':') && libItem(id);
   if (!l || l.cat === 'Shape') return `<div class="lp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1"/><path d="M14 7h7m-3-3 3 3-3 3M7 14v7m-3-3 3 3 3-3"/></svg><span>Drag a product onto the drawing</span></div>`;
   let pic = '';
@@ -147,9 +157,10 @@ function libPeekHTML(id) {
   return `<div class="lp-pic">${pic}</div><div class="lp-name">${esc(l.name)}</div><div class="lp-dim">${fmtLen(l.w)} × ${fmtLen(l.h)} × ${fmtLen(l.d)}</div>`;
 }
 document.addEventListener('mouseover', e => {
-  const b = e.target.closest && e.target.closest('.ptree .libitem[data-id]'); if (!b) return;
-  const el = document.getElementById('libpeek'); if (!el || ui.libPeek === b.dataset.id) return;
-  ui.libPeek = b.dataset.id; el.innerHTML = libPeekHTML(ui.libPeek);
+  const b = e.target.closest && e.target.closest('.ptree .libitem[data-id], .ptree .fixtbtn[data-id], .ptree [data-act="shape-pick"][data-id]'); if (!b) return;
+  const k = b.classList.contains('fixtbtn') ? 'fixt:' + b.dataset.id : b.dataset.act === 'shape-pick' ? 'shape:' + b.dataset.id : b.dataset.id;
+  const el = document.getElementById('libpeek'); if (!el || ui.libPeek === k) return;
+  ui.libPeek = k; el.innerHTML = libPeekHTML(ui.libPeek);
 });
 function renderSources() {
   renderRail();
@@ -231,8 +242,8 @@ function renderRoom() {
   setHTML($('#openctl'), `<button data-act="open-all" aria-pressed="${anyOpen}" title="Open or close every door and drawer in this room">${vic('Open all')}<span>${anyOpen ? 'Close All' : 'Open All'}</span></button>`
     + `<button data-act="open-toggle" data-id="${ocOn ? oc.id : ''}" aria-pressed="${!!(ocOn && ui.open[oc.id])}"${ocOn ? '' : ' disabled'} title="${ocOn ? 'Open or close the doors and drawers of the selected cabinet (O)' : 'Select a cabinet with doors or drawers to open it'}">${vic('Open all')}<span>${ocOn && ui.open[oc.id] ? 'Close Cabinet' : 'Open Cabinet'}</span></button>`);
   // Every cabinet and shape in the room by name and number, grouped by wall, to select without clicking it.
-  const cur = ui.sel && (ui.sel.type === 'cab' ? ui.sel.id : ui.sel.type === 'shape' ? 'shape:' + ui.sel.id : '');
-  const byWall = w => [...S.cabinets.filter(c => c.wall === w.id).sort((a, b) => a.off - b.off).map(c => [c.id, `${c.name} ${LBL[c.id]}`]), ...(S.shapes || []).filter(x => x.wall === w.id).map(x => ['shape:' + x.id, x.name || 'Shape'])];
+  const cur = ui.sel && (ui.sel.type === 'cab' ? ui.sel.id : ui.sel.type === 'shape' ? 'shape:' + ui.sel.id : ui.sel.type === 'fixt' ? 'fixt:' + ui.sel.id : '');
+  const byWall = w => [...S.cabinets.filter(c => c.wall === w.id).sort((a, b) => a.off - b.off).map(c => [c.id, `${c.name} ${LBL[c.id]}`]), ...(S.shapes || []).filter(x => x.wall === w.id).map(x => ['shape:' + x.id, x.name || 'Shape']), ...(S.fixtures || []).filter(x => x.wall === w.id).map(x => ['fixt:' + x.id, fixtName(x)])];
   setHTML($('#itemsel'), `<option value="">Select item…</option>` + S.walls.map(w => { const it = byWall(w); return it.length ? `<optgroup label="${wallName(w)}">${it.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>` : ''; }).join(''));
   $('#views').dataset.mode = ui.viewMode;
   $('#v3sel').disabled = !(ui.sel && ui.sel.type === 'cab');
@@ -549,7 +560,7 @@ function dockBody(k) {
   if (k === 'lights') return lightsCard();
   if (k === 'molding') return `<div class="card cardbody">${autoMoldBox(moldingRuns())}</div>${genMoldsCard()}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="moldings">Molding library and totals</button></div>`;
   if (k === 'room') return roomDockBody();
-  if (k === 'item') return itemBar(multiIds().length < 2 ? c : null);
+  if (k === 'item') { const x = multiIds().length < 2 && typeof xItem === 'function' && xItem(); return x ? itemBarX(x) : itemBar(multiIds().length < 2 ? c : null); }
   if (k === 'layout') {
     const L = lay();
     // Automatic fillers and panels are switched on the Item tab.
@@ -977,6 +988,7 @@ document.addEventListener('click', e => {
     case 'des-mode': ui.desMode = id; ui.shapeSel = null; renderDesigner(); break;
     case 'shape-new': ui.desMode = 'shape'; mutate(() => { S.shapeDesign = blankShapeDesign(); }); goTab('designer'); break;
     case 'shape-pick': ui.libOpen = false; placeMode(ui.placing === 'shape:' + id ? null : 'shape:' + id); break;
+    case 'x-center': { const [k, xid] = id.split(':'), o = k === 'fixt' ? fixtById(xid) : shapeById(xid); if (!o) break; mutate(() => { const px = xProxy(o), { lo, hi } = runLimits(px); o.off = r3(lo + Math.max(0, hi - lo - px.w) / 2); }); flash('Centered on the wall'); break; }
     case 'shape-edit': editShape(id); break;
     case 'shape-lib-edit': { const l = shapeLibItem(id); if (!l) break; ui.desMode = 'shape'; ui.shapeSel = null; mutate(() => { S.shapeDesign = { ...clone(l), sourceLib: l.id, editShape: null }; delete S.shapeDesign.id; }); goTab('designer'); break; }
     case 'shape-lib-del': mutate(() => { S.shapeLib = S.shapeLib.filter(x => x.id !== id); }); ui.libSel = null; break;
@@ -1323,6 +1335,7 @@ document.addEventListener('input', e => {
   ui.doorFind = e.target.value; renderDoors();
   const f = $('#doorfind'); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
 });
+document.addEventListener('change', e => { if (e.target.id === 'libset') swapLibrary(e.target.value); });
 document.addEventListener('change', e => {
   if (e.target.id !== 'lblsize') return;
   try { localStorage.setItem(KEY + '.lblsize', e.target.value); } catch (_) {}
@@ -1457,8 +1470,8 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if
 })();
 document.addEventListener('change', e => {
   if (e.target.id !== 'itemsel' || !e.target.value) return;
-  const v = e.target.value, sh = v.startsWith('shape:') ? shapeById(v.slice(6)) : null, c = sh ? null : cab(v);
-  if (sh) { select({ type: 'shape', id: sh.id }); ui.elevWall = sh.wall; } else if (c) { select({ type: 'cab', id: c.id }); ui.elevWall = c.wall; }
+  const v = e.target.value, sh = v.startsWith('shape:') ? shapeById(v.slice(6)) : null, fx = v.startsWith('fixt:') ? fixtById(v.slice(5)) : null, c = sh || fx ? null : cab(v);
+  if (fx) { select({ type: 'fixt', id: fx.id }); ui.elevWall = fx.wall; } else if (sh) { select({ type: 'shape', id: sh.id }); ui.elevWall = sh.wall; } else if (c) { select({ type: 'cab', id: c.id }); ui.elevWall = c.wall; }
   ui.measure = null; renderRoom();
 });
 document.addEventListener('change', e => { if (e.target.id === 'edgridstyle') ui.edGridStyle = e.target.value; });

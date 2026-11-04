@@ -82,6 +82,7 @@ function capPoly(w, cp) {
 const elevX = (c, L) => c.side === 1 ? c.off : L - c.off - c.w;
 /* ---------- Fronts ---------- */
 function computeFronts(c, p) {
+  if (c.moz && typeof isMoz === 'function' && isMoz(c)) return [];
   p = p || effParams(c);
   // Face frame cabinets: fronts overlay the frame's openings.
   const ffr = faceFrame(c); if (ffr) return ffFronts(c, p, ffr);
@@ -367,6 +368,8 @@ const bandLen = p => EDGE_KEYS.reduce((a, k) => a + (p.band && p.band[k] ? (k[0]
 
 /* ---------- Parts ---------- */
 function buildParts(c) {
+  // Mozaik products (fillers, C mold, hoods...) bring their own parts (js/mozprod.js).
+  if (c.moz && typeof isMoz === 'function' && isMoz(c)) return mozBuildParts(c);
   const p = effParams(c), lbl = LBL[c.id] || c.name;
   const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = drawerMatT(cabSet(c, 'drawerMatT'));
   const cm = mat(mt.carcass) || S.materials[0], t = cm.thick;

@@ -145,6 +145,7 @@ function nearestAt(c, dir) {
 }
 // Fillers between a cabinet and a wall, by the viewer's end: [{ end, gap, a0, a1 }].
 function fillersOf(c) {
+  if (c.moz) return []; // a Mozaik product is its own filler or trim
   const ly = lay(); if (!c.wall || (!ly.autoFillers && c.fillL !== 'on' && c.fillR !== 'on')) return [];
   return inRoomOf(c, () => {
     if (!wall(c.wall)) return [];
@@ -162,6 +163,7 @@ function fillersOf(c) {
 }
 // Does this end of the cabinet get an applied panel? end is the viewer's L or R.
 function hasPanel(c, end) {
+  if (c.moz) return false;
   const m = panelMode(c, end);
   if (m === 'on') return true;
   if (m === 'off' || !c.wall) return false;

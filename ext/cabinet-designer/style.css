@@ -1169,6 +1169,7 @@ html{zoom:var(--ui-zoom,1)}
 /* Products tree in the library rail */
 .seg.libview{align-self:stretch;flex:none;margin:0 0 6px;box-shadow:none;display:flex}
 .seg.libview button{flex:1;padding:4px 8px;font-size:12.5px;min-height:0}
+#libset{width:100%;margin:0 0 6px;padding:6px 9px;font-size:13px;font-weight:600}
 #libfind{width:100%;margin:0 0 8px;padding:6px 9px;font-size:13px}
 .lgrp{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}
 .lgrp-h,.lfold-h{display:flex;align-items:center;gap:6px;width:100%;border:0;background:transparent;cursor:pointer;text-align:left;border-radius:6px;color:var(--ink)}
@@ -1725,6 +1726,7 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   .room .rail .srclist{flex:1;min-height:0;overflow:auto;padding:0 0 calc(10 * var(--u));font-family:var(--f-tree);color:var(--d-treeink)}
   .room .rail .srclist > .note{display:none!important}
   .room .rail #libfind{display:block;width:calc(100% - 16px);margin:calc(12 * var(--u)) 8px calc(10 * var(--u));padding:calc(8 * var(--u)) calc(12 * var(--u));border:1px solid transparent;border-radius:6px;background:color-mix(in srgb,var(--d-treeink) 4%,transparent);color:var(--d-treeink);font:400 calc(21 * var(--u)) var(--f-tree)}
+  .room .rail #libset{display:block;width:calc(100% - 16px);margin:calc(12 * var(--u)) 8px 0;padding:calc(8 * var(--u)) calc(12 * var(--u));border:1px solid color-mix(in srgb,var(--d-treeink) 25%,transparent);border-radius:6px;background:transparent;color:var(--d-treeink);font:600 calc(21 * var(--u)) var(--f-tree)}
   .room .rail #libfind:focus{border-color:var(--d-primary);outline:none}
   .room .rail .lgrp{margin:0}
   .room .rail .lgrp-h,.room .rail .lfold-h{min-height:calc(33 * var(--u));padding:0 calc(10 * var(--u)) 0 calc(12 * var(--u));gap:calc(8 * var(--u));border:0;border-radius:0;background:transparent;color:var(--d-treeink);font:500 calc(21 * var(--u))/1.2 var(--f-tree);letter-spacing:0;text-transform:none}
@@ -2154,3 +2156,8 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 /* Payment schedule rows: name, percent, remove (0.44.4) */
 .xrow.pay{grid-template-columns:minmax(0,1fr) 100px auto}
 @media (max-width: 640px){ .xrow.pay{grid-template-columns:minmax(0,1fr) 80px auto} }
+/* Item bar for appliances, fixtures and shapes: sizes in two columns so its buttons stay beside them */
+body.desk .xbar .ib-size{grid-template-columns:repeat(2,calc(144 * var(--u)))}
+.xbar .ib-name .chip{font-size:.7em;vertical-align:middle}
+.libpeek .lp-fx svg{fill:none;stroke:var(--accent);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+.libpeek .lp-shp svg polygon{fill:color-mix(in srgb,var(--accent) 30%,transparent);stroke:var(--accent);stroke-width:2px!important;vector-effect:non-scaling-stroke}

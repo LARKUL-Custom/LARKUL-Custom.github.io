@@ -694,6 +694,7 @@ function doorFaceSVG(ds, framed, x, y, w, h) {
 }
 // Front drawing for one cabinet in elevation space; by is the cabinet bottom's y (y grows downward).
 function frontsSVG(c, ex, by, opts = {}) {
+  if (c.moz && typeof isMoz === 'function' && isMoz(c)) return mozFrontSVG(c, ex, by, opts);
   const p = effParams(c), fr = computeFronts(c, p), tk = hasToe(c) ? p.toeKickHeight : 0;
   const Y = z => by - z, cm = mat(cabMatT(cabSet(c, 'cabMatT')).carcass);
   const mats = [];

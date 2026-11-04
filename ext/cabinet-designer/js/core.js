@@ -344,7 +344,7 @@ function seed() {
   };
   // The sample shows its tops already built.
   S.rooms.forEach(r => { r.autoTops = true; });
-  ensureEdgeLibs(S); ensureJoinery(S); ensureFaceFrames(S); if (typeof ensureInteriorLib === 'function') ensureInteriorLib(S); attachRoom(S);
+  ensureEdgeLibs(S); ensureJoinery(S); ensureFaceFrames(S); if (typeof ensureInteriorLib === 'function') ensureInteriorLib(S); if (typeof ensureMozLib === 'function') ensureMozLib(S); attachRoom(S);
   S.shapeLib = defaultShapeLib(S); S.formulas = {}; S.job.vars = [];
   const put = (libId, wall, off, o = {}) => S.cabinets.push(Object.assign(newCab(S, S.library.find(l => l.id === libId), wall, 1, off), o));
   // Runs start a filler's width off the wall (see LAYOUT_DEFAULTS); open ends get panels automatically.
@@ -383,7 +383,7 @@ function newCab(S, lib, wallId, side, off) {
     panelL: lib.appliedL ? 'on' : '', panelR: lib.appliedR ? 'on' : '', molding: null,
     construction: clone(lib.construction || defaultConstruction(lib.cat)),
     rows: clone(lib.rows), libParams: { ...(lib.params || {}) }, params: {}, custom: clone(lib.custom || []), vars: clone(lib.vars || []), inserts: clone(lib.inserts || []),
-    ...(lib.corner ? { corner: clone(lib.corner) } : {}),
+    ...(lib.corner ? { corner: clone(lib.corner) } : {}), ...(lib.moz ? { moz: lib.moz } : {}),
   };
 }
 
@@ -461,6 +461,7 @@ function migrate(s) {
   s.shapeLib = s.shapeLib.filter(l => l.id !== 'sh-crown');
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
   if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
+  if (typeof ensureMozLib === 'function') ensureMozLib(s);
   return attachRoom(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))));
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
@@ -496,7 +497,21 @@ function undoRedo(dir) {
 const cab = id => id === '_designer' ? desCabLive() : S.cabinets.find(c => c.id === id);
 const wall = id => S.walls.find(w => w.id === id);
 const mat = id => S.materials.find(m => m.id === id);
-const libItem = id => S.library.find(l => l.id === id);
+// Product libraries: the job's own, plus backup sets (like American Cabinets) to swap to when a job wants them.
+// The set not in use waits in S.libSets, so its edits are kept, and cabinets placed from it still find their product.
+const PRODUCT_LIBS = [{ id: 'main', name: 'My library' }, { id: 'american', name: 'American Cabinets', items: () => typeof AMERICAN_LIB !== 'undefined' ? AMERICAN_LIB : [] }];
+const libItem = id => S.library.find(l => l.id === id) || Object.values(S.libSets || {}).reduce((a, L) => a || (L || []).find(l => l.id === id), null);
+function swapLibrary(id) {
+  const cur = S.libSet || 'main', def = PRODUCT_LIBS.find(x => x.id === id); if (!def || id === cur) return;
+  ui.placing = null; ui.libPeek = null;
+  mutate(() => {
+    S.libSets = S.libSets || {}; S.libSets[cur] = S.library;
+    S.library = S.libSets[id] || clone(def.items ? def.items() : []);
+    delete S.libSets[id]; S.libSet = id;
+    ui.libSel = S.library[0] && S.library[0].id;
+  });
+  flash('Products now come from ' + def.name + '. Cabinets already drawn stay as they are.');
+}
 const doorStyle = id => ({ ...DOOR_DEFAULTS, ...(S.doorStyles.find(d => d.id === id) || S.doorStyles[0]) });
 const doorTpl = id => S.doorTemplates.find(d => d.id === id) || S.doorTemplates[0];
 const cabMatT = id => S.matTemplates.cabinet.find(t => t.id === id) || S.matTemplates.cabinet[0];

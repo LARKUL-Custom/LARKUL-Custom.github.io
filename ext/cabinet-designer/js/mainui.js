@@ -70,6 +70,57 @@ function itemBar(c) {
   </div>`;
 }
 
+// The picked appliance, fixture or shape, for the same item bar as a cabinet.
+function xItem() {
+  const s = ui.sel; if (!s) return null;
+  if (s.type === 'fixt') { const o = fixtById(s.id); return o && { k: 'fixt', o }; }
+  if (s.type === 'shape') { const o = shapeById(s.id); return o && { k: 'shp', o }; }
+  return null;
+}
+// Stands in for a cabinet so the wall-end math (runLimits, fromEnd) works on appliances and shapes.
+function xProxy(o) {
+  const b = o.pts ? shapeBox(o.pts) : null, flat = o.pts && o.plane === 'flat';
+  return { id: o.id, wall: o.wall, side: o.side || 1, off: o.off || 0, w: b ? b.w : o.w, d: Math.max(1, b ? (flat ? b.h : o.thick) : o.d || 0), h: b ? (flat ? o.thick : b.h) : o.h, elev: o.elev || 0, outset: o.outset || 0 };
+}
+// Item bar for a non-cabinet: the same place-on-the-wall tools and size boxes as a cabinet, and its own buttons.
+function itemBarX(x) {
+  const o = x.o, id = o.id, fx = x.k === 'fixt', R = (fx ? 'fixt:' : 'shp:') + id, P = (fx ? 'fixtpos:' : 'shppos:') + id, w = wall(o.wall);
+  const px = w ? xProxy(o) : null, { lo, hi } = px ? runLimits(px) : { lo: 0, hi: 0 };
+  const box = (label, ref, f, val) => `<label class="ib-f"><span>${label}</span>${ctl(ref, f, val, 'len', { label })}</label>`;
+  const pos = (label, end) => `<label class="ib-f"><span>${label}</span>${px ? ctl(P, end, r3(fromEnd(px, end)), 'len', { label }) : `<input type="text" disabled aria-label="${label}">`}</label>`;
+  const span = px ? Math.max(0, r3(hi - lo - px.w)) : 0;
+  const ctr = `<span class="ib-ctrs"><button class="ib-ctr" data-act="x-center" data-id="${x.k}:${id}" title="Center it on the wall" aria-label="Center it on the wall"${px ? '' : ' disabled'}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 3v14M18 3v14M5 10h10m-7-3-3 3 3 3m4-6 3 3-3 3"/></svg></button></span>`;
+  const sizes = fx ? `${box('Width', R, 'w', o.w)}${fixtSink(o) ? box('Front to back', R, 'd', o.d) : box('Height', R, 'h', o.h)}${fixtHole(o) ? box(o.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', o.elev || 0) : ''}${fixtFloor(o) ? box('Depth', R, 'd', o.d) : ''}`
+    : `${box(o.plane === 'flat' ? 'Bottom height' : 'Off the floor', R, 'elev', o.elev || 0)}${box('Out from wall', R, 'outset', o.outset || 0)}${box('Thickness', R, 'thick', o.thick)}`;
+  const name = fx ? fixtName(o) : o.name || 'Shape', kind = fx ? ((fixtPreset(o.lib) || {}).folder || fixtDef(o).name) : 'Shape';
+  const sb = (act, ic, l, t, cls = '') => `<button class="${cls}" data-act="${act}" data-id="${id}" title="${t}">${icon(ic)}${l}</button>`;
+  return `<div class="itembar xbar">
+    <div class="ib-pos">${pos('From left wall', 'L')}${ctr}${pos('From right wall', 'R')}
+      <div class="ib-slidewrap"><input type="range" class="ib-slide" data-xslide="${x.k}:${id}" min="0" max="${span}" step="0.125" value="${px ? r3(fromEnd(px, 'L')) : 0}" aria-label="Slide along the wall" title="Slide it along the wall"${px ? '' : ' disabled'}></div></div>
+    <div class="ib-size">${sizes}</div>
+    <div class="ib-acts"><div class="ib-name"><span class="chip shape">${esc(kind)}</span> <b>${esc(name)}</b></div>
+      ${fx ? '' : `<button class="ib-edit" data-act="shape-edit" data-id="${id}" title="Change its outline in the shape editor">${icon('edit')}<span>Edit shape</span></button>`}
+      <div class="ib-small">${fx ? (fixtSink(o) ? sb('fixt-center', 'ends', 'Center', 'Center on the cabinet under it') : sb('fixt-flip', 'flip', o.kind === 'door' ? 'Swing' : 'Flip', 'Flip it to the other side')) + sb('fixt-dup', 'copy', 'Copy', 'Duplicate') + sb('fixt-del', 'trash', 'Delete', 'Delete')
+        : sb('shape-flip', 'flip', 'Flip', 'Flip it to the other side') + sb('shape-dup', 'copy', 'Copy', 'Duplicate') + sb('shape-del', 'trash', 'Delete', 'Delete')}</div></div>
+  </div>`;
+}
+// Sliding an appliance or shape: it follows live, and one undo step is saved when it is let go.
+let xSlideWas = null;
+const xSlideObj = el => { const [k, xid] = el.dataset.xslide.split(':'); return k === 'fixt' ? fixtById(xid) : shapeById(xid); };
+document.addEventListener('input', e => {
+  const el = e.target; if (!el.matches || !el.matches('.ib-slide[data-xslide]')) return;
+  const o = xSlideObj(el); if (!o) return;
+  if (!xSlideWas || xSlideWas.id !== o.id) xSlideWas = { id: o.id, off: o.off };
+  const px = xProxy(o); setFromEnd(px, 'L', +el.value); o.off = px.off;
+  if (ui.viewMode === 'plan') renderPlan(); else if (ui.viewMode === 'elev') renderElev();
+});
+document.addEventListener('change', e => {
+  const el = e.target; if (!el.matches || !el.matches('.ib-slide[data-xslide]')) return;
+  const o = xSlideObj(el); if (!o) return;
+  const v = +el.value; if (xSlideWas && xSlideWas.id === o.id) o.off = xSlideWas.off; xSlideWas = null;
+  mutate(() => { const px = xProxy(o); setFromEnd(px, 'L', v); o.off = px.off; });
+});
+
 // Sliding: the cabinet follows the slider live, and one undo step is saved when it is let go.
 let slideWas = null;
 document.addEventListener('input', e => {

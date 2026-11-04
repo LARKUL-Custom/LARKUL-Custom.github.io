@@ -98,7 +98,7 @@ function renderLibrary() {
   const sl = String(ui.libSel || '').startsWith('shape:') ? shapeLibItem(ui.libSel.slice(6)) : null;
   const l = sl ? null : libItem(ui.libSel), cats = ['Base', 'Wall', 'Tall'], jp = S.job.params;
   const fake = l ? { ...newCab(S, l, null, 1, 0), id: '_lib' } : null;
-  $('#tab-library').innerHTML = `<div class="pagehead"><div><h2>Products</h2></div>
+  $('#tab-library').innerHTML = `<div class="pagehead"><div><h2>Products${(S.libSet || 'main') !== 'main' ? ` <span class="muted">· ${esc((PRODUCT_LIBS.find(x => x.id === S.libSet) || {}).name || '')}</span>` : ''}</h2></div>
     <div class="row-actions"><button class="btn primary" data-act="designer-new">${icon('plus')}Design a new cabinet</button></div></div>
   <div class="split">
     <div class="card cardbody libtree">${LIB_GROUPS.map(([g, gl]) => { const items = S.library.filter(x => x.cat !== 'Shape' && libGroup(x) === g), shp = (S.shapeLib || []).filter(x => shapeGroup(x) === g); return items.length + shp.length ? `<div class="lgrp lg-${g}"><div class="lgrp-h">${gl}<span class="ct">${items.length + shp.length}</span></div>${items.map(x => libButton(x, 'lib-sel', x.id === ui.libSel)).join('')}${shp.map(x => shapeLibButton(x, 'shape:' + x.id === ui.libSel)).join('')}</div>` : ''; }).join('')}

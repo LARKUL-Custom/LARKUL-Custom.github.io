@@ -143,6 +143,7 @@ function wallGroup(w, side, leftAlong, out = 0) {
   return grp;
 }
 function cabinetMeshes(c, opts = {}) {
+  if (c.moz && typeof isMoz === 'function' && isMoz(c)) return mozMeshes(c, opts);
   const grp = new THREE.Group();
   const p = effParams(c), mt = cabMatT(cabSet(c, 'cabMatT'));
   const cm = mat(mt.carcass) || S.materials[0], bm = mat(mt.back) || cm, t = cm.thick, bt = bm.thick;
@@ -676,6 +677,30 @@ function cabPic3D(c, onLate) {
     const m = cabinetMeshes(c); m.position.x = -c.w / 2; v.root.add(m);
     v.resize(); v.look({ x: -0.8, y: 0.5, z: 1.4 }); v.draw();
     return v.renderer.domElement.toDataURL('image/png');
+  };
+  let url = null;
+  try { url = peekPics[key] = shot(); } catch (_) { return null; }
+  setTimeout(() => { try { peekPics[key] = shot(); if (onLate) onLate(peekPics[key]); } catch (_) {} }, 700);
+  return url;
+}
+// A 3D picture of an appliance or fixture preset for the preview above the Products tree. It is drawn the
+// way the room draws it, on a stand-in wall that is swapped in only while the picture is taken.
+function fixtPeek3D(d, onLate) {
+  if (!has3D() || !d) return null;
+  const key = 'fixt|' + d.id + '|' + document.documentElement.dataset.theme;
+  if (peekPics[key]) return peekPics[key];
+  if (!libPeek3D({ id: '_warm', w: 1, h: 1, d: 1 }) && !peekViewer) return null;
+  const v = peekViewer; if (!v || !v.ok) return null;
+  const shot = () => {
+    const keepW = S.walls, keepF = S.fixtures, keepC = S.cabinets, f = fixtNew(d.id);
+    try {
+      S.walls = [{ id: '_pw', x1: -200, y1: 0, x2: 200, y2: 0, thick: 4, height: 96 }]; S.cabinets = [];
+      Object.assign(f, { id: '_pf', wall: '_pw', side: 1, off: 200 - f.w / 2 }); S.fixtures = [f];
+      v.scene.background = new THREE.Color(cssVar('--panel')); v.clear();
+      fixt3d(v, '#ffffff');
+      v.resize(); v.look({ x: -0.8, y: 0.5, z: 1.4 }); v.draw();
+      return v.renderer.domElement.toDataURL('image/png');
+    } finally { S.walls = keepW; S.fixtures = keepF; S.cabinets = keepC; }
   };
   let url = null;
   try { url = peekPics[key] = shot(); } catch (_) { return null; }

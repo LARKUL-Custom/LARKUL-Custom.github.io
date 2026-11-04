@@ -94,6 +94,8 @@ function resolve(ref) {
     case 'shdpt': return S.shapeDesign && S.shapeDesign.pts[+id];
     case 'shp': return shapeById(id);
     case 'fixt': return typeof fixtById === 'function' ? fixtById(id) : null;
+    case 'fixtpos': return typeof fixtById === 'function' ? fixtById(id) : null;
+    case 'shppos': return shapeById(id);
     case 'slib': return shapeLibItem(id);
     case 'jvar': return (S.job.vars || []).find(v => v.id === id);
     case 'rvar': { const [rid, vid] = id.split(':'), r = roomById(rid); return r && (r.vars || []).find(v => v.id === vid); }
@@ -133,7 +135,7 @@ document.addEventListener('change', e => {
   }
   let note = '';
   // Formulas that name a value are kept and worked out again later; sizes worked out from a wall end are not.
-  const raw = el.value.trim(), keepFx = NUM_TYPES.includes(el.dataset.type) && !/^cabpos:|^cabgap:|^wcap/.test(ref) && !(ref.startsWith('wall:') && ['len', 'angle'].includes(field));
+  const raw = el.value.trim(), keepFx = NUM_TYPES.includes(el.dataset.type) && !/^cabpos:|^cabgap:|^wcap|^fixtpos:|^shppos:/.test(ref) && !(ref.startsWith('wall:') && ['len', 'angle'].includes(field));
   mutate(() => {
     const o = resolve(ref); if (!o) return;
     if (typeof cabLogField === 'function') cabLogField(ref, field, el);
@@ -161,6 +163,8 @@ document.addEventListener('change', e => {
       return;
     }
     if (ref.startsWith('mold:') && field === 'profile' && v === 'shape') { o.profile = v; if (!(o.pts || []).length) o.pts = moldStartPts(); moldFitShape(o); return; }
+    // An appliance or shape set a distance off either wall end, like a cabinet's From left / From right.
+    if (ref.startsWith('fixtpos:') || ref.startsWith('shppos:')) { const px = xProxy(o); setFromEnd(px, field, v); o.off = px.off; return; }
     if (ref.startsWith('wall:') && field === 'len') return setWallLen(o, v);
     if (ref.startsWith('wall:') && field === 'angle') return setWallAngle(o, v);
     if (ref === 'layout') {
