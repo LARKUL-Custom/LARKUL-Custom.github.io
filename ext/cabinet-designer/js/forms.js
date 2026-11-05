@@ -27,7 +27,7 @@ const opts = (arr, filter) => arr.filter(filter || (() => true)).map(m => ({ v: 
 // Options for a pick that can follow the level above: cabinet follows its room, a room follows the job.
 function setOpts(k, list, level = 'room') {
   const inh = level === 'cab' ? roomSet(k) : S.job.defaults[k] || '';
-  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'same as the doors' : 'none');
+  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'same as the doors' : k === 'finish' ? 'from the door styles' : 'none');
   return [{ v: '', l: `${level === 'cab' ? 'Room' : 'Job'} · ${nm}` }, ...list];
 }
 // L1: name pickers list A to Z under their group headers.
@@ -165,6 +165,8 @@ document.addEventListener('change', e => {
     }
     if (ref.startsWith('mold:') && field === 'profile' && v === 'shape') { o.profile = v; if (!(o.pts || []).length) o.pts = moldStartPts(); moldFitShape(o); return; }
     // An appliance or shape set a distance off either wall end, like a cabinet's From left / From right.
+    // An appliance, window or doorway on a wall grows its width the same way a cabinet does (see qGrow).
+    if (ref.startsWith('fixt:') && field === 'w' && v > 0 && o.wall && wall(o.wall) && typeof qGrow === 'function') { const px = xProxy(o); qGrow(px, v); o.off = px.off; o.w = v; return; }
     if (ref.startsWith('fixtpos:') || ref.startsWith('shppos:')) { const px = xProxy(o); setFromEnd(px, field, v); o.off = px.off; return; }
     if (ref.startsWith('wall:') && field === 'len') return setWallLen(o, v);
     if (ref.startsWith('wall:') && field === 'angle') return setWallAngle(o, v);

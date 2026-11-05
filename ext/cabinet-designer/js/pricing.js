@@ -170,8 +170,8 @@ function insertPrice(it) {
 const panelAdd = (ps, cat) => +((ps.panelAdd || {})[cat === 'Wall' || cat === 'Tall' ? cat : 'Base']) || 0;
 // The door style applied end panels are made and priced as: the job or room pick, or else the cabinet's own door.
 function panelDoor(c) {
-  const id = cabSet(c, 'panelDoor'); if (id && S.doorStyles.some(d => d.id === id)) return doorStyle(id);
-  const t = doorTpl(cabSet(c, 'doorT')); return doorStyle(c.cat === 'Wall' && t.wallDoor ? t.wallDoor : t.door);
+  const id = cabSet(c, 'panelDoor'); if (id && S.doorStyles.some(d => d.id === id)) return withFinish(doorStyle(id), c);
+  const t = doorTpl(cabSet(c, 'doorT')); return withFinish(doorStyle(c.cat === 'Wall' && t.wallDoor ? t.wallDoor : t.door), c);
 }
 // The panel library keeps the fit (overhang, scribe, to the floor); the look comes from the door style.
 function panelFor(c) {

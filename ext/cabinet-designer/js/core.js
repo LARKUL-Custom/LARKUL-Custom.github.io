@@ -65,7 +65,7 @@ const PARAM_DEFS = [
   { k: 'drawerBottomDado', g: 'drawers', label: 'Drawer bottom dado', type: 'len' },
 ];
 // Parameter groups, by what they are for.
-const PARAM_GROUPS = [['base', 'Feet and toe kick'], ['box', 'Box construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
+const PARAM_GROUPS = [['base', 'Feet and toe kick'], ['box', 'Cabinet construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
 const SHOP_PARAMS = {
   baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'none', nailerWidth: 3.5, backInset: 0.75, dadoDepth: 0.375,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
@@ -277,8 +277,8 @@ function seed() {
     ],
     matTemplates: {
       cabinet: [
-        { id: 'mt-maple', name: 'Prefinished maple box', carcass: 'm-ply', back: 'm-back', shelf: 'm-ply', toeKick: 'm-ply' },
-        { id: 'mt-oak', name: 'White oak box (furniture grade)', carcass: 'm-wo', back: 'm-back', shelf: 'm-wo', toeKick: 'm-wo' },
+        { id: 'mt-maple', name: 'Prefinished maple cabinet', carcass: 'm-ply', back: 'm-back', shelf: 'm-ply', toeKick: 'm-ply' },
+        { id: 'mt-oak', name: 'White oak cabinet (furniture grade)', carcass: 'm-wo', back: 'm-back', shelf: 'm-wo', toeKick: 'm-wo' },
       ],
       drawer: [
         { id: 'dt-bb58', name: '5/8 Baltic birch boxes', sides: 'm-bb', bottom: 'm-bot' },
@@ -417,7 +417,7 @@ function attachRoom(st) {
   });
   return st;
 }
-const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'doorT', 'pull', 'slide', 'hinge', 'panelStyle', 'panelDoor', 'partT', 'jointU', 'jointF', 'faceFrame'];
+const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'doorT', 'finish', 'pull', 'slide', 'hinge', 'panelStyle', 'panelDoor', 'partT', 'jointU', 'jointF', 'faceFrame'];
 // Older saves had one room and stored the job default on every cabinet. Blank those so cabinets follow room settings.
 // Blum TANDEM plus BLUMOTION 563H, frameless, from Blum's 563H/563 installation sheet (2016).
 // Runner screws: top row 37 mm above the runner bottom (the opening bottom), the box sits 14 mm above it, so 23 mm above the box bottom.
@@ -536,9 +536,9 @@ function ensureMatSets(s) {
   const mt = s.matTemplates; if (!mt || Array.isArray(mt.job)) return s;
   const has = (list, id) => (list || []).some(x => x.id === id), ok = t => has(s.doorTemplates, t.doorT) && has(mt.cabinet, t.cabMatT) && has(mt.drawer, t.drawerMatT);
   const list = [
-    { id: 'ms-paint', name: 'Paint grade shaker, maple box', doorT: 'door-shaker', cabMatT: 'mt-maple', drawerMatT: 'dt-bb58' },
-    { id: 'ms-sage', name: 'Sage shaker, maple box', doorT: 'door-sage', cabMatT: 'mt-maple', drawerMatT: 'dt-bb58' },
-    { id: 'ms-oak', name: 'Rift oak slab, white oak box', doorT: 'door-oak', cabMatT: 'mt-oak', drawerMatT: 'dt-bb12' },
+    { id: 'ms-paint', name: 'Paint grade shaker, maple cabinet', doorT: 'door-shaker', cabMatT: 'mt-maple', drawerMatT: 'dt-bb58' },
+    { id: 'ms-sage', name: 'Sage shaker, maple cabinet', doorT: 'door-sage', cabMatT: 'mt-maple', drawerMatT: 'dt-bb58' },
+    { id: 'ms-oak', name: 'Rift oak slab, white oak cabinet', doorT: 'door-oak', cabMatT: 'mt-oak', drawerMatT: 'dt-bb12' },
   ].filter(ok);
   // The job's own picks become a template too, so nothing is lost when another one is picked.
   const d = (s.job && s.job.defaults) || {}, cur = { doorT: d.doorT, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT };
@@ -569,6 +569,12 @@ const roomById = id => S.rooms.find(r => r.id === id);
 // Job setting, overridden by the room, overridden by the cabinet. A blank value means "follow the level above".
 const roomSet = (k, r = curRoom()) => ((r && r.settings) || {})[k] || S.job.defaults[k] || '';
 const cabSet = (c, k) => (c && c[k]) || roomSet(k);
+// Finish material (0.48.3): picked for the job or a room under Cabinet and panels. Doors, drawer fronts, end panels and fillers
+// are made in it instead of their door style's own material; a door panel cut from the same material follows too. Blank = the door styles' own.
+function withFinish(ds, c) {
+  const id = cabSet(c, 'finish'); if (!id || id === ds.mat || !S.materials.some(m => m.id === id)) return ds;
+  return { ...ds, mat: id, ...(ds.panelMat === ds.mat ? { panelMat: id } : {}) };
+}
 // Runs fn with another room open, so S.walls and S.cabinets point at it.
 function withRoom(r, fn) { const prev = S.roomId; S.roomId = r.id; try { return fn(); } finally { S.roomId = prev; } }
 const allCabs = () => S.rooms.flatMap(r => r.cabinets);

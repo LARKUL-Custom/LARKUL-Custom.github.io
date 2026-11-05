@@ -64,7 +64,7 @@ function renderDesigner() {
       <div class="psec box"><div class="grid2">${fld('Name', 'des', 'name', d.name, 'text')}${fld('Category', 'des', 'cat', d.cat, 'select', { options: ['Base', 'Wall', 'Tall'] })}</div>
       <div class="grid3">${fld('Width', 'des', 'w', d.w, 'len')}${fld('Height', 'des', 'h', d.h, 'len')}${fld('Depth', 'des', 'd', d.d, 'len')}</div></div>
       ${qeOpening(c, qr)}
-      ${desFold('box', 'Box', `${fld('Elevation', 'des', 'elev', d.elev, 'len')}
+      ${desFold('box', 'Cabinet', `${fld('Elevation', 'des', 'elev', d.elev, 'len')}
         <div class="checkrow"><label>${ctl('desc', 'toeKick', d.construction.toeKick, 'bool', { label: 'Raised base (feet or toe kick)' })} Feet / toe kick</label>${ctl('desc', 'top', d.construction.top, 'select', { options: [{ v: 'full', l: 'Full top' }, { v: 'stretchers', l: 'Stretchers' }], label: 'Top' })}</div>
         <div class="checkrow"><label>${ctl('des', 'appliedL', d.appliedL, 'bool', { label: 'Left panel' })} Applied left end</label><label>${ctl('des', 'appliedR', d.appliedR, 'bool', { label: 'Right panel' })} Applied right end</label></div>
         ${qeInside(c)}`)}

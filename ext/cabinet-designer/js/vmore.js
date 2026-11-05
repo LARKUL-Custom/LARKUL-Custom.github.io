@@ -223,7 +223,7 @@ const qrText = p => [S.job.name, p.room || '', p.cab, p.report || p.name].join('
 /* ----- V12: dynamic materials take the look of the material picked for the room ----- */
 function dynLook(m) {
   if (!m || !m.dynamic) return m;
-  const rm = typeof curRoom === 'function' ? curRoom() : null, id = rm && rm.dynMat || S.job.dynMat, src = id && id !== m.id ? mat(id) : null;
+  const rm = typeof curRoom === 'function' ? curRoom() : null, id = (rm && roomSet('finish', rm)) || (rm && rm.dynMat) || S.job.dynMat, src = id && id !== m.id ? mat(id) : null;
   return src ? { ...m, texture: src.texture, procedural: src.procedural, color: src.color, texScale: src.texScale } : m;
 }
 if (typeof texURL === 'function') { const txBase = texURL; texURL = function (m) { return txBase(dynLook(m)); }; }

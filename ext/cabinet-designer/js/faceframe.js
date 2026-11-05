@@ -144,7 +144,7 @@ function renderFaceFrames() {
   const el = $('#tab-faceframes'); if (!el) return;
   const list = S.faceFrames || [];
   if (typeof LIB_REFS === 'object' && !LIB_REFS.ff) LIB_REFS.ff = ['ff', () => S.faceFrames];
-  el.innerHTML = `<div class="pagehead"><div><h2>Face frames</h2><p>Stile and rail sizes for face frame cabinets. Pick one for the whole job under Settings › Box and panels, or for one cabinet in its editor.</p></div><button class="btn primary" data-act="ff-add">${icon('plus')}Add face frame</button></div>
+  el.innerHTML = `<div class="pagehead"><div><h2>Face frames</h2><p>Stile and rail sizes for face frame cabinets. Pick one for the whole job under Settings › Cabinet and panels, or for one cabinet in its editor.</p></div><button class="btn primary" data-act="ff-add">${icon('plus')}Add face frame</button></div>
   <div class="card"><div class="cardbody"><div class="roomsum"><span>This job is <b>${esc(ffJobName())}</b></span><button class="linkbtn" data-act="ff-settings">Change for the whole job</button></div></div></div>
   ${pickBar('ff', list, 'Face frame')}<div class="cards">${picked('ff', list).map(t => {
     const R = 'ff:' + t.id, L = (k, l) => fld(l, R, k, t[k], 'len');

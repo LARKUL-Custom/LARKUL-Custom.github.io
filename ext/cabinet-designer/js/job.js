@@ -88,6 +88,7 @@ const SETTINGS = [
   { k: 'jointU', label: 'Joints, unfinished ends', list: () => opts(hwOf('joint')), tab: 'hardware' },
   { k: 'jointF', label: 'Joints, finished ends', list: () => opts(hwOf('joint')), tab: 'hardware' },
   { k: 'leg', label: 'Legs', list: () => opts(hwOf('leg')), tab: 'hardware' },
+  { k: 'finish', label: 'Finish material', list: () => azOpts(S.materials, m => (m.kind || 'sheet') === 'sheet' && !m.dynamic), tab: 'materials', blank: 'From the door styles' },
   { k: 'panelDoor', label: 'Applied end panel door style', list: () => opts(S.doorStyles), tab: 'doors', blank: 'Same as the doors' },
   { k: 'panelStyle', label: 'Applied end panel fit', list: () => opts(S.panels), tab: 'panels' },
   { k: 'faceFrame', label: 'Construction', list: () => ffOpts(), tab: 'faceframes' },
@@ -101,6 +102,7 @@ function settingPreview(k, id) {
   if (k === 'drawerMatT') return swatch(mat(drawerMatT(id).sides), 16);
   if (k === 'countertop') return swatch(mat(countertop(id).mat), 16);
   if (k === 'panelDoor') return id ? swatch(mat(doorStyle(id).mat), 16) : '';
+  if (k === 'finish') return id ? swatch(mat(id), 16) : '';
   return '';
 }
 /* ---------- Material template: door, cabinet and drawer materials for the whole job in one pick ---------- */
@@ -130,7 +132,7 @@ function matSetBar() {
 const TPL_CATS = [
   ['fronts', 'Doors and fronts', ['doorT', 'dt.door', 'dt.wallDoor', 'dt.drawerTop', 'dt.drawer', 'dt.drawerBot', 'dt.falseFront', 'pull', 'hinge']],
   ['drawers', 'Drawers', ['drawerMatT', 'slide']],
-  ['box', 'Box and panels', ['faceFrame', 'cabMatT', 'panelDoor', 'panelStyle', 'shelfpin', 'jointU', 'jointF', 'leg', 'partT']],
+  ['box', 'Cabinet and panels', ['faceFrame', 'cabMatT', 'finish', 'panelDoor', 'panelStyle', 'shelfpin', 'jointU', 'jointF', 'leg', 'partT']],
   ['tops', 'Tops and molding', ['countertop', 'molding']],
   ['walls', 'Walls', ['wallThick', 'wallHeight']],
 ];
@@ -157,6 +159,7 @@ function tplPic(k, id) {
       : svg(`<path d="M22 40 L58 28 L100 38 L100 62 L64 74 L22 64 Z" fill="${c}" stroke="#555"/><path d="M22 40 L64 50 L100 38 M64 50 L64 74" fill="none" stroke="#555"/><path d="M28 44 L60 52 L96 42" fill="none" stroke="#555" stroke-opacity=".4"/>`);
   }
   if (k === 'panelDoor') { const ds = id ? doorStyle(id) : doorStyle(doorTpl(S.job.defaults.doorT).door), c = col(mat(ds.mat)); return svg(`<rect x="44" y="4" width="32" height="82" fill="${c}" stroke="#555"/>${ds.type !== 'slab' ? '<rect x="50" y="12" width="20" height="66" fill="none" stroke="#555" stroke-opacity=".55"/>' : ''}`); }
+  if (k === 'finish') { const m = id ? mat(id) : mat(doorStyle(doorTpl(S.job.defaults.doorT).door).mat); return svg(`<rect x="20" y="10" width="38" height="72" rx="1.5" fill="${col(m)}" stroke="#555"/><rect x="62" y="10" width="38" height="72" rx="1.5" fill="${col(m)}" stroke="#555"/><rect x="28" y="20" width="22" height="52" fill="none" stroke="#555" stroke-opacity=".45"/><rect x="70" y="20" width="22" height="52" fill="none" stroke="#555" stroke-opacity=".45"/>`); }
   if (k === 'panelStyle') return svg('<rect x="44" y="4" width="32" height="82" fill="#e8e1d2" stroke="#555"/><path d="M76 10 h14 M76 80 h14" stroke="var(--accent)" stroke-width="2"/>');
   if (k === 'faceFrame') { const t = (S.faceFrames || []).find(f => f.id === id); return t ? ffPic(t) : svg('<rect x="38" y="8" width="44" height="74" fill="#e8e1d2" stroke="#555"/><rect x="40" y="10" width="40" height="70" fill="none" stroke="#555" stroke-opacity=".4"/>'); }
   if (k === 'partT') return svg('<rect x="20" y="30" width="80" height="30" fill="#e8e1d2" stroke="#555"/><rect x="20" y="56" width="80" height="4" fill="var(--accent)"/><text x="60" y="80" text-anchor="middle" font-size="10" fill="currentColor">banded edge</text>');

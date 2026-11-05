@@ -325,7 +325,7 @@ function renderPropsBody(el = $('#props')) {
   <div class="psec">${fld('Room name', 'room:' + rm.id, 'name', rm.name, 'text')}
     <div class="note">Click a cabinet or a wall to edit it. Room settings are on the Settings tab, under Job dashboard.</div><button class="btn" data-act="set-dash">${icon('home')}Job dashboard</button>
     ${S.job.labelStyle !== 'type' ? `<div class="note">Cabinets here are numbered #${rm.block || ''}01 and up. They keep their numbers as you edit; renumber to put them back in wall order.</div><button class="btn" data-act="renumber">${icon('list')}Renumber cabinets</button>` : ''}</div>
-  ${roomTopsMoldBoxes(rm)}${typeof dynBox === 'function' ? dynBox(rm) : ''}
+  ${roomTopsMoldBoxes(rm)}
   <div class="psec how">${secHead('hint', 'How to', 'blue')}
     <p><b>Walls:</b> press <kbd>W</kbd> or Draw walls, click each corner, click the first corner to close the room.</p>
     <p><b>Cabinets:</b> drag one from the left onto a wall, or click it in the list and click a wall.</p>

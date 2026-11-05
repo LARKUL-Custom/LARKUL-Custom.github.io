@@ -15,14 +15,38 @@ function qSizeRule(c, f, v) {
   if (mx > 0 && v > mx + 1e-6) return { v: mx, note: `${name} can't go over ${fmtLen(mx, 1)} on this cabinet, so it was set to that.` };
   return { v };
 }
-/* ----- Q2: which way a cabinet grows when its width changes (as seen in elevation) ----- */
+/* ----- Q2: which way a cabinet grows when its width changes (as seen in elevation) -----
+   Auto (the default): nothing next to it on either side grows or shrinks evenly from the middle; something next to it
+   on one side keeps that edge where it is and grows toward the open side; boxed in on both sides keeps the left end. */
 let qGrowDir = null;
-const growDir = () => { if (qGrowDir === null) { try { qGrowDir = localStorage.getItem(KEY + '.grow') || 'right'; } catch (_) { qGrowDir = 'right'; } } return qGrowDir; };
-const GROW = [['left', '◀ Left'], ['both', '◀ Both ▶'], ['right', 'Right ▶']];
+const growDir = () => { if (qGrowDir === null) { try { qGrowDir = localStorage.getItem(KEY + '.grow2') || 'auto'; } catch (_) { qGrowDir = 'auto'; } } return qGrowDir; };
+const GROW = [['auto', 'Auto'], ['left', '◀ Left'], ['both', '◀ Both ▶'], ['right', 'Right ▶']];
+// Open room past each end of c along its wall (low = toward the wall's start), up to the next item or the wall face.
+function growRoom(c, dir) {
+  const { lo, hi } = runLimits(c), n = nearestAt(c, dir), toWall = dir < 0 ? c.off - lo : hi - (c.off + c.w);
+  return Math.max(0, n ? Math.min(n.gap, toWall) : toWall);
+}
+// How far the low end moves down the wall when the width grows by dv (shrinks when dv < 0), for Auto.
+function autoGrowLo(c, dv) {
+  const ly = lay(), near = Math.max(ly.panelReach || 0, ly.autoFillers ? ly.fillerReach || 0 : 0) + 0.01;
+  const rLo = growRoom(c, -1), rHi = growRoom(c, 1), bLo = rLo <= near, bHi = rHi <= near;
+  if (bLo && bHi) return null;            // boxed in: the usual left end stays
+  if (bLo) return 0;                      // something at the low end: grow toward the high end
+  if (bHi) return dv;                     // something at the high end: grow toward the low end
+  if (dv <= 0) return dv / 2;             // open both sides: shrink evenly
+  return Math.max(dv - rHi, Math.min(rLo, dv / 2)); // grow evenly, giving any shortfall on one side to the other
+}
 function qGrow(c, v) {
-  if (!c.wall || growDir() === 'right') { c.w = v; return; }
-  const L0 = fromEnd(c, 'L'), dv = v - c.w; c.w = v;
-  setFromEnd(c, 'L', r3(L0 - (growDir() === 'left' ? dv : dv / 2)));
+  if (!c.wall || !wall(c.wall)) { c.w = v; return; }
+  const dv = v - c.w;
+  if (growDir() === 'auto') {
+    const d = inRoomOf(c, () => autoGrowLo(c, dv));
+    if (d !== null) { c.off = r3(c.off - d); c.w = v; return; }
+    const L0 = inRoomOf(c, () => fromEnd(c, 'L')); c.w = v; inRoomOf(c, () => setFromEnd(c, 'L', L0)); return;
+  }
+  if (growDir() === 'right') { const L0 = inRoomOf(c, () => fromEnd(c, 'L')); c.w = v; inRoomOf(c, () => setFromEnd(c, 'L', L0)); return; }
+  const L0 = inRoomOf(c, () => fromEnd(c, 'L')); c.w = v;
+  inRoomOf(c, () => setFromEnd(c, 'L', r3(L0 - (growDir() === 'left' ? dv : dv / 2))));
 }
 const growSeg = () => `<div class="qb-grow"><span>Width grows</span><div class="seg" role="group" aria-label="Which way the width grows">${GROW.map(([k, l]) => `<button data-act="q-grow" data-id="${k}" aria-pressed="${growDir() === k}">${l}</button>`).join('')}</div></div>`;
 
@@ -308,7 +332,7 @@ function qPasteMany(at) {
 function qRowMut(id, fn) { const [cid, i] = id.split(':'), c = cab(cid), r = c && (c.rows || [])[+i]; if (r) mutate(() => fn(c, r, +i)); }
 function quickAct(a, id, el) {
   switch (a) {
-    case 'q-grow': qGrowDir = id; try { localStorage.setItem(KEY + '.grow', id); } catch (_) {} render(); return true;
+    case 'q-grow': qGrowDir = id; try { localStorage.setItem(KEY + '.grow2', id); } catch (_) {} render(); return true;
     case 'q-equal': qEqualize(); return true;
     case 'q-copyset': qCopySettings(); return true;
     case 'q-pasteset': qPasteSettings(); return true;

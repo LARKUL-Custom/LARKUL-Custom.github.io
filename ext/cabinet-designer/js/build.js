@@ -34,7 +34,9 @@ function fillerPolys(c) {
   const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), t = (mat(fillerMat(c)) || { thick: 0.75 }).thick;
   return fillersOf(c).map(fl => [wallPt(w, g, s, fl.a0, f + c.d), wallPt(w, g, s, fl.a1, f + c.d), wallPt(w, g, s, fl.a1, f + c.d + t), wallPt(w, g, s, fl.a0, f + c.d + t)]);
 }
-const fillerMat = c => doorStyle(doorTpl(cabSet(c, 'doorT')).door).mat;
+const fillerMat = c => withFinish(doorStyle(doorTpl(cabSet(c, 'doorT')).door), c).mat;
+// The material a cabinet's show parts are made in: the room's finish pick, else its door style's material.
+const finishMat = c => fillerMat(c);
 function segDist(p, w) {
   const g = wg(w); const t = (p.x - w.x1) * g.u.x + (p.y - w.y1) * g.u.y;
   const tc = Math.max(0, Math.min(g.L, t));
@@ -184,7 +186,7 @@ function frontStyle(c, f) {
   const dt = doorTpl(cabSet(c, 'doorT'));
   let ds = frontBaseStyle(c, f, dt);
   const fh = f.z1 - f.z0, fw = f.x1 - f.x0;
-  ds = sizeRuleStyle(ds, fw, fh);
+  ds = withFinish(sizeRuleStyle(ds, fw, fh), c);
   const { nR, nS, mrs, mss } = doorMids(ds, fw, fh), sum = a => a.reduce((x, y) => x + y, 0);
   const needH = 2 * ds.rail + sum(mrs) + (nR + 1) * 2, needW = 2 * ds.stile + sum(mss) + (nS + 1) * 2;
   const framed = ds.type !== 'slab' && fh >= Math.max(needH, f.type === 'door' ? 0 : dt.minFrameHeight || 0) && fw >= needW;

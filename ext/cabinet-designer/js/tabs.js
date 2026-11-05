@@ -198,7 +198,7 @@ function renderMaterials() {
   <div class="cards">
     <div class="card">${cardHead('Cabinet material templates', '<button class="btn sm" data-act="mtc-add">Add</button>')}<div class="cardbody">${mc.map(t => `<div class="tplrow" data-drag="cabMatT:${t.id}">
       <div class="tplhead">${swatch(mat(t.carcass), 22)}${ctl('mtc:' + t.id, 'name', t.name, 'text', { label: 'Template name' })}<span class="note">${nCab(usedBy(c => cabSet(c, 'cabMatT') === t.id))}</span>${delBtn('mtc-del', t.id, mc.length < 2, '×')}</div>
-      <div class="autogrid">${fld('Box (sides, top, bottom)', 'mtc:' + t.id, 'carcass', t.carcass, 'select', { options: matOpts('sheet') })}${fld('Back', 'mtc:' + t.id, 'back', t.back, 'select', { options: matOpts('sheet') })}${fld('Shelves', 'mtc:' + t.id, 'shelf', t.shelf, 'select', { options: matOpts('sheet') })}${fld('Toe kick', 'mtc:' + t.id, 'toeKick', t.toeKick, 'select', { options: matOpts('sheet') })}</div></div>`).join('')}</div></div>
+      <div class="autogrid">${fld('Cabinet (sides, top, bottom)', 'mtc:' + t.id, 'carcass', t.carcass, 'select', { options: matOpts('sheet') })}${fld('Back', 'mtc:' + t.id, 'back', t.back, 'select', { options: matOpts('sheet') })}${fld('Shelves', 'mtc:' + t.id, 'shelf', t.shelf, 'select', { options: matOpts('sheet') })}${fld('Toe kick', 'mtc:' + t.id, 'toeKick', t.toeKick, 'select', { options: matOpts('sheet') })}</div></div>`).join('')}</div></div>
     <div class="card">${cardHead('Drawer material templates', '<button class="btn sm" data-act="mtd-add">Add</button>')}<div class="cardbody">${md.map(t => `<div class="tplrow" data-drag="drawerMatT:${t.id}">
       <div class="tplhead">${swatch(mat(t.sides), 22)}${ctl('mtd:' + t.id, 'name', t.name, 'text', { label: 'Template name' })}<span class="note">${nCab(usedBy(c => cabSet(c, 'drawerMatT') === t.id))}</span>${delBtn('mtd-del', t.id, md.length < 2, '×')}</div>
       <div class="autogrid">${fld('Sides, front, back', 'mtd:' + t.id, 'sides', t.sides, 'select', { options: matOpts('sheet') })}${fld('Bottom', 'mtd:' + t.id, 'bottom', t.bottom, 'select', { options: matOpts('sheet') })}</div></div>`).join('')}</div></div>
@@ -507,9 +507,9 @@ function buildDoor3D() {
 
 /* ---------- Applied panels ---------- */
 function renderPanels() {
-  // The panel's look and price come from a door style (Settings › Box and panels); this library keeps only how it fits.
+  // The panel's look and price come from a door style (Settings › Cabinet and panels); this library keeps only how it fits.
   const ds = doorStyle(roomSet('panelDoor') || doorTpl(roomSet('doorT')).door), m = mat(ds.mat), framed = ds.type !== 'slab', fr = framed ? Math.max(+ds.stile || 0, +ds.rail || 0) : 0;
-  $('#tab-panels').innerHTML = `<div class="pagehead"><div><h2>Applied panels</h2><p>Finished end panels for exposed cabinet sides. Each panel is made and priced in a door style picked for the job or room under Settings › Box and panels. These styles only set how the panel fits.</p></div><button class="btn primary" data-act="panel-add">Add panel fit</button></div>
+  $('#tab-panels').innerHTML = `<div class="pagehead"><div><h2>Applied panels</h2><p>Finished end panels for exposed cabinet sides. Each panel is made and priced in a door style picked for the job or room under Settings › Cabinet and panels. These styles only set how the panel fits.</p></div><button class="btn primary" data-act="panel-add">Add panel fit</button></div>
   <div class="card"><div class="cardbody"><div class="roomsum">${swatch(m, 16)}<span>${esc(curRoom().name)} uses <b>${esc(ds.name)}</b>, ${money(doorRate(ds))}/sq ft</span><button class="linkbtn" data-act="tab" data-id="settings">Change in Settings</button><button class="linkbtn" data-act="tab" data-id="doors">Door designer</button></div></div></div>
   ${pickBar('panel', S.panels, 'Panel fit')}<div class="cards">${picked('panel', S.panels).map(d => {
     const R = 'panel:' + d.id, W = 24 + d.frontOverhang + d.scribe, H = 34.5;
@@ -582,7 +582,7 @@ function renderHardware() {
         ${loc('ends', 'Bottom (into the sides)')}${loc('top', 'Top (into the sides)', 'ends')}${loc('dividers', 'Dividers (into the bottom and top)')}
         <div class="jt-loc"><b>Top stretchers</b>${fld('Holes per stretcher end', X('stretchers'), 'n', (h.stretchers || {}).n ?? 2, 'int')}</div>
         ${jtTypesBox(h)}
-        <div class="note">${['jointU', 'jointF'].map(key => S.job.defaults[key] === h.id ? `<b>Job ${key === 'jointF' ? 'finished' : 'unfinished'} ends.</b>` : '').join(' ')} Pick which template each end uses in Settings › Templates and hardware › Box and panels, for a room, or per cabinet in the cabinet editor.</div>`;
+        <div class="note">${['jointU', 'jointF'].map(key => S.job.defaults[key] === h.id ? `<b>Job ${key === 'jointF' ? 'finished' : 'unfinished'} ends.</b>` : '').join(' ')} Pick which template each end uses in Settings › Templates and hardware › Cabinet and panels, for a room, or per cabinet in the cabinet editor.</div>`;
       const c = sampleCab({ w: 24, endL: a.fin ? 'fin' : 'unfin', endR: a.fin ? 'fin' : 'unfin', jointU: h.id, jointF: h.id, libParams: { shelfCount: 0 }, rows: [{ type: 'door', h: '*', count: 1 }] });
       const b = buildParts(c), side = b.parts.find(p => p.name === 'Left side'), bot = b.parts.find(p => p.name === 'Bottom');
       prev = `${side ? `<div class="note">Sample 24" base, left side:</div><div class="preview">${partSVG(side, 200)}</div>` : ''}${bot ? `<div class="note">Bottom:</div><div class="preview">${partSVG(bot, 140)}</div>` : ''}`;
