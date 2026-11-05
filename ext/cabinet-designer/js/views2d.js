@@ -893,6 +893,24 @@ function elevGhost(l, p) {
   const off = findFree(l, w.id, side, want, null);
   return off === null ? null : { wall: w.id, side, off };
 }
+// Placing from the library (a product picked, then clicked onto the drawing) works in the elevation too:
+// the ghost follows the pointer along the wall being shown, and a click puts it there.
+function elevPlaceGhost(e) {
+  const k = String(ui.placing || ''), p = elevPoint(e), g = e.target && e.target.closest && e.target.closest('[data-cab]');
+  ui.ghost = null; ui.fixtGhost = null; ui.shapeGhost = null; ui.ghostLib = null;
+  if (k.startsWith('fixt:')) { const f = fixtNew(k.slice(5)), at = f && fixtElevSpot(f, p, g && g.dataset.cab); ui.fixtGhost = at ? Object.assign(f, at) : null; }
+  else if (k.startsWith('shape:')) ui.shapeGhost = shapeElevSpot(k.slice(6), p);
+  else if (k) { const l = libItem(k); ui.ghost = l ? elevGhost(l, p) : null; ui.ghostLib = ui.ghost ? k : null; }
+  return !!(ui.ghost || ui.fixtGhost || ui.shapeGhost);
+}
+function elevPlace(e) {
+  const k = String(ui.placing), keep = e.shiftKey ? ui.placing : null;
+  if (!elevPlaceGhost(e)) { renderElev(); flash('There is no room for that there.'); return; }
+  if (ui.fixtGhost) { const f = ui.fixtGhost; ui.fixtGhost = null; mutate(() => { S.fixtures = S.fixtures || []; S.fixtures.push(f); }); ui.sel = { type: 'fixt', id: f.id }; ui.elevWall = f.wall; }
+  else if (ui.shapeGhost) { const g = ui.shapeGhost; ui.shapeGhost = null; placeShape(k.slice(6), null, g); }
+  else { const g = ui.ghost; ui.ghost = null; ui.ghostLib = null; placeCabinet(k, g); }
+  ui.placing = keep; renderRoom();
+}
 function elevPoint(e) {
   const svg = $('#elev'), pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
   const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 };
@@ -938,6 +956,8 @@ function initElev() {
       }
     }
     if (ui.chainDim && typeof vChainClick === 'function') { const w = wall(ui.elevWall); if (w && vChainClick(e, w, elevSide(w))) return; }
+    if (ui.placing && e.button === 2) { placeMode(null); return; }
+    if (ui.placing && e.button === 0) { elevPlace(e); return; }
     const rz = e.target.closest('[data-rz]');
     if (rz && rzShow()) {
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
@@ -980,13 +1000,16 @@ function initElev() {
     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
     ui.edrag = { id: c.id, sx: p.x, sy: p.y, off: c.off, elev: c.elev, snap: JSON.stringify(S), live: false };
   });
+  svg.addEventListener('pointerleave', () => { if (ui.placing && !dnd && (ui.ghost || ui.fixtGhost || ui.shapeGhost)) { ui.ghost = null; ui.ghostLib = null; ui.fixtGhost = null; ui.shapeGhost = null; renderElev(); } });
   svg.addEventListener('pointermove', e => {
     if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pinch) {
       if (touches.size < 2) return;
       const m = pinchAt(); elevZoomTo(pinch.k * m.d / pinch.d, pinch.world, m); return;
     }
-    const d = ui.edrag; if (!d) return;
+    const d = ui.edrag;
+    if (!d && ui.placing && !dnd) { elevPlaceGhost(e); renderElev(); return; }
+    if (!d) return;
     if (d.pan) {
       if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
       d.moved = true; if (!d.z) return;

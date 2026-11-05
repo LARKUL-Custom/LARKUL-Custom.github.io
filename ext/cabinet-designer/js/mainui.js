@@ -165,21 +165,56 @@ function applyDockH() {
   const room = document.getElementById('tab-room'); if (!room) return;
   if (h > 0) room.style.setProperty('--dockh', h + 'px'); else room.style.removeProperty('--dockh');
 }
-// The panel keeps its normal size whatever its height: a taller panel shows more, a shorter one
-// scrolls. Its contents wrap to the width so nothing runs off the side.
+// The panel's contents zoom to fill it: a taller panel makes everything bigger, a shorter or
+// narrower one makes it smaller, so it never needs a scroll bar. The item bar also tries wrapping
+// onto two rows when that lets it grow bigger. Only very long room-wide lists (past half size) scroll.
 function fitDock(el = document.getElementById('dock')) {
   if (!el || !deskUI() || ui.tab !== 'room') return;
+  const real = el.isConnected;
   const body = el.querySelector('.dockbody'), inner = body && body.firstElementChild;
   if (body && inner) {
     let fit = body.querySelector(':scope > .dockfit');
     if (!fit) { fit = document.createElement('div'); fit.className = 'dockfit'; while (body.firstChild) fit.appendChild(body.firstChild); body.appendChild(fit); }
-    fit.style.zoom = ''; fit.style.width = '';
-    const bar = fit.querySelector('.itembar'); if (bar) bar.classList.add('ib-wrap');
-    body.classList.add('scroll');
+    const bar = fit.querySelector('.itembar');
+    if (!real) {
+      // Built off screen: carry over the live panel's zoom so swapping it in doesn't flash, then refit after.
+      const live = document.querySelector('#dock .dockfit'), lb = live && live.querySelector('.itembar');
+      fit.style.zoom = live ? live.style.zoom : ''; fit.style.width = live ? live.style.width : '';
+      if (bar) bar.classList.toggle('ib-wrap', !!(lb && lb.classList.contains('ib-wrap')));
+      body.classList.toggle('scroll', !!(live && live.parentElement.classList.contains('scroll')));
+    } else {
+      fit.style.zoom = 1; fit.style.width = ''; body.classList.remove('scroll');
+      if (bar) bar.classList.remove('ib-wrap');
+      const cs = getComputedStyle(body), aw = body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const isBar = !!bar || ui.dock === 'ends';
+      // Lists and cards lay out at the panel's width; the item bar keeps its own width and wraps on purpose.
+      if (!isBar) fit.style.width = aw + 'px';
+      let w = fit.scrollWidth, h = fit.scrollHeight;
+      if (aw > 0 && ah > 0 && w > 0 && h > 0) {
+        const MAX = isBar ? 1.6 : 1;
+        let z = Math.min(MAX, aw / w, ah / h);
+        // Smaller text fits more on a line, which makes the list shorter: settle the width a few times.
+        if (!isBar) for (let i = 0; i < 3 && z < 1; i++) { fit.style.width = Math.round(aw / z) + 'px'; z = Math.min(1, aw / fit.scrollWidth, ah / fit.scrollHeight); }
+        // A tall panel: the item bar wraps onto two rows when that lets everything grow bigger.
+        if (bar && ah / h > aw / w * 1.3) {
+          bar.classList.add('ib-wrap'); fit.style.width = Math.round(w * 0.6) + 'px';
+          const w2 = fit.scrollWidth, h2 = fit.scrollHeight, z2 = Math.min(MAX, aw / w2, ah / h2);
+          if (z2 > z * 1.08) z = z2; else { bar.classList.remove('ib-wrap'); fit.style.width = ''; }
+        }
+        // Long lists on the room-wide tabs stop shrinking at half size and scroll up and down instead.
+        if (!isBar && z < 0.5) { z = 1; fit.style.width = ''; body.classList.add('scroll'); }
+        // Rounded down a hair so rounding never leaves a pixel of overflow (and a scroll bar).
+        fit.style.zoom = body.classList.contains('scroll') ? '' : Math.max(0.25, Math.floor(z * 0.995 * 1000) / 1000).toFixed(3);
+      } else fit.style.zoom = '';
+    }
   }
-  const tabs = el.querySelector('.dockhead .docktabs'); if (tabs) tabs.style.zoom = '';
+  const head = el.querySelector('.dockhead'), tabs = head && head.querySelector('.docktabs');
+  if (head && tabs) {
+    if (!real) { const lt = document.querySelector('#dock .dockhead .docktabs'); tabs.style.zoom = lt ? lt.style.zoom : ''; }
+    else { tabs.style.zoom = 1; const sh = tabs.scrollHeight, z = sh > 0 ? Math.min(1, (head.clientHeight - 8) / sh) : 1; tabs.style.zoom = Math.max(0.4, z).toFixed(3); }
+  }
 }
-// tmp is the panel's new content built off screen; it gets the same wrapping fitDock gives the real one.
+// tmp is the panel's new content built off screen; it gets the same wrapping and zoom as the real one.
 function dockExtras(tmp, el = tmp) {
   applyDockH();
   if (!tmp.querySelector('.dockgrip')) tmp.insertAdjacentHTML('afterbegin', '<div class="dockgrip" title="Drag to resize this panel. Double-click to reset." aria-hidden="true"></div>');

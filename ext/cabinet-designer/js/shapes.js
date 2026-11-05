@@ -131,7 +131,8 @@ function shapesPlanSVG() {
 function hitShapes(p) { return S.shapes.filter(s => { const poly = shapePlanPoly(s); return poly && inPoly(p, poly); }).map(s => s.id); }
 // Elevation: a flat shape shows its front edge as a band, an upright one shows its whole outline.
 function shapesElevSVG(w, side, L, mats) {
-  return S.shapes.filter(s => s.wall === w.id && s.side === side).map(s => {
+  const g = ui.shapeGhost, gh = g && g.wall === w.id && g.side === side ? `<rect class="ghost nss" x="${side === 1 ? g.off : L - g.off - g.w}" y="${-(g.elev + g.h)}" width="${g.w}" height="${g.h}"/>` : '';
+  return gh + S.shapes.filter(s => s.wall === w.id && s.side === side).map(s => {
     const { box, out } = shapeLocal(s), x0 = side === 1 ? s.off : L - s.off - box.w, m = mat(s.mat); mats.push(m && m.id);
     const sel = ui.sel && ui.sel.type === 'shape' && ui.sel.id === s.id;
     const shape = s.plane === 'flat' ? `<rect ${fillFor(m, 'ev-top')} x="${x0}" y="${-(s.elev + s.thick)}" width="${box.w}" height="${s.thick}"/>`
@@ -156,16 +157,28 @@ function shapeMesh3(s, opts = {}) {
   grp.add(mesh); grp.traverse(o => { o.userData.shapeId = s.id; });
   return grp;
 }
-function placeShape(libId, p) {
+function placeShape(libId, p, at) {
   const l = shapeLibItem(libId); if (!l) return false;
-  let best = null; S.walls.forEach(w => { const r = segDist(p, w); if (r.d < 60 && (!best || r.d < best.r.d)) best = { w, r }; });
-  if (!best) { flash('Move closer to a wall to place the shape.'); return false; }
-  const W = shapeBox(l.pts).w, L = best.r.g.L, off = Math.max(0, Math.min(Math.max(0, L - W), best.r.t - W / 2));
-  // Flat shapes land at counter height over base cabinets; upright ones stand on the floor.
-  const elev = l.plane === 'flat' ? 34.5 + 0.75 : 0;
-  let ns; mutate(() => { ns = { ...clone(l), id: uid('s'), libId: l.id, wall: best.w.id, side: best.r.side, off: r3(off), outset: 0, elev }; S.shapes.push(ns); });
+  if (!at) {
+    let best = null; S.walls.forEach(w => { const r = segDist(p, w); if (r.d < 60 && (!best || r.d < best.r.d)) best = { w, r }; });
+    if (!best) { flash('Move closer to a wall to place the shape.'); return false; }
+    const W = shapeBox(l.pts).w, L = best.r.g.L, off = Math.max(0, Math.min(Math.max(0, L - W), best.r.t - W / 2));
+    // Flat shapes land at counter height over base cabinets; upright ones stand on the floor.
+    at = { wall: best.w.id, side: best.r.side, off: r3(off), elev: l.plane === 'flat' ? 34.5 + 0.75 : 0 };
+  }
+  let ns; mutate(() => { ns = { ...clone(l), id: uid('s'), libId: l.id, wall: at.wall, side: at.side, off: at.off, outset: 0, elev: at.elev }; S.shapes.push(ns); });
   ui.sel = { type: 'shape', id: ns.id }; ui.elevWall = ns.wall; renderRoom();
   return true;
+}
+// Where a library shape lands for a point on the elevation being shown: centered on the point, its bottom
+// where you let go, snapping onto the tops of the cabinets on that wall.
+function shapeElevSpot(libId, p) {
+  const l = shapeLibItem(libId), w = wall(ui.elevWall); if (!l || !w || !p) return null;
+  const b = shapeBox(l.pts), L = wg(w).L, side = elevSide(w), a = side === 1 ? p.x : L - p.x, H = l.plane === 'flat' ? (+l.thick || 0.75) : b.h;
+  const off = Math.max(0, Math.min(Math.max(0, L - b.w), Math.round((a - b.w / 2) * 4) / 4));
+  let elev = Math.max(0, Math.round((-p.y - H / 2) * 4) / 4), best = Math.max(lay().snapReach, 10 * (ui.elevPx || 0));
+  S.cabinets.forEach(k => { if (k.wall === w.id && k.side === side) { const v = k.elev + k.h; if (Math.abs(v - elev) < best) { best = Math.abs(v - elev); elev = v; } } });
+  return { wall: w.id, side, off: r3(off), elev, w: b.w, h: H, lib: l.id };
 }
 function shapeProps(s) {
   const id = s.id, R = 'shp:' + id, b = shapeBox(s.pts), o = shapeOutline(s.pts);

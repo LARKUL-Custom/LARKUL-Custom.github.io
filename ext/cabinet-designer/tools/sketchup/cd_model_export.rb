@@ -9,7 +9,7 @@ module LarkulCD
     unless file_loaded?(__FILE__)
       ext = SketchupExtension.new('Cabinet Designer model export', 'cd_model_export/main')
       ext.description = 'Turns a whole folder of SketchUp models (like a Mozaik library) into models Cabinet Designer can load.'
-      ext.version = '1.0.0'
+      ext.version = '2.0.0'
       ext.creator = 'Larkul Custom'
       Sketchup.register_extension(ext, true)
       file_loaded(__FILE__)

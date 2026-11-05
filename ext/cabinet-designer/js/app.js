@@ -106,7 +106,7 @@ const shapeFolder = l => l.folder || (l.plane === 'flat' ? 'Tops' : 'Panels');
 function loadFavs() { try { return JSON.parse(localStorage.getItem(KEY + '.favs') || '[]'); } catch (_) { return []; } }
 function shapeButton(l) {
   const b = shapeBox(l.pts), o = shapeLocal(l).out, k = Math.max(b.w, b.h), on = ui.placing === 'shape:' + l.id, m = mat(l.mat);
-  return `<button class="srcitem libbtn${on ? ' on' : ''}" data-act="shape-pick" data-id="${l.id}" title="${esc(l.name)}"><svg class="shpico" viewBox="${-k * 0.08} ${-k * 0.08} ${k * 1.16} ${k * 1.16}" aria-hidden="true"><polygon style="fill:${esc((m && m.color) || '#d6b07c')}" points="${o.map(p => `${r3(p.x)},${r3(l.plane === 'flat' ? p.y : b.h - p.y)}`).join(' ')}"/></svg><span><span class="nm">${esc(l.name)}</span><span class="ab">${esc(l.name)}</span><span class="dm">${fmtLen(b.w)} × ${fmtLen(b.h)} · ${l.plane === 'flat' ? 'flat' : 'upright'}</span></span></button>`;
+  return `<button class="srcitem libbtn${on ? ' on' : ''}" data-act="shape-pick" data-id="${l.id}" data-drag="shape:${l.id}" title="${esc(l.name)}"><svg class="shpico" viewBox="${-k * 0.08} ${-k * 0.08} ${k * 1.16} ${k * 1.16}" aria-hidden="true"><polygon style="fill:${esc((m && m.color) || '#d6b07c')}" points="${o.map(p => `${r3(p.x)},${r3(l.plane === 'flat' ? p.y : b.h - p.y)}`).join(' ')}"/></svg><span><span class="nm">${esc(l.name)}</span><span class="ab">${esc(l.name)}</span><span class="dm">${fmtLen(b.w)} × ${fmtLen(b.h)} · ${l.plane === 'flat' ? 'flat' : 'upright'}</span></span></button>`;
 }
 // The Products tree from the main screen design: a search box, then category heads that open to folders and products.
 // Search keeps matching products with their categories opened, and everything under a matching category or folder.
@@ -648,13 +648,16 @@ document.addEventListener('pointermove', e => {
   dnd.chip.style.transform = `translate(${e.clientX + 12}px, ${e.clientY + 12}px)`;
   const t = dndTarget(e);
   if (dnd.kind === 'fixt') {
-    const f = fixtNew(dnd.val), at = f && t.p && (t.where === 'plan' || t.where === '3d') ? fixtSpot(f, t.p, ui.px) : null;
-    ui.fixtGhost = at ? Object.assign(f, at) : null;
-    if (ui.viewMode === 'plan') renderPlan();
+    const f = fixtNew(dnd.val), at = !f ? null : t.where === 'elev' ? fixtElevSpot(f, t.ep, t.cab) : t.p && (t.where === 'plan' || t.where === '3d') ? fixtSpot(f, t.p, ui.px) : null;
+    ui.fixtGhost = at ? Object.assign(f, at) : null; dnd.over = t.where;
+    if (ui.viewMode === 'plan') renderPlan(); else if (ui.viewMode === 'elev') renderElev();
+  } else if (dnd.kind === 'shape') {
+    ui.shapeGhost = t.where === 'elev' ? shapeElevSpot(dnd.val, t.ep) : null; dnd.over = t.where; dnd.p = t.p;
+    if (ui.viewMode === 'elev') renderElev();
   } else if (dnd.kind === 'lib') {
     const l = libItem(dnd.val);
     ui.ghost = !l ? null : t.where === 'elev' ? elevGhost(l, t.ep) : t.p && (t.where === 'plan' || t.where === '3d') ? snapToWall(t.p, l, null, 0, ui.px) : null;
-    ui.ghostLib = dnd.val;
+    ui.ghostLib = dnd.val; dnd.over = t.where;
     if (ui.viewMode === 'plan') renderPlan(); else if (ui.viewMode === 'elev') renderElev();
   } else {
     const nd = t.cab || null;
@@ -664,7 +667,7 @@ document.addEventListener('pointermove', e => {
 // A finger drag the browser takes over (a scroll) ends without a pointerup: drop the drag there too.
 document.addEventListener('pointercancel', () => {
   dndPending = null; if (!dnd) return;
-  dnd.chip.remove(); dnd = null; document.body.classList.remove('dragging'); ui.ghost = null; ui.ghostLib = null; ui.fixtGhost = null; ui.dropCab = null; redrawView();
+  dnd.chip.remove(); dnd = null; document.body.classList.remove('dragging'); ui.ghost = null; ui.ghostLib = null; ui.fixtGhost = null; ui.shapeGhost = null; ui.dropCab = null; redrawView();
 });
 document.addEventListener('pointerup', dndDrop);
 // A finger whose lift was lost drops what it carried where it was last seen.
@@ -674,8 +677,11 @@ function dndDrop() {
   if (!dnd) return;
   const d = dnd; dnd = null; d.chip.remove(); document.body.classList.remove('dragging');
   ui.suppressClick = true; setTimeout(() => { ui.suppressClick = false; }, 0);
-  if (d.kind === 'fixt') { const g = ui.fixtGhost; ui.fixtGhost = null; if (g) { mutate(() => { S.fixtures = S.fixtures || []; S.fixtures.push(g); }); ui.sel = { type: 'fixt', id: g.id }; ui.elevWall = g.wall; } renderRoom(); return; }
-  if (d.kind === 'lib') { const g = ui.ghost; ui.ghost = null; ui.ghostLib = null; if (g) placeCabinet(d.val, g); else renderRoom(); return; }
+  // Let go over a drawing with nowhere for it to go: say so instead of dropping it without a word.
+  const noRoom = () => { if (d.over) flash('There is no room for that there.'); };
+  if (d.kind === 'fixt') { const g = ui.fixtGhost; ui.fixtGhost = null; if (g) { mutate(() => { S.fixtures = S.fixtures || []; S.fixtures.push(g); }); ui.sel = { type: 'fixt', id: g.id }; ui.elevWall = g.wall; } else noRoom(); renderRoom(); return; }
+  if (d.kind === 'lib') { const g = ui.ghost; ui.ghost = null; ui.ghostLib = null; if (g) placeCabinet(d.val, g); else { noRoom(); renderRoom(); } return; }
+  if (d.kind === 'shape') { const g = ui.shapeGhost; ui.shapeGhost = null; if (g) placeShape(d.val, null, g); else if (d.over === 'plan' || d.over === '3d') { if (!(d.p && placeShape(d.val, d.p))) renderRoom(); } else { noRoom(); renderRoom(); } return; }
   const target = ui.dropCab; ui.dropCab = null;
   if (target) { applyPayload(target, d.kind, d.val); ui.sel = { type: 'cab', id: target }; renderRoom(); flash(`Applied to ${LBL[target]}`); }
   else renderRoom();
@@ -1392,8 +1398,9 @@ document.addEventListener('keydown', e => {
 }, true);
 // Click a library cabinet, then click a wall: one placement (Shift keeps placing). null stops.
 function placeMode(id) {
-  ui.placing = id; ui.drawWalls = false; ui.drawing = null; ui.typed = ''; ui.ghost = null; ui.fixtGhost = null; ui.ghostBlocked = false;
-  if (id && ui.viewMode !== 'plan') { ui.viewMode = 'plan'; requestAnimationFrame(fitView); }
+  ui.placing = id; ui.drawWalls = false; ui.drawing = null; ui.typed = ''; ui.ghost = null; ui.fixtGhost = null; ui.shapeGhost = null; ui.ghostBlocked = false;
+  // The elevation places products too, so only the 3D view switches to the plan.
+  if (id && ui.viewMode === '3d') { ui.viewMode = 'plan'; requestAnimationFrame(fitView); }
   if (ui.tab !== 'room') { ui.tab = 'room'; render(); requestAnimationFrame(() => renderRoom()); } else renderRoom();
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && ui.quick) { e.stopImmediatePropagation(); closeQuick(); } }, true);

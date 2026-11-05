@@ -58,9 +58,53 @@ function modelLoad(key) {
   }).catch(() => { modelGeo[key] = { missing: true }; });
 }
 const mdlMats = {};
-function mdlMat(c, o) {
-  const k = c + '|' + o;
-  return mdlMats[k] || (mdlMats[k] = new THREE.MeshStandardMaterial({ color: new THREE.Color(c), roughness: 0.75, side: THREE.DoubleSide, transparent: o < 1, opacity: o, depthWrite: !(o < 1) }));
+function mdlMat(c, o, tex) {
+  const k = c + '|' + o + '|' + (tex ? tex.uuid : '');
+  if (mdlMats[k]) return mdlMats[k];
+  // A textured material's picture already carries SketchUp's colour, so it isn't tinted again.
+  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(tex ? '#ffffff' : c), map: tex || null, roughness: 0.6, metalness: 0.05, side: THREE.DoubleSide, transparent: o < 1, opacity: o, depthWrite: !(o < 1) });
+  return mdlMats[k] = m;
+}
+// Pictures for textured materials, read once from storage and shared.
+const mdlTex = new Map();
+function mdlTexture(blob) {
+  if (mdlTex.has(blob)) return mdlTex.get(blob);
+  const t = new THREE.Texture(); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  if (THREE.SRGBColorSpace && 'colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace; else if (THREE.sRGBEncoding) t.encoding = THREE.sRGBEncoding;
+  const img = new Image(), url = URL.createObjectURL(blob);
+  img.onload = () => {
+    t.image = img; t.needsUpdate = true; URL.revokeObjectURL(url);
+    if (typeof roomViewer !== 'undefined' && roomViewer && roomViewer.draw) try { roomViewer.draw(); } catch (_) {}
+    for (const k in peekPics) if (k.startsWith('fixt|')) delete peekPics[k];
+    const el = document.getElementById('libpeek'); if (el && ui.libPeek) el.innerHTML = libPeekHTML(ui.libPeek);
+  };
+  img.src = url; mdlTex.set(blob, t);
+  return t;
+}
+// Smooth shading across curved surfaces (SketchUp's soft edges), sharp corners kept: each corner's normal averages
+// the triangles at that point that face within 35 degrees of its own. Worked out in inches, before the stretch.
+function creaseNormals(pos) {
+  const n = pos.length / 9, fn = new Float32Array(n * 3), map = new Map(), out = new Float32Array(pos.length), cos = Math.cos(35 * Math.PI / 180);
+  const key = j => Math.round(pos[j] * 200) + ',' + Math.round(pos[j + 1] * 200) + ',' + Math.round(pos[j + 2] * 200);
+  for (let t = 0; t < n; t++) {
+    const a = t * 9, ux = pos[a + 3] - pos[a], uy = pos[a + 4] - pos[a + 1], uz = pos[a + 5] - pos[a + 2], vx = pos[a + 6] - pos[a], vy = pos[a + 7] - pos[a + 1], vz = pos[a + 8] - pos[a + 2];
+    fn[t * 3] = uy * vz - uz * vy; fn[t * 3 + 1] = uz * vx - ux * vz; fn[t * 3 + 2] = ux * vy - uy * vx;
+    for (let c = 0; c < 3; c++) { const k = key(a + c * 3); let l = map.get(k); if (!l) map.set(k, l = []); l.push(t); }
+  }
+  const len = t => Math.hypot(fn[t * 3], fn[t * 3 + 1], fn[t * 3 + 2]) || 1;
+  for (let t = 0; t < n; t++) {
+    const lt = len(t), ax = fn[t * 3] / lt, ay = fn[t * 3 + 1] / lt, az = fn[t * 3 + 2] / lt;
+    for (let c = 0; c < 3; c++) {
+      let x = 0, y = 0, z = 0;
+      for (const o of map.get(key(t * 9 + c * 3))) {
+        const lo = len(o), d = (fn[o * 3] * ax + fn[o * 3 + 1] * ay + fn[o * 3 + 2] * az) / lo;
+        // Triangles facing the other way (a face drawn twice, back to back) count turned over.
+        if (Math.abs(d) >= cos) { const sg = d < 0 ? -1 : 1; x += sg * fn[o * 3]; y += sg * fn[o * 3 + 1]; z += sg * fn[o * 3 + 2]; }
+      }
+      const l = Math.hypot(x, y, z) || 1, j = t * 9 + c * 3; out[j] = x / l; out[j + 1] = y / l; out[j + 2] = z / l;
+    }
+  }
+  return out;
 }
 // The model fitted into a 1 x 1 x 1 box in the room's fixture axes: x along the wall, y up, z out from the wall.
 // SketchUp's axes are x right, y back, z up, and Mozaik's models face -y, so y turns into the depth.
@@ -71,26 +115,46 @@ function modelTemplate(key) {
   const grp = new THREE.Group();
   let tris = 0;
   g.mats.forEach(m => {
-    const p = m.p, idx = m.i, pos = new Float32Array(idx.length * 3);
+    const p = m.p, idx = m.i, raw = new Float32Array(idx.length * 3), pos = new Float32Array(idx.length * 3), uv = m.u && m.tex ? new Float32Array(idx.length * 2) : null;
     for (let n = 0; n < idx.length; n++) {
       const j = idx[n] * 3;
+      raw[n * 3] = p[j]; raw[n * 3 + 1] = p[j + 1]; raw[n * 3 + 2] = p[j + 2];
       pos[n * 3] = (p[j] - x0) / sx; pos[n * 3 + 1] = (p[j + 2] - z0) / sz; pos[n * 3 + 2] = (y1 - p[j + 1]) / sy;
+      if (uv) { uv[n * 2] = m.u[idx[n] * 2]; uv[n * 2 + 1] = m.u[idx[n] * 2 + 1]; }
     }
-    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, mdlMat(m.c, m.o)); mesh.userData.mdlColor = [m.c, m.o]; grp.add(mesh); tris += idx.length / 3;
+    // Normals from inches, turned into the box's axes (a normal stretches the other way from the points).
+    const nr = creaseNormals(raw), nm = new Float32Array(nr.length);
+    for (let n = 0; n < nr.length; n += 3) {
+      const a = nr[n] * sx, b = nr[n + 2] * sz, c = -nr[n + 1] * sy, l = Math.hypot(a, b, c) || 1;
+      nm[n] = a / l; nm[n + 1] = b / l; nm[n + 2] = c / l;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nm, 3));
+    if (uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    grp.add(new THREE.Mesh(geo, mdlMat(m.c, m.o, uv ? mdlTexture(m.tex) : null))); tris += idx.length / 3;
   });
+  // SketchUp's own edge lines (the hard ones), like the rest of the drawing.
+  if (g.e && g.e.length) {
+    const e = g.e, ep = new Float32Array(e.length);
+    for (let n = 0; n < e.length; n += 3) { ep[n] = (e[n] - x0) / sx; ep[n + 1] = (e[n + 2] - z0) / sz; ep[n + 2] = (y1 - e[n + 1]) / sy; }
+    const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.BufferAttribute(ep, 3));
+    const ln = new THREE.LineSegments(eg, mdlEdgeMat()); ln.userData.mdlEdges = true; grp.add(ln);
+  }
   grp.userData.tris = tris;
   return modelTpl[key] = grp;
 }
+const mdlEdgeMat = () => mdlEdgeMat.m || (mdlEdgeMat.m = new THREE.LineBasicMaterial({ color: 0x1e1e1e, transparent: true, opacity: 0.45 }));
 // A copy sized w x h x d with its low front-left corner at the origin, or null until the model is loaded.
+// Selected, it keeps its pictures and glows in the selection colour. Realistic view leaves the edge lines off.
 function modelMesh(key, w, h, d, selCol) {
   modelLoad(key);
   const t = modelTemplate(key); if (!t) return null;
   const grp = new THREE.Group();
   t.children.forEach(m => {
-    const c = new THREE.Mesh(m.geometry, selCol ? mdlMat(selCol, 1) : m.material);
-    if (selCol) { c.material = c.material.clone(); c.material.emissive = new THREE.Color(selCol); c.material.emissiveIntensity = 0.25; }
-    grp.add(c);
+    if (m.userData.mdlEdges) { if (!R3) grp.add(new THREE.LineSegments(m.geometry, m.material)); return; }
+    let mat = m.material;
+    if (selCol) { mat = mat.clone(); mat.emissive = new THREE.Color(selCol); mat.emissiveIntensity = 0.35; }
+    grp.add(new THREE.Mesh(m.geometry, mat));
   });
   grp.scale.set(Math.max(w, 0.01), Math.max(h, 0.01), Math.max(d, 0.01));
   return grp;
@@ -176,14 +240,19 @@ async function importModels(fileList) {
   const loose = cdm.map(f => ({ f, k: keyOf(f) })).filter(x => !used.has(x.k) && !/(^|\/)(products|customparts)(\/|$)/.test(dirOf(x.k)));
   const todo = cdm.filter(f => used.has(keyOf(f)) || loose.some(x => x.f === f));
   // Geometry, a batch at a time so a thousand files don't sit in memory together.
-  const boxes = {};
+  const boxes = {}, pics = new Map(files.filter(f => /\.(jpe?g|png)$/i.test(f.name)).map(f => [relOf(f).toLowerCase(), f]));
   let done = 0, bad = 0;
   for (let i = 0; i < todo.length; i += 25) {
     const batch = [];
     for (const f of todo.slice(i, i + 25)) {
       try {
         const j = JSON.parse(await f.text());
-        const g = { box: j.box, mats: (j.mats || []).map(m => ({ c: m.c || '#cccccc', o: +m.o || 1, p: Float32Array.from(m.p), i: Uint32Array.from(m.i) })) };
+        // A textured material names its picture beside the model file ("<model>.tex/0.jpg"); the picture is stored with it.
+        const here = dirOf(relOf(f));
+        const g = { box: j.box, e: Array.isArray(j.e) && j.e.length ? Float32Array.from(j.e) : null, mats: (j.mats || []).map(m => {
+          const tf = m.t && Array.isArray(m.u) ? pics.get((here + '/' + m.t).toLowerCase()) : null;
+          return { c: m.c || '#cccccc', o: +m.o || 1, p: Float32Array.from(m.p), i: Uint32Array.from(m.i), ...(tf ? { u: Float32Array.from(m.u), tex: tf.slice(0, tf.size, tf.type || (/\.png$/i.test(tf.name) ? 'image/png' : 'image/jpeg')) } : {}) };
+        }) };
         if (!g.mats.length || !Array.isArray(g.box)) { bad++; continue; }
         const k = keyOf(f); batch.push([k, g]); boxes[k] = g.box;
       } catch (_) { bad++; }

@@ -144,6 +144,22 @@ function fixtSpot(f, p, px) {
   const want = Math.round((best.r.t - f.w / 2) / gr) * gr, off = fixtFree(f, best.w.id, best.r.side, want, px);
   return off === null ? null : { wall: best.w.id, side: best.r.side, off: r3(off) };
 }
+// Where a fixture lands for a point on the elevation being shown (a sink centers on the base cabinet under it).
+// Windows and loose items go where you let go up and down too; the rest keep their own height.
+function fixtElevSpot(f, p, cabId) {
+  const w = wall(ui.elevWall); if (!w || !p) return null;
+  const L = wg(w).L, side = elevSide(w);
+  if (fixtSink(f)) {
+    const c = cab(cabId);
+    if (c && c.cat !== 'Wall' && c.wall === w.id) return { wall: w.id, side: c.side, off: r3(c.off + (c.w - f.w) / 2) };
+  }
+  const gr = lay().grid > 0 ? lay().grid : 1, a = side === 1 ? p.x : L - p.x;
+  const off = fixtFree(f, w.id, side, Math.round((a - f.w / 2) / gr) * gr, ui.elevPx);
+  if (off === null) return null;
+  const at = { wall: w.id, side, off: r3(off) };
+  if (f.kind === 'window' || fixtLoose(f)) at.elev = Math.max(0, Math.round((-p.y - f.h / 2) * 4) / 4);
+  return at;
+}
 function fixtNew(pid) {
   const d = fixtPreset(pid); if (!d) return null;
   const f = { id: uid('fx'), kind: d.kind, lib: d.id, name: d.name, w: d.w, h: d.h, d: d.d, elev: d.elev };
@@ -214,9 +230,10 @@ function fixtPlanSVG(low) {
 
 /* ---------- Elevation ---------- */
 function fixtElevSVG(w, side, L, fs, holes) {
-  return fixtList().filter(f => f.wall === w.id && fixtHole(f) === !!holes && (holes || f.side === side)).map(f => {
-    const x = side === 1 ? f.off : L - f.off - f.w, sel = fixtSel(f.id), cls = `fixt fx-${f.kind}${sel ? ' sel' : ''} nss`;
-    let s = `<g data-fixt="${f.id}">`;
+  const gh = ui.fixtGhost && ui.fixtGhost.wall === w.id && fixtHole(ui.fixtGhost) === !!holes && (holes || ui.fixtGhost.side === side) ? [ui.fixtGhost] : [];
+  return fixtList().concat(gh).filter(f => f.wall === w.id && fixtHole(f) === !!holes && (holes || f.side === side)).map(f => {
+    const x = side === 1 ? f.off : L - f.off - f.w, ghost = f === ui.fixtGhost, sel = !ghost && fixtSel(f.id), cls = `fixt fx-${f.kind}${sel ? ' sel' : ''} nss`;
+    let s = ghost ? '<g class="fx-ghost" pointer-events="none">' : `<g data-fixt="${f.id}">`;
     if (fixtSink(f)) {
       // Under the countertop: dashed bowl; above it the faucet.
       const t = fixtCounter(f).top, cx = x + f.w / 2;
@@ -316,7 +333,8 @@ function fixt3d(v, selCol) {
     }
     const mm = f.model && modelMesh(f.model, f.w, f.h, f.d, sel && selCol);
     if (mm) { mm.position.set(0, f.elev, 0); grp.add(mm); v.root.add(tag(grp)); return; }
-    if (fixtLoose(f)) { grp.add(box3(f.w, f.h, f.d, hot || flat3('#d4d7db', 0.6), f.w / 2, f.elev + f.h / 2, f.d / 2)); v.root.add(tag(grp)); return; }
+    // A loose model not imported in this browser (or still loading) shows as a solid box.
+    if (fixtLoose(f)) { grp.add(box3(f.w, f.h, f.d, hot || flat3('#d4d7db'), f.w / 2, f.elev + f.h / 2, f.d / 2)); v.root.add(tag(grp)); return; }
     const body = f.kind === 'washer' || f.kind === 'dryer' ? white : metal;
     grp.add(box3(f.w, f.h, f.d, hot || body, f.w / 2, f.elev + f.h / 2, f.d / 2));
     const z = f.d + 0.4;

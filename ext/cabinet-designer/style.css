@@ -1747,7 +1747,6 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 
   /* Item panel along the bottom: the selected item's position and size, the automatic switches, then its tabs on the right */
   .room .dock .dockhead{order:2;flex:none;flex-direction:column;align-items:stretch;justify-content:flex-start;width:calc(150 * var(--u));padding:calc(8 * var(--u)) calc(8 * var(--u)) 0;border:0;border-left:1px solid var(--line);overflow:hidden}
-  .room .dock .dockhead{overflow-y:auto;scrollbar-width:thin}
   .room .dock .dockhead .docktabs{transform-origin:0 0}
   .room .dock .dockhead > .btn{display:none}
   .room .dock .docktabs{display:flex;flex-direction:column;gap:1px;overflow:visible}
@@ -1756,7 +1755,8 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   .room .dock .docktabs button[aria-selected="true"]{background:var(--d-primary);color:var(--d-onprimary);box-shadow:none}
   .room .dock .dockbody{flex:1;min-width:0;overflow:hidden;padding:calc(10 * var(--u)) calc(14 * var(--u))}
   .room .dock .dockbody.scroll{overflow-y:auto;overflow-x:hidden}
-  .room .dock .dockfit{width:100%;min-width:0}
+  .room .dock .dockfit{width:max-content;min-width:0}
+  .room .dock .dockbody.scroll .dockfit{width:100%}
   .dockgrip{position:absolute;left:0;right:0;top:0;height:8px;z-index:3;cursor:ns-resize;touch-action:none}
   .dockgrip::after{content:"";position:absolute;left:50%;top:2px;width:48px;height:4px;margin-left:-24px;border-radius:2px;background:var(--line-strong);opacity:.6}
   .dockgrip:hover::after,body.dockdrag .dockgrip::after{opacity:1;background:var(--d-primary)}
@@ -1909,6 +1909,7 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .fixt.fx-door,.fixt.fx-window,.fixt.fx-opening{fill:var(--panel);stroke:var(--ink);stroke-width:1.2}
 .fixt.sel{stroke:var(--sel);stroke-width:2.6}
 .fixt.ghost{fill:var(--accent);fill-opacity:.25;stroke:var(--accent);stroke-dasharray:4 3}
+.fx-ghost{opacity:.5}
 #plan .fixt.fx-case{fill:var(--panel)}
 .fx-gap{fill:var(--paper);stroke:none}
 .fx-hole{fill:var(--paper);stroke:var(--ink);stroke-width:1}
