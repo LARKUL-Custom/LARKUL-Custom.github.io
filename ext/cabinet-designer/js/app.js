@@ -982,12 +982,13 @@ document.addEventListener('click', e => {
     case 'int-add': case 'int-del': case 'int-fav': case 'int-fold': case 'int-sel': case 'int-delsel': intAct(a, id); break;
     case 'qe-divider': { const c = cab(id); if (c) mutate(() => { (c.inserts = c.inserts || []).push({ type: 'divider', ...clone(insertType('divider').def) }); }); break; }
     case 'ins-del': { const o = resolve(ref); if (o) mutate(() => o.inserts.splice(+el.dataset.i, 1)); break; }
+    case 'des-tab': ui.desTab = id; ui.edPart = null; renderDesigner(); break;
     case 'des-view': ui.des3d = id === '3d'; renderDesigner(); break;
     case 'pt-add': mutate(() => S.partTemplates.push({ id: uid('pt'), name: 'New part template', rules: clone(partTpl(S.job.defaults.partT).rules || {}) })); break;
     case 'pt-dup': { const t = partTpl(id); mutate(() => S.partTemplates.push({ ...clone(t), id: uid('pt'), name: t.name + ' copy' })); break; }
     case 'pt-del': mutate(() => { S.partTemplates = S.partTemplates.filter(x => x.id !== id); unsetPick('partT', id, S.partTemplates[0].id); }); break;
     case 'pt-kind': { const [tid, kind] = id.split(':'), v = el.dataset.v; mutate(() => { const t = partTpl(tid); t.rules = t.rules || {}; t.rules[kind] = v ? { L1: v, L2: v, W1: v, W2: v } : {}; }); break; }
-    case 'eb-add': mutate(() => S.edgebands.push({ id: uid('eb'), name: 'New edgeband', thickMM: 0.5, width: 0.875, color: '#d8c49a', rollCost: EB_ROLL.cost, rollFt: EB_ROLL.ft })); break;
+    case 'eb-add': foldOpen('eb/'); mutate(() => S.edgebands.push({ id: uid('eb'), name: 'New edgeband', thickMM: 0.5, width: 0.875, color: '#d8c49a', rollCost: EB_ROLL.cost, rollFt: EB_ROLL.ft })); break;
     case 'eb-del': mutate(() => {
       S.edgebands = S.edgebands.filter(x => x.id !== id);
       S.partTemplates.forEach(t => Object.values(t.rules || {}).forEach(r => EDGE_KEYS.forEach(k => { if (r[k] === id) r[k] = ''; })));
@@ -1094,7 +1095,7 @@ document.addEventListener('click', e => {
       if (id === 'interior' && r && !['door', 'open'].includes(r.type)) { const i = rows.findIndex(x => ['door', 'open'].includes(x.type)); if (i >= 0) ui.qeRow = i; }
       renderQuick(); break;
     }
-    case 'ed-part': { if (e.target.closest('.pe-build')) break; const now = Date.now(), dbl = ui.edPartClick && ui.edPartClick.i === id && now - ui.edPartClick.t < 450; ui.edPartClick = { i: id, t: now }; ui.edPart = id; if (dbl && cab(ui.quick)) { openPartEdit(ui.quick, id); break; } renderQuick(); break; }
+    case 'ed-part': { if (e.target.closest('.pe-build')) break; const now = Date.now(), dbl = ui.edPartClick && ui.edPartClick.i === id && now - ui.edPartClick.t < 450; ui.edPartClick = { i: id, t: now }; ui.edPart = id; if (dbl && cab(peHost())) { openPartEdit(peHost(), id); break; } renderQuick(); break; }
     case 'ed-step': edStep(+id); break;
     // The editor's own preview turns into a 3D view of the cabinet (wide tabs have no preview, so Size opens).
     case 'ed-3d': ui.ed3d = !ui.ed3d; if (ui.ed3d && ED_WIDE.includes(ui.edTab)) ui.edTab = 'size'; renderQuick(); break;
@@ -1180,6 +1181,7 @@ document.addEventListener('click', e => {
     case 'part': { const now = Date.now(), dbl = ui.cutClick && ui.cutClick.i === id && now - ui.cutClick.t < 450; ui.cutClick = { i: id, t: now }; ui.partSel = id; renderCutlist(); if (dbl) { const p = cutScope().parts.find((q, i) => q.cabId + '#' + i === id); if (p && cab(p.cabId)) openPartEdit(p.cabId, peKeyOf(p)); } break; }
     case 'cut-edit-part': { const [cid, ...k] = id.split('|'); openPartEdit(cid, k.join('|')); break; }
     case 'lib-sel': ui.libSel = id; renderLibrary(); break;
+    case 'pg-fold': foldToggle(id); render(); break;
     case 'lib-dup': { const l = libItem(id), nl = { ...clone(l), id: uid('l'), name: l.name + ' copy' }; mutate(() => S.library.push(nl)); ui.libSel = nl.id; render(); break; }
     case 'lib-del': mutate(() => { S.library = S.library.filter(x => x.id !== id); }); break;
     case 'lib-place': ui.tab = 'room'; placeMode(id); break;
@@ -1196,7 +1198,7 @@ document.addEventListener('click', e => {
       else flash(a === 'des-update' ? 'Library template updated' : 'Saved to the library');
       break;
     }
-    case 'mat-add': mutate(() => S.materials.push({ id: uid('m'), name: 'New material', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 0, color: '#d8cfc0', texture: null, procedural: null, texScale: 24 })); break;
+    case 'mat-add': foldOpen('mat/'); mutate(() => S.materials.push({ id: uid('m'), name: 'New material', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 0, color: '#d8cfc0', texture: null, procedural: null, texScale: 24 })); break;
     case 'mat-del': {
       const inUse = JSON.stringify({ t: S.matTemplates, d: S.doorStyles, p: S.panels, c: S.countertops, m: S.moldings }).includes('"' + id + '"');
       if (inUse) { el.textContent = 'In use'; el.disabled = true; break; }
@@ -1336,7 +1338,7 @@ function setView(id) {
 document.addEventListener('pointerdown', e => { const m = $('#libmenu'); if (!m.hidden && !e.target.closest('#libmenu,#libbtn')) { m.hidden = true; const b = $('#libbtn'); if (b) b.setAttribute('aria-expanded', 'false'); } });
 function designCabFrom(c) {
   return { sourceLib: c.libId, name: c.name, cat: c.cat, w: c.w, h: c.h, d: c.d, elev: c.elev, rows: clone(c.rows), params: { ...(c.libParams || {}), ...(c.params || {}) },
-    construction: clone(c.construction || defaultConstruction(c.cat)), cabMatT: c.cabMatT, drawerMatT: c.drawerMatT, doorT: c.doorT, slide: c.slide, hinge: c.hinge, partT: c.partT || '', appliedL: panelMode(c, 'L') === 'on', appliedR: panelMode(c, 'R') === 'on', custom: clone(c.custom || []), inserts: clone(c.inserts || []), ...(c.corner ? { corner: clone(c.corner) } : {}) };
+    construction: clone(c.construction || defaultConstruction(c.cat)), cabMatT: c.cabMatT, drawerMatT: c.drawerMatT, doorT: c.doorT, slide: c.slide, hinge: c.hinge, partT: c.partT || '', appliedL: panelMode(c, 'L') === 'on', appliedR: panelMode(c, 'R') === 'on', custom: clone(c.custom || []), inserts: clone(c.inserts || []), ...(c.corner ? { corner: clone(c.corner) } : {}), ...desKeep(c, true) };
 }
 document.addEventListener('toggle', e => { if (e.target.id === 'rowsdetails') ui.rowsOpen = e.target.open; if (e.target.id === 'qelayouts') ui.qeLayouts = e.target.open; }, true);
 document.addEventListener('change', e => {

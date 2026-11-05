@@ -398,6 +398,8 @@ function newCab(S, lib, wallId, side, off) {
     construction: clone(lib.construction || defaultConstruction(lib.cat)),
     rows: clone(lib.rows), libParams: { ...(lib.params || {}) }, params: {}, custom: clone(lib.custom || []), vars: clone(lib.vars || []), inserts: clone(lib.inserts || []),
     ...(lib.corner ? { corner: clone(lib.corner) } : {}), ...(lib.moz ? { moz: lib.moz } : {}),
+    // Parts and operations changed on the product in the library come with every copy placed.
+    ...['partEdits', 'addParts', 'shape', 'mozPrm'].reduce((o, k) => (lib[k] !== undefined && (o[k] = clone(lib[k])), o), {}),
   };
 }
 
@@ -476,7 +478,7 @@ function migrate(s) {
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
   if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
   if (typeof ensureMozLib === 'function') ensureMozLib(s);
-  return attachRoom(ensureMatSets(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))));
+  return attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))))));
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
 // The open job lives in its own file (see jobs.js); browser storage keeps a working copy too.
@@ -561,6 +563,24 @@ function ensureMatSets(s) {
 }
 // Older jobs: one finish per material their door styles used, and the job, rooms and cabinets pick the finish their doors were in,
 // so nothing they cut changes. The 0.48.3 finish pick held a material id; it becomes that material's finish.
+// Material groups (Libraries › Materials folds by them, like Mozaik). A job made before groups gets each material
+// sorted once by its kind and name; Ayden can change any group after.
+function matGroupGuess(m) {
+  const n = String(m.name || '').toLowerCase();
+  if (m.kind === 'top') return 'Countertops';
+  if (m.kind === 'solid') return 'Solid wood';
+  if (/melamine|\btfl\b|\blpl\b|thermofused/.test(n)) return 'Melamine';
+  if (/baltic/.test(n)) return 'Baltic birch';
+  if (/\bhdf\b|hardboard/.test(n)) return 'HDF';
+  if (/\bmdf\b/.test(n)) return 'MDF';
+  if (/\bply|plywood/.test(n)) return 'Plywood';
+  return 'Other';
+}
+function ensureMatGroups(s) {
+  if (!s || !Array.isArray(s.materials) || s.matGrouped) return s;
+  if (!s.materials.some(m => m.group)) s.materials.forEach(m => { m.group = matGroupGuess(m); });
+  s.matGrouped = 1; return s;
+}
 function ensureFinishes(s) {
   if (!s || !Array.isArray(s.materials) || !Array.isArray(s.doorStyles)) return s;
   if (Array.isArray(s.finishes)) return s;
@@ -598,6 +618,45 @@ function ensureFinishes(s) {
     const roomFin = r.settings.finish || jobFin;
     (r.cabinets || []).forEach(c => { const own2 = fromMat(c.finish) || (c.doorT ? tplFin(c.doorT) : ''); if (own2 && own2 !== roomFin) c.finish = own2; else delete c.finish; });
   });
+  return s;
+}
+// Door names say the shape only, since the finish gives the material (0.48.4): "Slab, white oak" is "Slab".
+const MAT_WORDS = ['paint grade', 'stain grade', 'painted', 'paint', 'prefinished', 'plywood', 'ply', 'veneer', 'melamine', 'thermofoil', 'laminate',
+  'rift sawn', 'rift', 'quartersawn', 'quarter sawn', 'flat sawn', 'plain sawn', 'white oak', 'red oak', 'oak', 'alder', 'knotty', 'maple', 'cherry', 'walnut', 'hickory',
+  'birch', 'poplar', 'ash', 'pine', 'mahogany', 'sapele', 'beech', 'teak', 'cedar', 'mdf', 'hdf', 'sage'];
+function shapeName(n, extra) {
+  const words = [...(extra || []), ...MAT_WORDS].sort((a, b) => b.length - a.length).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  let t = String(n || '').replace(new RegExp(`\\b(${words.join('|')})\\b`, 'gi'), ' ');
+  t = t.replace(/\(\s*[-,\s]*\)/g, '').replace(/\(\s*([^()]*?)[-\s,]*\)/g, (m, a) => a.trim() ? `(${a.trim()})` : '').replace(/\s+([,)])/g, '$1').replace(/,\s*,/g, ',')
+    .replace(/\s{2,}/g, ' ').replace(/^[\s,\-–]+|[\s,\-–]+$/g, '').trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : String(n || '');
+}
+// Renames door styles and door templates once; styles or templates that end up the same are merged and every pick moves to the one kept.
+function ensureShapeNames(s) {
+  if (!s || s.shapeNames || !Array.isArray(s.doorStyles)) return s;
+  const extra = (s.finishes || []).flatMap(f => String(f.name || '').toLowerCase().split(/[\s,()]+/)).filter(w => w.length > 2 && !/^(grade|the|and|finish|new)$/.test(w));
+  const remap = {}, strip = (o, drop) => JSON.stringify(Object.keys(o).filter(k => !drop.includes(k) && !/^v[A-Z]/.test(k)).sort().map(k => [k, o[k]]));
+  const ROLE = [['falseFront', 'false fronts'], ['drawer', 'drawer fronts'], ['door', 'doors'], ['wallDoor', 'wall doors']];
+  const merge = (list, drop, tpl) => {
+    const kept = [];
+    list.forEach(o => {
+      o.name = shapeName(o.name, extra);
+      // The same shape (and price) is one style, whatever it was called; templates must also match by name.
+      const twin = kept.find(k => strip(k, drop) === strip(o, drop) && (!tpl || k.name.toLowerCase() === o.name.toLowerCase()));
+      if (twin) { remap[o.id] = twin.id; return; }
+      const clash = kept.find(k => k.name.toLowerCase() === o.name.toLowerCase());
+      if (clash && tpl) { const r = ROLE.find(([k]) => o[k] && o[k] !== clash[k]), ds = r && s.doorStyles.find(d => d.id === o[r[0]]); if (ds) o.name += `, ${ds.name.toLowerCase()} ${r[1]}`; }
+      let n = 2; const base = o.name; while (kept.some(k => k.name.toLowerCase() === o.name.toLowerCase())) o.name = `${base} ${n++}`;
+      kept.push(o);
+    });
+    return kept;
+  };
+  s.doorStyles = merge(s.doorStyles, ['id', 'name', 'mat', 'panelMat', 'group']);
+  const walk = (o, skip) => { if (!o || typeof o !== 'object' || o === skip) return; Object.keys(o).forEach(k => { const v = o[k]; if (typeof v === 'string' && remap[v]) o[k] = remap[v]; else walk(v, skip); }); };
+  (s.doorTemplates || []).forEach(t => walk(t));
+  if (Array.isArray(s.doorTemplates)) s.doorTemplates = merge(s.doorTemplates, ['id', 'name', 'group'], true);
+  Object.keys(s).forEach(k => { if (k !== 'doorStyles') walk(s[k]); });
+  s.shapeNames = 1;
   return s;
 }
 const matSets = () => { if (!Array.isArray(S.matTemplates.job)) ensureMatSets(S); return S.matTemplates.job; };

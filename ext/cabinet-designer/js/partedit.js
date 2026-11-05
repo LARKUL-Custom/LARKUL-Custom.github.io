@@ -255,7 +255,9 @@ const peKeyOf = p => p.editKey || peKey(p.name);
 const peAdded = (c, key) => (c.addParts || []).find(a => peKey(a.name) === key);
 const peEdit = (c, key) => ((c.partEdits = c.partEdits || {})[key] = c.partEdits[key] || {});
 function openPartEdit(cid, key, tab) { ui.partEdit = { cab: cid, key: peKey(key), tab: tab || (ui.partEdit && ui.partEdit.tab) || 'ops', sel: '', pt: -1 }; renderPartEdit(); }
-function closePartEdit() { ui.partEdit = null; const el = $('#partedit'); if (el) el.remove(); if (ui.quick) renderQuick(); }
+// The cabinet whose parts are listed: the one open in the cabinet editor, or the product open in the Designer.
+const peHost = () => ui.quick || (ui.tab === 'designer' && ui.desMode !== 'shape' ? '_designer' : null);
+function closePartEdit() { ui.partEdit = null; const el = $('#partedit'); if (el) el.remove(); if (peHost()) renderQuick(); }
 // The outline to start from: the part as it is now, each point anchored to its nearest end and edge.
 function peStartPts(q) {
   let pts;
@@ -847,7 +849,7 @@ function peUniqueName(c, base) {
   if (!names.has(base)) return base; let i = 2; while (names.has(`${base} ${i}`)) i++; return `${base} ${i}`;
 }
 function partsTabAct(a, id) {
-  const c = cab(ui.quick); if (!c) return false;
+  const c = cab(peHost()); if (!c) return false;
   const sel = () => ui.edPart;
   switch (a) {
     case 'pe-add-part': {
@@ -868,7 +870,7 @@ function partsTabAct(a, id) {
     case 'pe-open-name': { const k = id || sel(); if (k) openPartEdit(c.id, k); return true; }
     case 'pe-rebuild': { const k = id || sel(); if (k && c.partEdits) mutate(() => { delete c.partEdits[k]; }); renderQuick(); return true; }
     case 'pe-rebuild-all':
-      if (!ui.edRebuildAll) { ui.edRebuildAll = true; renderQuick(); setTimeout(() => { if (ui.edRebuildAll) { ui.edRebuildAll = false; if (ui.quick) renderQuick(); } }, 4000); return true; }
+      if (!ui.edRebuildAll) { ui.edRebuildAll = true; renderQuick(); setTimeout(() => { if (ui.edRebuildAll) { ui.edRebuildAll = false; if (peHost()) renderQuick(); } }, 4000); return true; }
       ui.edRebuildAll = false; mutate(() => { delete c.partEdits; delete c.addParts; }); renderQuick(); return true;
     case 'pe-legend': ui.edLegend = !ui.edLegend; renderQuick(); return true;
     case 'pe-sort': { const sk = ui.edSort || { k: '', d: 1 }; ui.edSort = sk.k === id ? (sk.d > 0 ? { k: id, d: -1 } : { k: '', d: 1 }) : { k: id, d: 1 }; renderQuick(); return true; }
@@ -877,7 +879,7 @@ function partsTabAct(a, id) {
 }
 document.addEventListener('change', ev => {
   const t = ev.target; if (!t.classList || !t.classList.contains('pe-build')) return;
-  const c = cab(ui.quick); if (!c) return; const k = t.dataset.id;
+  const c = cab(peHost()); if (!c) return; const k = t.dataset.id;
   mutate(() => { const e = peEdit(c, k); if (t.checked) { delete e.off; if (e.qty === 0) delete e.qty; if (!Object.keys(e).length) delete c.partEdits[k]; } else e.off = true; });
   renderQuick();
 });

@@ -163,7 +163,7 @@ function mozRows(p, sz) {
   p.fronts.forEach(f => { let b = bands.find(b => Math.abs(b.z - f.z) < 2 && Math.abs(b.h - f.h) < 2); if (!b) bands.push(b = { z: f.z, h: f.h, fs: [] }); b.fs.push(f); });
   bands.sort((a, b) => b.z - a.z);
   for (let i = 1; i < bands.length; i++) if (bands[i].z + bands[i].h > bands[i - 1].z + 2) return null;
-  const style = n => { const d = S.doorStyles.find(x => x.name.toLowerCase() === n.toLowerCase()); return d ? d.id : ''; };
+  const style = n => { const k = String(n || '').toLowerCase(), d = S.doorStyles.find(x => x.name.toLowerCase() === k) || S.doorStyles.find(x => x.name.toLowerCase() === shapeName(n).toLowerCase()); return d ? d.id : ''; };
   const tall = bands.reduce((a, b) => b.h > a.h ? b : a);
   return bands.map(b => {
     const fs = b.fs.sort((x, y) => x.x - y.x), type = fs.some(f => f.type === 'door') ? 'door' : 'drawer';

@@ -133,7 +133,7 @@ document.addEventListener('change', e => {
   if (/^pshp?:/.test(ref)) {
     const o = priceRef(ref); if (!o) return;
     if (v === '' && ref.startsWith('pshp:')) delete o[field]; else o[field] = v;
-    savePrices(); renderPricing(); return;
+    savePrices(); renderPricing(); if (ui.quick && typeof renderQuick === 'function') renderQuick(); return;
   }
   let note = '';
   // Formulas that name a value are kept and worked out again later; sizes worked out from a wall end are not.

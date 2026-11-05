@@ -221,7 +221,7 @@ async function qAddDrawings(cid, files) {
 function qPriceExtras(c) {
   const R = 'cab:' + c.id, ps = typeof priceSheet === 'function' && priceSheet(), pr = ps ? priceCab(c, ps) : null;
   return `<div class="psec box">${secHead('tag', 'This cabinet only', 'amber')}<div class="grid4">${fld('Price per foot', R, 'pxFt', c.pxFt || '', 'num', { blank: true, ph: '0' })}${fld('Price per sq ft of face', R, 'pxSq', c.pxSq || '', 'num', { blank: true, ph: '0' })}${fld('Upcharge %', R, 'pxUp', c.pxUp || '', 'num', { blank: true, ph: '0' })}${fld('Weight (lb)', R, 'weight', c.weight || '', 'num', { blank: true, ph: '' })}</div>
-    <label class="checkrow">${ctl(R, 'noCount', !!c.noCount, 'bool', { label: 'Leave out of the cabinet counts' })} <span>Leave out of the cabinet counts and price per foot</span></label>
+    ${pr && pr.own ? '' : `<label class="checkrow">${ctl(R, 'noCount', !!c.noCount, 'bool', { label: 'Leave out of the cabinet counts' })} <span>Leave out of the cabinet counts and price per foot</span></label>`}
     ${pr && (pr.custom || pr.upcharge) ? `<div class="note">Adds ${money(pr.custom || 0)}${pr.upcharge ? ` plus a ${money(pr.upcharge)} upcharge` : ''} to this cabinet.</div>` : ''}</div>`;
 }
 function qInfoExtras(c) {

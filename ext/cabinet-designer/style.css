@@ -2207,3 +2207,12 @@ body.desk .xbar .ib-size{grid-template-columns:repeat(2,calc(144 * var(--u)))}
 .tx-like{display:inline-flex;align-items:center;gap:6px;font-size:13px}
 .tx-like select{max-width:220px}
 .tx-used{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}
+/* Folding group rows in the library tables (Materials, Edgebanding), like Mozaik's grouped lists. */
+table.t tr.grouphead td.grouprow{padding:0;border-top:1px solid var(--line)}
+.grp-tog{display:flex;align-items:center;gap:8px;width:100%;border:0;border-left:4px solid var(--accent);background:transparent;cursor:pointer;text-align:left;padding:7px 10px;font:700 13px var(--f-label);letter-spacing:.04em;text-transform:uppercase;color:var(--ink)}
+.grp-tog:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.grp-tog .arr{width:12px;flex:none}
+.grp-tog .ct{font-size:11px;font-weight:600;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:1px 8px;letter-spacing:0}
+.libtree > .pick-findf{display:flex;flex-direction:column;align-items:stretch;gap:4px;margin-bottom:8px}
+.libtree > .pick-findf input{width:100%}
+.libtree .lfold-h .arr,.libtree .lgrp-h .arr{width:12px;flex:none}

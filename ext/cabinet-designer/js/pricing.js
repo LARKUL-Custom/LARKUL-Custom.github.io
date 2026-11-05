@@ -105,7 +105,16 @@ function savePrices() {
 
 /* ---------- Pricing the drawn job ---------- */
 // Price of one cabinet, split into lines so the quote can show where it comes from.
+// A product priced on its own (a floating shelf, a mantel): its row on the sheet's Products card is its whole price.
+// It isn't a cabinet: no doors, materials, hardware or paint, no installation, and it's left out of the cabinet counts.
+const ownRule = (c, ps) => { const o = (ps.products || {})[c.libId]; return o && o.own ? o : null; };
 function priceCab(c, ps) {
+  const own = ownRule(c, ps);
+  if (own) {
+    const each = (+own.base || 0) + (+own.perFt || 0) * c.w / 12, custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, upcharge = (each + custom) * (+c.pxUp || 0) / 100;
+    const sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0, total: 0 };
+    return { own: true, each, box: 0, doors: 0, extras: 0, ends: 0, hardware: 0, materials: 0, sq, paint: 0, custom, upcharge, total: each + custom + upcharge };
+  }
   const b = buildParts(c), fr = computeFronts(c), rule = { ...ps.cab[c.cat], ...(ps.products[c.libId] || {}) };
   const box = (+rule.base || 0) + (+rule.perFt || 0) * c.w / 12;
   ensureLibPrices(ps);
@@ -216,7 +225,9 @@ function ensureLibPrices(ps) {
 }
 function priceJob(ps) {
   const rooms = S.rooms.map(r => withRoom(r, () => {
-    const cabs = S.cabinets.map(c => ({ c, label: LBL[c.id], ...priceCab(c, ps) }));
+    const all = S.cabinets.map(c => ({ c, label: LBL[c.id], ...priceCab(c, ps) })), cabs = all.filter(k => !k.own);
+    // Products priced on their own go on the room as lines of their own, never in with the cabinets.
+    const own = all.filter(k => k.own).map(k => ({ name: `${k.label} ${k.c.name} (${fmtLen(k.c.w, 1)} wide)`, amount: k.total, own: true }));
     const tops = countertopRuns().filter(t => t.on).map(t => ({ name: `Countertop, ${wallName(wall(t.wall))} (${t.tpl.name})`, amount: t.len * t.depth / 144 * (+ps.tops[t.tpl.id] || 0) }));
     const molds = moldingRuns().map(m => ({ name: `Molding, ${wallName(wall(m.wall))} (${m.m.name})`, amount: m.len / 12 * (+ps.molds[m.m.id] || 0) }));
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
@@ -225,7 +236,7 @@ function priceJob(ps) {
     // A job can leave installation out (the customer installs, or it's a pickup).
     const inst = S.job.noInstall ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((ps.install || {})[cat]) || 0;
       return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r } : null; }).filter(Boolean);
-    const lines = [...tops, ...molds, ...priceShapes(ps), ...inst, ...xs];
+    const lines = [...own, ...tops, ...molds, ...priceShapes(ps), ...inst, ...xs];
     return { r, cabs, lines, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
   }));
   const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 }));
@@ -277,7 +288,7 @@ function priceQuote(ps) {
   const paintNote = R => R.sq.total ? `<span class="note">Includes ${sqft(R.sq.total)} sq ft paint${+paintOf(ps).rate ? `, ${money(R.cabs.reduce((a, k) => a + k.paint, 0))}` : ''}</span>` : '';
   const room = R => `<div class="card"><div class="cardhead"><h3>${icon('home')}${esc(R.r.name)}</h3>${paintNote(R)}<b class="money">${money(R.total)}</b></div><div class="tscroll"><table class="t quote">
     <thead><tr><th>Cabinet</th><th>Size</th><th class="r">Cabinet</th>${ps.doors.on ? '<th class="r">Doors and fronts</th>' : ''}<th class="r">Drawers, shelves, inserts</th><th class="r">Panels, fillers</th>${ps.hardware.on ? '<th class="r">Hardware</th>' : ''}${ps.materials.on ? '<th class="r">Materials</th>' : ''}<th class="r">Paint sq ft</th><th class="r">Total</th></tr></thead>
-    <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>'}
+    <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || (R.lines.some(l => l.own) ? '' : '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>')}
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`;
   return `<div class="quotetop">
     <div class="qtile grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${q.rooms.reduce((a, R) => a + R.cabs.length, 0)} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>
@@ -307,7 +318,9 @@ function paintCard(ps, q) {
 function priceEditor(ps) {
   const R = 'psh:' + ps.id, P = path => 'pshp:' + ps.id + ':' + path, num = (ref, k, v, x = {}) => ctl(ref, k, v ?? '', 'num', { label: k, ...x });
   const used = {}; allCabs().forEach(c => inRoomOf(c, () => Object.keys(buildParts(c).bom).forEach(k => { used[k] = 1; })));
-  const showProd = ui.psProd ?? Object.values(ps.products).some(o => o && (o.base !== undefined || o.perFt !== undefined));
+  const priced = o => o && (o.own || o.base !== undefined || o.perFt !== undefined), showProd = !!ui.psProd;
+  // Folded, the card still lists every product that has a price of its own; Show all opens the whole library.
+  const prods = S.library.filter(l => l.cat !== 'Shape' && (showProd || priced(ps.products[l.id]))).sort((a, b) => !!(ps.products[b.id] || {}).own - !!(ps.products[a.id] || {}).own);
   const hwNames = [...new Set([...Object.keys(used), ...Object.keys(ps.hardware.items)])].sort();
   return `${jobPriceCard(ps)}<div class="pricegrid">
   <div class="card"><div class="cardhead"><h3>${icon('tag')}Sheet</h3></div><div class="cardbody">
@@ -316,8 +329,8 @@ function priceEditor(ps) {
   <div class="card"><div class="cardhead"><h3>${icon('home')}Installation</h3><span class="note">Per foot of cabinet width. Turn it off for a job on its Quote.</span></div><div class="cardbody">${CAT_FT.map(([k, l]) => fld(l + ' ($/ft)', P('install'), k, (ps.install || {})[k] ?? 0, 'num')).join('')}</div></div>
   <div class="card"><div class="cardhead"><h3>${icon('box')}Cabinets by type</h3><span class="note">Base price plus a price per foot of width</span></div><div class="tscroll"><table class="t"><thead><tr><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${['Base', 'Wall', 'Tall'].map(cat => `<tr><td><span class="catpill cat-${cat}">${cat}</span></td><td style="width:110px">${num(P('cab.' + cat), 'base', ps.cab[cat].base)}</td><td style="width:110px">${num(P('cab.' + cat), 'perFt', ps.cab[cat].perFt)}</td></tr>`).join('')}</tbody></table></div></div>
-  <div class="card wide"><div class="cardhead"><h3>${icon('stack')}Products</h3><span class="note">Give any library cabinet its own price. Blank uses its type.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Hide' : `Show all ${S.library.length}`}</button></div>${showProd ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
-    ${S.library.map(l => { const o = ps.products[l.id] || {}; return `<tr><td>${esc(l.name)}</td><td><span class="catpill cat-${l.cat}">${l.cat}</span></td><td style="width:110px">${num(P('products.' + l.id), 'base', o.base, { blank: true, ph: String(ps.cab[l.cat].base) })}</td><td style="width:110px">${num(P('products.' + l.id), 'perFt', o.perFt, { blank: true, ph: String(ps.cab[l.cat].perFt) })}</td></tr>`; }).join('')}</tbody></table></div>` : ''}</div>
+  <div class="card wide"><div class="cardhead"><h3>${icon('stack')}Products</h3><span class="note">Give any library product its own price. Blank uses its type. Tick Own price for items like floating shelves.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Show priced only' : `Show all ${S.library.filter(l => l.cat !== 'Shape').length}`}</button></div>${prods.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th title="Priced only by this row: not a cabinet, not in the cabinet count, no installation, doors, materials or hardware">Own price</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
+    ${prods.map(l => { const o = ps.products[l.id] || {}, ph = k => String(o.own ? 0 : ps.cab[l.cat][k]); return `<tr${o.own ? ' class="own"' : ''}><td>${esc(l.name)}</td><td><span class="catpill cat-${l.cat}">${l.cat}</span></td><td style="width:90px">${ctl(P('products.' + l.id), 'own', !!o.own, 'bool', { label: l.name + ' has its own price' })}</td><td style="width:110px">${num(P('products.' + l.id), 'base', o.base, { blank: true, ph: ph('base') })}</td><td style="width:110px">${num(P('products.' + l.id), 'perFt', o.perFt, { blank: true, ph: ph('perFt') })}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="cardbody"><div class="note">No product has its own price yet. Show all to set one.</div></div>'}</div>
   <div class="card"><div class="cardhead"><h3>${icon('shelf')}Adders</h3></div><div class="cardbody">${PRICE_ADDERS.map(([k, l]) => fld(l, P('adders'), k, ps.adders[k], 'num')).join('')}
     <div class="note">Each insert has its own price in Libraries › Inserts.</div></div></div>
   <div class="card"><div class="cardhead"><h3>${icon('box')}Panels</h3><span class="note">Each panel, by height</span></div><div class="cardbody">${PANEL_CATS.map(([k, l]) => fld(l, P('panelAdd'), k, (ps.panelAdd || {})[k] ?? 0, 'num')).join('')}
@@ -384,7 +397,7 @@ function priceAction(a, id) {
     case 'ps-doors': ps.doors.on = !ps.doors.on; break;
     case 'ps-mats': ps.materials.on = !ps.materials.on; break;
     case 'ps-hw': ps.hardware.on = !ps.hardware.on; break;
-    case 'ps-prod': ui.psProd = !(ui.psProd ?? Object.values(ps.products).some(o => o && (o.base !== undefined || o.perFt !== undefined))); renderPricing(); return;
+    case 'ps-prod': ui.psProd = !ui.psProd; renderPricing(); return;
     case 'ps-paint': { const po = paintOf(ps); po[id] = !po[id]; break; }
     case 'ps-export': saveFile(new Blob([JSON.stringify({ cabinetDesignerPriceSheet: 1, sheet: ps }, null, 2)], { type: 'application/json' }), `${fileSafe(ps.name)} price sheet.json`, 'Cabinet Designer/Price sheets'); return;
     case 'quote-print': showQuoteSheet(); return;

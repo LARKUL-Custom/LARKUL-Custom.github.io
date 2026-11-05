@@ -10,17 +10,21 @@ function blankDesign(cat = 'Base') {
     cabMatT: '', drawerMatT: '', doorT: '', slide: '', hinge: '', partT: '', appliedL: false, appliedR: false, custom: [], inserts: [],
   };
 }
+// What a product carries besides its box, rows and templates: a Mozaik product's key, its folder, and the parts and
+// operations changed by hand. They go into the Designer and back to the library untouched.
+const DES_KEEP = ['moz', 'mozPrm', 'group', 'folder', 'desc', 'vars', 'partEdits', 'addParts', 'shape'];
+const desKeep = (o, copy) => DES_KEEP.reduce((r, k) => (o[k] !== undefined && (r[k] = copy ? clone(o[k]) : o[k]), r), {});
 function designFromLib(l) {
   return { ...blankDesign(l.cat), sourceLib: l.id, name: l.name, cat: l.cat, w: l.w, h: l.h, d: l.d, elev: l.elev, rows: clone(l.rows), params: clone(l.params || {}),
     construction: clone(l.construction || defaultConstruction(l.cat)), cabMatT: l.cabMatT || '', drawerMatT: l.drawerMatT || '',
-    doorT: l.doorT || '', slide: l.slide || '', hinge: l.hinge || '', partT: l.partT || '', appliedL: !!l.appliedL, appliedR: !!l.appliedR, custom: clone(l.custom || []), inserts: clone(l.inserts || []), ...(l.corner ? { corner: clone(l.corner), folder: l.folder } : {}) };
+    doorT: l.doorT || '', slide: l.slide || '', hinge: l.hinge || '', partT: l.partT || '', appliedL: !!l.appliedL, appliedR: !!l.appliedR, custom: clone(l.custom || []), inserts: clone(l.inserts || []), ...desKeep(l, true), ...(l.corner ? { corner: clone(l.corner), folder: l.folder } : {}) };
 }
 function designCab() {
   const d = S.designer;
   return { id: '_designer', libId: d.sourceLib, name: d.name, cat: d.cat, w: d.w, h: d.h, d: d.d, elev: d.elev, wall: null, side: 1, off: 0,
     cabMatT: d.cabMatT, drawerMatT: d.drawerMatT, doorT: d.doorT, slide: d.slide, hinge: d.hinge, partT: d.partT || '', pull: '', panelStyle: '',
     appliedL: d.appliedL, appliedR: d.appliedR, molding: null, construction: d.construction, rows: d.rows, libParams: {}, params: d.params, custom: d.custom, inserts: d.inserts || [],
-    finInt: d.finInt, grainMatch: d.grainMatch, vars: d.vars, ...(d.corner ? { corner: d.corner } : {}) };
+    finInt: d.finInt, grainMatch: d.grainMatch, ...desKeep(d), ...(d.corner ? { corner: d.corner } : {}) };
 }
 // The design as a cabinet whose changes write back into the design.
 function desCabLive() {
@@ -34,7 +38,7 @@ function desCabLive() {
 }
 function designToLib(d, id) {
   return { id, name: d.name, cat: d.cat, w: d.w, h: d.h, d: d.d, elev: d.elev, rows: clone(d.rows), params: clone(d.params), construction: clone(d.construction),
-    cabMatT: d.cabMatT, drawerMatT: d.drawerMatT, doorT: d.doorT, slide: d.slide, hinge: d.hinge, partT: d.partT || '', appliedL: d.appliedL, appliedR: d.appliedR, custom: clone(d.custom), inserts: clone(d.inserts || []), finInt: d.finInt, grainMatch: d.grainMatch, ...(d.corner ? { corner: clone(d.corner), folder: d.folder || 'Corner' } : {}) };
+    cabMatT: d.cabMatT, drawerMatT: d.drawerMatT, doorT: d.doorT, slide: d.slide, hinge: d.hinge, partT: d.partT || '', appliedL: d.appliedL, appliedR: d.appliedR, custom: clone(d.custom), inserts: clone(d.inserts || []), finInt: d.finInt, grainMatch: d.grainMatch, ...desKeep(d, true), ...(d.corner ? { corner: clone(d.corner), folder: d.folder || 'Corner' } : {}) };
 }
 // A folded section of the designer form; it stays open or shut as you left it.
 function desFold(k, title, body) {
@@ -58,7 +62,8 @@ function renderDesigner() {
   const html = `<div class="pagehead"><div><button class="linkbtn back" data-act="tab" data-id="library">${icon('back')}Products</button><h2>Cabinet designer</h2></div>
     <div class="row-actions">${desModeSeg()}<select id="des-load" aria-label="Start from"><option value="">Start from…</option><option value="new:Base">Blank base</option><option value="new:Wall">Blank wall</option><option value="new:Tall">Blank tall</option>${S.library.map(l => `<option value="lib:${l.id}">${esc(l.name)}</option>`).join('')}</select>
     ${src ? `<button class="btn" data-act="des-update">Update “${esc(src.name)}”</button>` : ''}<button class="btn primary" data-act="des-save">Save as new template</button></div></div>
-  <div class="designer">
+  <div class="subtabs" role="tablist">${[['design', 'Design', 'box'], ['parts', `Parts and operations (${nParts})`, 'list']].map(([k, l, ic]) => `<button role="tab" data-act="des-tab" data-id="${k}" aria-selected="${(ui.desTab || 'design') === k}">${icon(ic)}${l}</button>`).join('')}</div>
+  ${ui.desTab === 'parts' ? `<div class="card cardbody des-parts">${b.warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}${edParts(c, b)}</div>` : `<div class="designer">
     <div class="card stack cardbody des-form">
       ${src ? `<div class="note">Editing a copy of <b>${esc(src.name)}</b>.</div>` : ''}
       <div class="psec box"><div class="grid2">${fld('Name', 'des', 'name', d.name, 'text')}${fld('Category', 'des', 'cat', d.cat, 'select', { options: ['Base', 'Wall', 'Tall'] })}</div>
@@ -88,9 +93,15 @@ function renderDesigner() {
           <table class="t"><tbody>${Object.entries(b.bom).map(([k, q]) => `<tr><td>${esc(k)}</td><td class="n">${q}</td></tr>`).join('')}</tbody></table>
           <div class="row-actions"><button class="btn" data-act="des-place">Save and place in room</button></div></div>
     </div>
-  </div>`;
+  </div>`}`;
   host.innerHTML = html;
-  const slot = $('#des3d-slot');
+  $('#des-load').addEventListener('change', e => {
+    const v = e.target.value; if (!v) return;
+    const [k, id] = v.split(':');
+    mutate(() => { S.designer = k === 'new' ? blankDesign(id) : designFromLib(libItem(id)); });
+    if (designerViewer) designerViewer.fitted = false;
+  });
+  const slot = $('#des3d-slot'); if (!slot) return;
   if (keep3d) slot.replaceWith(keep3d); else { slot.id = 'des3d'; }
   const h3 = $('#des3d');
   // The 3D preview is made the first time it is shown, then kept.
@@ -99,12 +110,6 @@ function renderDesigner() {
     else if (designerViewer.host !== h3 && designerViewer.ok) { h3.appendChild(designerViewer.renderer.domElement); designerViewer.host = h3; new ResizeObserver(() => designerViewer.resize()).observe(h3); }
     buildDesigner3D();
   }
-  $('#des-load').addEventListener('change', e => {
-    const v = e.target.value; if (!v) return;
-    const [k, id] = v.split(':');
-    mutate(() => { S.designer = k === 'new' ? blankDesign(id) : designFromLib(libItem(id)); });
-    if (designerViewer) designerViewer.fitted = false;
-  });
 }
 function buildDesigner3D() {
   const v = designerViewer; if (!v || !v.ok) return;

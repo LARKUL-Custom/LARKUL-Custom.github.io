@@ -97,12 +97,22 @@ function libTableBar(key, label) {
   return `<div class="pickbar lt-bar"><label class="f pick-findf"><span>Find</span><input type="search" class="pick-find" data-key="${esc(key)}" value="${esc(q)}" placeholder="Type part of a name" aria-label="Find ${esc(label)}"></label>
     <div class="lp-tools" role="group" aria-label="${esc(label)} library"><button class="btn sm" data-act="lp-az" data-id="${esc(key)}">${icon('sort')}A to Z</button><button class="btn sm" data-act="lp-expall" data-id="${esc(key)}">${icon('download')}Export all</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="${esc(key)}" accept=".json,application/json" hidden></label></div></div>`;
 }
-// The rows to show, in order, with a header before each group: [{hdr: 'MDF'}, item, item, …].
+// Folding menus shared by the library pages (Products, Materials, Edgebanding): one open/closed list, kept between visits.
+// Groups start closed; a search opens every group with a match.
+function pageFold() { if (!ui.pageFold) { try { ui.pageFold = JSON.parse(localStorage.getItem(KEY + '.pfold') || '{}'); } catch (_) { ui.pageFold = {}; } } return ui.pageFold; }
+const foldShut = k => !(pageFold()[k]);
+function foldToggle(k) { const f = pageFold(); if (f[k]) delete f[k]; else f[k] = 1; try { localStorage.setItem(KEY + '.pfold', JSON.stringify(f)); } catch (_) {} }
+function foldOpen(k) { const f = pageFold(); if (!f[k]) { f[k] = 1; try { localStorage.setItem(KEY + '.pfold', JSON.stringify(f)); } catch (_) {} } }
+const foldHead = (k, label, n, shut, cls) => `<button class="${cls}" data-act="pg-fold" data-id="${esc(k)}" aria-expanded="${!shut}"><span class="arr" aria-hidden="true">${shut ? '▸' : '▾'}</span><span>${label}</span>${n ? `<span class="ct">${n}</span>` : ''}</button>`;
+// The rows to show, in order, with a folding header before each group: [{hdr: 'MDF', n, shut}, item, item, …]. A closed group shows only its header.
 function libRows(key, arr) {
   pickState(); const q = ui.pickQ[key] || '', shown = arr.filter(x => pickMatch(x, q) || String(x.group || '').toLowerCase().includes(q.toLowerCase()));
   if (!arr.some(x => x.group)) return shown;
   const out = [], gs = [...new Set(shown.map(x => x.group || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b));
-  gs.forEach(g => { out.push({ hdr: g || 'No group' }); shown.filter(x => (x.group || '') === g).forEach(x => out.push(x)); });
+  gs.forEach(g => { const items = shown.filter(x => (x.group || '') === g), fk = key + '/' + g, shut = !q && foldShut(fk); out.push({ hdr: g || 'No group', fk, n: items.length, shut }); if (!shut) items.forEach(x => out.push(x)); });
   return out;
 }
+// Typing a new group name moves the row there; open that group so the row stays in view.
+document.addEventListener('change', e => { const t = e.target; if (!t || !t.dataset || t.dataset.field !== 'group') return; const k = String(t.dataset.obj || '').split(':')[0]; if (k === 'mat' || k === 'eb') foldOpen(k + '/' + String(t.value || '').trim()); }, true);
+const libGroupRow = (h, cols) => `<tr class="grouphead"><td colspan="${cols}" class="grouprow">${foldHead(h.fk, esc(h.hdr), h.n, h.shut, 'grp-tog')}</td></tr>`;
 const libRowBtns = (key, id) => `<span class="lp-row">${['copy|Copy', 'up|Move up', 'down|Move down'].map(t => { const [ic, l] = t.split('|'); return `<button class="btn sm" data-act="lp-${ic === 'copy' ? 'copy' : ic}" data-id="${esc(key + '|' + id)}" title="${l}" aria-label="${l}">${icon(ic)}</button>`; }).join('')}</span>`;

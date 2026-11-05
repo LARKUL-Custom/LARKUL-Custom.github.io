@@ -101,7 +101,7 @@ function renderLibrary() {
   $('#tab-library').innerHTML = `<div class="pagehead"><div><h2>Products${(S.libSet || 'main') !== 'main' ? ` <span class="muted">· ${esc((PRODUCT_LIBS.find(x => x.id === S.libSet) || {}).name || '')}</span>` : ''}</h2></div>
     <div class="row-actions"><button class="btn primary" data-act="designer-new">${icon('plus')}Design a new cabinet</button></div></div>
   <div class="split">
-    <div class="card cardbody libtree">${LIB_GROUPS.map(([g, gl]) => { const items = S.library.filter(x => x.cat !== 'Shape' && libGroup(x) === g), shp = (S.shapeLib || []).filter(x => shapeGroup(x) === g); return items.length + shp.length ? `<div class="lgrp lg-${g}"><div class="lgrp-h">${gl}<span class="ct">${items.length + shp.length}</span></div>${items.map(x => libButton(x, 'lib-sel', x.id === ui.libSel)).join('')}${shp.map(x => shapeLibButton(x, 'shape:' + x.id === ui.libSel)).join('')}</div>` : ''; }).join('')}
+    <div class="card cardbody libtree">${productPageTree()}
       <button class="btn sm" data-act="shape-new">${icon('plus')}Draw a new shape</button></div>
     ${sl ? shapeLibCard(sl) : l ? `<div class="card">${cardHead(esc(l.name), `<button class="btn sm primary" data-act="designer-load" data-id="${l.id}">${icon('edit')}Edit in Designer</button><button class="btn sm" data-act="lib-place" data-id="${l.id}">Place in room</button>${dupBtn('lib-dup', l.id)}${delBtn('lib-del', l.id)}`)}
       <div class="cardbody"><div class="split2">
@@ -116,6 +116,22 @@ function renderLibrary() {
   </div>`;
 }
 // Short name for the Small library: "Base 3 Drawer" → "Base 3-D", "Base 1 Door 1 Drawer" → "Base 1-DR 1-D".
+// The Products page list: the same folding groups and folders as the room's product tree, with a Find box.
+function productPageTree() {
+  pickState(); const q = (ui.pickQ.prod || '').trim().toLowerCase();
+  const all = S.library.filter(x => x.cat !== 'Shape').map(x => ({ id: x.id, g: libGroup(x), f: libFolder(x), name: x.name, html: libButton(x, 'lib-sel', x.id === ui.libSel) }))
+    .concat((S.shapeLib || []).map(x => ({ id: 'shape:' + x.id, g: shapeGroup(x), f: shapeFolder(x), name: x.name, html: shapeLibButton(x, 'shape:' + x.id === ui.libSel) })));
+  const gname = g => (LIB_GROUPS.find(([k]) => k === g) || [])[1] || '';
+  const list = all.filter(x => !q || x.name.toLowerCase().includes(q) || gname(x.g).toLowerCase().includes(q) || x.f.toLowerCase().includes(q));
+  const body = LIB_GROUPS.map(([g, gl]) => {
+    const items = list.filter(x => x.g === g); if (!items.length) return '';
+    const fk = 'prod/' + g, shut = !q && foldShut(fk), folders = [...new Set(items.map(x => x.f))];
+    const inner = folders.length === 1 ? `<div class="grp">${items.map(x => x.html).join('')}</div>`
+      : folders.map(f => { const k = fk + '/' + f, fs = !q && foldShut(k), fi = items.filter(x => x.f === f); return `<div class="lfold">${foldHead(k, esc(f), fi.length, fs, 'lfold-h')}${fs ? '' : `<div class="grp">${fi.map(x => x.html).join('')}</div>`}</div>`; }).join('');
+    return `<div class="lgrp lg-${g}">${foldHead(fk, gl, items.length, shut, 'lgrp-h')}${shut ? '' : inner}</div>`;
+  }).join('');
+  return `<label class="f pick-findf"><span>Find</span><input type="search" class="pick-find" data-key="prod" value="${esc(ui.pickQ.prod || '')}" placeholder="Type part of a name" aria-label="Find products"></label>${body || '<div class="note show">No products match.</div>'}`;
+}
 function libShort(name) {
   return String(name).replace(/(\d+)\s*doors?\b/gi, '$1-DR').replace(/(\d+)\s*drawers?\b/gi, '$1-D')
     .replace(/\bdoors?\b/gi, 'DR').replace(/\bdrawers?\b/gi, 'D').replace(/\s+/g, ' ').trim();
@@ -168,7 +184,7 @@ function renderMaterials() {
   const kinds = [{ v: 'sheet', l: 'Sheet' }, { v: 'top', l: 'Countertop' }, { v: 'solid', l: 'Solid wood' }];
   S.materials.forEach(m => { const u = use[m.id], sheets = u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0; totalSheets += m.kind === 'top' ? 0 : sheets; totalCost += sheets * (m.cost || 0); });
   const rows = libRows('mat', S.materials).map(m => {
-    if (m.hdr) return `<tr><td colspan="18" class="grouprow"><b>${esc(m.hdr)}</b></td></tr>`;
+    if (m.hdr) return libGroupRow(m, 19);
     const u = use[m.id], sheets = u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0;
     const R = 'mat:' + m.id;
     return `<tr><td style="width:46px"><label class="texup" title="Upload a texture photo">${swatch(m, 30)}<input type="file" accept="image/*" data-tex="${m.id}" hidden></label></td>
@@ -709,7 +725,7 @@ function renderPartTemplates() {
     }).join('')}</tbody></table></div></div>`;
   }).join('')}
   <div class="pagehead"><h3>Edgebanding</h3><button class="btn primary" data-act="eb-add">Add edgeband</button></div>
-  <div class="card">${libTableBar('eb', 'Edgebands')}<div class="tscroll"><table class="t"><thead><tr><th>Color</th><th>Name</th><th>Code</th><th>Group</th><th>Thickness (mm)</th><th>Width</th><th>Roll price</th><th>Roll length (ft)</th><th class="r">Used in job</th><th></th><th></th></tr></thead><tbody>${libRows('eb', S.edgebands).map(b => b.hdr ? `<tr><td colspan="11" class="grouprow"><b>${esc(b.hdr)}</b></td></tr>` : `<tr>
+  <div class="card">${libTableBar('eb', 'Edgebands')}<div class="tscroll"><table class="t"><thead><tr><th>Color</th><th>Name</th><th>Code</th><th>Group</th><th>Thickness (mm)</th><th>Width</th><th>Roll price</th><th>Roll length (ft)</th><th class="r">Used in job</th><th></th><th></th></tr></thead><tbody>${libRows('eb', S.edgebands).map(b => b.hdr ? libGroupRow(b, 11) : `<tr>
     <td style="width:56px">${ctl('eb:' + b.id, 'color', b.color, 'color', { label: 'Color' })}</td><td>${ctl('eb:' + b.id, 'name', b.name, 'text', { label: 'Name' })}</td><td style="width:80px">${ctl('eb:' + b.id, 'code', b.code || '', 'text', { label: 'Short code', ph: 'PVC1' })}</td><td style="width:110px">${ctl('eb:' + b.id, 'group', b.group || '', 'text', { label: 'Group', ph: 'Group' })}</td>
     <td style="width:110px">${ctl('eb:' + b.id, 'thickMM', b.thickMM, 'num', { label: 'Thickness in mm' })}</td><td style="width:100px">${ctl('eb:' + b.id, 'width', b.width, 'len', { label: 'Width' })}</td>
     <td style="width:100px">${ctl('eb:' + b.id, 'rollCost', b.rollCost ?? EB_ROLL.cost, 'num', { label: 'Price of one roll' })}</td><td style="width:100px">${ctl('eb:' + b.id, 'rollFt', b.rollFt ?? EB_ROLL.ft, 'num', { label: 'Feet on one roll' })}</td>

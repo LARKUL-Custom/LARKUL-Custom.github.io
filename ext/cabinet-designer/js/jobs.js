@@ -108,7 +108,7 @@ async function bootJobs() {
   let s = null, folder = 'My jobs';
   if (inHub()) { try { const r = await Hub.storage.get('job'); s = migrate(r && (r.value || r)); } catch (_) {} }
   s = s || loadLocal();
-  if (!s) { s = seed(); folder = 'Samples'; }
+  if (!s) { s = migrate(seed()) || seed(); folder = 'Samples'; }
   const p = freePath(folder, s.job.name);
   await st.write(p, JSON.stringify(s)).catch(() => {});
   await refreshJobs(); setOpenJob(p);
