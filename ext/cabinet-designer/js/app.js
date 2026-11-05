@@ -112,11 +112,14 @@ function shapeButton(l) {
 // Search keeps matching products with their categories opened, and everything under a matching category or folder.
 function productTree() {
   const favs = ui.favs || (ui.favs = loadFavs()), q = (ui.libFind || '').trim().toLowerCase(), fold = ui.libFold || (ui.libFold = {});
-  const all = S.library.filter(l => l.cat !== 'Shape').map(l => ({ key: l.id, g: libGroup(l), f: libFolder(l), name: l.name, html: libButton(l, 'lib-pick', ui.placing === l.id) }))
+  // An imported model library (like Mozaik's Appliances and Graphics) is its own library on the switch, never mixed in.
+  if (ui.libView && !modelLibs().includes(ui.libView)) ui.libView = null;
+  const mv = ui.libView;
+  const all = mv ? modelTreeItems(mv) : S.library.filter(l => l.cat !== 'Shape').map(l => ({ key: l.id, g: libGroup(l), f: libFolder(l), name: l.name, html: libButton(l, 'lib-pick', ui.placing === l.id) }))
     .concat((S.shapeLib || []).map(l => ({ key: 'shape:' + l.id, g: shapeGroup(l), f: shapeFolder(l), name: l.name, html: shapeButton(l) })))
     .concat(fixtTreeItems());
   const wrap = x => `<div class="lw">${x.html}<button class="favbtn${favs.includes(x.key) ? ' on' : ''}" data-act="lib-fav" data-id="${esc(x.key)}" title="${favs.includes(x.key) ? 'Remove from Favorites' : 'Add to Favorites'}" aria-label="Favorite ${esc(x.name)}">★</button></div>`;
-  const groups = [...LIB_GROUPS, FIXT_GROUP], gname = g => (groups.find(([k]) => k === g) || [])[1] || '';
+  const groups = mv ? modelGroups(mv) : [...LIB_GROUPS, FIXT_GROUP], gname = g => (groups.find(([k]) => k === g) || [])[1] || '';
   const hit = x => !q || x.name.toLowerCase().includes(q) || gname(x.g).toLowerCase().includes(q) || x.f.toLowerCase().includes(q);
   const list = all.filter(hit);
   const head = (k, label, n, shut, cls) => `<button class="${cls}" data-act="lib-fold" data-id="${esc(k)}" aria-expanded="${!shut}"><span class="arr" aria-hidden="true">${shut ? '▸' : '▾'}</span><span>${label}</span>${n ? `<span class="ct">${n}</span>` : ''}</button>`;
@@ -126,14 +129,14 @@ function productTree() {
     const items = list.filter(x => x.g === g); if (q && !items.length) return '';
     const shut = !q && fold[g], folders = [...new Set(items.map(x => x.f))];
     const inner = !items.length ? '<div class="note show">Nothing here yet.</div>' : folders.length === 1 ? `<div class="grp">${items.map(wrap).join('')}</div>`
-      : folders.map(f => { const fk = g + '/' + f, fs = !q && fold[fk], fi = items.filter(x => x.f === f); return `<div class="lfold">${head(fk, esc(f), fi.length, fs, 'lfold-h')}${fs ? '' : `<div class="grp">${fi.map(wrap).join('')}</div>`}</div>`; }).join('');
+      : folders.map(f => { const fk = g + '/' + f, fs = !q && (fk in fold ? fold[fk] : g.startsWith('mdl')), fi = items.filter(x => x.f === f); return `<div class="lfold">${head(fk, esc(f), fi.length, fs, 'lfold-h')}${fs ? '' : `<div class="grp">${fi.map(wrap).join('')}</div>`}</div>`; }).join('');
     return `<div class="lgrp lg-${g}">${head(g, gl, items.length, shut, 'lgrp-h')}${shut ? '' : inner}</div>`;
   }).join('');
   return `<div class="libpeek" id="libpeek">${libPeekHTML(ui.libPeek || ui.placing)}</div>`
-    + `<select id="libset" aria-label="Product library" title="Which product library to draw from">${PRODUCT_LIBS.map(x => `<option value="${x.id}"${(S.libSet || 'main') === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`
+    + `<select id="libset" aria-label="Product library" title="Which product library to draw from">${PRODUCT_LIBS.map(x => `<option value="${x.id}"${!mv && (S.libSet || 'main') === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}${modelLibs().map(l => `<option value="mdl:${esc(l)}"${mv === l ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
     + `<input id="libfind" type="search" placeholder="Search…" value="${esc(ui.libFind || '')}" aria-label="Search products">`
     + `<div class="ptree">${favGrp}${body || '<div class="note show">No products match.</div>'}</div>`
-    + `<div class="row-actions libnew"><button class="btn sm" data-act="designer-new">${icon('plus')}New cabinet</button><button class="btn sm" data-act="shape-new">${icon('plus')}New shape</button></div>`;
+    + `<div class="row-actions libnew"><button class="btn sm" data-act="designer-new">${icon('plus')}New cabinet</button><button class="btn sm" data-act="shape-new">${icon('plus')}New shape</button><button class="btn sm" data-act="models-import" title="Bring in a whole folder of SketchUp models, after the SketchUp export has run on it">${icon('upload')}Import models</button></div><div class="note show" id="mdlprog" hidden></div>`;
 }
 // Picture of the product under the mouse (or the one being placed) above the tree, like Mozaik's preview.
 // With nothing to show it says how to start: drag a product onto the drawing.
@@ -176,6 +179,7 @@ function renderSources() {
   else if (ui.src === 'hardware') h = HW_KINDS.filter(([k]) => ['slide', 'hinge', 'pull'].includes(k)).map(([k, l]) => `<div class="eyebrow">${l}</div>${hwOf(k).map(x => item('hw:' + x.id, `<span class="hwdot ${k}"${k === 'pull' ? ` style="background:${esc(x.finish)}"` : ''}></span><span><span class="nm">${esc(x.name)}</span></span>`)).join('')}`).join('') + `<button class="btn sm" data-act="tab" data-id="hardware">Edit hardware</button>`;
   else if (ui.src === 'moldings') h = S.moldings.map(m => item('mold:' + m.id, `${swatch(mat(m.mat), 26)}<span><span class="nm">${esc(m.name)}</span><span class="dm">${fmtLen(m.h)} × ${fmtLen(m.d)}</span></span>`)).join('') + item('mold:', '<span class="sw none"></span><span><span class="nm">No molding</span></span>') + `<button class="btn sm" data-act="tab" data-id="moldings">Quick molding</button>`;
   setHTML($('#srclist'), `<div class="note">${ui.src === 'cabinets' ? (isPhone() ? 'Tap one, then tap near a wall.' : 'Drag onto a wall, or click and then click a wall.') : 'Drag onto a cabinet in any view, or click to apply to the selected cabinet.'}</div>` + h);
+  { const ls = document.getElementById('libset'); if (ls) ls.value = ui.libView ? 'mdl:' + ui.libView : (S.libSet || 'main'); }
 }
 // Room viewer: the same live 3D view on the whole screen with a list of views down the side, like Mozaik's.
 // Clicking and double-clicking cabinets still works in it.
@@ -841,7 +845,7 @@ document.addEventListener('click', e => {
     case 'src': ui.src = id; renderSources(); break;
     case 'props-toggle': ui.propsShut = !propsShut(); if (ui.sel && /wall|shape/.test(ui.sel.type) && ui.propsShut) ui.sel = null; try { localStorage.setItem(KEY + '.side', ui.propsShut ? '1' : '0'); } catch (_) {} renderProps(); break;
     case 'lib-view': ui.libFavs = id === 'favs'; renderSources(); break;
-    case 'lib-fold': (ui.libFold || (ui.libFold = {}))[id] = !ui.libFold[id]; try { localStorage.setItem(KEY + '.fold', JSON.stringify(ui.libFold)); } catch (_) {} renderSources(); break;
+    case 'lib-fold': { const lf = ui.libFold || (ui.libFold = {}); lf[id] = !(id in lf ? lf[id] : id.startsWith('mdl') && id.includes('/')); } try { localStorage.setItem(KEY + '.fold', JSON.stringify(ui.libFold)); } catch (_) {} renderSources(); break;
     case 'lib-fav': { const f = ui.favs || (ui.favs = loadFavs()), i = f.indexOf(id); if (i < 0) f.push(id); else f.splice(i, 1); try { localStorage.setItem(KEY + '.favs', JSON.stringify(f)); } catch (_) {} renderSources(); break; }
     case 'src-apply': {
       const [kind, ...rest] = el.dataset.drag.split(':');
@@ -1168,6 +1172,7 @@ document.addEventListener('click', e => {
     case 'lib-dup': { const l = libItem(id), nl = { ...clone(l), id: uid('l'), name: l.name + ' copy' }; mutate(() => S.library.push(nl)); ui.libSel = nl.id; render(); break; }
     case 'lib-del': mutate(() => { S.library = S.library.filter(x => x.id !== id); }); break;
     case 'lib-place': ui.tab = 'room'; placeMode(id); break;
+    case 'models-import': pickModelFolder(); break;
     case 'designer-new': mutate(() => { S.designer = blankDesign(); }); if (designerViewer) designerViewer.fitted = false; goTab('designer'); break;
     case 'designer-load': mutate(() => { S.designer = designFromLib(libItem(id)); }); if (designerViewer) designerViewer.fitted = false; goTab('designer'); break;
     case 'des-save': case 'des-place': case 'des-update': {
@@ -1339,7 +1344,14 @@ document.addEventListener('input', e => {
   ui.doorFind = e.target.value; renderDoors();
   const f = $('#doorfind'); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
 });
-document.addEventListener('change', e => { if (e.target.id === 'libset') swapLibrary(e.target.value); });
+document.addEventListener('change', e => {
+  if (e.target.id !== 'libset') return;
+  const v = e.target.value;
+  // An imported model library is only a view of the tree; the job's cabinet library stays as it is.
+  const keep = x => { try { localStorage.setItem(KEY + '.libView', x || ''); } catch (_) {} };
+  if (v.startsWith('mdl:')) { ui.libView = v.slice(4); keep(ui.libView); renderSources(); return; }
+  const was = ui.libView; ui.libView = null; keep(''); if (v === (S.libSet || 'main')) { if (was) renderSources(); } else swapLibrary(v);
+});
 document.addEventListener('change', e => {
   if (e.target.id !== 'lblsize') return;
   try { localStorage.setItem(KEY + '.lblsize', e.target.value); } catch (_) {}

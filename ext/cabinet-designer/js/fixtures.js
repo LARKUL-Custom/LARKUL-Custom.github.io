@@ -16,6 +16,8 @@ const FIXT_KINDS = [
   { k: 'range', name: 'Range', ab: 'RANGE' },
   { k: 'washer', name: 'Washer', ab: 'W' },
   { k: 'dryer', name: 'Dryer', ab: 'D' },
+  // An imported model that is only there to look at (decor, lights, art): it keeps nothing out of its space.
+  { k: 'model', name: '3D model', loose: true },
 ];
 // Presets: names, folders and sizes from Mozaik's Appliances and Graphics library (inches). Doors, openings and
 // windows are their outside size with the casing (2 1/2" each side, like Mozaik's); windows start with their top at 84".
@@ -73,7 +75,7 @@ const FIXT_LIB = [
   FX('wn-pic', 'window', 'Windows', 'Picture Window', 90, 60, 0),
 ];
 const FIXT_FOLDERS = ['Kitchen sinks', 'Dishwashers', 'Refrigerators', 'Under-counter fridges', 'Ranges', 'Laundry', 'Doors', 'Doorways and openings', 'Windows'];
-const fixtPreset = id => FIXT_LIB.find(x => x.id === id);
+const fixtPreset = id => FIXT_LIB.find(x => x.id === id) || (typeof modelItem === 'function' ? modelItem(id) : null);
 const CASE = 2.5;
 const fixtKind = k => FIXT_KINDS.find(x => x.k === k);
 const fixtDef = f => fixtKind(f.kind) || FIXT_KINDS[0];
@@ -82,6 +84,7 @@ const fixtById = id => fixtList().find(f => f.id === id);
 const fixtHole = f => !!fixtDef(f).wallHole;
 const fixtSink = f => !!fixtDef(f).top;
 const fixtFloor = f => !fixtHole(f) && !fixtSink(f);
+const fixtLoose = f => !!fixtDef(f).loose;
 const fixtUnder = f => !!fixtDef(f).under;
 const fixtName = f => f.name || fixtDef(f).name;
 // The hole in the wall inside the casing: [a0, a1, z0, z1].
@@ -108,7 +111,7 @@ function fixtHit(p) { return fixtList().filter(f => { const poly = fixtPoly(f); 
 // Spans along a wall side that a fixture (or a cabinet of this height and depth) runs into. Used by the cabinet layout too.
 function fixtObstacles(wallId, side, spec, excludeId, add, out) {
   fixtList().forEach(f => {
-    if (f.id === excludeId || fixtSink(f) || !vOverlap(f, spec)) return;
+    if (f.id === excludeId || fixtSink(f) || fixtLoose(f) || !vOverlap(f, spec)) return;
     if (fixtHole(f)) { if (f.wall === wallId) out.push({ a0: f.off, a1: f.off + f.w, kind: 'fx', id: f.id }); return; }
     const p = fixtPoly(f); if (p) add(p, 'fx', f.id);
   });
@@ -118,7 +121,7 @@ function fixtFree(f, wallId, side, want, px) {
   const w = wall(wallId); if (!w) return null;
   const L = wg(w).L, hi = L - f.w, e = 0.005;
   if (hi < -e) return null;
-  if (!fixtFloor(f)) return Math.max(0, Math.min(hi, want));
+  if (!fixtFloor(f) || fixtLoose(f)) return Math.max(0, Math.min(hi, want));
   const obs = obstacles(wallId, side, { ...f, outset: 0 }, f.id), bl = obs.map(o => [o.a0 - f.w, o.a1]);
   const reach = Math.max(lay().snapReach, 12 * (px || 0));
   bl.forEach(([x0, x1]) => { if (Math.abs(want - x0) < reach) want = x0; else if (Math.abs(want - x1) < reach) want = x1; });
@@ -144,7 +147,7 @@ function fixtSpot(f, p, px) {
 function fixtNew(pid) {
   const d = fixtPreset(pid); if (!d) return null;
   const f = { id: uid('fx'), kind: d.kind, lib: d.id, name: d.name, w: d.w, h: d.h, d: d.d, elev: d.elev };
-  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
+  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
   return f;
 }
 function fixtPlace(k, p) {
@@ -254,7 +257,7 @@ function fixtElevMove(d, p) {
   d.live = true;
   const off = fixtFree(f, f.wall, f.side, Math.round((d.off + (side === 1 ? dx : -dx)) * 4) / 4, ui.elevPx);
   if (off !== null) f.off = r3(off);
-  if (f.kind === 'window') f.elev = Math.max(0, Math.round((d.elev + dz) * 4) / 4);
+  if (f.kind === 'window' || fixtLoose(f)) f.elev = Math.max(0, Math.round((d.elev + dz) * 4) / 4);
   renderElev(); renderPlan();
 }
 
@@ -282,6 +285,9 @@ function fixt3d(v, selCol) {
     if (fixtHole(f)) {
       // In the wall: glass for a window, a closed slab for a door, and a thin casing on both faces.
       const grp = wallGroup(w, 1, 0, -w.thick), T = w.thick, [a0, a1, z0, z1] = fixtInner(f), iw = a1 - a0, ih = z1 - z0, c = f.bare ? 0 : CASE;
+      // An imported door or window model fills the opening, through the wall's thickness.
+      const md = f.model && Math.max(f.md || 0, T + 1), mm = md && modelMesh(f.model, f.w, f.h, md, sel && selCol);
+      if (mm) { mm.position.set(f.off, f.elev, (T - md) / 2); grp.add(mm); v.root.add(tag(grp)); return; }
       if (f.kind === 'window') grp.add(box3(iw, ih, 0.25, hot || glass, (a0 + a1) / 2, (z0 + z1) / 2, T / 2, false));
       if (f.kind === 'door' && f.swing && f.swing !== 'none') {
         const zc = f.side === 1 ? T - 0.7 : 0.7, lv = f.swing === 'both' ? [[a0, iw / 2], [a0 + iw / 2, iw / 2]] : [[a0, iw]];
@@ -298,6 +304,9 @@ function fixt3d(v, selCol) {
     const grp = wallGroup(w, f.side, f.side === 1 ? f.off : f.off + f.w);
     if (fixtSink(f)) {
       const c = fixtCounter(f), m = c.depth / 2 - 0.5;
+      // An imported sink model hangs from the countertop by its rim.
+      const mm = f.model && modelMesh(f.model, f.w, f.h, f.d, sel && selCol);
+      if (mm) { mm.position.set(0, c.top - f.h + 0.2, m - f.d / 2); grp.add(mm); v.root.add(tag(grp)); return; }
       grp.add(box3(f.w, 0.2, f.d, hot || metal, f.w / 2, c.top + 0.1, m));
       const n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5, bw = (f.w - 1.5 - gap * (n - 1)) / n;
       for (let i = 0; i < n; i++) grp.add(box3(bw, 0.1, f.d - 2.25, dark, 0.75 + i * (bw + gap) + bw / 2, c.top + 0.22, m + 0.4, false));
@@ -305,6 +314,9 @@ function fixt3d(v, selCol) {
       grp.add(box3(1, 1, 7, hot || metal, f.w / 2, c.top + 13, m - f.d / 2 + 2));
       v.root.add(tag(grp)); return;
     }
+    const mm = f.model && modelMesh(f.model, f.w, f.h, f.d, sel && selCol);
+    if (mm) { mm.position.set(0, f.elev, 0); grp.add(mm); v.root.add(tag(grp)); return; }
+    if (fixtLoose(f)) { grp.add(box3(f.w, f.h, f.d, hot || flat3('#d4d7db', 0.6), f.w / 2, f.elev + f.h / 2, f.d / 2)); v.root.add(tag(grp)); return; }
     const body = f.kind === 'washer' || f.kind === 'dryer' ? white : metal;
     grp.add(box3(f.w, f.h, f.d, hot || body, f.w / 2, f.elev + f.h / 2, f.d / 2));
     const z = f.d + 0.4;
@@ -328,6 +340,7 @@ const FIXT_ICON = {
   dw: '<rect x="4" y="6" width="12" height="12" rx="1"/><path d="M4 9h12M7 11h6M2.5 6h15"/>',
   range: '<rect x="4" y="5" width="12" height="13" rx="1"/><path d="M4 8h12"/><rect x="6" y="10" width="8" height="5"/>',
   washer: '<rect x="4" y="3" width="12" height="15" rx="1"/><path d="M4 6h12"/><circle cx="10" cy="11.5" r="3.6"/>',
+  model: '<path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2z"/><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"/>',
   dryer: '<rect x="4" y="3" width="12" height="15" rx="1"/><path d="M4 6h12"/><circle cx="10" cy="11.5" r="3.6"/><path d="M8.2 11.5h3.6"/>',
 };
 function fixtButton(d) {
@@ -340,12 +353,12 @@ const fixtTreeItems = () => FIXT_LIB.map(d => ({ key: 'fixt:' + d.id, g: 'fixt',
 function fixtProps(f) {
   const id = f.id, R = 'fixt:' + id, d = fixtDef(f), pre = fixtPreset(f.lib) || {}, w = wall(f.wall), L = w ? wg(w).L : 0;
   const from = fixtHole(f) ? 'From the wall start' : 'Along the wall';
-  return `<div class="psec"><div class="pshead"><div class="cabtitle"><span class="chip shape">${esc(pre.folder || d.name)}</span> <b>${esc(fixtName(f))}</b></div></div>
-    <div class="row-actions">${fixtSink(f) ? '' : `<button class="btn" data-act="fixt-flip" data-id="${id}">${icon('flip')}${f.kind === 'door' ? 'Swing to the other side' : fixtHole(f) ? 'Other side' : 'Flip'}</button>`}<button class="btn" data-act="fixt-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn danger" data-act="fixt-del" data-id="${id}">${icon('trash')}Delete</button></div>
+  return `<div class="psec"><div class="pshead"><div class="cabtitle"><span class="chip shape">${esc(String(pre.folder || d.name).split(' › ').pop())}</span> <b>${esc(fixtName(f))}</b></div></div>
+    <div class="row-actions">${fixtSink(f) ? '' : `<button class="btn" data-act="fixt-flip" data-id="${id}">${icon('flip')}${f.kind === 'door' ? 'Swing to the other side' : fixtHole(f) ? 'Other side' : 'Flip'}</button>`}<button class="btn" data-act="fixt-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn danger" data-act="fixt-del" data-id="${id}">${icon('trash')}Delete</button></div>${f.model && modelItem(f.lib) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-unlib" data-id="${id}" title="Takes this model out of the Imported models list. Ones already in jobs stay.">${icon('trash')}Remove from Imported models</button></div>` : ''}
     <div class="sizeline">${fixtHole(f) && !f.bare ? 'With casing: ' : ''}${fmtLen(f.w, 1)} wide × ${fmtLen(f.h, 1)} high${f.d ? ` × ${fmtLen(f.d, 1)} deep` : ''}</div>
-    <div class="note">${w ? esc(wallName(w)) : ''}${fixtSink(f) ? ' · sits in the countertop' : fixtUnder(f) ? ' · the countertop runs over it' : fixtHole(f) ? ' · cabinets stay out of it where they would overlap' : ' · cabinets stay out of its space'}. Not on the cut list.</div></div>
+    <div class="note">${w ? esc(wallName(w)) : ''}${fixtSink(f) ? ' · sits in the countertop' : fixtUnder(f) ? ' · the countertop runs over it' : fixtHole(f) ? ' · cabinets stay out of it where they would overlap' : fixtLoose(f) ? ' · just to look at, cabinets can go over it' : ' · cabinets stay out of its space'}. Not on the cut list.</div></div>
   <div class="psec box">${secHead('ruler', 'Size and position', 'teal')}
-    <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
+    <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtLoose(f) ? fld('Off the floor', R, 'elev', f.elev || 0, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
     ${f.kind === 'door' ? fld('Door', R, 'swing', f.swing || 'L', 'select', { options: [{ v: 'L', l: 'LH, hinge on the left' }, { v: 'R', l: 'RH, hinge on the right' }, { v: 'both', l: 'Double door' }, { v: 'none', l: 'No door (open doorway)' }] }) : ''}
     ${fixtSink(f) ? fld('Bowls', R, 'bowls', f.bowls || 1, 'selnum', { options: [{ v: 1, l: 'Single bowl' }, { v: 2, l: 'Double bowl' }, { v: 3, l: 'Triple bowl' }] }) : ''}
     ${fixtSink(f) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-center" data-id="${id}">${icon('ends')}Center on the cabinet under it</button></div>` : ''}
@@ -355,6 +368,7 @@ function fixtAct(a, id) {
   const f = fixtById(id);
   switch (a) {
     case 'fixt-pick': ui.libOpen = false; placeMode(ui.placing === 'fixt:' + id ? null : 'fixt:' + id); return true;
+    case 'fixt-unlib': if (f && f.lib) removeModels([f.lib]); return true;
     case 'fixt-del': ui.sel = null; mutate(() => { S.fixtures = fixtList().filter(x => x.id !== id); }); return true;
     case 'fixt-flip': if (f) mutate(() => { f.side = -f.side; }); return true;
     case 'fixt-dup': {
@@ -375,4 +389,4 @@ function fixtAct(a, id) {
 // Countertop runs bridge over dishwashers and under-counter fridges.
 const fixtUnderList = () => fixtList().filter(fixtUnder).map(f => ({ id: f.id, wall: f.wall, side: f.side, off: f.off, w: f.w, d: f.d, bridge: true }));
 // A countertop run stops flush against a fridge, range or washer.
-const fixtBlocksEnd = (r, at, dir) => fixtList().some(f => fixtFloor(f) && !fixtUnder(f) && f.wall === r.wall && f.side === r.side && f.elev < r.top - 0.01 && f.elev + f.h > r.bottom + 0.01 && Math.abs((dir < 0 ? f.off + f.w : f.off) - at) < 0.5);
+const fixtBlocksEnd = (r, at, dir) => fixtList().some(f => fixtFloor(f) && !fixtUnder(f) && !fixtLoose(f) && f.wall === r.wall && f.side === r.side && f.elev < r.top - 0.01 && f.elev + f.h > r.bottom + 0.01 && Math.abs((dir < 0 ? f.off + f.w : f.off) - at) < 0.5);

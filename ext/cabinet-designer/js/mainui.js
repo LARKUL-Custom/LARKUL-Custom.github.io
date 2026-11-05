@@ -90,7 +90,7 @@ function itemBarX(x) {
   const pos = (label, end) => `<label class="ib-f"><span>${label}</span>${px ? ctl(P, end, r3(fromEnd(px, end)), 'len', { label }) : `<input type="text" disabled aria-label="${label}">`}</label>`;
   const span = px ? Math.max(0, r3(hi - lo - px.w)) : 0;
   const ctr = `<span class="ib-ctrs"><button class="ib-ctr" data-act="x-center" data-id="${x.k}:${id}" title="Center it on the wall" aria-label="Center it on the wall"${px ? '' : ' disabled'}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 3v14M18 3v14M5 10h10m-7-3-3 3 3 3m4-6 3 3-3 3"/></svg></button></span>`;
-  const sizes = fx ? `${box('Width', R, 'w', o.w)}${fixtSink(o) ? box('Front to back', R, 'd', o.d) : box('Height', R, 'h', o.h)}${fixtHole(o) ? box(o.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', o.elev || 0) : ''}${fixtFloor(o) ? box('Depth', R, 'd', o.d) : ''}`
+  const sizes = fx ? `${box('Width', R, 'w', o.w)}${fixtSink(o) ? box('Front to back', R, 'd', o.d) : box('Height', R, 'h', o.h)}${fixtHole(o) ? box(o.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', o.elev || 0) : ''}${fixtFloor(o) ? box('Depth', R, 'd', o.d) : ''}${fixtLoose(o) ? box('Off the floor', R, 'elev', o.elev || 0) : ''}`
     : `${box(o.plane === 'flat' ? 'Bottom height' : 'Off the floor', R, 'elev', o.elev || 0)}${box('Out from wall', R, 'outset', o.outset || 0)}${box('Thickness', R, 'thick', o.thick)}`;
   const name = fx ? fixtName(o) : o.name || 'Shape', kind = fx ? ((fixtPreset(o.lib) || {}).folder || fixtDef(o).name) : 'Shape';
   const sb = (act, ic, l, t, cls = '') => `<button class="${cls}" data-act="${act}" data-id="${id}" title="${t}">${icon(ic)}${l}</button>`;
