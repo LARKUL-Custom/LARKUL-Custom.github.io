@@ -136,7 +136,7 @@ function productTree() {
     + `<select id="libset" aria-label="Product library" title="Which product library to draw from">${PRODUCT_LIBS.map(x => `<option value="${x.id}"${!mv && (S.libSet || 'main') === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}${modelLibs().map(l => `<option value="mdl:${esc(l)}"${mv === l ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
     + `<input id="libfind" type="search" placeholder="Search…" value="${esc(ui.libFind || '')}" aria-label="Search products">`
     + `<div class="ptree">${favGrp}${body || '<div class="note show">No products match.</div>'}</div>`
-    + `<div class="row-actions libnew"><button class="btn sm" data-act="designer-new">${icon('plus')}New cabinet</button><button class="btn sm" data-act="shape-new">${icon('plus')}New shape</button><button class="btn sm" data-act="models-import" title="Bring in a whole folder of SketchUp models, after the SketchUp export has run on it">${icon('upload')}Import models</button></div><div class="note show" id="mdlprog" hidden></div>`;
+    + `<div class="row-actions libnew"><button class="btn sm" data-act="designer-new" title="Make a new cabinet for the library">${icon('plus')}Cabinet</button><button class="btn sm" data-act="shape-new" title="Make a new shape for the library">${icon('plus')}Shape</button><button class="btn sm" data-act="models-import" title="Import models: bring in a whole folder of SketchUp models, after the SketchUp export has run on it">${icon('upload')}Import</button></div><div class="note show" id="mdlprog" hidden></div>`;
 }
 // Picture of the product under the mouse (or the one being placed) above the tree, like Mozaik's preview.
 // With nothing to show it says how to start: drag a product onto the drawing.
