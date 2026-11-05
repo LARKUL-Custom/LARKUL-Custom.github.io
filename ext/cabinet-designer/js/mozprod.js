@@ -336,7 +336,7 @@ const mozKind = t => MOZ_KIND[t] || 'filler';
 // (1/4" back, 1" strapping), the sheet material closest to that thickness is used instead.
 function mozMatFor(c, q) {
   const mt = cabMatT(cabSet(c, 'cabMatT')), cm = mat(mt.carcass) || S.materials[0];
-  const g = mozGroup(q.t), m = g === 'back' ? mat(mt.back) || cm : g === 'show' ? mat(fillerMat(c)) || cm : cm;
+  const g = mozGroup(q.t), m = g === 'back' ? mat(mt.back) || cm : g === 'show' || (c.finished && g === 'box') ? mat(finishMat(c)) || cm : cm;
   const want = (q.mt || 19.05) / 25.4;
   if (!m || Math.abs(m.thick - want) <= 0.06) return m;
   const near = S.materials.filter(x => x.kind === 'sheet' && Math.abs(x.thick - want) <= 0.06).sort((a, b) => Math.abs(a.thick - want) - Math.abs(b.thick - want));
@@ -503,12 +503,12 @@ function mozMeshes(c, opts = {}) {
   if (mozFolded(r)) {
     const F = mozFoldModel(r, c);
     if (F) { mozFold3d(F, r, c, opts).forEach(o => grp.add(o)); grp.traverse(o => { o.userData.cabId = c.id; }); return grp; }
-    const m = r.mats.find(Boolean); grp.add(box3(c.w, c.h, c.d, mat3(m, opts), c.w / 2, c.h / 2, c.d / 2)); grp.traverse(o => { o.userData.cabId = c.id; }); return grp;
+    const m = texLook(r.mats.find(Boolean), 'finished', c); grp.add(box3(c.w, c.h, c.d, mat3(m, opts), c.w / 2, c.h / 2, c.d / 2)); grp.traverse(o => { o.userData.cabId = c.id; }); return grp;
   }
   r.parts.forEach((q, i) => {
     if (!(q.qty > 0) || q.outline.length < 3) return;
     const m0 = r.mats[i], T = q.group === 'metal' ? q.T : (m0 ? m0.thick * 25.4 : q.T);
-    const M = q.group === 'metal' ? (typeof metal3 === 'function' && R3 ? metal3('#8a9096') : flat3('#8a9096')) : mat3(m0, opts);
+    const M = q.group === 'metal' ? (typeof metal3 === 'function' && R3 ? metal3('#8a9096') : flat3('#8a9096')) : mat3(texLook(m0, mozSurf(q, c), c), opts);
     const kf = q.group === 'metal' ? null : mozKerf(r, q, c.w * 25.4, D * 25.4);
     if (kf) {
       const g = mozKerfGeo(kf, D), Md = M.clone(); Md.side = THREE.DoubleSide;
@@ -618,7 +618,7 @@ function mozFoldModel(r, c) {
 }
 // The folded pieces as solids, and the part's grooves, holes and pockets drawn on the faces they are cut in.
 function mozFold3d(F, r, c, opts) {
-  const D = c.d, out = [], m = r.mats[F.i], M0 = mat3(m, opts), Md = M0.clone(); Md.side = THREE.DoubleSide;
+  const D = c.d, out = [], m = texLook(r.mats[F.i], 'finished', c), M0 = mat3(m, opts), Md = M0.clone(); Md.side = THREE.DoubleSide;
   const toG = v => new THREE.Vector3(v.x / 25.4, v.z / 25.4, D - v.y / 25.4);
   // No polygon offset: it pulled inside marks through the folded skin at a slant (rod slots showed through the shelf face).
   // They sit half a millimetre off their face instead.
@@ -658,11 +658,11 @@ const mozFolded = r => r.def.group === 'shelf' || r.def.group === 'mantel';
 function mozFrontSVG(c, ex, by, opts = {}) {
   const r = mozRun(c), mats = []; let s = '';
   if (!r) { s = `<rect class="ev-box" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`; return opts.withDefs ? { svg: s, mats } : s; }
-  if (mozFolded(r)) { const m = r.mats.find(Boolean); mats.push(m && m.id); s = `<rect ${fillFor(m, 'ev-box')} x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`; return opts.withDefs ? { svg: s, mats } : s; }
+  if (mozFolded(r)) { const m = texLook(r.mats.find(Boolean), 'finished', c); mats.push(m && m.id); s = `<rect ${fillFor(m, 'ev-box')} x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`; return opts.withDefs ? { svg: s, mats } : s; }
   const faces = [];
   r.parts.forEach((q, i) => {
     if (!(q.qty > 0) || q.outline.length < 3) return;
-    const m = r.mats[i], T = m ? m.thick * 25.4 : q.T, kf = q.group === 'metal' ? null : mozKerf(r, q, c.w * 25.4, c.d * 25.4), f = mozPlace(q, T);
+    const m0 = r.mats[i], m = texLook(m0, mozSurf(q, c), c), T = m0 ? m0.thick * 25.4 : q.T, kf = q.group === 'metal' ? null : mozKerf(r, q, c.w * 25.4, c.d * 25.4), f = mozPlace(q, T);
     if (kf) { const pts = mozKerfFace(kf); faces.push({ y: Math.min(...pts.map(p => p.y)), pts, m }); return; }
     [0, T].forEach(z => {
       const pts = q.outline.map(p => f(p.x, p.y, z)), ys = pts.map(p => p.y);

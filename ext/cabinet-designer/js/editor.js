@@ -105,7 +105,7 @@ function edTab(c, tab, qr) {
           ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}</div></div>${ffBox(c)}`;
     }
     case 'interior': return `${qeOpening(c, qr, 'inside')}${intLibrary(c, qr)}<div class="psec box">${intWhole(c)}</div>${typeof qInteriorExtras === 'function' ? qInteriorExtras(c) : ''}`;
-    case 'materials': return `<div class="psec box">${secHead('palette', 'Materials and hardware', 'amber')}${dockBody('cab-tpl')}
+    case 'materials': return `${finishedBox(c)}<div class="psec box">${secHead('palette', 'Materials and hardware', 'amber')}${dockBody('cab-tpl')}
         <div class="grid2">${fld('Joints, unfinished ends', R, 'jointU', c.jointU || '', 'select', { options: setOpts('jointU', opts(hwOf('joint')), 'cab') })}${fld('Joints, finished ends', R, 'jointF', c.jointF || '', 'select', { options: setOpts('jointF', opts(hwOf('joint')), 'cab') })}</div></div>`;
     case 'ends': return `<div class="psec box">${secHead('ends', 'End panels and fillers', 'amber')}${endRows(c)}
         <div class="grid2">${['L', 'R'].map(e => { const k = 'end' + e, auto = (() => { const o = c[k]; c[k] = ''; const f = endFinished(c, e); c[k] = o; return f; })(); return fld(`${e === 'L' ? 'Left' : 'Right'} end`, R, k, c[k] || '', 'select', { options: [{ v: '', l: `Auto · ${auto ? 'finished' : 'unfinished'}` }, { v: 'fin', l: 'Finished (exposed)' }, { v: 'unfin', l: 'Unfinished' }] }); }).join('')}</div></div>`;

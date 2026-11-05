@@ -34,9 +34,9 @@ function fillerPolys(c) {
   const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), t = (mat(fillerMat(c)) || { thick: 0.75 }).thick;
   return fillersOf(c).map(fl => [wallPt(w, g, s, fl.a0, f + c.d), wallPt(w, g, s, fl.a1, f + c.d), wallPt(w, g, s, fl.a1, f + c.d + t), wallPt(w, g, s, fl.a0, f + c.d + t)]);
 }
-const fillerMat = c => withFinish(doorStyle(doorTpl(cabSet(c, 'doorT')).door), c).mat;
+const fillerMat = c => finishRole(c, 'sheet');
 // The material a cabinet's show parts are made in: the room's finish pick, else its door style's material.
-const finishMat = c => fillerMat(c);
+const finishMat = c => finishRole(c, 'sheet');
 function segDist(p, w) {
   const g = wg(w); const t = (p.x - w.x1) * g.u.x + (p.y - w.y1) * g.u.y;
   const tc = Math.max(0, Math.min(g.L, t));
@@ -707,6 +707,21 @@ function buildParts(c) {
   if (typeof vBuildExtras === 'function') vBuildExtras(c, parts, warn, p, { t, inD, zIn0, zIn1, addB, pin });
   if (c.addParts && c.addParts.length && typeof addedParts === 'function') addedParts(c, parts, warn, part, cm);
   const removed = (c.partEdits && typeof applyPartEdits === 'function') ? applyPartEdits(c, parts, warn, ptT) : [];
+  // A Finished product (editor › Materials and hardware): the box parts you can see are cut from the finish material, when it is the same thickness.
+  if (c.finished) {
+    const fm = mat(finishMat(c)); let off = 0;
+    if (fm && fm.id !== cm.id) parts.forEach(q => { if (q.cabId !== c.id || q.fin === false || q.mat !== cm.id || !['side', 'topbot', 'shelf', 'divider'].includes(q.kind)) return; if (Math.abs(fm.thick - q.T) <= 0.07) { q.mat = fm.id; q.T = fm.thick; q.grain = !!fm.grain; q.fin = true; } else off++; });
+    if (off) warn.push(`Finished: ${fm.name} is not the same thickness as ${cm.name}, so ${off} box part${off === 1 ? '' : 's'} stay in ${cm.name}.`);
+  }
+  // Finished ends (exposed sides) and finished interiors are cut from the finish's sheet material, like a Finished product.
+  { const fm = mat(finishMat(c)), keep = new Set();
+    if (fm && fm.id !== cm.id) parts.forEach(q => {
+      if (q.cabId !== c.id || q.fin === false || q.mat !== cm.id) return;
+      const inside = c.finInt && ['side', 'topbot', 'shelf', 'divider', 'stretcher', 'rearStretcher'].includes(q.kind);
+      if (!q.finEnd && !inside) return;
+      if (Math.abs(fm.thick - q.T) <= 0.07) { q.mat = fm.id; q.T = fm.thick; q.grain = !!fm.grain; q.fin = true; } else keep.add(q.name);
+    });
+    if (keep.size) warn.push(`${fm.name} is not the same thickness as ${cm.name}, so ${[...keep].join(', ')} stay${keep.size === 1 ? 's' : ''} in ${cm.name}.`); }
   // A finished interior is called out on every part you see inside the box.
   if (c.finInt) parts.forEach(q => { if (q.cabId === c.id && ['side', 'topbot', 'back', 'shelf', 'divider', 'stretcher', 'rearStretcher'].includes(q.kind)) q.name += ' (finished inside)'; });
   return { parts, bom, warn, fronts, inD, inW, removed };

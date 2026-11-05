@@ -476,7 +476,7 @@ function migrate(s) {
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
   if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
   if (typeof ensureMozLib === 'function') ensureMozLib(s);
-  return attachRoom(ensureMatSets(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s))))));
+  return attachRoom(ensureMatSets(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))));
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
 // The open job lives in its own file (see jobs.js); browser storage keeps a working copy too.
@@ -510,7 +510,9 @@ function undoRedo(dir) {
 // '_designer' is the cabinet open in the Designer, so the cabinet editor's face and interior tools work there too.
 const cab = id => id === '_designer' ? desCabLive() : S.cabinets.find(c => c.id === id);
 const wall = id => S.walls.find(w => w.id === id);
-const mat = id => S.materials.find(m => m.id === id);
+// SKINS: look-only stand-ins made by the Textures tab (textures.js), so drawings can find them by id too.
+const SKINS = {};
+const mat = id => S.materials.find(m => m.id === id) || (id && SKINS[id]) || undefined;
 // Product libraries: the job's own, plus backup sets (like American Cabinets) to swap to when a job wants them.
 // The set not in use waits in S.libSets, so its edits are kept, and cabinets placed from it still find their product.
 const PRODUCT_LIBS = [{ id: 'main', name: 'My library' }, { id: 'american', name: 'American Cabinets', items: () => typeof AMERICAN_LIB !== 'undefined' ? AMERICAN_LIB : [] }];
@@ -526,27 +528,76 @@ function swapLibrary(id) {
   });
   flash('Products now come from ' + def.name + '. Cabinets already drawn stay as they are.');
 }
-const doorStyle = id => ({ ...DOOR_DEFAULTS, ...(S.doorStyles.find(d => d.id === id) || S.doorStyles[0]) });
+const doorStyle = id => withFinish({ ...DOOR_DEFAULTS, ...(S.doorStyles.find(d => d.id === id) || S.doorStyles[0]) }, null);
 const doorTpl = id => S.doorTemplates.find(d => d.id === id) || S.doorTemplates[0];
 const cabMatT = id => S.matTemplates.cabinet.find(t => t.id === id) || S.matTemplates.cabinet[0];
 const drawerMatT = id => S.matTemplates.drawer.find(t => t.id === id) || S.matTemplates.drawer[0];
 // Material templates (0.48.2): one pick for the job that sets its door template, cabinet materials and drawer materials together, like Mozaik's.
-const MAT_SET_KEYS = ['doorT', 'cabMatT', 'drawerMatT'];
+const MAT_SET_KEYS = ['doorT', 'finish', 'cabMatT', 'drawerMatT'];
+// The finish a door template's base door was made in before finishes existed.
+function finFromTpl(s, id) {
+  const t = (s.doorTemplates || []).find(x => x.id === id) || (s.doorTemplates || [])[0], d = t && (s.doorStyles || []).find(x => x.id === t.door);
+  const f = d && (s.finishes || []).find(x => x.front === d.mat); return f ? f.id : ((s.job || {}).defaults || {}).finish || '';
+}
 function ensureMatSets(s) {
-  const mt = s.matTemplates; if (!mt || Array.isArray(mt.job)) return s;
+  const mt = s.matTemplates; if (!mt) return s;
+  if (Array.isArray(mt.job)) { mt.job.forEach(t => { if (!t.finish) t.finish = finFromTpl(s, t.doorT); }); return s; }
   const has = (list, id) => (list || []).some(x => x.id === id), ok = t => has(s.doorTemplates, t.doorT) && has(mt.cabinet, t.cabMatT) && has(mt.drawer, t.drawerMatT);
   const list = [
     { id: 'ms-paint', name: 'Paint grade shaker, maple cabinet', doorT: 'door-shaker', cabMatT: 'mt-maple', drawerMatT: 'dt-bb58' },
     { id: 'ms-sage', name: 'Sage shaker, maple cabinet', doorT: 'door-sage', cabMatT: 'mt-maple', drawerMatT: 'dt-bb58' },
     { id: 'ms-oak', name: 'Rift oak slab, white oak cabinet', doorT: 'door-oak', cabMatT: 'mt-oak', drawerMatT: 'dt-bb12' },
   ].filter(ok);
+  list.forEach(t => { t.finish = finFromTpl(s, t.doorT); });
   // The job's own picks become a template too, so nothing is lost when another one is picked.
-  const d = (s.job && s.job.defaults) || {}, cur = { doorT: d.doorT, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT };
+  const d = (s.job && s.job.defaults) || {}, cur = { doorT: d.doorT, finish: d.finish, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT };
   if (ok(cur) && !list.some(t => MAT_SET_KEYS.every(k => t[k] === cur[k]))) {
     const nm = (l, id) => (l.find(x => x.id === id) || {}).name || '';
     list.unshift({ id: 'ms-job', name: `${nm(s.doorTemplates, cur.doorT)}, ${nm(mt.cabinet, cur.cabMatT)}`, ...cur });
   }
+  list.forEach(t => { if (!t.finish) t.finish = finFromTpl(s, t.doorT); });
   mt.job = list;
+  return s;
+}
+// Older jobs: one finish per material their door styles used, and the job, rooms and cabinets pick the finish their doors were in,
+// so nothing they cut changes. The 0.48.3 finish pick held a material id; it becomes that material's finish.
+function ensureFinishes(s) {
+  if (!s || !Array.isArray(s.materials) || !Array.isArray(s.doorStyles)) return s;
+  if (Array.isArray(s.finishes)) return s;
+  const mats = s.materials, byId = id => mats.find(m => m.id === id), list = [];
+  const nameOf = m => (m.name || 'Finish').replace(/^\s*[\d\/.]+\s*(mm|cm|"|in)?\s+/i, '').replace(/\s+(ply|plywood)\b/i, '').replace(/\s*\((doors?|backs?|door panels)\)/i, '').trim() || m.name;
+  const add = (front, panel, name) => {
+    let f = list.find(x => x.front === front); if (f) return f;
+    const m = byId(front); if (!m) return null;
+    f = { id: 'fin-' + front.replace(/^m-/, ''), name: name || nameOf(m), front, panel: panel && byId(panel) ? panel : front, sheet: front, solid: front };
+    list.push(f); return f;
+  };
+  s.doorStyles.forEach(d => add(d.mat, d.type === 'fivepiece' || d.type === 'twopiece' ? d.panelMat : ''));
+  if (!list.length && mats[0]) add(mats[0].id);
+  // An Alder finish to start from, using the shop's alder materials when the library has them.
+  if (!list.some(f => /alder/i.test(f.name))) {
+    const al = mats.filter(m => /alder/i.test(m.name || '') && (m.kind || 'sheet') === 'sheet');
+    if (!al.length) {
+      al.push({ id: 'm-alder', name: '3/4 Alder Ply', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: true, cost: 150, color: '#c98f63', texture: null, procedural: 'oak', texScale: 26 },
+        { id: 'm-alder14', name: '1/4 Alder Ply (door panels)', kind: 'sheet', thick: 0.25, sheetW: 49, sheetL: 97, grain: true, cost: 70, color: '#cb9468', texture: null, procedural: 'oak', texScale: 26 });
+      mats.push(...al);
+    }
+    const thick = al.slice().sort((a, b) => (b.thick || 0) - (a.thick || 0)), thin = al.find(m => (m.thick || 1) < 0.4);
+    list.push({ id: 'fin-alder', name: 'Alder', front: thick[0].id, panel: (thin || thick[0]).id, sheet: thick[0].id, solid: thick[0].id });
+  }
+  s.finishes = list;
+  // Picks: the finish each door template's base door was in, unless a 0.48.3 finish material was set.
+  const tplFin = id => { const t = (s.doorTemplates || []).find(x => x.id === id) || (s.doorTemplates || [])[0]; const d = t && s.doorStyles.find(x => x.id === t.door); return d ? (add(d.mat) || {}).id || '' : ''; };
+  const fromMat = id => id && byId(id) ? (add(id) || {}).id || '' : id && list.some(f => f.id === id) ? id : '';
+  const d = s.job && s.job.defaults; if (!d) return s;
+  const jobFin = fromMat(d.finish) || tplFin(d.doorT) || list[0].id; d.finish = jobFin;
+  (s.rooms || []).forEach(r => {
+    r.settings = r.settings || {};
+    const own = fromMat(r.settings.finish) || (r.settings.doorT ? tplFin(r.settings.doorT) : '');
+    if (own && own !== jobFin) r.settings.finish = own; else delete r.settings.finish;
+    const roomFin = r.settings.finish || jobFin;
+    (r.cabinets || []).forEach(c => { const own2 = fromMat(c.finish) || (c.doorT ? tplFin(c.doorT) : ''); if (own2 && own2 !== roomFin) c.finish = own2; else delete c.finish; });
+  });
   return s;
 }
 const matSets = () => { if (!Array.isArray(S.matTemplates.job)) ensureMatSets(S); return S.matTemplates.job; };
@@ -569,11 +620,19 @@ const roomById = id => S.rooms.find(r => r.id === id);
 // Job setting, overridden by the room, overridden by the cabinet. A blank value means "follow the level above".
 const roomSet = (k, r = curRoom()) => ((r && r.settings) || {})[k] || S.job.defaults[k] || '';
 const cabSet = (c, k) => (c && c[k]) || roomSet(k);
-// Finish material (0.48.3): picked for the job or a room under Cabinet and panels. Doors, drawer fronts, end panels and fillers
-// are made in it instead of their door style's own material; a door panel cut from the same material follows too. Blank = the door styles' own.
+/* ---------- Finishes (0.48.4): the material is picked by finish name, never by door style ----------
+   Each finish (Alder, Paint grade…) says what every finished part is cut from: fronts (doors and drawer fronts), door panels,
+   finished sheet parts (finished ends, finished interiors, applied end panels, fillers) and solid parts (face frames).
+   The job picks one, a room or a cabinet can pick another. Unfinished parts use the cabinet material template. */
+const FINISH_ROLES = [['front', 'Doors and drawer fronts'], ['panel', 'Door panels'], ['sheet', 'Finished panels and ends'], ['solid', 'Face frames']];
+const finishList = () => { if (!Array.isArray(S.finishes)) ensureFinishes(S); return S.finishes; };
+function finishOf(c) { const l = finishList(), id = cabSet(c, 'finish'); return l.find(f => f.id === id) || l[0] || null; }
+const finishRole = (c, role) => { const f = finishOf(c); return f ? f[role] || f.front || f.sheet : ''; };
+// A door style is shape only: its material comes from the finish of the cabinet (or the open room when there is none).
 function withFinish(ds, c) {
-  const id = cabSet(c, 'finish'); if (!id || id === ds.mat || !S.materials.some(m => m.id === id)) return ds;
-  return { ...ds, mat: id, ...(ds.panelMat === ds.mat ? { panelMat: id } : {}) };
+  const f = S && Array.isArray(S.finishes) ? finishOf(c) : null; if (!f) return ds;
+  const front = f.front || f.sheet, panel = ds.panelType === 'raised' ? front : f.panel || front;
+  return { ...ds, mat: front, panelMat: panel };
 }
 // Runs fn with another room open, so S.walls and S.cabinets point at it.
 function withRoom(r, fn) { const prev = S.roomId; S.roomId = r.id; try { return fn(); } finally { S.roomId = prev; } }

@@ -88,7 +88,7 @@ const SETTINGS = [
   { k: 'jointU', label: 'Joints, unfinished ends', list: () => opts(hwOf('joint')), tab: 'hardware' },
   { k: 'jointF', label: 'Joints, finished ends', list: () => opts(hwOf('joint')), tab: 'hardware' },
   { k: 'leg', label: 'Legs', list: () => opts(hwOf('leg')), tab: 'hardware' },
-  { k: 'finish', label: 'Finish material', list: () => azOpts(S.materials, m => (m.kind || 'sheet') === 'sheet' && !m.dynamic), tab: 'materials', blank: 'From the door styles' },
+  { k: 'finish', label: 'Finish', list: () => azOpts(finishList()), tab: 'materials' },
   { k: 'panelDoor', label: 'Applied end panel door style', list: () => opts(S.doorStyles), tab: 'doors', blank: 'Same as the doors' },
   { k: 'panelStyle', label: 'Applied end panel fit', list: () => opts(S.panels), tab: 'panels' },
   { k: 'faceFrame', label: 'Construction', list: () => ffOpts(), tab: 'faceframes' },
@@ -102,7 +102,7 @@ function settingPreview(k, id) {
   if (k === 'drawerMatT') return swatch(mat(drawerMatT(id).sides), 16);
   if (k === 'countertop') return swatch(mat(countertop(id).mat), 16);
   if (k === 'panelDoor') return id ? swatch(mat(doorStyle(id).mat), 16) : '';
-  if (k === 'finish') return id ? swatch(mat(id), 16) : '';
+  if (k === 'finish') { const f = finishList().find(x => x.id === id) || finishList()[0]; return f ? swatch(mat(f.front), 16) : ''; }
   return '';
 }
 /* ---------- Material template: door, cabinet and drawer materials for the whole job in one pick ---------- */
@@ -118,14 +118,14 @@ function applyMatSet(id) {
   flash(`Every cabinet now uses ${t.name}${own ? `. ${own} room or cabinet pick${own === 1 ? ' was' : 's were'} reset; Undo puts ${own === 1 ? 'it' : 'them'} back` : ''}.`);
 }
 function saveMatSet() {
-  const d = S.job.defaults, t = { id: uid('ms'), name: `${doorTpl(d.doorT).name}, ${cabMatT(d.cabMatT).name}`, doorT: d.doorT, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT };
+  const d = S.job.defaults, t = { id: uid('ms'), name: `${doorTpl(d.doorT).name}, ${(finishList().find(f => f.id === d.finish) || {}).name || cabMatT(d.cabMatT).name}`, doorT: d.doorT, finish: d.finish, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT };
   mutate(() => matSets().push(t)); flash(`Saved as “${t.name}”. Rename it under Libraries › Materials.`);
 }
 function matSetBar() {
-  const now = matSetNow(), d = S.job.defaults, dt = doorTpl(d.doorT), cm = cabMatT(d.cabMatT), dm = drawerMatT(d.drawerMatT);
+  const now = matSetNow(), d = S.job.defaults, dt = doorTpl(d.doorT), fin = finishList().find(f => f.id === d.finish) || finishList()[0] || { name: '' }, cm = cabMatT(d.cabMatT), dm = drawerMatT(d.drawerMatT);
   const part = (label, sw, name) => `<span class="ms-part">${sw}<span><span class="ms-l">${label}</span>${esc(name)}</span></span>`;
   return `<div class="msbar"><label class="ms-pick"><span>Material template · whole job</span><select data-act-change="mat-set" aria-label="Material template for the whole job">${now ? '' : '<option value="" selected>Own picks (no template)</option>'}${matSets().map(t => `<option value="${t.id}"${now && now.id === t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
-    <div class="ms-parts">${part('Doors', swatch(mat(doorStyle(dt.door).mat), 18), dt.name)}${part('Cabinet', swatch(mat(cm.carcass), 18), cm.name)}${part('Drawers', swatch(mat(dm.sides), 18), dm.name)}</div>
+    <div class="ms-parts">${part('Doors', swatch(mat(doorStyle(dt.door).mat), 18), dt.name)}${part('Finish', swatch(mat(fin.front), 18), fin.name)}${part('Cabinet', swatch(mat(cm.carcass), 18), cm.name)}${part('Drawers', swatch(mat(dm.sides), 18), dm.name)}</div>
     <div class="ms-acts">${now ? '' : '<button class="btn sm" data-act="mat-set-save">Save as template</button>'}<button class="linkbtn" data-act="tab" data-id="materials">Edit templates</button></div></div>`;
 }
 /* ---------- Templates and hardware: picture tiles by category, like Mozaik ---------- */
@@ -159,7 +159,7 @@ function tplPic(k, id) {
       : svg(`<path d="M22 40 L58 28 L100 38 L100 62 L64 74 L22 64 Z" fill="${c}" stroke="#555"/><path d="M22 40 L64 50 L100 38 M64 50 L64 74" fill="none" stroke="#555"/><path d="M28 44 L60 52 L96 42" fill="none" stroke="#555" stroke-opacity=".4"/>`);
   }
   if (k === 'panelDoor') { const ds = id ? doorStyle(id) : doorStyle(doorTpl(S.job.defaults.doorT).door), c = col(mat(ds.mat)); return svg(`<rect x="44" y="4" width="32" height="82" fill="${c}" stroke="#555"/>${ds.type !== 'slab' ? '<rect x="50" y="12" width="20" height="66" fill="none" stroke="#555" stroke-opacity=".55"/>' : ''}`); }
-  if (k === 'finish') { const m = id ? mat(id) : mat(doorStyle(doorTpl(S.job.defaults.doorT).door).mat); return svg(`<rect x="20" y="10" width="38" height="72" rx="1.5" fill="${col(m)}" stroke="#555"/><rect x="62" y="10" width="38" height="72" rx="1.5" fill="${col(m)}" stroke="#555"/><rect x="28" y="20" width="22" height="52" fill="none" stroke="#555" stroke-opacity=".45"/><rect x="70" y="20" width="22" height="52" fill="none" stroke="#555" stroke-opacity=".45"/>`); }
+  if (k === 'finish') { const f = finishList().find(x => x.id === id) || finishList()[0], m = f && mat(f.front); return svg(`<rect x="20" y="10" width="38" height="72" rx="1.5" fill="${col(m)}" stroke="#555"/><rect x="62" y="10" width="38" height="72" rx="1.5" fill="${col(m)}" stroke="#555"/><rect x="28" y="20" width="22" height="52" fill="none" stroke="#555" stroke-opacity=".45"/><rect x="70" y="20" width="22" height="52" fill="none" stroke="#555" stroke-opacity=".45"/>`); }
   if (k === 'panelStyle') return svg('<rect x="44" y="4" width="32" height="82" fill="#e8e1d2" stroke="#555"/><path d="M76 10 h14 M76 80 h14" stroke="var(--accent)" stroke-width="2"/>');
   if (k === 'faceFrame') { const t = (S.faceFrames || []).find(f => f.id === id); return t ? ffPic(t) : svg('<rect x="38" y="8" width="44" height="74" fill="#e8e1d2" stroke="#555"/><rect x="40" y="10" width="40" height="70" fill="none" stroke="#555" stroke-opacity=".4"/>'); }
   if (k === 'partT') return svg('<rect x="20" y="30" width="80" height="30" fill="#e8e1d2" stroke="#555"/><rect x="20" y="56" width="80" height="4" fill="var(--accent)"/><text x="60" y="80" text-anchor="middle" font-size="10" fill="currentColor">banded edge</text>');

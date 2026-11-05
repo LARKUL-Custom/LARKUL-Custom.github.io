@@ -109,6 +109,9 @@ function applyPartEdits(c, parts, warn, ptT) {
     // Type and material first: they set the banding, thickness and grain the formulas then see.
     if (e.kind && e.kind !== q.kind) { q.kind = e.kind; if (ptT) { q.band = partBands(ptT, q.kind); } }
     if (e.mat) { const m = mat(e.mat); if (m) { q.mat = m.id; q.T = m.thick; q.grain = !!m.grain; q.matOver = true; } }
+    // Finished (0.48.4): a part marked finished is cut from the finish material and wears the finished texture; unfinished stays in the cabinet material.
+    if (e.fin === '1' && typeof finishMat === 'function') { const m = mat(finishMat(c)); if (m) { q.mat = m.id; q.T = m.thick; q.grain = !!m.grain; } q.fin = true; }
+    else if (e.fin === '0') q.fin = false;
     if (e.tex) q.tex = e.tex;
     if (e.band) { q.band = { ...(q.band || {}) }; Object.entries(e.band).forEach(([k, v]) => { q.band[k] = v === 'none' ? null : v; }); }
     if (e.kind || e.band) q.edges = edgeSummary(q.kind, q.band);
@@ -466,7 +469,7 @@ function peDetailsTab(c, q, e, s) {
     ${peIn('Length (x)', 'L', e.L ?? '', fmtLen(q.L, 1))}${peIn('Width (y)', 'W', e.W ?? '', fmtLen(q.W, 1))}
     <label class="f"><span>Thickness</span><input disabled value="${esc(fmtLen(q.T, 1))}" aria-label="Thickness"></label>
     ${peSel('Grain', 'grain', e.grain === undefined ? '' : e.grain ? '1' : '0', [{ v: '', l: `From the material (${q.grain ? 'along the length' : 'none'})` }, { v: '1', l: 'Along the length (x)' }, { v: '0', l: 'No grain' }])}
-    ${peSel('Part type', 'kind', e.kind || '', kinds)}${peSel('Material', 'mat', e.mat || '', mats)}${peSel('Texture', 'tex', e.tex || '', texs)}</div>
+    ${peSel('Part type', 'kind', e.kind || '', kinds)}${peSel('Material', 'mat', e.mat || '', mats)}${peSel('Texture', 'tex', e.tex || '', texs)}${peSel('Finish', 'fin', e.fin || '', [{ v: '', l: `From the product (${q.fin ? 'finished' : 'unfinished'})` }, { v: '1', l: 'Finished (finish material)' }, { v: '0', l: 'Unfinished (cabinet material)' }])}</div>
     <div class="note">Part type sets the banding from the part template. Material sets the thickness and grain. Texture only changes how it looks.</div>
     ${a ? `<div class="eyebrow">3D position</div>
       <label class="f chk"><input type="checkbox" class="pe-in" data-path="add.graphic"${a.graphic !== false ? ' checked' : ''}> <span>Draw it in 3D (untick for a cut-list-only part)</span></label>
@@ -648,7 +651,7 @@ function peChange(path, raw, isSelect) {
     if (path === 'grain') v = raw === '' ? undefined : raw === '1';
     else if (/\.closed$/.test(path)) v = raw === '1';
     else if (['name', 'note', 'report'].includes(path) && v !== undefined) v = String(raw).trim();
-    else if (['kind', 'mat', 'tex'].includes(path) || path.startsWith('band.')) v = raw === '' ? undefined : raw;
+    else if (['kind', 'mat', 'tex', 'fin'].includes(path) || path.startsWith('band.')) v = raw === '' ? undefined : raw;
     peSetPath(e, path, v);
     if (e.band && !Object.keys(e.band).length) delete e.band;
   });
@@ -834,7 +837,7 @@ function peBadges(e) {
   if ((e.ops || []).length || (e.hide || []).length) t.push(['ops', 'Operations']);
   if (e.band) t.push(['band', 'Banding']);
   if (e.xf) t.push(['shape', 'Mirrored']);
-  if (['L', 'W', 'qty', 'grain', 'name', 'note', 'report', 'kind', 'mat', 'tex'].some(k => e[k] !== undefined && e[k] !== '')) t.push(['det', 'Details']);
+  if (['L', 'W', 'qty', 'grain', 'name', 'note', 'report', 'kind', 'mat', 'tex', 'fin'].some(k => e[k] !== undefined && e[k] !== '')) t.push(['det', 'Details']);
   return t.map(([k, l]) => ` <span class="pe-tag ${k}">${l}</span>`).join('');
 }
 

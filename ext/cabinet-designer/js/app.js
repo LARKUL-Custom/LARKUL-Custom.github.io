@@ -533,7 +533,7 @@ function renderQuick() {
 function dockTabs() {
   const c = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id);
   // The item bar (size and position of the selected item) comes first, then the cabinet's ends, then room-wide tops, molding, lights and layout.
-  return [['item', 'Item', 'ruler'], ...(c && multiIds().length < 2 ? [['ends', 'Ends', 'ends']] : []), ['tops', 'Tops', 'stack'], ['molding', 'Molding', 'stack'], ['room', 'Room', 'home'], ['lights', 'Lights', 'sun'], ['layout', 'Layout', 'magnet']];
+  return [['item', 'Item', 'ruler'], ...(c && multiIds().length < 2 ? [['ends', 'Ends', 'ends']] : []), ['tops', 'Tops', 'stack'], ['molding', 'Molding', 'stack'], ['tex', 'Textures', 'palette'], ['room', 'Room', 'home'], ['lights', 'Lights', 'sun'], ['layout', 'Layout', 'magnet']];
 }
 function renderDock() {
   const el = $('#dock'); if (!el) return;
@@ -562,6 +562,7 @@ function dockBody(k) {
   const rm = curRoom(), c = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id);
   if (k === 'tops') return `${typeof topOpRow === 'function' ? topOpRow() : ''}${autoTopsCard(countertopRuns(), opts(S.countertops))}${genTopsCard(opts(S.countertops))}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="countertops">Countertop styles</button></div>`;
   if (k === 'lights') return lightsCard();
+  if (k === 'tex') return texDock();
   if (k === 'molding') return `<div class="card cardbody">${autoMoldBox(moldingRuns())}</div>${genMoldsCard()}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="moldings">Molding library and totals</button></div>`;
   if (k === 'room') return roomDockBody();
   if (k === 'item') { const x = multiIds().length < 2 && typeof xItem === 'function' && xItem(); return x ? itemBarX(x) : itemBar(multiIds().length < 2 ? c : null); }
@@ -823,6 +824,7 @@ document.addEventListener('click', e => {
   if (/^pe-/.test(a) && typeof partsTabAct === 'function' && partsTabAct(a, id)) return;
   if (/^ct-/.test(a) && typeof cncToolsAct === 'function' && cncToolsAct(a, id)) return;
   if (/^vc-/.test(a) && typeof vcAct === 'function' && vcAct(a, id)) return;
+  if (/^tx-/.test(a) && typeof texAct === 'function' && texAct(a, id)) return;
   if (/^q-/.test(a) && typeof quickAct === 'function' && quickAct(a, id, el)) return;
   if (/^jt-/.test(a) && typeof jtAct === 'function' && jtAct(a, id, el)) return;
   if (/^(mp|rem|rc|sv|mt)-/.test(a) && typeof libs2Act === 'function' && libs2Act(a, id)) return;
@@ -1207,8 +1209,10 @@ document.addEventListener('click', e => {
     case 'tex-sub': ui.texPick.sub = id; renderTexPick(); break;
     case 'tex-pick': pickTexture(+id); break;
     case 'mtc-add': mutate(() => S.matTemplates.cabinet.push({ ...clone(S.matTemplates.cabinet[0]), id: uid('mt'), name: 'New cabinet materials' })); break;
+    case 'fin-add': { const f0 = finishList()[0] || {}; mutate(() => finishList().push({ id: uid('fin'), name: 'New finish', front: f0.front || '', panel: f0.panel || '', sheet: f0.sheet || '', solid: f0.solid || '' })); break; }
+    case 'fin-del': mutate(() => { S.finishes = finishList().filter(f => f.id !== id); unsetPick('finish', id, S.finishes[0].id); matSets().forEach(t => { if (t.finish === id) t.finish = S.finishes[0].id; }); }); break;
     case 'mat-set-save': saveMatSet(); break;
-    case 'mset-add': { const d = S.job.defaults; mutate(() => matSets().push({ id: uid('ms'), name: 'New material template', doorT: d.doorT, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT })); break; }
+    case 'mset-add': { const d = S.job.defaults; mutate(() => matSets().push({ id: uid('ms'), name: 'New material template', doorT: d.doorT, finish: d.finish, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT })); break; }
     case 'mset-del': mutate(() => { S.matTemplates.job = matSets().filter(t => t.id !== id); }); break;
     case 'mtd-add': mutate(() => S.matTemplates.drawer.push({ ...clone(S.matTemplates.drawer[0]), id: uid('dt'), name: 'New drawer materials' })); break;
     case 'mtc-del': mutate(() => { S.matTemplates.cabinet = S.matTemplates.cabinet.filter(t => t.id !== id); unsetPick('cabMatT', id, S.matTemplates.cabinet[0].id); }); break;

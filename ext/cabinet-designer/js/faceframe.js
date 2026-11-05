@@ -38,7 +38,7 @@ function faceFrame(c) {
   return f;
 }
 const ffThick = c => { const f = faceFrame(c); return f ? f.thick : 0; };
-const ffMat = (c, f) => mat((f || faceFrame(c) || {}).mat) || mat(fillerMat(c)) || mat(cabMatT(cabSet(c, 'cabMatT')).carcass) || S.materials[0];
+const ffMat = (c, f) => mat(finishRole(c, 'solid')) || mat(cabMatT(cabSet(c, 'cabMatT')).carcass) || S.materials[0];
 
 // Frame members and fronts of a face frame cabinet, in cabinet coordinates (x from the left, z up from the floor).
 // Members: stiles run full height, rails run between the stiles, center stiles sit between the rails of their row.
@@ -103,7 +103,7 @@ function ffParts(c, p, f, part, addB, warn) {
 // Elevation drawing of the frame, behind the fronts.
 function ffSVG(c, ex, Y, mats) {
   const f = faceFrame(c); if (!f) return '';
-  const m = ffMat(c, f); mats.push(m && m.id);
+  const m = texLook(ffMat(c, f), 'finished', c); mats.push(m && m.id);
   return ffLayout(c, effParams(c), f).members.map(mb => `<rect ${fillFor(m, 'ev-front')} x="${ex + mb.x0}" y="${Y(mb.z1)}" width="${mb.x1 - mb.x0}" height="${mb.z1 - mb.z0}"/>`).join('');
 }
 // 3D frame members, flush with the cabinet's front.
@@ -152,7 +152,7 @@ function renderFaceFrames() {
     <div class="cardbody"><div class="cardsplit"><div class="stack">
       ${fld('Name', R, 'name', t.name, 'text', { wide: true })}
       <div class="grid2">${L('stile', 'Stiles')}${L('topRail', 'Top rail')}${L('topRailWall', 'Top rail, wall cabinets')}${L('bottomRail', 'Bottom rail')}${L('midRail', 'Mid rails')}${L('midStile', 'Center stiles')}${L('thick', 'Thickness')}${L('overlay', 'Door overlay')}</div>
-      ${fld('Material', R, 'mat', t.mat || '', 'select', { options: [{ v: '', l: 'Same as the doors' }, ...matOpts('sheet')] })}
+      <div class="note">Cut from the room's finish (Face frames material). Set finishes under Libraries › Materials.</div>
     </div><div class="preview pad">${ffPic(t)}</div></div></div></div>`;
   }).join('')}</div>`;
 }

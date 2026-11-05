@@ -192,9 +192,12 @@ function renderMaterials() {
   $('#tab-materials').innerHTML = `<div class="pagehead"><div><h2>Materials</h2><p>The material library holds every sheet, top and solid you use. Pick a texture from the library, or click a swatch to upload your own photo; it shows in the elevation, 3D and Realistic views. Templates bundle materials so a cabinet picks one template instead of five materials.</p></div><div class="row-actions"><button class="btn" data-act="tex-lib" data-id="">From texture library</button><button class="btn primary" data-act="mat-add">Add material</button></div></div>
   <div class="card stats"><div class="stat"><span class="eyebrow">Sheets</span><b>${totalSheets}</b></div><div class="stat"><span class="eyebrow">Material cost</span><b>$${totalCost.toLocaleString()}</b></div><div class="stat"><span class="eyebrow">Cabinets, all rooms</span><b>${allCabs().length}</b></div>${saveNote ? `<div class="warnbox">${esc(saveNote)}</div>` : ''}</div>
   <div class="card">${cardHead('Material library')}${libTableBar('mat', 'Materials')}<datalist id="matgroups">${[...new Set(S.materials.map(m => m.group).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('')}</datalist><div class="tscroll"><table class="t"><thead><tr><th>Texture</th><th>Name</th><th>Group</th><th>Kind</th><th>Thick</th><th>Sheet W</th><th>Sheet L</th><th>Grain</th><th title="Takes the look of the material picked for each room">Dynamic</th><th>Color</th><th>Tex size</th><th>$/unit</th><th title="CNC feed rate, as a percent of the post's feeds (100 = as set). Goes to CNC Cutlist with the part file.">Feed %</th><th class="r">Parts</th><th class="r">Sq ft</th><th class="r">Sheets</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
-  <div class="card">${cardHead('Material templates', '<span class="note">Door, cabinet and drawers in one pick. Swap the whole job under Settings › Room settings.</span><button class="btn sm" data-act="mset-add">Add</button>')}<div class="cardbody">${matSets().map(t => { const on = MAT_SET_KEYS.every(k => t[k] === S.job.defaults[k]); return `<div class="tplrow msrow">
+  <div class="card">${cardHead('Finishes', '<span class="note">Pick a finish by name (Alder, Paint grade…) for the job or a room. It says what every finished part is cut from; unfinished parts use the cabinet material.</span><button class="btn sm" data-act="fin-add">Add</button>')}<div class="cardbody">${finishList().map(f => { const n = allCabs().filter(c => (finishOf(c) || {}).id === f.id).length; return `<div class="tplrow msrow">
+      <div class="tplhead">${swatch(mat(f.front), 22)}${ctl('fin:' + f.id, 'name', f.name, 'text', { label: 'Finish name' })}<span class="note">${nCab(n)}</span>${delBtn('fin-del', f.id, finishList().length < 2, '×')}</div>
+      <div class="autogrid">${FINISH_ROLES.map(([k, l]) => fld(l, 'fin:' + f.id, k, f[k] || '', 'select', { options: k === 'solid' || k === 'front' ? azOpts(S.materials, m => (m.kind || 'sheet') !== 'top') : matOpts('sheet') })).join('')}</div></div>`; }).join('')}</div></div>
+  <div class="card">${cardHead('Material templates', '<span class="note">Doors, finish, cabinet and drawers in one pick. Swap the whole job under Settings › Room settings.</span><button class="btn sm" data-act="mset-add">Add</button>')}<div class="cardbody">${matSets().map(t => { const on = MAT_SET_KEYS.every(k => t[k] === S.job.defaults[k]); return `<div class="tplrow msrow">
       <div class="tplhead">${swatch(mat(doorStyle(doorTpl(t.doorT).door).mat), 22)}${ctl('mset:' + t.id, 'name', t.name, 'text', { label: 'Material template name' })}${on ? '<span class="chip cab">This job</span>' : ''}${delBtn('mset-del', t.id, false, '×')}</div>
-      <div class="autogrid">${fld('Doors', 'mset:' + t.id, 'doorT', t.doorT, 'select', { options: opts(S.doorTemplates) })}${fld('Cabinet', 'mset:' + t.id, 'cabMatT', t.cabMatT, 'select', { options: opts(mc) })}${fld('Drawers', 'mset:' + t.id, 'drawerMatT', t.drawerMatT, 'select', { options: opts(md) })}</div></div>`; }).join('') || '<div class="note">No material templates yet.</div>'}</div></div>
+      <div class="autogrid">${fld('Doors', 'mset:' + t.id, 'doorT', t.doorT, 'select', { options: opts(S.doorTemplates) })}${fld('Finish', 'mset:' + t.id, 'finish', t.finish || '', 'select', { options: opts(finishList()) })}${fld('Cabinet', 'mset:' + t.id, 'cabMatT', t.cabMatT, 'select', { options: opts(mc) })}${fld('Drawers', 'mset:' + t.id, 'drawerMatT', t.drawerMatT, 'select', { options: opts(md) })}</div></div>`; }).join('') || '<div class="note">No material templates yet.</div>'}</div></div>
   <div class="cards">
     <div class="card">${cardHead('Cabinet material templates', '<button class="btn sm" data-act="mtc-add">Add</button>')}<div class="cardbody">${mc.map(t => `<div class="tplrow" data-drag="cabMatT:${t.id}">
       <div class="tplhead">${swatch(mat(t.carcass), 22)}${ctl('mtc:' + t.id, 'name', t.name, 'text', { label: 'Template name' })}<span class="note">${nCab(usedBy(c => cabSet(c, 'cabMatT') === t.id))}</span>${delBtn('mtc-del', t.id, mc.length < 2, '×')}</div>
@@ -408,7 +411,7 @@ function foldDsecs(html) {
 }
 function doorDesigner() {
   if (!S.doorStyles.some(d => d.id === ui.doorSel)) ui.doorSel = S.doorStyles[0].id;
-  const raw = S.doorStyles.find(d => d.id === ui.doorSel), d = { ...DOOR_DEFAULTS, ...raw }, R = 'door:' + d.id;
+  const raw = S.doorStyles.find(d => d.id === ui.doorSel), d = withFinish({ ...DOOR_DEFAULTS, ...raw }, null), R = 'door:' + d.id;
   const pv = doorPreviewSize(), [, , pw, ph] = pv;
   // Parts list: a one-front cabinet the size of the chosen sample, using a throwaway template.
   const smp = sampleCab({ doorT: '_tmp', rows: [{ type: pv[0] === 'drawer' ? 'drawer' : 'door', h: '*', count: 1 }], w: pw, h: ph, cat: 'Wall', construction: { toeKick: false, top: 'full' }, params: { frontSideReveal: 0, frontTopReveal: 0, frontBottomReveal: 0 } });
@@ -441,7 +444,7 @@ function doorDesigner() {
         ${fld('Category', R, 'cat', d.cat || '', 'select', { options: [{ v: '', l: `Automatic · ${(DOOR_CATS.find(c => c.v === doorCat({ ...d, cat: '' })) || {}).l}` }, ...DOOR_CATS], wide: true })}
         ${fld('Made by', R, 'source', d.source, 'select', { options: DOOR_SOURCES, wide: true })}
         ${fld('Construction', R, 'type', d.type, 'select', { options: DOOR_TYPES, wide: true })}
-        ${fld('Material', R, 'mat', d.mat, 'select', { options: matOpts('sheet'), wide: true })}
+        <div class="note">Material comes from the room's finish (${esc((finishOf(null) || {}).name || '')}), not the door style. Set finishes under Libraries › Materials.</div>
         ${fld('Outside edge', R, 'edgeProfile', d.edgeProfile, 'select', { options: EDGE_PROFILES })}</div>
       ${buyout && doorExportOf(S) === 'bywater' ? bywaterStyleFields(d, R, framedT) : ''}${buyout && doorExportOf(S) !== 'bywater' ? `<div class="dsec">${secHead('list', 'Door maker order', 'amber')}
         <div class="note">What goes on the buyout door order. Blank boxes use this style's own settings.</div>
@@ -462,9 +465,8 @@ function doorDesigner() {
         ${fld(nFields > 1 ? 'Panels' : 'Panel type', R, 'panelType', d.panelType, 'select', { options: PANEL_TYPES, wide: true })}
         ${nFields > 1 ? `<div class="note">Swap any opening's panel. The numbers match the drawing, across then down from the top left.</div>${Array.from({ length: nFields }, (_, i) => fld(`Opening ${i + 1}`, `sub:fieldPanels|${R}`, String(i), (d.fieldPanels || [])[i] || '', 'select', { options: [{ v: '', l: 'Same as Panels' }, ...PANEL_TYPES], wide: true })).join('')}` : ''}
         ${ptUsed.has('raised') ? `<div class="grid2">${fld('Raise width', R, 'raiseW', d.raiseW, 'len')}</div>` : ''}
-        ${two ? '' : (fp && (ptUsed.has('flat') || ptUsed.has('raised'))) || ptUsed.has('insert') ? fld('Panel material', R, 'panelMat', d.panelMat, 'select', { options: matOpts('sheet'), wide: true }) : ''}</div>` : ''}
+        </div>` : ''}
       ${two ? `<div class="dsec">${secHead('box', 'Panel recess', 'teal')}
-        ${fld('Panel', R, 'panelMat', d.panelMat, 'select', { options: matOpts('sheet'), wide: true })}
         <div class="grid2">${fld('Recess width', R, 'recessW', d.recessW, 'len')}${fld('Recess depth', R, 'recessD', d.recessD, 'len')}${fld('Panel clearance', R, 'panelGap', d.panelGap, 'len')}</div>
         <div class="note">The CNC cuts the frame from the 3/4 material, cuts out each opening and rabbets the back. The panel drops into the rabbet from the back: opening plus twice the recess width, less the clearance.</div></div>` : ''}
       <div class="dsec">${secHead('ruler', 'Size rules', 'slate')}

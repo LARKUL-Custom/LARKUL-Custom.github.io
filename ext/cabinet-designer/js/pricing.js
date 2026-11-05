@@ -18,6 +18,8 @@ function paintCab(c, ps, b, fr) {
     if (pt.kind === 'applied') sq.panels += area(pt);
     else if (pt.kind === 'filler' || pt.kind === 'faceFrame') sq.fillers += area(pt);
     else if (pt.kind === 'toekick') sq.toe += area(pt);
+    // A Finished product's box is finished like an applied panel.
+    else if (c.finished && ['side', 'topbot'].includes(pt.kind)) sq.panels += area(pt);
     // A finished interior paints the inside face of the box, and both faces of shelves and dividers.
     else if (c.finInt && ['side', 'topbot', 'back'].includes(pt.kind)) sq.interior += area(pt);
     else if (c.finInt && ['shelf', 'divider'].includes(pt.kind)) sq.interior += 2 * area(pt);
@@ -176,7 +178,7 @@ function panelDoor(c) {
 // The panel library keeps the fit (overhang, scribe, to the floor); the look comes from the door style.
 function panelFor(c) {
   const ps = panelStyle(cabSet(c, 'panelStyle')), ds = panelDoor(c), framed = ds.type !== 'slab';
-  return { ...ps, mat: ds.mat, type: framed ? 'routed' : 'flat', frame: framed ? Math.max(+ds.stile || 0, +ds.rail || 0) : 0, pocketDepth: +ds.pocketDepth || 0.25, door: ds };
+  return { ...ps, mat: finishRole(c, 'sheet') || ds.mat, type: framed ? 'routed' : 'flat', frame: framed ? Math.max(+ds.stile || 0, +ds.rail || 0) : 0, pocketDepth: +ds.pocketDepth || 0.25, door: ds };
 }
 // Loose panels drawn as shapes in the room: their material plus the sheet's charge for a panel that tall.
 function shapePanelCat(s) { const b = shapeBox(s.pts || []); return b.h > 48 ? 'Tall' : (+s.elev || 0) >= 30 ? 'Wall' : 'Base'; }

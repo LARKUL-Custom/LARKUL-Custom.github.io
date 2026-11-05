@@ -150,11 +150,12 @@ function cabinetMeshes(c, opts = {}) {
   const M = m => mat3(m, opts);
   // A face frame takes its thickness off the front of the box.
   const W = c.w, H = c.h, D = c.d - ffThick(c), tk = hasToe(c) ? p.toeKickHeight : 0, sb = tk ? p.toeKickSetback : 0;
-  const cmM = M(cm);
-  ffMeshes(c, p, M, o => grp.add(o));
+  // Textures: each surface wears its pick from the Textures tab (look only; cm and the rest still give sizes).
+  const L3 = (m, k) => M(texLook(m, k, c)), bk = boxKey(c), cmM = L3(cm, bk);
+  ffMeshes(c, p, m => L3(m, 'finished'), o => grp.add(o));
   const feet = onFeet(c, p);
-  if (hasCabShape(c)) cabShape3d(c, p, t, bt, tk, feet ? tk : 0, cmM, M(bm), o => grp.add(o));
-  if ((cabTopShape(c) || {}).edges && typeof edgeParts3d === 'function') { const dp = buildParts(c).parts.find(q => q.cabId === c.id && / door$/.test(q.name)); edgeParts3d(c, o => grp.add(o), t, feet ? tk : 0, { box: cmM, back: M(bm), door: dp ? M(mat(dp.mat)) : cmM }); }
+  if (hasCabShape(c)) cabShape3d(c, p, t, bt, tk, feet ? tk : 0, cmM, L3(bm, 'inside'), o => grp.add(o));
+  if ((cabTopShape(c) || {}).edges && typeof edgeParts3d === 'function') { const dp = buildParts(c).parts.find(q => q.cabId === c.id && / door$/.test(q.name)); edgeParts3d(c, o => grp.add(o), t, feet ? tk : 0, { box: cmM, back: L3(bm, 'inside'), door: dp ? L3(mat(dp.mat), 'doors') : cmM }); }
   else {
     [t / 2, W - t / 2].forEach(x => {
       if (tk && !feet) grp.add(box3(t, tk, D - sb, cmM, x, tk / 2, (D - sb) / 2));
@@ -165,9 +166,9 @@ function cabinetMeshes(c, opts = {}) {
       grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, D - p.stretcherWidth / 2));
       grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, p.stretcherWidth / 2 + p.backInset + bt));
     } else grp.add(box3(W - 2 * t, t, D, cmM, W / 2, H - t / 2, D / 2));
-    grp.add(box3(W - 2 * t, H - tk - 2 * t, bt, M(bm), W / 2, tk + H / 2 - tk / 2, p.backInset + bt / 2, false));
+    grp.add(box3(W - 2 * t, H - tk - 2 * t, bt, L3(bm, 'inside'), W / 2, tk + H / 2 - tk / 2, p.backInset + bt / 2, false));
   }
-  if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, M(mat(mt.toeKick) || cm), o => grp.add(o)); else grp.add(box3(W, tk, t, M(mat(mt.toeKick) || cm), W / 2, tk / 2, D - sb - t / 2)); }
+  if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, L3(mat(mt.toeKick) || cm, 'toe'), o => grp.add(o)); else grp.add(box3(W, tk, t, L3(mat(mt.toeKick) || cm, 'toe'), W / 2, tk / 2, D - sb - t / 2)); }
   // A blind corner's blind panel, flush with the front of the box.
   if (blindCorner(c)) { const bw = blindWidth(c), x0 = cornerSide(c) === 'L' ? t : W - bw; grp.add(box3(bw - t, H - tk - 2 * t, t, cmM, x0 + (bw - t) / 2, tk + t + (H - tk - 2 * t) / 2, D - t / 2)); }
   if (feet) {
@@ -177,14 +178,14 @@ function cabinetMeshes(c, opts = {}) {
   }
   if (c.addParts && c.addParts.length && typeof addedParts3d === 'function') addedParts3d(c, grp, M);
   const fronts = computeFronts(c, p), lay = interiorLayout(c, p, fronts);
-  const inD = D - p.backInset - bt, sm = M(mat(mt.shelf) || cm);
+  const inD = D - p.backInset - bt, sm = L3(mat(mt.shelf) || cm, bk);
   // shelves, split by a divider when there is one
   const spans = lay.divX !== null ? [[t, lay.divX - t / 2], [lay.divX + t / 2, W - t]] : [[t, W - t]];
   if (angledCorner(c)) shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => grp.add(cornerShelf3d(c, p, t, bt, z, sm)));
   else shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => spans.forEach(([a, b]) => grp.add(box3(b - a - 0.06, t, inD - p.shelfFrontSetback, sm, (a + b) / 2, z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2))));
   if (lay.divX !== null) grp.add(box3(t, lay.zIn1 - lay.zIn0, inD, cmM, lay.divX, (lay.zIn0 + lay.zIn1) / 2, p.backInset + bt + inD / 2));
   // inserts
-  const dmt = drawerMatT(cabSet(c, 'drawerMatT')), dbx = M(mat(dmt.sides) || cm);
+  const dmt = drawerMatT(cabSet(c, 'drawerMatT')), dbx = L3(mat(dmt.sides) || cm, 'drawerBox');
   const trayBox = (x0, x1, z, h, d, zBack, into) => {
     const w = x1 - x0, st = 0.5, g = into ? { add: o => { o.userData.layer = 'drawerBox'; into.add(o); } } : grp;
     g.add(box3(w, 0.25, d, dbx, (x0 + x1) / 2, z + 0.125, zBack + d / 2, false));
@@ -205,14 +206,14 @@ function cabinetMeshes(c, opts = {}) {
     // A corner's fronts are built on their own face (x along it, z out of it), so here D is that face.
     const host = f.face ? cornerFaceGroup(f) : grp, D = f.face ? 0 : c.d;
     if (f.face) grp.add(host);
-    const { ds, framed } = frontStyle(c, f), fm = mat(ds.mat) || cm, ft = fm.thick, fmM = M(fm);
+    const { ds, framed } = frontStyle(c, f), fm = mat(ds.mat) || cm, ft = fm.thick, fk = frontKey(f), fmM = L3(fm, fk);
     const fw = f.x1 - f.x0, fh = f.z1 - f.z0, cx = f.x0 + fw / 2, cy = f.z0 + fh / 2;
     // Each front lives in its own group so it can swing on its hinge or slide out.
     const fg = new THREE.Group(), add = (o, ly = 'fronts') => { o.userData.layer = ly; fg.add(o); };
-    doorMeshes(ds, framed, f, ft, fmM, M(mat(ds.panelMat) || fm), D, add);
+    doorMeshes(ds, framed, f, ft, fmM, L3(mat(ds.panelMat) || fm, fk), D, add);
     const pp = pullPlacement(c, f);
     if (pp) {
-      const L = Math.max(pp.hw.lengthMM * MM, 1), pm = (R3 ? metal3 : flat3)(pp.hw.finish || '#333333');
+      const L = Math.max(pp.hw.lengthMM * MM, 1), pm = (R3 ? metal3 : flat3)(pullColor(c, pp.hw));
       const px = f.x0 + pp.x, py = f.z0 + pp.z, pz = D + ft + 0.55;
       if (!pp.hw.ccMM) add(box3(L, L, 0.9, pm, px, py, pz - 0.1, false), 'pulls');
       else add(box3(pp.vertical ? 0.45 : L, pp.vertical ? L : 0.45, 0.45, pm, px, py, pz, false), 'pulls');
@@ -230,13 +231,13 @@ function cabinetMeshes(c, opts = {}) {
       host.add(pivot);
     } else host.add(fg);
   });
-  const ps = panelFor(c), pmM = M(mat(ps.mat) || cm), pt = panelThick(c);
+  const ps = panelFor(c), pmM = L3(mat(ps.mat) || cm, 'finished'), pt = panelThick(c);
   const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pdL = endDepth(c, 'L') + ps.frontOverhang, pdR = endDepth(c, 'R') + ps.frontOverhang;
   const pL = hasPanel(c, 'L'), pR = hasPanel(c, 'R');
   if (pL) grp.add(box3(pt, ph, pdL, pmM, -pt / 2, py0 + ph / 2, pdL / 2));
   if (pR) grp.add(box3(pt, ph, pdR, pmM, W + pt / 2, py0 + ph / 2, pdR / 2));
   // Fillers to the wall, flush with the fronts, with a short return behind them.
-  const flm = mat(fillerMat(c)) || cm, flM = M(flm), fy0 = c.cat === 'Wall' ? 0 : tk;
+  const flm = mat(fillerMat(c)) || cm, flM = L3(flm, 'finished'), fy0 = c.cat === 'Wall' ? 0 : tk;
   fillersOf(c).forEach(fl => {
     const x0 = fl.end === 'L' ? -fl.gap - (pL ? pt : 0) : W + (pR ? pt : 0), fh = H - fy0;
     grp.add(box3(fl.gap, fh, flm.thick, flM, x0 + fl.gap / 2, fy0 + fh / 2, D + flm.thick / 2));
@@ -521,7 +522,7 @@ function buildRoomScene(v) {
     const g = wg(w), grp = new THREE.Group(), mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
     grp.position.set(mx, 0, my);
     grp.rotation.y = Math.atan2(-g.u.y, g.u.x);
-    const wm = R3 ? realWall3(op) : flat3(cssVar('--wall3d'), op);
+    const wm = wallLook3(op, R3 ? realWall3(op) : flat3(cssVar('--wall3d'), op));
     fixtWall3(w, g, wm, wallMode !== 'faded').forEach(m => grp.add(m));
     const inward = (mid.x - mx) * g.n.x + (mid.y - my) * g.n.y >= 0 ? 1 : -1, cut = { x: mx, z: my, nx: g.n.x * inward, nz: g.n.y * inward };
     grp.userData.wall = true; if (cutaway) grp.userData.cut = cut;
@@ -541,9 +542,9 @@ function buildRoomScene(v) {
   if (pts.length && L.ceiling && S.walls.length) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), hgt = Math.max(...S.walls.map(w => w.height || 96));
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    const vc = typeof vCeiling3d === 'function' ? vCeiling3d(v, R3 ? realWall3() : flat3(cssVar('--wall3d'))) : null;
+    const vc = typeof vCeiling3d === 'function' ? vCeiling3d(v, wallLook3(1, R3 ? realWall3() : flat3(cssVar('--wall3d')))) : null;
     if (vc) v.root.add(vc);
-    else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), R3 ? realWall3() : flat3(cssVar('--wall3d')));
+    else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), wallLook3(1, R3 ? realWall3() : flat3(cssVar('--wall3d'))));
       cl.rotation.x = Math.PI / 2; cl.position.set((x0 + x1) / 2, hgt, (y0 + y1) / 2); cl.userData.noBounds = true; cl.userData.wall = true; v.root.add(cl); }
   }
   if (pts.length && L.floor) {
@@ -552,8 +553,9 @@ function buildRoomScene(v) {
     const pad = Math.max(120, 0.6 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)));
     const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
     const fg = new THREE.PlaneGeometry(x1 - x0, y1 - y0);
-    if (R3) { const uv = fg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 48, uv.getY(i) * (y1 - y0) / 48); }
-    const fl = new THREE.Mesh(fg, R3 ? realFloor3() : flat3(cssVar('--floor3d')));
+    const fpk = texPickOf('floor');
+    if (R3 && !fpk) { const uv = fg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 48, uv.getY(i) * (y1 - y0) / 48); }
+    const fl = new THREE.Mesh(fg, floorLook3(R3 ? realFloor3() : flat3(cssVar('--floor3d')), fg, x1 - x0, y1 - y0));
     fl.rotation.x = -Math.PI / 2; fl.position.set((x0 + x1) / 2, -0.02, (y0 + y1) / 2); fl.userData.noBounds = true; fl.receiveShadow = true; v.root.add(fl);
   }
   const selId = ui.sel && ui.sel.type === 'cab' ? ui.sel.id : null, selCol = cssVar('--sel'), dropCol = cssVar('--drop');
@@ -592,14 +594,14 @@ function buildRoomScene(v) {
   if (L.shapes) fixt3d(v, selCol);
   if (L.tops) countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), a = r.start - r.ovS, b = r.end + r.ovE;
-    const grp = wallGroup(w, r.side, r.side === 1 ? a : b), tm = mat3(mat(r.tpl.mat));
+    const grp = wallGroup(w, r.side, r.side === 1 ? a : b), tm = mat3(texLook(mat(r.tpl.mat), 'tops'));
     if (r.poly) v.root.add(ctTop3(r, tm));
     else grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
     if (r.tpl.backsplash > 0) { const off = r.side === 1 ? r.ovS : r.ovE; grp.add(box3(r.end - r.start, r.tpl.backsplash, 0.75, tm, off + (r.end - r.start) / 2, r.top + r.thick + r.tpl.backsplash / 2, 0.375)); }
     v.root.add(grp);
   });
   if (L.molding) moldingRuns().forEach(r => {
-    const w = wall(r.wall), m = r.m, mm = mat3(mat(m.mat));
+    const w = wall(r.wall), m = r.m, mm = mat3(texLook(mat(m.mat), 'molding'));
     const leftRet = r.side === 1 ? r.retS : r.retE, rightRet = r.side === 1 ? r.retE : r.retS;
     const a = (r.side === 1 ? r.start : r.end);
     const grp = wallGroup(w, r.side, a);

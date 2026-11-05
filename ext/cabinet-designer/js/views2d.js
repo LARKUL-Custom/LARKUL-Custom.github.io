@@ -696,7 +696,7 @@ function doorFaceSVG(ds, framed, x, y, w, h) {
 function frontsSVG(c, ex, by, opts = {}) {
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return mozFrontSVG(c, ex, by, opts);
   const p = effParams(c), fr = computeFronts(c, p), tk = hasToe(c) ? p.toeKickHeight : 0;
-  const Y = z => by - z, cm = mat(cabMatT(cabSet(c, 'cabMatT')).carcass);
+  const Y = z => by - z, cm = texLook(mat(cabMatT(cabSet(c, 'cabMatT')).carcass), boxKey(c), c);
   const mats = [];
   const fo = (c.shape || {}).front ? clipPoly(cabOutline(c, 'front'), 0, c.w, tk, c.h) : null;
   let s = fo ? `<polygon ${fillFor(cm, 'ev-box')} points="${fo.map(q => `${r3(ex + q.x)},${r3(Y(q.y))}`).join(' ')}"/>` : `<rect ${fillFor(cm, 'ev-box')} x="${ex}" y="${Y(c.h)}" width="${c.w}" height="${c.h - tk}"/>`;
@@ -731,7 +731,7 @@ function frontsSVG(c, ex, by, opts = {}) {
       if (opts.noFronts && f.type === 'drawer' && h > 2.5 && w > 2) s += `<rect class="ev-dbox nss" x="${x + 0.75}" y="${y + 1}" width="${w - 1.5}" height="${h - 2}"/>`;
       s += `<rect class="ev-inner nss" x="${x}" y="${y}" width="${w}" height="${h}" stroke-dasharray="2 2"/>`; return;
     }
-    const { ds, framed } = frontStyle(c, f), fm = mat(ds.mat); mats.push(fm && fm.id);
+    const { ds, framed } = frontStyle(c, f), fm = texLook(mat(ds.mat), frontKey(f), c); mats.push(fm && fm.id);
     if (opts.open && f.type === 'door') {
       // Door swung open on its hinge: seen nearly edge-on beside the hinge side.
       const hx = f.hinge === 'R' ? x + w : x, o = (f.hinge === 'R' ? 1 : -1) * Math.min(w * 0.22, 4), k = Math.abs(o) * 0.3;
@@ -781,7 +781,7 @@ function renderElev() {
   ui.elevPx = px; ui.elevL = L;
   svg.setAttribute('viewBox', vb);
   const zc = $('#elevzoom'); if (zc) zc.style.display = z ? '' : 'none';
-  let body = `<rect class="ev-wall nss" x="0" y="${-H}" width="${L}" height="${H}"/><line class="ev-floor nss" x1="-8" x2="${L + 8}" y1="0" y2="0" stroke-width="2"/>`;
+  let body = `<rect class="ev-wall nss"${wallFill2d()} x="0" y="${-H}" width="${L}" height="${H}"/><line class="ev-floor nss" x1="-8" x2="${L + 8}" y1="0" y2="0" stroke-width="2"/>`;
   const mats = [], dims = []; let labels = '';
   // Doors and windows sit in the wall, behind the cabinets.
   body += fixtElevSVG(w, side, L, fs, true);
@@ -789,10 +789,10 @@ function renderElev() {
     const ex = elevX(c, L), by = -c.elev, f = frontsSVG(c, ex, by, { withDefs: true, dims: ui.dims.fronts ? fs * 0.95 : 0, open: !!ui.open[c.id] });
     mats.push(...f.mats);
     body += `<g data-cab="${c.id}">` + f.svg;
-    const ps = panelFor(c), pt = panelThick(c), ph = ps.toFloor || c.cat === 'Wall' ? c.h : c.h - effParams(c).toeKickHeight, pm = mat(ps.mat); mats.push(pm && pm.id);
+    const ps = panelFor(c), pt = panelThick(c), ph = ps.toFloor || c.cat === 'Wall' ? c.h : c.h - effParams(c).toeKickHeight, pm = texLook(mat(ps.mat), 'finished', c); mats.push(pm && pm.id);
     if (hasPanel(c, 'L')) body += `<rect ${fillFor(pm, 'apanel')} x="${ex - pt}" y="${by - c.h}" width="${pt}" height="${ph}"/>`;
     if (hasPanel(c, 'R')) body += `<rect ${fillFor(pm, 'apanel')} x="${ex + c.w}" y="${by - c.h}" width="${pt}" height="${ph}"/>`;
-    const fm = mat(fillerMat(c)), ftk = c.cat === 'Wall' || !hasToe(c) ? 0 : effParams(c).toeKickHeight; mats.push(fm && fm.id);
+    const fm = texLook(mat(fillerMat(c)), 'finished', c), ftk = c.cat === 'Wall' || !hasToe(c) ? 0 : effParams(c).toeKickHeight; mats.push(fm && fm.id);
     fillersOf(c).forEach(fl => { body += `<rect ${fillFor(fm, 'ev-filler')} x="${fl.end === 'L' ? ex - fl.gap : ex + c.w}" y="${by - c.h}" width="${fl.gap}" height="${c.h - ftk}"/>`; });
     body += `<rect class="ev-hit" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`;
     if (ui.dropCab === c.id) body += `<rect class="ev-halo drop nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/><rect class="ev-drop nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`;
@@ -831,12 +831,12 @@ function renderElev() {
   });
   // countertops and moldings on this wall side
   countertopRuns().filter(rn => rn.on && rn.wall === w.id && rn.side === side).forEach(rn => {
-    const a = side === 1 ? ctX0(rn) : L - ctX1(rn), m = mat(rn.tpl.mat); mats.push(m && m.id);
+    const a = side === 1 ? ctX0(rn) : L - ctX1(rn), m = texLook(mat(rn.tpl.mat), 'tops'); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-top')} x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}"/>`;
     if (rn.tpl.backsplash > 0) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? rn.start : L - rn.end}" y="${-(rn.top + rn.thick + rn.tpl.backsplash)}" width="${rn.end - rn.start}" height="${rn.tpl.backsplash}" opacity=".75"/>`;
   });
   moldingRuns().filter(rn => rn.wall === w.id && rn.side === side).forEach(rn => {
-    const a = (side === 1 ? rn.start : L - rn.end) - (side === 1 ? (rn.retS ? rn.m.d : 0) : (rn.retE ? rn.m.d : 0)), m = mat(rn.m.mat); mats.push(m && m.id);
+    const a = (side === 1 ? rn.start : L - rn.end) - (side === 1 ? (rn.retS ? rn.m.d : 0) : (rn.retE ? rn.m.d : 0)), m = texLook(mat(rn.m.mat), 'molding'); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-mold')} x="${a}" y="${-(rn.z + rn.h)}" width="${rn.front}" height="${rn.h}"/>`;
     if (rn.m.profile !== 'flat') body += `<line class="ev-inner nss" x1="${a}" x2="${a + rn.front}" y1="${-(rn.z + rn.h * 0.45)}" y2="${-(rn.z + rn.h * 0.45)}"/>`;
   });

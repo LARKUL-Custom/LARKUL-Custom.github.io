@@ -160,9 +160,9 @@ setDesignScale();
 // Panel under the drawing: drag its top edge to make it taller or shorter (remembered), and its
 // contents shrink or grow to fit it, so it never needs scroll bars. Double-click the edge to reset.
 const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh2';
-// The panel never gets shorter than this, so its contents can't shrink past easy reading
-// (heights saved back when the panel scrolled instead of scaling are dropped: new key .dockh2).
-function dockMinH() { return Math.round(160 * (parseFloat(document.documentElement.style.getPropertyValue('--u')) || 1)); }
+// The panel can be dragged as short or tall as you like (down to a thin strip); its contents
+// always scale to fit. Heights saved back when the panel scrolled instead of scaling are dropped (key .dockh2).
+function dockMinH() { return 40; }
 function applyDockH() {
   let h = 0; try { h = +localStorage.getItem(DOCK_KEY()) || 0; } catch (_) {}
   const room = document.getElementById('tab-room'); if (!room) return;
@@ -193,7 +193,7 @@ function fitDock(el = document.getElementById('dock')) {
       // Lists and cards lay out at the panel's width; the item bar keeps its own width and wraps on purpose.
       if (!isBar) fit.style.width = aw + 'px';
       let w = fit.scrollWidth, h = fit.scrollHeight;
-      if (aw > 40 && ah > 30 && w > 0 && h > 0) {
+      if (aw > 40 && ah > 10 && w > 0 && h > 0) {
         const MAX = isBar ? 1.6 : 1;
         let z = Math.min(MAX, aw / w, ah / h);
         // Smaller text fits more on a line, which makes the list shorter: settle the width a few times.
@@ -207,14 +207,14 @@ function fitDock(el = document.getElementById('dock')) {
         // Long lists on the room-wide tabs stop shrinking at half size and scroll up and down instead.
         if (!isBar && z < 0.5) { z = 1; fit.style.width = ''; body.classList.add('scroll'); }
         // Rounded down a hair so rounding never leaves a pixel of overflow (and a scroll bar).
-        fit.style.zoom = body.classList.contains('scroll') ? '' : Math.max(0.25, Math.floor(z * 0.995 * 1000) / 1000).toFixed(3);
+        fit.style.zoom = body.classList.contains('scroll') ? '' : Math.max(0.1, Math.floor(z * 0.995 * 1000) / 1000).toFixed(3);
       } else fit.style.zoom = '';
     }
   }
   const head = el.querySelector('.dockhead'), tabs = head && head.querySelector('.docktabs');
   if (head && tabs) {
     if (!real) { const lt = document.querySelector('#dock .dockhead .docktabs'); tabs.style.zoom = lt ? lt.style.zoom : ''; }
-    else if (head.clientHeight > 30) { tabs.style.zoom = 1; const sh = tabs.scrollHeight, z = sh > 0 ? Math.min(1, (head.clientHeight - 8) / sh) : 1; tabs.style.zoom = Math.max(0.4, z).toFixed(3); }
+    else if (head.clientHeight > 10) { tabs.style.zoom = 1; const sh = tabs.scrollHeight, z = sh > 0 ? Math.min(1, (head.clientHeight - 8) / sh) : 1; tabs.style.zoom = Math.max(0.1, z).toFixed(3); }
   }
 }
 // tmp is the panel's new content built off screen; it gets the same wrapping and zoom as the real one.

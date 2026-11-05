@@ -1680,7 +1680,7 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 
   /* Room screen grid: tree on the left, drawing, the item panel along the bottom */
   main.is-room{padding:0 0 max(56px,calc(env(safe-area-inset-bottom,0px) + 24px));background:var(--d-panel)}
-  #tab-room.room,:root[data-rail] #tab-room.room,#tab-room.room.props-shut,#tab-room.room.rail-shut{position:relative;grid-template-columns:calc(300 * var(--u)) minmax(0,1fr) auto!important;grid-template-rows:minmax(0,1fr) max(calc(160 * var(--u)),var(--dockh,calc(184 * var(--u))));gap:0}
+  #tab-room.room,:root[data-rail] #tab-room.room,#tab-room.room.props-shut,#tab-room.room.rail-shut{position:relative;grid-template-columns:calc(300 * var(--u)) minmax(0,1fr) auto!important;grid-template-rows:minmax(0,1fr) var(--dockh,calc(184 * var(--u)));gap:0}
   .room .rail{grid-column:1;grid-row:1 / span 2;padding-top:calc(48 * var(--u));background:var(--d-tree);border-right:2px solid var(--d-top-line);gap:0;min-height:0}
   .room .rail .railtab{display:none!important}
   .room.rail-shut .srcbox{display:flex!important}
@@ -2185,3 +2185,25 @@ body.desk .xbar .ib-size{grid-template-columns:repeat(2,calc(144 * var(--u)))}
 .qe-prev .preview.ed3d canvas:active{cursor:grabbing}
 .qe-tip .linkbtn{display:inline;font-size:inherit;margin-left:6px}
 @media (max-width: 760px){ .qe-prev .preview.ed3d{height:300px;min-height:300px} }
+/* Textures tab under the drawing (0.48.3) */
+.tx-dock{display:flex;flex-direction:column;gap:10px}
+.tx-top{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.tx-surfs{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:6px}
+.tx-surf{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:6px 4px 5px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer;color:inherit;font:inherit;min-width:0}
+.tx-surf:hover{border-color:var(--line-strong)}
+.tx-surf.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.tx-surf .sw{border-radius:7px;width:100% !important;height:26px !important}
+.tx-sl{display:flex;flex-direction:column;min-width:0;width:100%;line-height:1.2}
+.tx-sl b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-sl > span{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-src{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.tx-src.set{color:var(--accent);font-weight:600}
+:root[data-help="hide"] .tx-dock .note.help{display:none}
+.tx-picks{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
+.tx-for{font-size:14px;margin-right:4px}
+.tx-picks .swatches{gap:6px}
+.tx-picks .accsw{width:26px;height:26px}
+.tx-picks .btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tx-like{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+.tx-like select{max-width:220px}
+.tx-used{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}

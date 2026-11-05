@@ -27,7 +27,7 @@ const opts = (arr, filter) => arr.filter(filter || (() => true)).map(m => ({ v: 
 // Options for a pick that can follow the level above: cabinet follows its room, a room follows the job.
 function setOpts(k, list, level = 'room') {
   const inh = level === 'cab' ? roomSet(k) : S.job.defaults[k] || '';
-  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'same as the doors' : k === 'finish' ? 'from the door styles' : 'none');
+  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'same as the doors' : 'none');
   return [{ v: '', l: `${level === 'cab' ? 'Room' : 'Job'} · ${nm}` }, ...list];
 }
 // L1: name pickers list A to Z under their group headers.
@@ -59,6 +59,7 @@ function resolve(ref) {
     case 'mtc': return S.matTemplates.cabinet.find(d => d.id === id);
     case 'mtd': return S.matTemplates.drawer.find(d => d.id === id);
     case 'mset': return matSets().find(d => d.id === id);
+    case 'fin': return finishList().find(d => d.id === id);
     case 'panel': return S.panels.find(p => p.id === id);
     case 'ff': return (S.faceFrames || []).find(f => f.id === id);
     case 'ilib': return (S.interiorLib || []).find(x => x.id === id);

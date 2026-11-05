@@ -42,7 +42,7 @@ function renderTexPick() {
   const keep = el.querySelector('.tx-grid'), top = keep ? keep.scrollTop : 0;
   const focusQ = document.activeElement && document.activeElement.id === 'texq';
   el.innerHTML = `<div class="qe texlib" role="dialog" aria-modal="true" aria-labelledby="tx-title">
-    <div class="qe-head"><b id="tx-title">Texture library</b><span class="muted">${m ? 'for ' + esc(m.name) : 'pick one to add a new material'}</span>
+    <div class="qe-head"><b id="tx-title">Texture library</b><span class="muted">${tp.surf ? 'for ' + esc(tp.surf === 'all' ? 'all fronts and ends' : ((TEX_SURF.find(([k]) => k === tp.surf) || [])[1] || '').toLowerCase()) : m ? 'for ' + esc(m.name) : 'pick one to add a new material'}</span>
       <button class="btn sm qe-x" data-act="tex-close" aria-label="Close the texture library">${icon('close')}</button></div>
     <div class="tx-bar">
       <div class="seg" role="group" aria-label="Texture category">${TEX_CATS.map(([k, l]) => `<button data-act="tex-cat" data-id="${k}" aria-pressed="${!tp.q && tp.cat === k}">${l}<span class="tx-n">${TEXLIB.filter(t => t.c === k).length}</span></button>`).join('')}</div>
@@ -59,6 +59,8 @@ function renderTexPick() {
 function pickTexture(i) {
   const t = TEXLIB && TEXLIB[i], tp = ui.texPick; if (!t || !tp) return;
   const path = 'textures/' + t.p;
+  // From the Textures tab: the photo becomes that surface's look, no material is added.
+  if (tp.surf) { closeTexPick(); texSet(path); return; }
   if (tp.mat) {
     mutate(() => { const m = mat(tp.mat); m.texture = path; if (t.col) m.color = t.col; if (typeof GRAIN_CATS !== 'undefined' && m.kind !== 'top') m.grain = GRAIN_CATS.includes(t.c); if (t.c === 'Tops' && (m.texScale || 24) < 36) m.texScale = 48; });
     renderTexPick(); return;
