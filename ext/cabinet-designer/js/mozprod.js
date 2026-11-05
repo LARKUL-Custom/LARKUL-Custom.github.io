@@ -620,7 +620,9 @@ function mozFoldModel(r, c) {
 function mozFold3d(F, r, c, opts) {
   const D = c.d, out = [], m = r.mats[F.i], M0 = mat3(m, opts), Md = M0.clone(); Md.side = THREE.DoubleSide;
   const toG = v => new THREE.Vector3(v.x / 25.4, v.z / 25.4, D - v.y / 25.4);
-  const opM = new THREE.MeshBasicMaterial({ color: 0x5b6170, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // No polygon offset: it pulled inside marks through the folded skin at a slant (rod slots showed through the shelf face).
+  // They sit half a millimetre off their face instead.
+  const opM = new THREE.MeshBasicMaterial({ color: 0x5b6170, side: THREE.DoubleSide });
   F.pieces.forEach(pc => {
     const n = pc.P.length, pos = [], uv = [], k = 24 * 25.4;
     const V = (p, z) => toG(new THREE.Vector3(p.x, p.y, z).applyMatrix4(pc.M));
@@ -644,7 +646,7 @@ function mozFold3d(F, r, c, opts) {
     let S = mk.S; if (area2(S) < 0) S = S.slice().reverse();
     // Inside operations only show on the inside face, which stops short of each mitre.
     S = clipTo(S, mk.face === 'bottom' ? pc.P : pc.top); if (S.length < 3) return;
-    const z = mk.face === 'bottom' ? -0.3 : F.T + 0.3, tri = THREE.ShapeUtils.triangulateShape(S.map(p => new THREE.Vector2(p.x, p.y)), []), pos = [];
+    const z = mk.face === 'bottom' ? -0.5 : F.T + 0.5, tri = THREE.ShapeUtils.triangulateShape(S.map(p => new THREE.Vector2(p.x, p.y)), []), pos = [];
     tri.forEach(t => t.forEach(j => { const v = toG(new THREE.Vector3(S[j].x, S[j].y, z).applyMatrix4(pc.M)); pos.push(v.x, v.y, v.z); }));
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.push(new THREE.Mesh(g, opM));
   }));

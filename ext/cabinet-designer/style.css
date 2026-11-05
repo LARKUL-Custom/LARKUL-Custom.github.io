@@ -1149,7 +1149,7 @@ html{zoom:var(--ui-zoom,1)}
 .ed-main{overflow:auto;display:flex;flex-direction:column;gap:12px;padding-right:4px;min-height:0}
 .ed-acts{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:auto;padding-left:12px;border-left:1px solid var(--line)}
 .ed-acts .btn{justify-content:flex-start;width:100%}
-.ed-acts .btn.on{border-color:var(--accent);color:var(--accent)}
+.ed-acts .btn.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .ed-gap{flex:1}
 .ed-split{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0}
 .ed-price td:first-child{width:60%}.ed-price tr.tot td{border-top:2px solid var(--line-strong)}
@@ -1680,7 +1680,7 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 
   /* Room screen grid: tree on the left, drawing, the item panel along the bottom */
   main.is-room{padding:0 0 max(56px,calc(env(safe-area-inset-bottom,0px) + 24px));background:var(--d-panel)}
-  #tab-room.room,:root[data-rail] #tab-room.room,#tab-room.room.props-shut,#tab-room.room.rail-shut{position:relative;grid-template-columns:calc(300 * var(--u)) minmax(0,1fr) auto!important;grid-template-rows:minmax(0,1fr) var(--dockh,calc(184 * var(--u)));gap:0}
+  #tab-room.room,:root[data-rail] #tab-room.room,#tab-room.room.props-shut,#tab-room.room.rail-shut{position:relative;grid-template-columns:calc(300 * var(--u)) minmax(0,1fr) auto!important;grid-template-rows:minmax(0,1fr) max(calc(160 * var(--u)),var(--dockh,calc(184 * var(--u))));gap:0}
   .room .rail{grid-column:1;grid-row:1 / span 2;padding-top:calc(48 * var(--u));background:var(--d-tree);border-right:2px solid var(--d-top-line);gap:0;min-height:0}
   .room .rail .railtab{display:none!important}
   .room.rail-shut .srcbox{display:flex!important}
@@ -2164,3 +2164,24 @@ body.desk .xbar .ib-size{grid-template-columns:repeat(2,calc(144 * var(--u)))}
 .xbar .ib-name .chip{font-size:.7em;vertical-align:middle}
 .libpeek .lp-fx svg{fill:none;stroke:var(--accent);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
 .libpeek .lp-shp svg polygon{fill:color-mix(in srgb,var(--accent) 30%,transparent);stroke:var(--accent);stroke-width:2px!important;vector-effect:non-scaling-stroke}
+
+/* Material template bar on Settings › Room settings: one pick swaps doors, cabinet and drawer materials for the job. */
+.msbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;background:var(--accent-soft);border:1.5px solid var(--accent);border-radius:10px}
+.ms-pick{display:flex;flex-direction:column;gap:4px;min-width:240px}
+.ms-pick>span{font:600 12px var(--f-label);color:var(--accent);text-transform:uppercase;letter-spacing:.05em}
+.ms-pick select{font-size:15px;font-weight:600}
+.ms-parts{display:flex;gap:16px;flex-wrap:wrap;flex:1}
+.ms-part{display:flex;align-items:center;gap:7px;font-size:13px}
+.ms-part>span{display:flex;flex-direction:column;line-height:1.2}
+.ms-l{font:600 11px var(--f-label);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.ms-acts{display:flex;gap:10px;align-items:center;margin-left:auto}
+@media (max-width: 760px){ .ms-pick{min-width:0;width:100%} .ms-acts{margin-left:0} }
+.msrow .autogrid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.msrow .autogrid .f>span{white-space:nowrap;flex:none}
+
+/* Cabinet editor: See it in 3D turns the preview into a live 3D view of the cabinet. */
+.qe-prev .preview.ed3d{padding:0;overflow:hidden;position:relative;display:block;min-height:320px}
+.qe-prev .preview.ed3d canvas{display:block;width:100%!important;height:100%!important;position:absolute;inset:0;cursor:grab}
+.qe-prev .preview.ed3d canvas:active{cursor:grabbing}
+.qe-tip .linkbtn{display:inline;font-size:inherit;margin-left:6px}
+@media (max-width: 760px){ .qe-prev .preview.ed3d{height:300px;min-height:300px} }

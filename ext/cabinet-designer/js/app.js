@@ -1094,6 +1094,9 @@ document.addEventListener('click', e => {
     }
     case 'ed-part': { if (e.target.closest('.pe-build')) break; const now = Date.now(), dbl = ui.edPartClick && ui.edPartClick.i === id && now - ui.edPartClick.t < 450; ui.edPartClick = { i: id, t: now }; ui.edPart = id; if (dbl && cab(ui.quick)) { openPartEdit(ui.quick, id); break; } renderQuick(); break; }
     case 'ed-step': edStep(+id); break;
+    // The editor's own preview turns into a 3D view of the cabinet (wide tabs have no preview, so Size opens).
+    case 'ed-3d': ui.ed3d = !ui.ed3d; if (ui.ed3d && ED_WIDE.includes(ui.edTab)) ui.edTab = 'size'; renderQuick(); break;
+    case 'ed-3d-fit': if (typeof edView3DFit === 'function') edView3DFit(); break;
     case 'ed-split': { const c = qeCab(), [i, n] = id.split(':').map(Number); if (c) mutate(() => edSplitRows(c, i, n)); break; }
     case 'ed-hsplit': { const c = qeCab(); if (c && c.rows[+id]) mutate(() => edSplitRows(c, +id, 2)); break; }
     case 'ed-join': {
@@ -1204,6 +1207,9 @@ document.addEventListener('click', e => {
     case 'tex-sub': ui.texPick.sub = id; renderTexPick(); break;
     case 'tex-pick': pickTexture(+id); break;
     case 'mtc-add': mutate(() => S.matTemplates.cabinet.push({ ...clone(S.matTemplates.cabinet[0]), id: uid('mt'), name: 'New cabinet materials' })); break;
+    case 'mat-set-save': saveMatSet(); break;
+    case 'mset-add': { const d = S.job.defaults; mutate(() => matSets().push({ id: uid('ms'), name: 'New material template', doorT: d.doorT, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT })); break; }
+    case 'mset-del': mutate(() => { S.matTemplates.job = matSets().filter(t => t.id !== id); }); break;
     case 'mtd-add': mutate(() => S.matTemplates.drawer.push({ ...clone(S.matTemplates.drawer[0]), id: uid('dt'), name: 'New drawer materials' })); break;
     case 'mtc-del': mutate(() => { S.matTemplates.cabinet = S.matTemplates.cabinet.filter(t => t.id !== id); unsetPick('cabMatT', id, S.matTemplates.cabinet[0].id); }); break;
     case 'mtd-del': mutate(() => { S.matTemplates.drawer = S.matTemplates.drawer.filter(t => t.id !== id); unsetPick('drawerMatT', id, S.matTemplates.drawer[0].id); }); break;

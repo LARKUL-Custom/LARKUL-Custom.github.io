@@ -103,6 +103,29 @@ function settingPreview(k, id) {
   if (k === 'panelDoor') return id ? swatch(mat(doorStyle(id).mat), 16) : '';
   return '';
 }
+/* ---------- Material template: door, cabinet and drawer materials for the whole job in one pick ---------- */
+const matSetNow = () => matSets().find(t => MAT_SET_KEYS.every(k => t[k] === S.job.defaults[k]));
+// Picking a template sets the job and clears room and cabinet picks of those three, so every cabinet changes. Undo puts them back.
+function applyMatSet(id) {
+  const t = matSets().find(x => x.id === id); if (!t) return;
+  let own = 0;
+  mutate(() => MAT_SET_KEYS.forEach(k => {
+    S.job.defaults[k] = t[k];
+    S.rooms.forEach(r => { if (r.settings && r.settings[k]) { delete r.settings[k]; own++; } r.cabinets.forEach(c => { if (c[k]) { c[k] = ''; own++; } }); });
+  }));
+  flash(`Every cabinet now uses ${t.name}${own ? `. ${own} room or cabinet pick${own === 1 ? ' was' : 's were'} reset; Undo puts ${own === 1 ? 'it' : 'them'} back` : ''}.`);
+}
+function saveMatSet() {
+  const d = S.job.defaults, t = { id: uid('ms'), name: `${doorTpl(d.doorT).name}, ${cabMatT(d.cabMatT).name}`, doorT: d.doorT, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT };
+  mutate(() => matSets().push(t)); flash(`Saved as “${t.name}”. Rename it under Libraries › Materials.`);
+}
+function matSetBar() {
+  const now = matSetNow(), d = S.job.defaults, dt = doorTpl(d.doorT), cm = cabMatT(d.cabMatT), dm = drawerMatT(d.drawerMatT);
+  const part = (label, sw, name) => `<span class="ms-part">${sw}<span><span class="ms-l">${label}</span>${esc(name)}</span></span>`;
+  return `<div class="msbar"><label class="ms-pick"><span>Material template · whole job</span><select data-act-change="mat-set" aria-label="Material template for the whole job">${now ? '' : '<option value="" selected>Own picks (no template)</option>'}${matSets().map(t => `<option value="${t.id}"${now && now.id === t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+    <div class="ms-parts">${part('Doors', swatch(mat(doorStyle(dt.door).mat), 18), dt.name)}${part('Cabinet', swatch(mat(cm.carcass), 18), cm.name)}${part('Drawers', swatch(mat(dm.sides), 18), dm.name)}</div>
+    <div class="ms-acts">${now ? '' : '<button class="btn sm" data-act="mat-set-save">Save as template</button>'}<button class="linkbtn" data-act="tab" data-id="materials">Edit templates</button></div></div>`;
+}
 /* ---------- Templates and hardware: picture tiles by category, like Mozaik ---------- */
 const TPL_CATS = [
   ['fronts', 'Doors and fronts', ['doorT', 'dt.door', 'dt.wallDoor', 'dt.drawerTop', 'dt.drawer', 'dt.drawerBot', 'dt.falseFront', 'pull', 'hinge']],
@@ -208,6 +231,7 @@ function renderTplTab() {
       <div class="tplbar"><div class="seg" role="group" aria-label="Settings for">${[['', 'Whole job'], ...S.rooms.map(r => [r.id, r.name])].map(([id, l]) => `<button data-act="tpl-scope" data-id="${id}" aria-pressed="${(scope ? scope.id : '') === id}">${esc(l)}</button>`).join('')}</div>
         <div class="tplbar-r">${scope ? `<button class="btn sm${ui.roomNotes ? ' primary' : ''}" data-act="room-notes">${icon('list')}Room notes</button>` : ''}<button class="btn sm" data-act="set-tab" data-id="rooms">${icon('home')}Job dashboard</button></div></div>
       ${scope && ui.roomNotes ? `<label class="f wide roomnotes"><span>Notes for ${esc(scope.name)}</span><textarea data-obj="room:${scope.id}" data-field="notes" data-type="text" rows="3" aria-label="Room notes">${esc(scope.notes || '')}</textarea></label>` : ''}
+      ${matSetBar()}
       <div class="subtabs tplcats" role="tablist">${TPL_CATS.map(([id, l]) => `<button role="tab" data-act="tpl-cat" data-id="${id}" aria-selected="${cat[0] === id}">${l}</button>`).join('')}</div>
       <div class="tplgrid">${cat[2].map(tile).join('')}</div>${cat[0] === 'fronts' ? `<div class="note tplnote">Base door, wall door and drawer front tiles change the door template itself, so every room using it changes too.</div>` : ''}
       <div class="tplfoot">${scope ? `${own ? `${own} pick${own === 1 ? '' : 's'} in ${esc(scope.name)} differ from the job. <button class="linkbtn" data-act="set-room-job" data-id="${scope.id}">Use the job picks</button>` : `${esc(scope.name)} uses the job picks. Change a tile to give this room its own.`}${cabOwn ? ` · ${cabOwn} pick${cabOwn === 1 ? '' : 's'} on single cabinets. <button class="linkbtn" data-act="set-room-follow" data-id="${scope.id}">Make cabinets follow the room</button>` : ''}`
@@ -268,6 +292,7 @@ function renderSettings() {
   if (st === 'templates' && ui.tpl3d !== false) requestAnimationFrame(() => mountTpl3D(keep3d));
 }
 document.addEventListener('change', e => {
+  const ms = e.target.closest('[data-act-change="mat-set"]'); if (ms) { applyMatSet(ms.value); return; }
   const el = e.target.closest('[data-act-change="tpl-prev"]'); if (!el) return;
   ui.tplPrev = el.value; renderSettings();
 });

@@ -164,13 +164,14 @@ function renderEditor(el, c) {
     ${edHead(c, buildParts(c))}
     <div class="ed-tabs" role="tablist" aria-label="Cabinet editor">${ED_TABS.map(([k, l, ic]) => `<button role="tab" data-act="ed-tab" data-id="${k}" aria-selected="${ui.edTab === k}">${icon(ic)}${l}</button>`).join('')}</div>
     <div class="ed-body${ED_WIDE.includes(ui.edTab) ? ' wide' : ''}">
-      ${ED_WIDE.includes(ui.edTab) ? '' : `<div class="qe-prev${ui.edTab === 'face' ? ' tools' : ''}">${ui.edTab === 'face' ? edTools(c, qr) : ''}<div class="preview pad">${qeFaceSVG(c, qr, 620, ui.edTab === 'interior')}</div><div class="note qe-tip">${ui.edTab === 'interior' ? 'Inside view, with the doors and drawer fronts off. ' : ''}${isPhone() ? 'Tap' : 'Click'} an opening to edit it.</div></div>`}
+      ${ED_WIDE.includes(ui.edTab) ? '' : `<div class="qe-prev${ui.edTab === 'face' ? ' tools' : ''}">${ui.edTab === 'face' ? edTools(c, qr) : ''}${ui.ed3d ? `<div class="preview ed3d" id="ed3d" data-morph-keep></div><div class="note qe-tip">Drag to turn it, right-drag to slide, scroll to zoom. <button class="linkbtn" data-act="ed-3d-fit">Reset view</button></div>` : `<div class="preview pad">${qeFaceSVG(c, qr, 620, ui.edTab === 'interior')}</div><div class="note qe-tip">${ui.edTab === 'interior' ? 'Inside view, with the doors and drawer fronts off. ' : ''}${isPhone() ? 'Tap' : 'Click'} an opening to edit it.</div>`}</div>`}
       <div class="ed-main">${edTab(c, ui.edTab, qr)}</div>
       <div class="ed-acts">${act('qe-close', 'check', 'Done', ' primary')}<div class="ed-undo"><button class="btn" data-act="ed-undo" title="Undo (Ctrl Z)">↶ Undo</button><button class="btn" data-act="ed-redo" title="Redo (Ctrl Y)">↷ Redo</button></div>
         ${openable(c) ? act('open-toggle', 'open', ui.open[id] ? 'Close fronts' : 'Open fronts', ui.open[id] ? ' on' : '') : ''}
-        ${act('cab-dup', 'copy', 'Duplicate')}${act('cab-flip', 'flip', 'Flip')}${act('show-parts', 'list', 'View cut list')}${act('q-tolib', 'stack', 'Save to library')}${act('cab-to-designer', 'cube', 'Open in Designer')}${act('cab-zoom3d', 'cube', 'See it in 3D')}
+        ${act('cab-dup', 'copy', 'Duplicate')}${act('cab-flip', 'flip', 'Flip')}${act('show-parts', 'list', 'View cut list')}${act('q-tolib', 'stack', 'Save to library')}${act('cab-to-designer', 'cube', 'Open in Designer')}${act('ed-3d', 'cube', ui.ed3d ? 'Back to drawing' : 'See it in 3D', ui.ed3d ? ' on' : '')}
         <span class="ed-gap"></span>${act('cab-del', 'trash', 'Delete', ' danger')}</div>
     </div>
     <div class="qe-foot"><span class="note">Changes save as you go. Undo with Ctrl Z. Esc closes.</span></div></div>`);
   const m = el.querySelector('.ed-main'); if (m) m.scrollTop = top;
+  if (ui.ed3d && typeof edView3D === 'function') edView3D(c);
 }

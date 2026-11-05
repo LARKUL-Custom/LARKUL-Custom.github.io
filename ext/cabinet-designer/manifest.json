@@ -3,7 +3,7 @@
   "name": "Cabinet Designer",
   "icon": "🗄️",
   "description": "Draw rooms and walls, drag in cabinets and see them in plan, elevation and 3D. Job and room settings, libraries for materials, doors and hardware. Exports parts and drilling for the CNC.",
-  "version": "0.48.1",
+  "version": "0.48.2",
   "ui": "index.html",
   "order": 25,
   "update": {

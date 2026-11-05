@@ -159,7 +159,10 @@ setDesignScale();
 
 // Panel under the drawing: drag its top edge to make it taller or shorter (remembered), and its
 // contents shrink or grow to fit it, so it never needs scroll bars. Double-click the edge to reset.
-const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh';
+const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh2';
+// The panel never gets shorter than this, so its contents can't shrink past easy reading
+// (heights saved back when the panel scrolled instead of scaling are dropped: new key .dockh2).
+function dockMinH() { return Math.round(160 * (parseFloat(document.documentElement.style.getPropertyValue('--u')) || 1)); }
 function applyDockH() {
   let h = 0; try { h = +localStorage.getItem(DOCK_KEY()) || 0; } catch (_) {}
   const room = document.getElementById('tab-room'); if (!room) return;
@@ -190,7 +193,7 @@ function fitDock(el = document.getElementById('dock')) {
       // Lists and cards lay out at the panel's width; the item bar keeps its own width and wraps on purpose.
       if (!isBar) fit.style.width = aw + 'px';
       let w = fit.scrollWidth, h = fit.scrollHeight;
-      if (aw > 0 && ah > 0 && w > 0 && h > 0) {
+      if (aw > 40 && ah > 30 && w > 0 && h > 0) {
         const MAX = isBar ? 1.6 : 1;
         let z = Math.min(MAX, aw / w, ah / h);
         // Smaller text fits more on a line, which makes the list shorter: settle the width a few times.
@@ -211,7 +214,7 @@ function fitDock(el = document.getElementById('dock')) {
   const head = el.querySelector('.dockhead'), tabs = head && head.querySelector('.docktabs');
   if (head && tabs) {
     if (!real) { const lt = document.querySelector('#dock .dockhead .docktabs'); tabs.style.zoom = lt ? lt.style.zoom : ''; }
-    else { tabs.style.zoom = 1; const sh = tabs.scrollHeight, z = sh > 0 ? Math.min(1, (head.clientHeight - 8) / sh) : 1; tabs.style.zoom = Math.max(0.4, z).toFixed(3); }
+    else if (head.clientHeight > 30) { tabs.style.zoom = 1; const sh = tabs.scrollHeight, z = sh > 0 ? Math.min(1, (head.clientHeight - 8) / sh) : 1; tabs.style.zoom = Math.max(0.4, z).toFixed(3); }
   }
 }
 // tmp is the panel's new content built off screen; it gets the same wrapping and zoom as the real one.
@@ -219,7 +222,7 @@ function dockExtras(tmp, el = tmp) {
   applyDockH();
   if (!tmp.querySelector('.dockgrip')) tmp.insertAdjacentHTML('afterbegin', '<div class="dockgrip" title="Drag to resize this panel. Double-click to reset." aria-hidden="true"></div>');
   if (tmp !== el) fitDock(tmp);
-  requestAnimationFrame(() => fitDock());
+  requestAnimationFrame(() => { watchDock(); fitDock(); });
 }
 document.addEventListener('pointerdown', e => {
   const g = e.target.closest && e.target.closest('.dockgrip'); if (!g || !deskUI()) return;
@@ -227,7 +230,7 @@ document.addEventListener('pointerdown', e => {
   const room = document.getElementById('tab-room'), dock = document.getElementById('dock'), y0 = e.clientY, h0 = dock.getBoundingClientRect().height;
   const max = room.getBoundingClientRect().height * 0.7;
   document.body.classList.add('dockdrag');
-  const move = ev => { const h = Math.round(Math.max(70, Math.min(max, h0 + (y0 - ev.clientY)))); room.style.setProperty('--dockh', h + 'px'); fitDock(); };
+  const move = ev => { const h = Math.round(Math.max(dockMinH(), Math.min(max, h0 + (y0 - ev.clientY)))); room.style.setProperty('--dockh', h + 'px'); fitDock(); };
   const up = () => {
     removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); unhook(); document.body.classList.remove('dockdrag');
     try { localStorage.setItem(DOCK_KEY(), String(Math.round(dock.getBoundingClientRect().height))); } catch (_) {}
@@ -240,6 +243,21 @@ document.addEventListener('dblclick', e => {
   if (!(e.target.closest && e.target.closest('.dockgrip'))) return;
   try { localStorage.removeItem(DOCK_KEY()); } catch (_) {} applyDockH(); fitDock(); dockRefit();
 });
+// Whenever the panel itself changes size (the window, the top bar, fonts or pictures finishing loading,
+// the hub resizing its frame), fit its contents again so they never stay shrunk from an early measurement.
+let dockRO = null, dockROel = null, dockROsz = '';
+function watchDock() {
+  const d = document.getElementById('dock'); if (!d || typeof ResizeObserver !== 'function' || d === dockROel) return;
+  if (dockRO) dockRO.disconnect();
+  dockROel = d; dockROsz = '';
+  dockRO = new ResizeObserver(() => {
+    const r = d.getBoundingClientRect(), sz = Math.round(r.width) + 'x' + Math.round(r.height);
+    if (sz === dockROsz) return; dockROsz = sz; requestAnimationFrame(() => fitDock());
+  });
+  dockRO.observe(d);
+}
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(() => fitDock()));
+addEventListener('load', () => requestAnimationFrame(() => fitDock()));
 // After the panel changes height the drawing gets a new size, so fit the room in it again.
 function dockRefit() { requestAnimationFrame(() => { fitDock(); if (ui.viewMode === 'plan' && typeof fitView === 'function') fitView(); if (typeof redrawView === 'function') redrawView(); }); }
 // A saved panel height never takes more than 70% of the room, even after the window gets smaller.

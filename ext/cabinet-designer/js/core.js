@@ -476,7 +476,7 @@ function migrate(s) {
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
   if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
   if (typeof ensureMozLib === 'function') ensureMozLib(s);
-  return attachRoom(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))));
+  return attachRoom(ensureMatSets(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s))))));
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
 // The open job lives in its own file (see jobs.js); browser storage keeps a working copy too.
@@ -530,6 +530,26 @@ const doorStyle = id => ({ ...DOOR_DEFAULTS, ...(S.doorStyles.find(d => d.id ===
 const doorTpl = id => S.doorTemplates.find(d => d.id === id) || S.doorTemplates[0];
 const cabMatT = id => S.matTemplates.cabinet.find(t => t.id === id) || S.matTemplates.cabinet[0];
 const drawerMatT = id => S.matTemplates.drawer.find(t => t.id === id) || S.matTemplates.drawer[0];
+// Material templates (0.48.2): one pick for the job that sets its door template, cabinet materials and drawer materials together, like Mozaik's.
+const MAT_SET_KEYS = ['doorT', 'cabMatT', 'drawerMatT'];
+function ensureMatSets(s) {
+  const mt = s.matTemplates; if (!mt || Array.isArray(mt.job)) return s;
+  const has = (list, id) => (list || []).some(x => x.id === id), ok = t => has(s.doorTemplates, t.doorT) && has(mt.cabinet, t.cabMatT) && has(mt.drawer, t.drawerMatT);
+  const list = [
+    { id: 'ms-paint', name: 'Paint grade shaker, maple box', doorT: 'door-shaker', cabMatT: 'mt-maple', drawerMatT: 'dt-bb58' },
+    { id: 'ms-sage', name: 'Sage shaker, maple box', doorT: 'door-sage', cabMatT: 'mt-maple', drawerMatT: 'dt-bb58' },
+    { id: 'ms-oak', name: 'Rift oak slab, white oak box', doorT: 'door-oak', cabMatT: 'mt-oak', drawerMatT: 'dt-bb12' },
+  ].filter(ok);
+  // The job's own picks become a template too, so nothing is lost when another one is picked.
+  const d = (s.job && s.job.defaults) || {}, cur = { doorT: d.doorT, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT };
+  if (ok(cur) && !list.some(t => MAT_SET_KEYS.every(k => t[k] === cur[k]))) {
+    const nm = (l, id) => (l.find(x => x.id === id) || {}).name || '';
+    list.unshift({ id: 'ms-job', name: `${nm(s.doorTemplates, cur.doorT)}, ${nm(mt.cabinet, cur.cabMatT)}`, ...cur });
+  }
+  mt.job = list;
+  return s;
+}
+const matSets = () => { if (!Array.isArray(S.matTemplates.job)) ensureMatSets(S); return S.matTemplates.job; };
 const panelStyle = id => S.panels.find(p => p.id === id) || S.panels[0];
 const hw = id => S.hardware.find(h => h.id === id);
 const hwOf = kind => S.hardware.filter(h => h.kind === kind);

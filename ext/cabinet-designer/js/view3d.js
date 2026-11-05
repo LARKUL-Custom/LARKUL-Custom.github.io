@@ -363,7 +363,7 @@ class Viewer3D {
     // Phones: when every finger is off the screen, the controls forget any finger whose lift was lost.
     if (typeof onAllFingersUp === 'function') onAllFingersUp(() => { if (this.controls.resetPointers) this.controls.resetPointers(); });
     this.persp.position.set(-150, 160, 250); this.controls.target.set(70, 30, 40); this.controls.update();
-    new ResizeObserver(() => this.resize()).observe(host);
+    this.ro = new ResizeObserver(() => this.resize()); this.ro.observe(host);
     const el = this.renderer.domElement; let down = null;
     el.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
     el.addEventListener('pointerup', e => {
@@ -376,6 +376,11 @@ class Viewer3D {
     }, true);
     el.addEventListener('dblclick', e => { const id = this.pick(e.clientX, e.clientY); if (id && this.onDouble) this.onDouble(id); else if (id && this.onPick) { this.onPick(id); view3dPreset(this, 'sel'); } });
     this.resize();
+  }
+  // Moves the drawing into another box (the cabinet editor draws its box again when it reopens).
+  moveTo(host) {
+    if (!this.ok || this.host === host) return;
+    this.ro.disconnect(); this.host = host; host.appendChild(this.renderer.domElement); this.ro.observe(host); this.resize();
   }
   setBackground(css) { if (this.ok) { this.scene.background = new THREE.Color(css); this.requestRender(); } }
   resize() {
@@ -661,6 +666,31 @@ function view3dPreset(v, k) {
     const g = wg(w), s = elevSide(w); v.look({ x: g.n.x * s, y: 0.12, z: g.n.y * s });
   }
 }
+
+// The cabinet editor's preview as a live 3D view of the one cabinet, to turn around (See it in 3D).
+let edViewer = null, edViewKey = '', edViewId = '';
+function edView3D(c) {
+  const host = document.getElementById('ed3d'); if (!host || !c || !has3D()) return;
+  if (!edViewer) { edViewer = new Viewer3D(host); if (!edViewer.ok) return; viewers.push(edViewer); }
+  if (!edViewer.ok) return;
+  edViewer.moveTo(host);
+  const real = !!ui.render3d, key = JSON.stringify(c) + '|' + real + '|' + document.documentElement.dataset.theme;
+  if (key === edViewKey && host.contains(edViewer.renderer.domElement)) return edViewer.requestRender();
+  edViewKey = key;
+  // Drawn in the same look as the room (plain or realistic).
+  R3 = real;
+  try {
+    edViewer.setReal(R3); edViewer.setBackground(R3 ? '#e4e1db' : cssVar('--sunk'));
+    edViewer.clear();
+    const m = cabinetMeshes(c); m.position.x = -c.w / 2; edViewer.root.add(m);
+    if (R3) edViewer.fitShadow();
+  } finally { R3 = false; }
+  // A new cabinet (or a new size) is framed from the front left; other edits keep where you turned it.
+  const fit = [c.id, c.w, c.h, c.d].join('|');
+  if (edViewId !== fit) { edViewId = fit; edViewer.resize(); edViewer.look({ x: -0.8, y: 0.5, z: 1.4 }); }
+  edViewer.requestRender();
+}
+function edView3DFit() { if (edViewer && edViewer.ok) edViewer.look({ x: -0.8, y: 0.5, z: 1.4 }); }
 
 // Library picture: the product drawn in 3D once, off screen, and kept as an image (like Mozaik's preview
 // above its product tree). One small hidden viewer does every picture; textures that load late redraw it once.

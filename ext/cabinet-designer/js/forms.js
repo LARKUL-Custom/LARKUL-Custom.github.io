@@ -58,6 +58,7 @@ function resolve(ref) {
     case 'dtpl': return S.doorTemplates.find(d => d.id === id);
     case 'mtc': return S.matTemplates.cabinet.find(d => d.id === id);
     case 'mtd': return S.matTemplates.drawer.find(d => d.id === id);
+    case 'mset': return matSets().find(d => d.id === id);
     case 'panel': return S.panels.find(p => p.id === id);
     case 'ff': return (S.faceFrames || []).find(f => f.id === id);
     case 'ilib': return (S.interiorLib || []).find(x => x.id === id);

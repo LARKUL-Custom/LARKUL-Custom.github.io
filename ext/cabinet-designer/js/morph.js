@@ -18,6 +18,8 @@ function morphAttrs(a, b) {
 function morphNode(a, b) {
   if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
   morphAttrs(a, b);
+  // A live drawing (like the editor's 3D view) owns its insides: only its attributes change.
+  if (a.hasAttribute('data-morph-keep')) return;
   const tag = a.localName, focused = a === document.activeElement;
   if (tag === 'textarea') { if (!focused && a.value !== b.value) a.value = b.value; return; }
   morphKids(a, b);
