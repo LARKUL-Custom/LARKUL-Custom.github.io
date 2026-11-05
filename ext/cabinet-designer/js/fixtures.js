@@ -367,7 +367,9 @@ function fixtButton(d) {
 }
 // Entries for the Products tree, in their own group at the bottom, foldered like Mozaik's library.
 const FIXT_GROUP = ['fixt', 'Appliances and Fixtures'];
-const fixtTreeItems = () => FIXT_LIB.map(d => ({ key: 'fixt:' + d.id, g: 'fixt', f: d.folder, name: d.name, html: fixtButton(d) }));
+// Once an appliance library (like Mozaik's Appliances and Graphics) is imported, its real models take the place of
+// these drawn ones in the tree. Ones already placed keep working.
+const fixtTreeItems = () => (typeof MODEL_LIB !== 'undefined' && MODEL_LIB.some(x => x.kind !== 'model') ? [] : FIXT_LIB).map(d => ({ key: 'fixt:' + d.id, g: 'fixt', f: d.folder, name: d.name, html: fixtButton(d) }));
 function fixtProps(f) {
   const id = f.id, R = 'fixt:' + id, d = fixtDef(f), pre = fixtPreset(f.lib) || {}, w = wall(f.wall), L = w ? wg(w).L : 0;
   const from = fixtHole(f) ? 'From the wall start' : 'Along the wall';

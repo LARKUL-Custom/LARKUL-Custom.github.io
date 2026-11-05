@@ -63,39 +63,47 @@ document.addEventListener('change', e => {
 });
 
 /* ----- L5: multi-print presets: one print of the pages you pick ----- */
-const MP_ITEMS = [['cover', 'Cover page'], ['cutlist', 'Cut list'], ['hardware', 'Hardware list'], ['cabinets', 'Cabinet sheets (one per cabinet)'], ['ops', 'Machining per part'], ['recuts', 'Recut list']];
-let PRINT_PRESETS = [{ id: 'pp-shop', name: 'Shop packet', title: '{JOB}', items: ['cover', 'cutlist', 'hardware', 'cabinets'] }, { id: 'pp-cut', name: 'Cut list only', title: '{JOB} cut list', items: ['cutlist'] }];
-shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) PRINT_PRESETS = v; });
+const MP_ITEMS = [['cover', 'Cover page'], ['plan', 'Floor plan (one per room)'], ['elev', 'Wall elevations with cabinet numbers'], ['3d', '3D views (saved views, or one per room)'], ['cutlist', 'Cut list'], ['hardware', 'Hardware list'], ['cabinets', 'Cabinet sheets (one per cabinet)'], ['ops', 'Machining per part'], ['recuts', 'Recut list']];
+const PP_BUILD = { id: 'pp-build', name: 'Builder drawings', title: '{JOB}', items: ['cover', 'plan', 'elev', '3d'] };
+let PRINT_PRESETS = [PP_BUILD, { id: 'pp-shop', name: 'Shop packet', title: '{JOB}', items: ['cover', 'cutlist', 'hardware', 'cabinets'] }, { id: 'pp-cut', name: 'Cut list only', title: '{JOB} cut list', items: ['cutlist'] }];
+// Saved preset lists from before drawings could print get the builder preset added at the top.
+shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) PRINT_PRESETS = v.some(p => p.id === PP_BUILD.id) ? v : [{ ...PP_BUILD }, ...v]; });
 function mpPreset() { return PRINT_PRESETS.find(p => p.id === ui.mpPreset) || PRINT_PRESETS[0]; }
 function mpPages(pr) {
   const sc = cutScope(), title = fillVars(pr.title || '{JOB}', {}), out = [];
+  // Drawing pages carry a title strip like a drawing sheet: job and room on the left, customer, date and page on the right.
+  const head = (room, what) => `<header class="mp-hd"><div><b>${esc(title)}</b> · ${esc(room)} · <b>${esc(what)}</b></div><div>${esc(S.job.customer || '')}${S.job.customer ? ' · ' : ''}${new Date().toLocaleDateString()} · %%PG%%</div></header>`;
   const tbl = (head, rows) => `<table class="t mp-t"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${head.length}">None</td></tr>`}</tbody></table>`;
   if (pr.items.includes('cover')) out.push(`<section class="mp-page"><h1>${esc(title)}</h1><p><b>Customer</b> ${esc(S.job.customer || '')}</p>${(S.job.fields || []).map(f => `<p><b>${esc(f.k)}</b> ${esc(f.v ?? '')}</p>`).join('')}
     <p><b>Rooms</b> ${sc.rooms.map(r => esc(r.name)).join(', ')}</p><p><b>Cabinets</b> ${sc.cabs.length} · <b>Parts</b> ${sc.parts.reduce((a, p) => a + p.qty, 0)}</p>${S.job.notes ? `<p><b>Notes</b> ${esc(S.job.notes)}</p>` : ''}<p class="muted">Printed ${new Date().toLocaleString()}</p></section>`);
+  if (typeof printDrawings === 'function') out.push(...printDrawings(pr, sc.rooms, head));
   if (pr.items.includes('cutlist')) out.push(`<section class="mp-page"><h2>Cut list · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Length', 'Width', 'Thick', 'Material', 'Edges'], sc.parts.map(p => `<tr><td>${esc(p.room)}</td><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)}</td><td>${fmtLen(p.W)}</td><td>${fmtLen(p.T)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td><td>${esc(p.edges || '')}</td></tr>`))}</section>`);
   if (pr.items.includes('hardware')) { const bom = {}; sc.cabs.forEach(({ c, room }) => withRoom(room, () => Object.entries(buildParts(c).bom || {}).forEach(([k, q]) => bom[k] = (bom[k] || 0) + q))); out.push(`<section class="mp-page"><h2>Hardware · ${esc(title)}</h2>${tbl(['Item', 'Qty'], Object.entries(bom).sort().map(([k, q]) => `<tr><td>${esc(k)}</td><td>${q}</td></tr>`))}</section>`); }
   if (pr.items.includes('cabinets')) sc.cabs.forEach(({ c, room }) => withRoom(room, () => { const ps = buildParts(c).parts.filter(p => p.cabId === c.id); out.push(`<section class="mp-page">${typeof qrSVG === 'function' ? `<div class="mp-qr">${qrSVG([S.job.name, room.name, LBL[c.id] || '', c.name].join(' | '), '0.9in')}</div>` : ''}<h2>${esc(LBL[c.id] || '')} · ${esc(c.name)} <span class="muted">${esc(room.name)}</span></h2><p>${fmtLen(c.w)} W × ${fmtLen(c.h)} H × ${fmtLen(c.d)} D</p>${c.notes ? `<p><b>Notes</b> ${esc(c.notes)}</p>` : ''}${tbl(['✓', 'Part', 'Qty', 'Size', 'Material'], ps.map(p => `<tr><td class="mp-box"></td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)} × ${fmtLen(p.W)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td></tr>`))}</section>`); }));
   if (pr.items.includes('ops')) out.push(`<section class="mp-page"><h2>Machining · ${esc(title)}</h2>${tbl(['Cab', 'Part', 'Operations'], sc.parts.filter(p => p.ops.length).map(p => `<tr><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.ops.map(o => esc(opText(o))).join('<br>')}</td></tr>`))}</section>`);
   if (pr.items.includes('recuts')) out.push(`<section class="mp-page"><h2>Recuts · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Why'], (S.job.recuts || []).map(r => `<tr><td>${esc(r.room)}</td><td>${esc(r.cab)}</td><td>${esc(r.name)}</td><td>${r.qty}</td><td>${esc(r.why || '')}</td></tr>`))}</section>`);
-  return out.join('');
+  return out.map((pg, i) => pg.replace('%%PG%%', `Page ${i + 1} of ${out.length}`)).join('');
 }
 function showMultiPrint() {
-  let el = $('#multiprint'); if (!el) { el = document.createElement('div'); el.id = 'multiprint'; el.className = 'labelsheet mpsheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Multi print'); document.body.appendChild(el); }
+  let el = $('#multiprint'); if (!el) { el = document.createElement('div'); el.id = 'multiprint'; el.className = 'labelsheet mpsheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Print'); document.body.appendChild(el); }
   const pr = mpPreset();
   el.innerHTML = `<div class="lbbar"><label class="f"><span>Preset</span><select class="mp-pick" aria-label="Print preset">${PRINT_PRESETS.map(p => `<option value="${p.id}"${p.id === pr.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
-    <label class="f"><span>Preset name</span><input type="text" class="mp-name" value="${esc(pr.name)}" aria-label="Preset name"></label><label class="f"><span>Title</span><input type="text" class="mp-title" value="${esc(pr.title || '')}" aria-label="Title (variables allowed)" placeholder="{JOB}"></label>
-    <div class="mp-items">${MP_ITEMS.map(([k, l]) => `<label class="checkrow"><input type="checkbox" class="mp-item" value="${k}"${pr.items.includes(k) ? ' checked' : ''}> ${l}</label>`).join('')}</div>
+    <label class="f"><span>Preset name</span><input type="text" class="mp-name" value="${esc(pr.name)}" aria-label="Preset name"></label>${S.rooms.length > 1 ? `<label class="f"><span>Rooms</span><select class="mp-room" aria-label="Rooms to print"><option value="all">Whole job (${S.rooms.length} rooms)</option>${S.rooms.map(r => `<option value="${r.id}"${ui.cutRoom === r.id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : ''}
+    <label class="f"><span>Title</span><input type="text" class="mp-title" value="${esc(pr.title || '')}" aria-label="Title (variables allowed)" placeholder="{JOB}"></label>
+    <div class="mp-items">${MP_ITEMS.map(([k, l]) => `<label class="checkrow"><input type="checkbox" class="mp-item" value="${k}"${pr.items.includes(k) ? ' checked' : ''}> ${l}</label>`).join('')}<label class="checkrow mp-colorrow"><input type="checkbox" class="mp-color"${pr.color ? ' checked' : ''}> Drawings in color</label></div>
     <div class="row-actions"><button class="btn sm" data-act="mp-new">${icon('plus')}New preset</button>${PRINT_PRESETS.length > 1 ? `<button class="btn sm" data-act="mp-del">${icon('trash')}Delete preset</button>` : ''}<button class="btn primary" data-act="mp-print">${icon('print')}Print</button><button class="btn" data-act="mp-close">Close</button></div></div>
-    <div class="mp-pages">${mpPages(pr)}</div>`;
+    <div class="mp-pages${pr.color ? '' : ' mp-line'}">${mpPages(pr)}</div>`;
   el.hidden = false;
 }
 function mpSave() { shopSave('printPresets', PRINT_PRESETS, 'print presets'); }
 document.addEventListener('change', e => {
   const t = e.target; if (!t.closest || !t.closest('#multiprint')) return;
   const pr = mpPreset();
+  if (t.classList.contains('mp-room')) { ui.cutRoom = t.value; showMultiPrint(); return; }
   if (t.classList.contains('mp-pick')) ui.mpPreset = t.value;
   else if (t.classList.contains('mp-name')) pr.name = t.value || pr.name;
   else if (t.classList.contains('mp-title')) pr.title = t.value;
+  else if (t.classList.contains('mp-color')) pr.color = t.checked;
   else if (t.classList.contains('mp-item')) pr.items = [...document.querySelectorAll('#multiprint .mp-item:checked')].map(x => x.value);
   else return;
   mpSave(); showMultiPrint();
@@ -199,7 +207,7 @@ document.addEventListener('change', e => {
 /* ----- Actions ----- */
 function libs2Act(a, id) {
   switch (a) {
-    case 'mp-open': showMultiPrint(); return true;
+    case 'mp-open': if (typeof printPicsClear === 'function') printPicsClear(); showMultiPrint(); return true;
     case 'mp-close': { const el = $('#multiprint'); if (el) el.hidden = true; document.body.classList.remove('printing-multi'); return true; }
     case 'mp-print': document.body.classList.add('printing-multi'); setTimeout(() => { window.print(); document.body.classList.remove('printing-multi'); }, 50); return true;
     case 'mp-new': { const p = { id: uid('pp'), name: 'New preset', title: '{JOB}', items: ['cutlist'] }; PRINT_PRESETS.push(p); ui.mpPreset = p.id; mpSave(); showMultiPrint(); return true; }

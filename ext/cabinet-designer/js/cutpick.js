@@ -1,5 +1,5 @@
 /* What to cut: check the cabinets (and each cabinet's box, fillers and end panels) and shapes to cut.
-   The pick drives the Cutlist tab: the parts table, labels, Multi print and the CNC parts file.
+   The pick drives the Cutlist tab: the parts table, labels, Print and the CNC parts file.
    ui.cutPick is null for everything, else { key: true }. Keys: a cabinet id (its box, inside and fronts' parts),
    id + '|fill' (its fillers), id + '|panel' (its applied end panels), or a shape id. */
 const cutPartKey = p => p.kind === 'filler' ? p.cabId + '|fill' : p.kind === 'applied' ? p.cabId + '|panel' : p.cabId;

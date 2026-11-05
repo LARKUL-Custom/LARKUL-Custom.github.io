@@ -268,7 +268,13 @@ async function importModels(fileList) {
   });
   items.forEach(it => { const b = boxes[it.model]; if (b) it.md = r3(b[4] - b[1]); });
   const kept = items.filter(it => boxes[it.model]), ids = new Set(kept.map(x => x.id));
-  MODEL_LIB = MODEL_LIB.filter(x => !ids.has(x.id)).concat(kept).sort((a, b) => a.folder.localeCompare(b.folder) || a.name.localeCompare(b.name));
+  // Importing a library again replaces it whole: its old items and their stored models go, so nothing from an
+  // earlier export lingers.
+  const libsNew = new Set(kept.map(x => x.lib));
+  const keepKeys = new Set(kept.map(x => x.model).concat(MODEL_LIB.filter(x => !libsNew.has(x.lib)).map(x => x.model)));
+  const dropKeys = [...new Set(MODEL_LIB.filter(x => libsNew.has(x.lib)).map(x => x.model))].filter(k => !keepKeys.has(k));
+  if (dropKeys.length) { try { await mdb('geo', 'readwrite', s => { dropKeys.forEach(k => s.delete(k)); }); } catch (_) {} dropKeys.forEach(k => { delete modelGeo[k]; delete modelTpl[k]; }); }
+  MODEL_LIB = MODEL_LIB.filter(x => !libsNew.has(x.lib)).concat(kept).sort((a, b) => a.folder.localeCompare(b.folder) || a.name.localeCompare(b.name));
   try { await saveModelLib(); } catch (_) { flash('Could not save the model list.'); }
   modelProg('');
   // Show the library just brought in.

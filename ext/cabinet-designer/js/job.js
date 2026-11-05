@@ -50,7 +50,7 @@ function renderJob() {
     return n;
   }));
   $('#tab-job').innerHTML = `<div class="pagehead"><div><h2>Job</h2><p>Each room has its own walls, cabinets and settings. Open a room to draw in it, or set what every room uses on the Settings tab.</p></div>
-    <div class="row-actions"><button class="btn" data-act="tab" data-id="settings">Job and room settings</button><button class="btn primary" data-act="room-add">Add room</button></div></div>
+    <div class="row-actions"><button class="btn" data-act="jobs">${icon('folder')}Job manager</button><button class="btn" data-act="tab" data-id="settings">Job and room settings</button><button class="btn primary" data-act="room-add">Add room</button></div></div>
   <div class="split2">
     <div class="card cardbody"><h3>Job details</h3>
       ${fld('Job name', 'job', 'name', j.name, 'text', { wide: true })}

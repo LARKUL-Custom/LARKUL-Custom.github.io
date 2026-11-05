@@ -2216,3 +2216,133 @@ table.t tr.grouphead td.grouprow{padding:0;border-top:1px solid var(--line)}
 .libtree > .pick-findf{display:flex;flex-direction:column;align-items:stretch;gap:4px;margin-bottom:8px}
 .libtree > .pick-findf input{width:100%}
 .libtree .lfold-h .arr,.libtree .lgrp-h .arr{width:12px;flex:none}
+/* Print drawings (print.js): landscape sheets with a title strip, the drawing, and the cabinet list under elevations */
+.mp-page.land{width:min(100%,11in);aspect-ratio:11/8.5;box-sizing:border-box;padding:.35in .4in;display:flex;flex-direction:column;gap:8px;margin:0 auto}
+.mp-hd{display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:4px;font-size:13px;color:#111;flex:none}
+.mp-svg{flex:1;min-height:0;width:100%;display:block}
+.mp-pic{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}.mp-pic img{max-width:100%;max-height:100%;object-fit:contain}
+.mp-cabs{flex:none;display:grid;grid-template-columns:repeat(3,1fr);gap:2px 14px;font-size:11px;color:#111;border-top:1px solid #999;padding-top:6px}
+.mp-cab b{font-size:12px}.mp-cab span{color:#333}
+.mp-colorrow{border-left:1.5px solid var(--line);padding-left:14px}
+/* Drawings print on white paper in light colors even in dark mode; without color they are black lines on white. */
+.mp-draw{--ink:#111;--muted:#222;--panel:#fff;--paper:#fff;--sunk:#f1f1f1;--line:#888;--wall:#9a9a9a;--wood:#efe3cf;--wood-edge:#6b5a44;--tall:#e3cfae;--upper:#c9d8e4;--accent:#1d4ed8;--t-amber:#a14a06;color:#111}
+.mp-line .mp-draw{--wood:#fff;--tall:#fff;--upper:#fff;--sunk:#fff;--wood-edge:#111;--accent:#111}
+.mp-line .mp-draw svg [style*="fill"]{fill:#fff!important}
+.mp-line .mp-draw .ev-pull{fill:#222!important}
+.mp-line .mp-draw .ev-toe{fill:#ddd}
+.mp-line .mp-draw .filler{fill:#e5e5e5;stroke:#111}
+.mp-line .mp-draw .ev-swing{stroke:#555}
+@page land{size:letter landscape;margin:.35in}
+@media print{
+  body.printing-multi .mp-page.land{page:land;width:auto;aspect-ratio:auto;height:7.75in;padding:0;margin:0}
+}
+.ev-tag rect{fill:#fff;stroke:#111;stroke-width:1.2}.ev-tag text{fill:#111}
+@media print{body.printing-multi .mp-page:last-child{break-after:auto;page-break-after:auto}}
+
+/* 0.49.1: the item panel under the drawing is white and plain like Mozaik (top bar and products tree keep Ayden's design).
+   One plain font, white boxes with thin borders and dark numbers, the controls in labelled groups. */
+@media (min-width: 961px){
+  .room .dock,.room.props-shut .dock{border-top:1px solid var(--line);background:var(--bg)}
+  .room .dock .dockhead{background:var(--panel);border-left:1px solid var(--line)}
+  .room .dock .docktabs button{font:500 calc(15 * var(--u))/1.25 var(--f-ui);padding:calc(3 * var(--u)) calc(8 * var(--u))}
+  .room .dock .docktabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+  .itembar{gap:calc(14 * var(--u));font-family:var(--f-ui)}
+  .itembar > .ib-pos,.itembar > .ib-size,.itembar > .ib-togs{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:calc(8 * var(--u));padding:calc(26 * var(--u)) calc(12 * var(--u)) calc(10 * var(--u))}
+  .itembar > .ib-pos::before,.itembar > .ib-size::before,.itembar > .ib-togs::before{position:absolute;left:calc(12 * var(--u));top:calc(6 * var(--u));font:700 calc(13 * var(--u))/1 var(--f-ui);color:var(--ink)}
+  .itembar > .ib-pos::before{content:"Position"}
+  .itembar > .ib-size::before{content:"Size"}
+  .itembar > .ib-togs::before{content:"Automatic"}
+  .ib-f > span{font:500 calc(13 * var(--u))/1.3 var(--f-ui);color:var(--muted)}
+  .ib-f input,.ib-pos .ib-f input{width:100%;height:calc(38 * var(--u));border:1px solid var(--line-strong);border-radius:calc(6 * var(--u));background:var(--panel);color:var(--ink);font:500 calc(17 * var(--u)) var(--f-ui)}
+  .ib-f input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+  .ib-size .ib-f{min-width:0}
+  .ib-pos{grid-template-columns:calc(120 * var(--u)) calc(108 * var(--u)) calc(120 * var(--u))}
+  .ib-size{grid-template-columns:repeat(3,calc(110 * var(--u)));gap:calc(6 * var(--u)) calc(12 * var(--u))}
+  .ib-ctr{margin-bottom:calc(3 * var(--u));background:var(--panel);color:var(--accent);border:1px solid var(--line-strong)}
+  .ib-ctr:not(:disabled):hover{background:var(--accent-soft);filter:none}
+  .ib-togs{gap:calc(10 * var(--u));padding-top:calc(26 * var(--u))}
+  .ib-tog{height:calc(38 * var(--u));width:calc(200 * var(--u));padding:0;border:0;background:var(--panel);color:var(--ink);font:500 calc(15 * var(--u)) var(--f-ui)}
+  .ib-tog input{background:var(--line-strong)}
+  .ib-tog input::before,.ib-tog input:checked::before{background:#fff}
+  .ib-tog input:checked{background:var(--accent)}
+  .ib-acts{padding-top:0;width:calc(280 * var(--u))}
+  .ib-acts .ib-name{font:500 calc(16 * var(--u))/1.25 var(--f-ui);color:var(--muted)}
+  .ib-edit{height:calc(46 * var(--u));border-radius:calc(8 * var(--u));background:var(--accent);color:var(--accent-ink);font:600 calc(18 * var(--u)) var(--f-ui)}
+  .ib-small button{background:var(--panel);color:var(--ink);border:1px solid var(--line);font:500 calc(13 * var(--u)) var(--f-ui)}
+  .ib-small button:hover{background:var(--sunk)}
+  .ib-small button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .ib-small button.danger{color:var(--warn)}
+  .ib-hint{font:400 calc(17 * var(--u))/1.4 var(--f-ui);color:var(--ink)}
+  .ib-hint b{color:var(--accent)}
+  .views .viewbar .itempick select{background-color:var(--panel);color:var(--ink);color-scheme:normal;border:1px solid var(--line);border-bottom:0;font:600 calc(15 * var(--u)) var(--f-ui)}
+}
+
+/* 0.49.2: every tab plain and easy to read, like Mozaik. One font (numbers line up with tabular figures instead of a typewriter font),
+   sentence-case headings, thin 1px field borders, plain table headers, and the pages use the whole window width.
+   The top bar, job box, room picker and products tree keep Ayden's design (they use --f-mono2, which stays). */
+:root{--f-label:var(--f-ui);--f-mono:var(--f-ui)}
+.mono,input.num,table.t td.n,.num{font-variant-numeric:tabular-nums}
+.page,.jobs{max-width:none}
+main:not(.is-room){padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+h2{font:700 22px/1.2 var(--f-ui)}
+h3{font:600 16px/1.25 var(--f-ui);letter-spacing:0}
+.eyebrow{font:600 13px/1.3 var(--f-ui);letter-spacing:0;text-transform:none;color:var(--muted)}
+.chip{font:600 12px/1.4 var(--f-ui);letter-spacing:0;text-transform:none}
+.chip.cab{background:var(--accent-soft);color:var(--accent)}
+.catpill{letter-spacing:0;text-transform:none}
+input[type=text],input[type=number],input[type=search],select,textarea,input[type=color]{border:1px solid var(--field-line);border-radius:6px}
+input[type=text]:focus,input[type=number]:focus,input[type=search]:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+table.t{font-size:14px}
+table.t th{font:600 13px/1.3 var(--f-ui);letter-spacing:0;text-transform:none;color:var(--ink);background:var(--sunk);padding:7px 8px;border-bottom:1px solid var(--line)}
+table.t td{padding:6px 8px}
+table.t tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+
+/* 0.50.0: job manager laid out like Mozaik's. Left: New job and the customers with their folders. Middle: categories and the job table. Right: one column of buttons. */
+.jm .jobshead h2{display:flex;align-items:center;gap:10px;font-size:22px}
+.jm .jobshead h2 .ic{width:28px;height:28px;color:var(--t-amber)}
+.jm-body{display:grid;grid-template-columns:270px minmax(0,1fr) 170px;gap:16px;align-items:start}
+.jm-left{display:flex;flex-direction:column;gap:10px;position:sticky;top:0}
+.jm-new{display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid var(--accent);border-radius:8px;background:var(--accent);color:var(--accent-ink);font:700 17px var(--f-ui);cursor:pointer}
+.jm-new .ic{width:20px;height:20px}
+.jm-new:hover{filter:brightness(1.08)}
+.jm .folders{position:static;gap:1px}
+.jm-sec{margin:10px 10px 4px;font:700 13px var(--f-ui);color:var(--muted)}
+.jm-none{padding:4px 10px;font-size:13px}
+.jm .folderbtn{padding:7px 8px;font-size:15px;gap:7px}
+.jm .folderbtn .ic{width:17px;height:17px;flex:none}
+.jm .folderbtn > .ic{color:var(--t-blue)}
+.jm .folderbtn.sub{padding-left:42px;font-size:14px}
+.jm .folderbtn.sub > .ic{color:var(--t-amber)}
+.jm-caret{display:inline-flex;width:16px;height:16px;flex:none;align-items:center;justify-content:center;color:var(--muted);border-radius:4px}
+.jm-caret:hover{background:var(--line)}
+.jm-caret .ic{width:14px;height:14px}
+.jm .folderadd.sub{margin:2px 0 6px 38px}
+.jm .folderadd input{min-width:0}
+.jm .folderops{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.jm .folderops input{flex:1;min-width:0}
+.drop-on{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--accent-soft)!important}
+.jm .jm-top{gap:10px}
+.jm .jm-tabs button{font-size:15px;padding:7px 14px}
+.jm .jm-bar{min-height:0;align-items:flex-end}
+.jm .jm-bar .f{min-width:280px}
+.jm-grid{max-height:calc(100vh - 230px);overflow:auto}
+.jm-grid thead th{position:sticky;top:0;z-index:1}
+.jm .jm-row .jobname{font:600 15px var(--f-ui)}
+.jm .jm-row td{padding-top:4px;padding-bottom:4px}
+.jm .jm-row.on td{background:var(--accent);color:var(--accent-ink)}
+.jm .jm-row.on .chip{background:var(--accent-ink);color:var(--accent)}
+.jm .jm-pic .thumb{background:var(--panel)}
+.jm-foot{font-size:13px;color:var(--muted)}
+.jm-side{display:flex;flex-direction:column;gap:6px;position:sticky;top:0}
+.jm-side .btn{justify-content:center;padding:8px 10px;font-size:14px}
+.jm-side .f{display:flex;flex-direction:column;gap:3px;grid-template-columns:none}
+.jm-side .f span{font-size:13px;color:var(--muted)}
+.jm-side select:disabled,.jm-side input:disabled{opacity:.5}
+.jm-gap{height:10px}
+.jm .newjob{gap:12px}
+@media (max-width: 1100px){ .jm-body{grid-template-columns:230px minmax(0,1fr)} .jm-side{grid-column:1 / -1;flex-direction:row;flex-wrap:wrap;position:static} .jm-side .jm-gap{display:none} }
+@media (max-width: 760px){ .jm-body{grid-template-columns:minmax(0,1fr)} .jm-left{position:static} }
+.jm .folderbtn{width:100%}
+.jm-side .f{text-align:left}
+.jm-side .f span{display:block;text-align:left}
+.jm-side .f{align-items:stretch!important}

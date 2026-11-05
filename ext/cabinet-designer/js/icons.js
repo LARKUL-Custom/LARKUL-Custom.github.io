@@ -2,6 +2,7 @@
 'use strict';
 const ICON_PATHS = {
   folder: '<path d="M2.5 5.5a1 1 0 0 1 1-1h4l1.6 1.8h7.4a1 1 0 0 1 1 1v8.2a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z"/>',
+  user: '<circle cx="10" cy="6.8" r="3.3"/><path d="M3.5 17c.6-3.4 3.2-5.4 6.5-5.4s5.9 2 6.5 5.4"/>',
   stack: '<path d="M3 7l7-3.5L17 7l-7 3.5z"/><path d="M3 10.5l7 3.5 7-3.5M3 14l7 3.5 7-3.5"/>',
   plus: '<path d="M10 4v12M4 10h12"/>',
   print: '<path d="M6 7.5V3h8v4.5"/><rect x="3" y="7.5" width="14" height="6.5" rx="1"/><path d="M6 11.5h8V17H6z"/>',

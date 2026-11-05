@@ -823,7 +823,7 @@ function renderCutlist() {
   const byMat = {}; shown.forEach(p => (byMat[p.mat] = byMat[p.mat] || []).push(p));
   const cabName = p => (multi ? esc(p.room) + ' · ' : '') + p.cab;
   $('#tab-cutlist').innerHTML = `<div class="pagehead"><div><h2>Cut list</h2></div>
-    <div class="row-actions"><button class="btn primary" data-act="labels">Print labels</button><button class="btn" data-act="mp-open">${icon('print')}Multi print</button><button class="btn" data-act="sv-open" data-id="${cutOneCab()}">${icon('list')}Shop view</button></div></div>
+    <div class="row-actions"><button class="btn primary" data-act="labels">Print labels</button><button class="btn" data-act="sv-open" data-id="${cutOneCab()}">${icon('list')}Shop view</button></div></div>
   <div class="cl-filters"><label class="f wide"><span>Room</span><select id="cutroom"><option value="all">Whole job (${S.rooms.length} rooms)</option>${S.rooms.map(r => `<option value="${r.id}"${ui.cutRoom === r.id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
     <label class="f wide"><span>Material</span><select id="cutmat"><option value="">All</option>${mats.map(m => `<option value="${esc(m)}"${ui.cutMat === m ? ' selected' : ''}>${esc((mat(m) || {}).name || m)}</option>`).join('')}</select></label>
     <label class="f wide"><span>Cabinet</span><select id="cutcab"><option value="">All</option>${cabsIn.map(([k, l]) => `<option value="${esc(k)}"${ui.cutCab === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>

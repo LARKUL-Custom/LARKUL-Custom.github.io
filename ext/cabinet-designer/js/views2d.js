@@ -5,10 +5,12 @@
 function planSize() { const r = $('#plan').getBoundingClientRect(); return { w: r.width, h: r.height, left: r.left, top: r.top }; }
 function toWorld(e) { const sz = planSize(); return { x: ui.view.x + (e.clientX - sz.left) / sz.w * ui.view.w, y: ui.view.y + (e.clientY - sz.top) / sz.h * ui.view.h }; }
 const polyPts = poly => poly.map(p => r3(p.x) + ',' + r3(p.y)).join(' ');
-function renderPlan() {
-  const svg = $('#plan'); const sz = planSize(); if (!sz.w || !sz.h) return;
-  const v = ui.view; v.h = v.w * sz.h / sz.w; ui.px = v.w / sz.w; const px = ui.px;
-  svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+// pr (printing, print.js): { view, w, h } draws that window of the room for a page of w × h pixels and returns { vb, html }.
+function renderPlan(pr) {
+  const svg = pr ? null : $('#plan'); const sz = pr || planSize(); if (!sz.w || !sz.h) return;
+  const v = pr ? pr.view : ui.view; v.h = v.w * sz.h / sz.w; ui.px = v.w / sz.w; const px = ui.px;
+  const vb = `${v.x} ${v.y} ${v.w} ${v.h}`;
+  if (svg) svg.setAttribute('viewBox', vb);
   let s = `<defs><pattern id="gmin" width="1" height="1" patternUnits="userSpaceOnUse"><path class="g-minor nss" d="M1 0H0V1"/></pattern><pattern id="gmaj" width="12" height="12" patternUnits="userSpaceOnUse"><path class="g-major nss" d="M12 0H0V12"/></pattern></defs>`;
   // Plain white paper like Mozaik: the grid only shows while drawing walls, where its snaps help.
   if (ui.drawWalls) {
@@ -65,7 +67,7 @@ function renderPlan() {
     s += `<polygon class="mold-outline nss" points="${polyPts([wallPt(w, g, r.side, r.start, f), wallPt(w, g, r.side, r.end, f), wallPt(w, g, r.side, r.end, f + r.m.d), wallPt(w, g, r.side, r.start, f + r.m.d)])}"/>`;
   });
   // Countertop corners: click the joint to miter it or pick which top runs through.
-  if (topOp() > 0 && typeof ctjPlanSVG === 'function' && !ui.drawWalls && !ui.placing) s += ctjPlanSVG(px);
+  if (topOp() > 0 && typeof ctjPlanSVG === 'function' && !ui.drawWalls && !ui.placing && !ui.printing) s += ctjPlanSVG(px);
   if (ui.drawWalls) s += wallDrawSVG(fs, px);
   if (ui.drawMold && ui.mouse) {
     const to = moldSnap(ui.mouse);
@@ -76,6 +78,7 @@ function renderPlan() {
   s += resizeHandlesPlan();
   if (typeof topEditSVG === 'function') s += topEditSVG();
   s += boxSVG();
+  if (pr) return { vb, html: s };
   setHTML(svg, s);
   renderHint();
 }
@@ -764,23 +767,24 @@ function frontsSVG(c, ex, by, opts = {}) {
   });
   return opts.withDefs ? { svg: s, mats } : s;
 }
-function renderElev() {
-  const svg = $('#elev'), w = wall(ui.elevWall), note = $('#elevnote');
-  if (!w) { setHTML(svg, ''); note.textContent = 'Draw a wall to see its elevation.'; return; }
-  const g = wg(w), L = g.L, H = w.height, side = elevSide(w);
+// pr (printing, print.js): { wall, side, w, h } draws that wall side for a page of w × h pixels and returns { vb, html }.
+function renderElev(pr) {
+  const svg = pr ? null : $('#elev'), w = pr ? pr.wall : wall(ui.elevWall), note = pr ? null : $('#elevnote');
+  if (!w) { if (pr) return null; setHTML(svg, ''); note.textContent = 'Draw a wall to see its elevation.'; return; }
+  const g = wg(w), L = g.L, H = w.height, side = (pr && pr.side) || elevSide(w);
   const cs = S.cabinets.filter(c => c.wall === w.id && c.side === side);
-  note.textContent = cs.length ? `${cs.length} cabinet${cs.length > 1 ? 's' : ''}. Drag a cabinet to move it.` : 'No cabinets on this side yet';
-  const dm = ui.dims.cab, r = svg.getBoundingClientRect(), x0 = -12, top = -H - (dm ? 22 : 8), vbW = L + (dm ? 46 : 24), vbH = -top + (dm ? 40 : 22);
+  if (note) note.textContent = cs.length ? `${cs.length} cabinet${cs.length > 1 ? 's' : ''}. Drag a cabinet to move it.` : 'No cabinets on this side yet';
+  const dm = pr ? true : ui.dims.cab, r = pr ? { width: pr.w, height: pr.h } : svg.getBoundingClientRect(), x0 = -12, top = -H - (dm ? 22 : 8), vbW = L + (dm ? 46 : 24), vbH = -top + (dm ? 40 : 22);
   let px = Math.max(vbW / (r.width || 600), vbH / (r.height || 300));
   // Zoomed in (pinch, scroll wheel or the + button): a smaller window on the same drawing.
-  ui.elevBase = { wall: w.id, x0, top, vbW, vbH, px };
-  const z = ui.elevZ && ui.elevZ.wall === w.id ? ui.elevZ : null;
+  if (!pr) ui.elevBase = { wall: w.id, x0, top, vbW, vbH, px };
+  const z = !pr && ui.elevZ && ui.elevZ.wall === w.id ? ui.elevZ : null;
   let vb = `${x0} ${top} ${vbW} ${vbH}`;
   if (z) { const zw = vbW / z.k, zh = vbH / z.k; px /= z.k; vb = `${z.cx - zw / 2} ${z.cy - zh / 2} ${zw} ${zh}`; }
   const fs = 10.5 * px;
   ui.elevPx = px; ui.elevL = L;
-  svg.setAttribute('viewBox', vb);
-  const zc = $('#elevzoom'); if (zc) zc.style.display = z ? '' : 'none';
+  if (svg) svg.setAttribute('viewBox', vb);
+  const zc = !pr && $('#elevzoom'); if (zc) zc.style.display = z ? '' : 'none';
   let body = `<rect class="ev-wall nss"${wallFill2d()} x="0" y="${-H}" width="${L}" height="${H}"/><line class="ev-floor nss" x1="-8" x2="${L + 8}" y1="0" y2="0" stroke-width="2"/>`;
   const mats = [], dims = []; let labels = '';
   // Doors and windows sit in the wall, behind the cabinets.
@@ -798,7 +802,9 @@ function renderElev() {
     if (ui.dropCab === c.id) body += `<rect class="ev-halo drop nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/><rect class="ev-drop nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`;
     else if ((ui.sel && ui.sel.type === 'cab' && ui.sel.id === c.id) || inMulti(c.id)) body += `<rect class="ev-halo nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/><rect class="ev-sel nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`;
     body += '</g>';
-    labels += `<text class="lbl dimtxt" x="${ex + c.w / 2}" y="${by - c.h - 2 * px}" font-size="${fs}" text-anchor="middle" font-weight="600" pointer-events="none">${LBL[c.id]}</text>`;
+    // On paper the number sits in a white tag inside the cabinet's top, clear of tops and molding.
+    if (pr) { const t = LBL[c.id] || '', tw = t.length * fs * 0.62 + fs * 0.8, th = fs * 1.45, ty = by - c.h + Math.min(c.h * 0.5, fs * 1.6); labels += `<g class="ev-tag" pointer-events="none"><rect class="nss" x="${ex + c.w / 2 - tw / 2}" y="${ty - th / 2}" width="${tw}" height="${th}" rx="${th / 2}"/><text x="${ex + c.w / 2}" y="${ty}" font-size="${fs * 1.05}" text-anchor="middle" dominant-baseline="central" font-weight="700">${t}</text></g>`; }
+    else labels += `<text class="lbl dimtxt" x="${ex + c.w / 2}" y="${by - c.h - 2 * px}" font-size="${fs}" text-anchor="middle" font-weight="600" pointer-events="none">${LBL[c.id]}</text>`;
     if (!c.noDim) dims.push([ex, ex + c.w, c.cat === 'Wall' ? 'up' : 'down']);
     fillersOf(c).forEach(fl => { const fx = fl.end === 'L' ? ex - fl.gap : ex + c.w; dims.push([fx, fx + fl.gap, c.cat === 'Wall' ? 'up' : 'down', 'fill']); });
   });
@@ -863,7 +869,9 @@ function renderElev() {
   }
   const rc = rzShow(); if (rc && rc.wall === w.id && rc.side === side) labels += resizeHandlesElev(rc, elevX(rc, L), L);
   if (typeof vChainSVG === 'function') labels += vChainSVG(w, side, fs, px);
-  setHTML(svg, `<defs>${texDefs(mats.filter(Boolean))}</defs>` + body + labels);
+  const html = `<defs>${texDefs(mats.filter(Boolean))}</defs>` + body + labels;
+  if (pr) return { vb, html };
+  setHTML(svg, html);
 }
 // The open span at elevation point (x, z): out to the nearest thing at that height on each side, or the wall ends.
 // Spans are in elevation x, so they match what is drawn whichever side of the wall is shown.
