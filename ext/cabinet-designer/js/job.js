@@ -55,6 +55,7 @@ function renderJob() {
     <div class="card cardbody"><h3>Job details</h3>
       ${fld('Job name', 'job', 'name', j.name, 'text', { wide: true })}
       ${fld('Customer', 'job', 'customer', j.customer || '', 'text', { wide: true })}
+      <label class="f wide"><span>Customer address</span><textarea data-obj="job" data-field="address" data-type="text" rows="2" aria-label="Customer address" placeholder="Street, town, state, zip">${esc(j.address || '')}</textarea></label>
       ${fld('Cabinet labels', 'job', 'labelStyle', j.labelStyle || 'num', 'select', { options: [{ v: 'num', l: 'Job numbers (#101, #102 … room 2 is #201)' }, { v: 'type', l: 'Type letters (B1, W1, T1)' }], wide: true })}
       <label class="f wide"><span>Notes</span><textarea data-obj="job" data-field="notes" data-type="text" rows="3" aria-label="Notes">${esc(j.notes || '')}</textarea></label>
     </div>
@@ -279,13 +280,14 @@ function renderSettings() {
         : ctl('roomp:' + r.id, pd.k, own ? r.params[pd.k] : '', pd.type, { label: pd.label + ' for ' + r.name, ph: 'Job ' + shown(jv), blank: true })}</td>`; }).join('')}</tr>`;
   };
   const pRows = paramGroups(PARAM_DEFS).map(([g, gl, ds]) => pgroupRow(g, gl, rooms.length + 2, ds.length) + (paramShut(g) ? '' : ds.map(pRow).join(''))).join('');
-  const tabsS = [['templates', 'Room settings', 'palette'], ['rooms', 'Job dashboard', 'home'], ['params', 'Construction parameters', 'sliders'], ['vars', 'Variables', 'calc'], ['look', 'Look and feel', 'eye']];
+  const tabsS = [['templates', 'Room settings', 'palette'], ['rooms', 'Job dashboard', 'home'], ['params', 'Construction parameters', 'sliders'], ['vars', 'Variables', 'calc'], ['look', 'Look and feel', 'eye'], ['company', 'Company', 'user']];
   const st = ui.setTab || 'templates';
   const dash = renderDash();
   const body = st === 'rooms' ? dash
     : st === 'templates' ? renderTplTab()
     : st === 'vars' ? renderVars() + (typeof fxVarsExtra === 'function' ? fxVarsExtra() : '')
     : st === 'look' ? renderLook()
+    : st === 'company' && typeof companyCard === 'function' ? companyCard()
     : (typeof methodsBox === 'function' ? methodsBox() : '') + `<div class="card"><div class="cardhead"><h3>${icon('sliders')}Construction parameters</h3><span class="note">Leave a room cell blank to use the job value. Library templates and single cabinets can still override.</span></div>
     <div class="tscroll"><table class="t settable"><thead>${head}</thead><tbody>${pRows}</tbody></table></div></div>`;
   const keep3d = $('#tpl3d');

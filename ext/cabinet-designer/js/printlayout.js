@@ -4,9 +4,25 @@
 'use strict';
 
 /* ----- Company details (shop-wide) ----- */
-let COMPANY = { name: 'LARKUL Custom', address: '', phone: '', email: '', web: '', logo: 'img/logo.png' };
-shopLoad('company', v => { if (v && typeof v === 'object') COMPANY = { ...COMPANY, ...v }; });
+let COMPANY = { name: 'LARKUL Custom', address: '109 E 310 N\nSalem, Utah 84651', phone: '(385) 292-6450', email: 'Sales@larkul.com', web: '', logo: 'img/logo.png' };
+// Blank saved details keep the shop's address, phone and email.
+shopLoad('company', v => { if (v && typeof v === 'object') COMPANY = { ...COMPANY, ...v, address: v.address || COMPANY.address, phone: v.phone || COMPANY.phone, email: v.email || COMPANY.email }; });
 function companySave() { shopSave('company', COMPANY, 'the company details'); }
+
+// Settings › Company: the shop's name, address, phone, email, website and logo used on printouts.
+function companyCard() {
+  const f = (k, lab, ph) => `<label class="f wide"><span>${lab}</span><input type="text" class="pl-co" data-k="${k}" value="${esc(COMPANY[k] || '')}" aria-label="${lab}" placeholder="${ph || ''}"></label>`;
+  return `<div class="card co-card"><div class="cardhead"><h3>${icon('user')}Company</h3><span class="note">Shown on printouts (cover and title blocks). Kept for the whole shop.</span></div><div class="cardbody">
+    ${f('name', 'Company name')}
+    <label class="f wide"><span>Address</span><textarea class="pl-co" data-k="address" rows="2" aria-label="Address">${esc(COMPANY.address || '')}</textarea></label>
+    ${f('phone', 'Phone')}${f('email', 'Email')}${f('web', 'Website', 'larkul.com')}
+    <div class="pl-row pl-logo">${COMPANY.logo ? `<img src="${esc(COMPANY.logo)}" alt="Logo">` : ''}<label class="btn sm">${icon('upload')}Change logo<input type="file" class="pl-logoin" accept="image/*" hidden></label></div></div></div>`;
+}
+document.addEventListener('change', e => {
+  const t = e.target; if (!t.closest || !t.closest('.co-card')) return;
+  if (t.classList.contains('pl-co')) { COMPANY[t.dataset.k] = t.value; companySave(); }
+  if (t.classList.contains('pl-logoin') && t.files[0]) readPic(t.files[0]).then(u => { COMPANY.logo = u; companySave(); render(); });
+});
 
 /* ----- Layouts ----- */
 // Page sizes in inches: the cover fills the landscape sheet; a title block runs across a drawing page inside its margins.
@@ -18,7 +34,7 @@ function plDefaultCover() {
   const e = (o) => ({ id: plId(), ...o }), O = '#d9731b', K = '#16202c', corner = (x, y, sx, sy) => [
     e({ type: 'rect', x: sx > 0 ? x : x - 0.9, y: sy > 0 ? y : y - 0.09, w: 0.9, h: 0.09, fill: O }),
     e({ type: 'rect', x: sx > 0 ? x : x - 0.09, y: sy > 0 ? y : y - 0.9, w: 0.09, h: 0.9, fill: O })];
-  return { id: 'pl-cover', v: 2, name: 'Cover with 3D', kind: 'cover', els: [
+  return { id: 'pl-cover', v: 3, name: 'Cover with 3D', kind: 'cover', els: [
     e({ type: 'rect', x: 0.3, y: 0.3, w: 10.4, h: 7.9, stroke: K, sw: 2.25 }),
     e({ type: 'rect', x: 0.42, y: 0.42, w: 10.16, h: 7.66, stroke: K, sw: 0.5 }),
     ...corner(0.3, 0.3, 1, 1), ...corner(10.7, 0.3, -1, 1), ...corner(0.3, 8.2, 1, -1), ...corner(10.7, 8.2, -1, -1),
@@ -32,7 +48,7 @@ function plDefaultCover() {
     e({ type: 'rect', x: 1.0, y: 2.1, w: 9.0, h: 4.95, stroke: K, sw: 1 }),
     e({ type: 'line', x: 1.0, y: 7.3, w: 9.0, h: 0, stroke: '#c9d3e1', sw: 0.75 }),
     e({ type: 'text', x: 1.0, y: 7.4, w: 3.4, h: 0.6, text: '{COMPANY}\n{ADDRESS}', size: 8, color: K }),
-    e({ type: 'text', x: 4.4, y: 7.4, w: 2.2, h: 0.5, text: '{ROOMS}', size: 8, align: 'center', color: '#4d5b70' }),
+    e({ type: 'text', x: 4.0, y: 7.4, w: 3.0, h: 0.62, text: '{ROOMS}\n{CUSTADDRESS}', size: 8, align: 'center', color: '#4d5b70' }),
     e({ type: 'text', x: 6.6, y: 7.4, w: 3.4, h: 0.5, text: 'Printed {DATE}', size: 8, align: 'right', color: '#4d5b70' }),
   ] };
 }
@@ -57,7 +73,7 @@ function plDefaultBlock() {
 }
 let PRINT_LAYOUTS = [plDefaultCover(), plDefaultBlock()];
 // A saved copy of the first built-in cover is swapped for the new one (covers you made or renamed are kept).
-shopLoad('printLayouts', v => { if (Array.isArray(v) && v.length) PRINT_LAYOUTS = v.map(l => l.id === 'pl-cover' && !l.v && l.name === 'Cover with 3D' ? plDefaultCover() : l); });
+shopLoad('printLayouts', v => { if (Array.isArray(v) && v.length) PRINT_LAYOUTS = v.map(l => l.id === 'pl-cover' && (l.v || 0) < 3 && l.name === 'Cover with 3D' ? plDefaultCover() : l); });
 function plSave() { shopSave('printLayouts', PRINT_LAYOUTS, 'print layouts'); }
 const plById = id => PRINT_LAYOUTS.find(l => l.id === id);
 // The preset's cover or title block ('none' for no title block), else the first of that kind.
@@ -70,9 +86,9 @@ function plFor(pr, kind) {
 /* ----- Names filled in on the page ----- */
 function plVars(x = {}) {
   return { COMPANY: COMPANY.name || '', ADDRESS: COMPANY.address || '', PHONE: COMPANY.phone || '', EMAIL: COMPANY.email || '', WEB: COMPANY.web || '',
-    JOB: S.job.name || '', CUSTOMER: S.job.customer || '', DATE: new Date().toLocaleDateString(), ROOMS: S.rooms.map(r => r.name).join(', '), ROOM: '', SHEET: '', PAGE: '%%PG%%', ...x };
+    JOB: S.job.name || '', CUSTOMER: S.job.customer || '', CUSTADDRESS: S.job.address || '', DATE: new Date().toLocaleDateString(), ROOMS: S.rooms.map(r => r.name).join(', '), ROOM: '', SHEET: '', PAGE: '%%PG%%', ...x };
 }
-const PL_NAMES = [['COMPANY', 'Company name'], ['ADDRESS', 'Address'], ['PHONE', 'Phone'], ['EMAIL', 'Email'], ['WEB', 'Website'], ['JOB', 'Job name'], ['CUSTOMER', 'Customer'], ['ROOM', 'Room'], ['ROOMS', 'All rooms'], ['SHEET', 'Sheet name (Wall 2, Floor plan)'], ['PAGE', 'Page 3 of 8'], ['DATE', "Today's date"]];
+const PL_NAMES = [['COMPANY', 'Company name'], ['ADDRESS', 'Address'], ['PHONE', 'Phone'], ['EMAIL', 'Email'], ['WEB', 'Website'], ['JOB', 'Job name'], ['CUSTOMER', 'Customer'], ['CUSTADDRESS', "Customer's address"], ['ROOM', 'Room'], ['ROOMS', 'All rooms'], ['SHEET', 'Sheet name (Wall 2, Floor plan)'], ['PAGE', 'Page 3 of 8'], ['DATE', "Today's date"]];
 
 /* ----- Drawing a layout ----- */
 // One piece as HTML, in inches. pic() gives the 3D picture for a view3d piece.
@@ -98,8 +114,8 @@ function plMainRoom(rooms) { return (rooms && rooms.length ? rooms : S.rooms).sl
 function plPic(rooms) {
   return e => {
     const room = plMainRoom(rooms); if (!room || typeof printPic !== 'function') return null;
-    const vw = (room.views || [])[0] || { id: 'iso' }, aspect = e.w / (e.h || 1), key = `cover|${room.id}|${vw.id}|${aspect.toFixed(2)}`;
-    const url = printPic(key, () => print3DShot(room, vw, { real: true, aspect, tight: true }));
+    const vw = (room.views || [])[0] || { id: 'iso' }, aspect = e.w / (e.h || 1), key = `cover|${room.id}|${vw.id}|${aspect.toFixed(2)}|fit`;
+    const url = printPic(key, () => print3DShot(room, vw, { real: true, aspect, fit: true }));
     return url ? { url, key } : null;
   };
 }
@@ -124,6 +140,7 @@ const PL_SYMBOLS = [
   ['3D view of the main room', [{ type: 'view3d', x: 0, y: 0, w: 4, h: 2.7 }]],
   ['Job name', plLabel('JOB', '{JOB}')],
   ['Customer', plLabel('CUSTOMER', '{CUSTOMER}')],
+  ["Customer's address", [{ type: 'text', x: 0, y: 0, w: 2.6, h: 0.14, text: 'JOB ADDRESS', size: 5.5, bold: true, color: '#666666' }, { type: 'text', x: 0, y: 0.13, w: 2.6, h: 0.45, text: '{CUSTADDRESS}', size: 9 }]],
   ['Sheet name', plLabel('SHEET', '{SHEET}', 2.6)],
   ['Page number', plLabel('PAGE', '{PAGE}', 1.2)],
   ['Date', plLabel('DATE', '{DATE}', 1.2)],
@@ -178,11 +195,7 @@ function renderLayoutEditor() {
       <div class="pl-side">
         <div class="card"><div class="cardbody">${props}</div></div>
         <div class="card"><div class="cardbody"><h3 class="pl-h">Symbols</h3><div class="pl-syms">${PL_SYMBOLS.map(([n], i) => sym(n, i)).join('')}</div>${MY_SYMBOLS.length ? `<h3 class="pl-h">My symbols</h3><div class="pl-syms">${MY_SYMBOLS.map((s, i) => sym(s.name, i, true)).join('')}</div>` : ''}</div></div>
-        <div class="card"><div class="cardbody"><h3 class="pl-h">Company</h3>
-          <label class="f wide"><span>Company name</span><input type="text" class="pl-co" data-k="name" value="${esc(COMPANY.name)}" aria-label="Company name"></label>
-          <label class="f wide"><span>Address</span><textarea class="pl-co" data-k="address" rows="2" aria-label="Address" placeholder="123 Main St\nTown, ST 00000">${esc(COMPANY.address)}</textarea></label>
-          <div class="pl-row"><label class="f"><span>Phone</span><input type="text" class="pl-co" data-k="phone" value="${esc(COMPANY.phone)}" aria-label="Phone"></label><label class="f"><span>Email</span><input type="text" class="pl-co" data-k="email" value="${esc(COMPANY.email)}" aria-label="Email"></label><label class="f"><span>Website</span><input type="text" class="pl-co" data-k="web" value="${esc(COMPANY.web)}" aria-label="Website"></label></div>
-          <div class="pl-row pl-logo">${COMPANY.logo ? `<img src="${esc(COMPANY.logo)}" alt="Logo">` : ''}<label class="btn sm">${icon('upload')}Change logo<input type="file" class="pl-logoin" accept="image/*" hidden></label></div></div></div>
+        <div class="card"><div class="cardbody"><h3 class="pl-h">Company</h3><div class="pl-row pl-logo">${COMPANY.logo ? `<img src="${esc(COMPANY.logo)}" alt="Logo">` : ''}<span class="note">${esc(COMPANY.name)}</span><button class="btn sm" data-act="pl-company">${icon('edit')}Change in Settings</button></div></div></div>
       </div></div>`;
   el.hidden = false;
   plFit();
@@ -205,6 +218,7 @@ function plAct(a, id) {
   switch (a) {
     case 'pl-open': openLayoutEditor(id); return true;
     case 'pl-done': closeLayoutEditor(); return true;
+    case 'pl-company': closeLayoutEditor(); { const mp = $('#multiprint'); if (mp) mp.hidden = true; } document.body.classList.remove('printing-multi'); ui.setTab = 'company'; goTab('settings'); return true;
     case 'pl-new': { const n = id === 'cover' ? { id: uid('pl'), name: 'New cover', kind: 'cover', els: [] } : { id: uid('pl'), name: 'New title block', kind: 'block', h: 0.85, els: [{ id: plId(), type: 'rect', x: 0, y: 0, w: PL_BLOCK_W, h: 0.85, stroke: '#111111', sw: 1 }] }; PRINT_LAYOUTS.push(n); plEd.id = n.id; plEd.sel = null; plSave(); renderLayoutEditor(); return true; }
     case 'pl-copy': { const n = { ...JSON.parse(JSON.stringify(l)), id: uid('pl'), name: l.name + ' copy' }; n.els.forEach(e => { e.id = plId(); }); PRINT_LAYOUTS.push(n); plEd.id = n.id; plEd.sel = null; plSave(); renderLayoutEditor(); return true; }
     case 'pl-del': PRINT_LAYOUTS = PRINT_LAYOUTS.filter(x => x !== l); plEd.id = (PRINT_LAYOUTS.find(x => x.kind === l.kind) || PRINT_LAYOUTS[0]).id; plEd.sel = null; plSave(); renderLayoutEditor(); return true;

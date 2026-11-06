@@ -80,15 +80,38 @@ function print3DShot(room, vw, o = {}) {
     if (!real) v.setBackground('#ffffff');
     v.resize();
     if (vw.pos) v.setView(vw); else view3dPreset(v, 'iso');
-    // o.tight (the cover): with no saved view, frame the cabinets themselves so they fill the picture.
-    if (o.tight && !vw.pos) {
-      const box = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && m.userData.cabId) box.expandByObject(m); });
-      if (!box.isEmpty()) { v.lookBox(box, { x: -1, y: 1.15, z: 1 }); v.orthoH = Math.max(12, box.getSize(new THREE.Vector3()).length() / 2) * 1.3; v.resize(); }
-    }
+    // o.fit (the cover): with no saved view, frame the whole kitchen (cabinets, tops and the walls left after the
+    // cutaway, not the floor) so all of it fits the picture with a small margin and nothing is cut off.
+    if (o.fit && !vw.pos) printFitAll(v, o.aspect || 1.5);
     if (real) v.fitShadow();
     v.draw();
     return v.renderer.domElement.toDataURL('image/jpeg', 0.9);
   }));
+}
+function printFitAll(v, aspect) {
+  const cb = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && m.userData.cabId) cb.expandByObject(m); });
+  if (cb.isEmpty()) return;
+  v.lookBox(cb, { x: -1, y: 1.15, z: 1 });
+  v.root.updateMatrixWorld(true);
+  if (v.beforeDraw) v.beforeDraw(); // the cutaway hides the walls in front for this camera
+  const cam = v.cam; cam.updateMatrixWorld(true);
+  const inv = cam.matrixWorldInverse.clone(), pts = [], b = new THREE.Box3(), q = new THREE.Vector3();
+  const seen = o => { for (let x = o; x; x = x.parent) { if (x.visible === false || (x.userData && x.userData.noBounds)) return false; } return true; };
+  v.root.traverse(m => {
+    if (!m.isMesh || m.isSprite || !seen(m)) return;
+    b.setFromObject(m); if (b.isEmpty()) return;
+    const sz = b.getSize(q.clone());
+    if (!m.userData.cabId && sz.y < 0.6 && b.min.y < 0.3 && sz.x * sz.z > 4000) return; // the floor
+    [b.min.x, b.max.x].forEach(x => [b.min.y, b.max.y].forEach(y => [b.min.z, b.max.z].forEach(z => pts.push(new THREE.Vector3(x, y, z).applyMatrix4(inv)))));
+  });
+  if (!pts.length) return;
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  // Slide the camera sideways so the kitchen sits in the middle, then size the view to fit it.
+  const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0), up = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
+  const shift = right.multiplyScalar((x0 + x1) / 2).add(up.multiplyScalar((y0 + y1) / 2));
+  cam.position.add(shift); v.controls.target.add(shift);
+  v.orthoH = Math.max(y1 - y0, (x1 - x0) / aspect) * 1.08; v.ortho.zoom = 1;
+  cam.lookAt(v.controls.target); v.controls.update(); v.resize();
 }
 // Pictures are kept while Print is open; each remembers how to take itself again once textures have loaded.
 const printShots = {};

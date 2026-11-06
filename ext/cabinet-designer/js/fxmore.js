@@ -117,7 +117,7 @@ function fxVarsExtra() {
 // Text for labels: {JOB}, {CUSTOMER}, {NOTES}, any job field, job or room variable.
 function jobText(name) {
   const k = String(name).toUpperCase();
-  if (k === 'JOB') return S.job.name || ''; if (k === 'CUSTOMER') return S.job.customer || ''; if (k === 'NOTES') return S.job.notes || '';
+  if (k === 'JOB') return S.job.name || ''; if (k === 'CUSTOMER') return S.job.customer || ''; if (k === 'CUSTADDRESS') return S.job.address || ''; if (k === 'NOTES') return S.job.notes || '';
   const f = (S.job.fields || []).find(x => x.k === name || x.k === k); if (f) return String(f.v ?? '');
   const v = [...((curRoom() || {}).vars || []), ...(S.job.vars || [])].find(x => x.k === name || x.k === k); return v ? fmtLen(+v.v, 1) : undefined;
 }

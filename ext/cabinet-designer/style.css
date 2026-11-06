@@ -2357,7 +2357,7 @@ table.t tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%,transpar
 .pl-box{position:relative;overflow:hidden}
 .pl-el{position:absolute;box-sizing:border-box;margin:0}
 .pl-text{white-space:pre-line;line-height:1.2;overflow:hidden;font-family:var(--f-ui)}
-.pl-img{object-fit:contain}.pl-img.pl-cover{object-fit:cover}
+.pl-img{object-fit:contain}.pl-img.pl-cover{object-fit:contain}
 .pl-empty{border:1px dashed #9aa;display:flex;align-items:center;justify-content:center;color:#778;font:9pt var(--f-ui);text-align:center;background:#f6f7f9}
 .pl-block{order:9;flex:none;color:#111}
 .mp-lay{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
@@ -2396,3 +2396,4 @@ table.t tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%,transpar
 .pl-side .f input,.pl-side .f select,.pl-side .f textarea{width:100%;min-width:0;box-sizing:border-box}
 .pl-side .pl-col{flex:0 0 auto}
 .pl-side .checkrow{align-self:center}
+.co-card{max-width:720px}
