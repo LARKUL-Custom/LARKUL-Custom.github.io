@@ -46,3 +46,6 @@ A formula can only do math. It can't run code, so it's safe on customers' browse
 - After 10 wrong passwords, that internet connection has to wait an hour.
 - Netlify's free plan covers this comfortably for a small shop (1 GB of stored files and well over 100,000 page loads a month).
 - Files: `admin.html` is the page. The server code is in `netlify/functions/`: `admin.mjs` (sign-in, publishing, uploads), `catalog.mjs` (gives the site what you published) and `files.mjs` (serves your uploads).
+
+## Photo library
+The Library button (on any photo field and in Past work) shows your uploads plus every photo already built into the site, sorted into Past work, Range hoods, Floating shelves, Mantels and 3D renderings. The built-in list is images/library.json; it gets refreshed whenever new photos are added to the images folder.
