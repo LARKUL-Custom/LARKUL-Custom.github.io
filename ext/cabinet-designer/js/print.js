@@ -78,6 +78,7 @@ function print3DShot(room, vw, o = {}) {
     R3 = real;
     try { buildRoomScene(v); } finally { R3 = false; [ui.layers, ui.cutaway, ui.wallOp] = keep; }
     if (!real) v.setBackground('#ffffff');
+    printCutaway(v);
     v.resize();
     if (vw.pos) v.setView(vw); else view3dPreset(v, 'iso');
     // o.fit (the cover): with no saved view, frame the whole kitchen (cabinets, tops and the walls left after the
@@ -87,6 +88,25 @@ function print3DShot(room, vw, o = {}) {
     v.draw();
     return v.renderer.domElement.toDataURL('image/jpeg', 0.9);
   }));
+}
+// Printed 3D: besides the walls whose room side faces away from the camera, hide any wall that stands between the
+// camera and the cabinets (the line from the camera to the middle of the cabinets crosses it), whatever the room's shape.
+function printCutaway(v) {
+  const base = v.beforeDraw;
+  const cb = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && m.userData.cabId) cb.expandByObject(m); });
+  if (cb.isEmpty()) return;
+  const c = cb.getCenter(new THREE.Vector3());
+  v.beforeDraw = () => {
+    if (base) base();
+    const p = v.cam.position, dx = c.x - p.x, dz = c.z - p.z;
+    v.root.children.forEach(o => {
+      const k = o.userData.cut; if (!k || !o.visible || !k.half) return;
+      // Where the camera-to-cabinets line meets the wall line: t along the sight line (0..1), s along the wall.
+      const den = dx * k.uz - dz * k.ux; if (Math.abs(den) < 1e-6) return;
+      const ox = k.x - p.x, oz = k.z - p.z, t = (ox * k.uz - oz * k.ux) / den, s2 = (ox * dz - oz * dx) / den;
+      if (t > 0 && t < 0.97 && Math.abs(s2) < k.half) o.visible = false;
+    });
+  };
 }
 function printFitAll(v, aspect) {
   const cb = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && m.userData.cabId) cb.expandByObject(m); });

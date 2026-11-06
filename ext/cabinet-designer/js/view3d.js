@@ -524,7 +524,9 @@ function buildRoomScene(v) {
     grp.rotation.y = Math.atan2(-g.u.y, g.u.x);
     const wm = wallLook3(op, R3 ? realWall3(op) : flat3(cssVar('--wall3d'), op));
     fixtWall3(w, g, wm, wallMode !== 'faded').forEach(m => grp.add(m));
-    const inward = (mid.x - mx) * g.n.x + (mid.y - my) * g.n.y >= 0 ? 1 : -1, cut = { x: mx, z: my, nx: g.n.x * inward, nz: g.n.y * inward };
+    // The room side of a wall is the side its cabinets are on (elevSide), else the side facing the middle of the room.
+    const hasCabs = S.cabinets.some(c => c.wall === w.id), inward = hasCabs || w.viewSide ? elevSide(w) : (mid.x - mx) * g.n.x + (mid.y - my) * g.n.y >= 0 ? 1 : -1;
+    const cut = { x: mx, z: my, nx: g.n.x * inward, nz: g.n.y * inward, ux: g.u.x, uz: g.u.y, half: g.L / 2 + (w.thick || 4) };
     grp.userData.wall = true; if (cutaway) grp.userData.cut = cut;
     v.root.add(grp);
     capsOf(w).forEach(cp => {
