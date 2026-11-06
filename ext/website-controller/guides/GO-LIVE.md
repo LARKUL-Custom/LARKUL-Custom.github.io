@@ -45,7 +45,7 @@ Every submission is also kept in **Forms** in Netlify, with photos and files att
 2. In Netlify add the environment variable `FAL_KEY` with that key, then deploy once (**Actions → Website deploy → Run workflow**, type `deploy`).
 3. Your monthly budget is in `render-settings.mjs` ($20 to start). Details and the Google Gemini option are in `render-setup/README.md`.
 
-Until you add a key, the button just says renders aren't switched on yet. Everything else works.
+For now the button says **Coming soon** and nothing is sent to an AI. Once your key is in Netlify and you've deployed, open `/admin` → **3D designer prices**, untick **Show "Coming soon" instead of Render my kitchen**, and press **Publish** (no redeploy needed).
 
 ## 6. Load your photos and prices (as long as you like)
 
