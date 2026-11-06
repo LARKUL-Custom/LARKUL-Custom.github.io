@@ -6,8 +6,8 @@ const ID = "website-controller";
 const BASE = `/api/ext/${ID}`;
 const ROOT = "Website";
 const DIRS = { work: `${ROOT}/Past work`, requests: `${ROOT}/Requests`, backups: `${ROOT}/Backups`, guides: `${ROOT}/Guides` };
-const GUIDES = ["GO-LIVE.md", "Website-README.md", "Admin-setup.md", "AI-renders-setup.md"];
-const GUIDES_VERSION = 1;
+const GUIDES = ["GO-LIVE.md", "Website-README.md", "Admin-setup.md", "AI-renders-setup.md", "Design-emails-setup.md"];
+const GUIDES_VERSION = 2;          // 2: adds Design-emails-setup.md
 const IMG = /\.(jpe?g|png|webp|avif|gif)$/i;
 
 /* ---------- little helpers ---------- */
