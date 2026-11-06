@@ -76,6 +76,17 @@ const FIXT_LIB = [
 ];
 const FIXT_FOLDERS = ['Kitchen sinks', 'Dishwashers', 'Refrigerators', 'Under-counter fridges', 'Ranges', 'Laundry', 'Doors', 'Doorways and openings', 'Windows'];
 const fixtPreset = id => FIXT_LIB.find(x => x.id === id) || (typeof modelItem === 'function' ? modelItem(id) : null);
+// A built-in appliance already placed in a job draws with the imported Mozaik model of the same name, when that
+// library is imported here. Names that differ in Mozaik's library are listed (with the folder they're in).
+const FIXT_ALIAS = { 'sk-di1': ['Single', /drop in/i], 'sk-di2': ['Double', /drop in/i], 'sk-bath': ['Drop In Oval'], 'fr-std': ['Standard Fridge (L)'], 'uc-bev': ['Beverage U-C (L)'], 'ld-tw': ['Washer', /top load/i], 'ld-td': ['Dryer', /top load/i] };
+function fixtModelOf(f) {
+  if (f.model) return f;
+  const d = FIXT_LIB.find(x => x.id === f.lib); if (!d || typeof MODEL_LIB === 'undefined' || !MODEL_LIB.length) return null;
+  const [n, fold] = FIXT_ALIAS[d.id] || [d.name], want = n.toLowerCase();
+  const hit = MODEL_LIB.filter(x => x.name.toLowerCase() === want && (!fold || fold.test(x.path || x.folder || '')));
+  const m = hit.find(x => x.lib === 'Appliances and Graphics') || hit[0];
+  return m ? { model: m.model, md: m.md } : null;
+}
 const CASE = 2.5;
 const fixtKind = k => FIXT_KINDS.find(x => x.k === k);
 const fixtDef = f => fixtKind(f.kind) || FIXT_KINDS[0];
@@ -303,7 +314,7 @@ function fixt3d(v, selCol) {
       // In the wall: glass for a window, a closed slab for a door, and a thin casing on both faces.
       const grp = wallGroup(w, 1, 0, -w.thick), T = w.thick, [a0, a1, z0, z1] = fixtInner(f), iw = a1 - a0, ih = z1 - z0, c = f.bare ? 0 : CASE;
       // An imported door or window model fills the opening, through the wall's thickness.
-      const md = f.model && Math.max(f.md || 0, T + 1), mm = md && modelMesh(f.model, f.w, f.h, md, sel && selCol);
+      const fm = fixtModelOf(f), md = fm && Math.max(fm.md || 0, T + 1), mm = md && modelMesh(fm.model, f.w, f.h, md, sel && selCol);
       if (mm) { mm.position.set(f.off, f.elev, (T - md) / 2); grp.add(mm); v.root.add(tag(grp)); return; }
       if (f.kind === 'window') grp.add(box3(iw, ih, 0.25, hot || glass, (a0 + a1) / 2, (z0 + z1) / 2, T / 2, false));
       if (f.kind === 'door' && f.swing && f.swing !== 'none') {
@@ -322,7 +333,7 @@ function fixt3d(v, selCol) {
     if (fixtSink(f)) {
       const c = fixtCounter(f), m = c.depth / 2 - 0.5;
       // An imported sink model hangs from the countertop by its rim.
-      const mm = f.model && modelMesh(f.model, f.w, f.h, f.d, sel && selCol);
+      const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
       if (mm) { mm.position.set(0, c.top - f.h + 0.2, m - f.d / 2); grp.add(mm); v.root.add(tag(grp)); return; }
       grp.add(box3(f.w, 0.2, f.d, hot || metal, f.w / 2, c.top + 0.1, m));
       const n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5, bw = (f.w - 1.5 - gap * (n - 1)) / n;
@@ -331,7 +342,7 @@ function fixt3d(v, selCol) {
       grp.add(box3(1, 1, 7, hot || metal, f.w / 2, c.top + 13, m - f.d / 2 + 2));
       v.root.add(tag(grp)); return;
     }
-    const mm = f.model && modelMesh(f.model, f.w, f.h, f.d, sel && selCol);
+    const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
     if (mm) { mm.position.set(0, f.elev, 0); grp.add(mm); v.root.add(tag(grp)); return; }
     // A loose model not imported in this browser (or still loading) shows as a solid box.
     if (fixtLoose(f)) { grp.add(box3(f.w, f.h, f.d, hot || flat3('#d4d7db'), f.w / 2, f.elev + f.h / 2, f.d / 2)); v.root.add(tag(grp)); return; }

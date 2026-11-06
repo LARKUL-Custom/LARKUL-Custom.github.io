@@ -576,7 +576,8 @@ function buildRoomScene(v) {
       m.add(sp);
     });
     if ((ui.dims.cab && !R3 && L.labels) || hot) {
-      const sp = textSprite(`${LBL[c.id] || ''}  ${fmtLen(c.w)} × ${fmtLen(c.h)}`, 2.6 * k, hot ? { onTop: true, bg: hot, color: '#ffffff' } : { onTop: true });
+      // Printed pictures show just the cabinet number, smaller; the sizes are on the elevation pages.
+      const sp = textSprite(ui.printing ? LBL[c.id] || '' : `${LBL[c.id] || ''}  ${fmtLen(c.w)} × ${fmtLen(c.h)}`, (ui.printing ? 1.7 : 2.6) * k, hot ? { onTop: true, bg: hot, color: '#ffffff' } : { onTop: true });
       sp.position.set(c.w / 2, c.h + 2.2 * k, D * 0.6); m.add(sp);
     }
     v.root.add(grp);

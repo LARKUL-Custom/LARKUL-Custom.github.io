@@ -2217,12 +2217,12 @@ table.t tr.grouphead td.grouprow{padding:0;border-top:1px solid var(--line)}
 .libtree > .pick-findf input{width:100%}
 .libtree .lfold-h .arr,.libtree .lgrp-h .arr{width:12px;flex:none}
 /* Print drawings (print.js): landscape sheets with a title strip, the drawing, and the cabinet list under elevations */
-.mp-page.land{width:min(100%,11in);aspect-ratio:11/8.5;box-sizing:border-box;padding:.35in .4in;display:flex;flex-direction:column;gap:8px;margin:0 auto}
-.mp-hd{display:flex;justify-content:space-between;gap:12px;border-bottom:2px solid #111;padding-bottom:4px;font-size:13px;color:#111;flex:none}
+.mp-page.land{width:11in;height:8.5in;flex:none;box-sizing:border-box;padding:.35in;display:flex;flex-direction:column;gap:8px;margin:0 auto}
+.mp-hd{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #111;padding-bottom:3px;font-size:10px;color:#111;flex:none}
 .mp-svg{flex:1;min-height:0;width:100%;display:block}
 .mp-pic{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}.mp-pic img{max-width:100%;max-height:100%;object-fit:contain}
-.mp-cabs{flex:none;display:grid;grid-template-columns:repeat(3,1fr);gap:2px 14px;font-size:11px;color:#111;border-top:1px solid #999;padding-top:6px}
-.mp-cab b{font-size:12px}.mp-cab span{color:#333}
+.mp-cabs{flex:none;display:grid;grid-template-columns:repeat(4,1fr);gap:1px 12px;font-size:8.5px;color:#111;border-top:.5px solid #aaa;padding-top:4px}
+.mp-cab b{font-weight:600}.mp-cab span{color:#444}
 .mp-colorrow{border-left:1.5px solid var(--line);padding-left:14px}
 /* Drawings print on white paper in light colors even in dark mode; without color they are black lines on white. */
 .mp-draw{--ink:#111;--muted:#222;--panel:#fff;--paper:#fff;--sunk:#f1f1f1;--line:#888;--wall:#9a9a9a;--wood:#efe3cf;--wood-edge:#6b5a44;--tall:#e3cfae;--upper:#c9d8e4;--accent:#1d4ed8;--t-amber:#a14a06;color:#111}
@@ -2234,9 +2234,11 @@ table.t tr.grouphead td.grouprow{padding:0;border-top:1px solid var(--line)}
 .mp-line .mp-draw .ev-swing{stroke:#555}
 @page land{size:letter landscape;margin:.35in}
 @media print{
-  body.printing-multi .mp-page.land{page:land;width:auto;aspect-ratio:auto;height:7.75in;padding:0;margin:0}
+  body.printing-multi .mp-page.land{page:land;width:auto;height:7.75in;padding:0;margin:0}
+  body.printing-multi .mp-page.mp-cover{page:cover;width:11in;height:8.5in;margin:0;padding:0}
+  body.printing-multi .mp-pages{zoom:1!important}
 }
-.ev-tag rect{fill:#fff;stroke:#111;stroke-width:1.2}.ev-tag text{fill:#111}
+.ev-tag rect{fill:#fff;stroke:#111;stroke-width:.7}.ev-tag text{fill:#111}
 @media print{body.printing-multi .mp-page:last-child{break-after:auto;page-break-after:auto}}
 
 /* 0.49.1: the item panel under the drawing is white and plain like Mozaik (top bar and products tree keep Ayden's design).
@@ -2346,3 +2348,51 @@ table.t tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%,transpar
 .jm-side .f{text-align:left}
 .jm-side .f span{display:block;text-align:left}
 .jm-side .f{align-items:stretch!important}
+.mp-draw .dimln{stroke-width:.6}.mp-draw .lbl-m{fill:#222}.mp-draw .dimtxt{stroke-width:2px}
+.mp-line .mp-draw .ev-swing{stroke:#888;stroke-width:.5}.mp-line .mp-draw .ev-front{stroke-width:.8}
+/* Print layouts (printlayout.js): covers and title blocks built from pieces placed in inches */
+@page cover{size:letter landscape;margin:0}
+.mp-pages{justify-items:center}
+.mp-page.mp-cover{width:11in;height:8.5in;padding:0;overflow:hidden;box-sizing:border-box}
+.pl-box{position:relative;overflow:hidden}
+.pl-el{position:absolute;box-sizing:border-box;margin:0}
+.pl-text{white-space:pre-line;line-height:1.2;overflow:hidden;font-family:var(--f-ui)}
+.pl-img{object-fit:contain}.pl-img.pl-cover{object-fit:cover}
+.pl-empty{border:1px dashed #9aa;display:flex;align-items:center;justify-content:center;color:#778;font:9pt var(--f-ui);text-align:center;background:#f6f7f9}
+.pl-block{order:9;flex:none;color:#111}
+.mp-lay{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.mp-specs{flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(3.2in,1fr));gap:.2in;align-content:start;padding-top:.1in}
+.mp-spec h3{margin:0 0 6px;font-size:13pt;border-bottom:2px solid #d9731b;padding-bottom:3px;color:#111}
+.mp-spect{width:100%;border-collapse:collapse;font-size:9pt;color:#111}
+.mp-spect th{text-align:left;font-weight:600;color:#555;width:42%;padding:4px 8px 4px 0;vertical-align:top;border-bottom:.5px solid #ddd}
+.mp-spect td{padding:4px 0;border-bottom:.5px solid #ddd;font-weight:600}.mp-spect .muted{font-weight:400;color:#666}
+.mp-sw{display:inline-block;width:.18in;height:.18in;border:1px solid #333;border-radius:3px;vertical-align:-3px;margin-right:6px}
+.mp-odd{margin-top:8px;font-size:8pt;color:#333;background:#fff6ec;border-left:3px solid #d9731b;padding:5px 8px}
+.mp-notes{flex:none;font-size:9pt;color:#111;border-top:.5px solid #aaa;padding-top:6px}
+.plsheet{z-index:61;display:flex;flex-direction:column;gap:10px}
+.plsheet .lbbar{flex-wrap:wrap;gap:10px;align-items:end}
+.pl-work{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:12px}
+.pl-stage{overflow:auto;background:var(--sunk);border:1.5px solid var(--line);border-radius:10px;padding:12px;display:flex;align-items:flex-start;justify-content:center}
+.pl-paper{position:relative;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.18);flex:none;overflow:hidden;color:#111}
+.pl-paper .pl-el{cursor:move}
+.pl-paper .pl-line::after{content:'';position:absolute;inset:-5px}
+.pl-selbox{position:absolute;outline:2px solid var(--sel);outline-offset:1px;pointer-events:none}
+.pl-handle{position:absolute;right:-7px;bottom:-7px;width:12px;height:12px;background:var(--sel);border:2px solid #fff;border-radius:3px;pointer-events:auto;cursor:nwse-resize}
+.pl-side{overflow:auto;display:flex;flex-direction:column;gap:10px}
+.pl-side .cardbody{display:grid;gap:8px}
+.pl-h{margin:0;font-size:14px}
+.pl-row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}.pl-row .f{min-width:0;flex:1 1 80px}
+.pl-colrow{display:flex;gap:4px;align-items:center}.pl-colrow input[type=color]{width:40px;height:32px;padding:0;border:1.5px solid var(--line);border-radius:6px}
+.pl-names code{font-size:11px;background:var(--sunk);padding:1px 4px;border-radius:4px;cursor:help}
+.pl-syms{display:flex;flex-wrap:wrap;gap:6px}
+.pl-symbtn{position:relative;border:1.5px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
+.pl-symbtn:hover{border-color:var(--accent)}
+.pl-symdel{margin-left:6px;color:var(--muted);font-weight:700}
+.pl-logo img{width:56px;height:56px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px}
+@media (max-width:900px){.pl-work{grid-template-columns:1fr;grid-template-rows:auto auto}.pl-stage{max-height:50vh}}
+@media print{body.printing-multi #pleditor{display:none!important}}
+.pl-side .f{display:grid!important;grid-template-columns:1fr!important;gap:3px;align-items:stretch}
+.pl-side .f>span{font-size:12px;color:var(--muted);font-weight:600}
+.pl-side .f input,.pl-side .f select,.pl-side .f textarea{width:100%;min-width:0;box-sizing:border-box}
+.pl-side .pl-col{flex:0 0 auto}
+.pl-side .checkrow{align-self:center}

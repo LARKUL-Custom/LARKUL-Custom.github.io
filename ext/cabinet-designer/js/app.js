@@ -828,6 +828,7 @@ document.addEventListener('click', e => {
   if (/^q-/.test(a) && typeof quickAct === 'function' && quickAct(a, id, el)) return;
   if (/^jt-/.test(a) && typeof jtAct === 'function' && jtAct(a, id, el)) return;
   if (/^(mp|rem|rc|sv|mt)-/.test(a) && typeof libs2Act === 'function' && libs2Act(a, id)) return;
+  if (/^pl-/.test(a) && typeof plAct === 'function' && plAct(a, id)) return;
   if (/^(ds|dt|v)-/.test(a) && typeof vAct === 'function' && vAct(a, id)) return;
   if (/^lp-/.test(a) && typeof libAct === 'function' && libAct(a, id)) return;
   if (/^(rl|rvar|jfield|fx)-/.test(a) && typeof fxAct === 'function' && fxAct(a, id, el)) return;

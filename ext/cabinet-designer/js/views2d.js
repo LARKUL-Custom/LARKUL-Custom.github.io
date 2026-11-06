@@ -17,7 +17,7 @@ function renderPlan(pr) {
     if (px < 0.12) s += `<rect x="${v.x}" y="${v.y}" width="${v.w}" height="${v.h}" fill="url(#gmin)"/>`;
     s += `<rect x="${v.x}" y="${v.y}" width="${v.w}" height="${v.h}" fill="url(#gmaj)"/>`;
   }
-  const fs = 13 * px;
+  const fs = (pr ? 9 : 13) * px;
   // Base and tall first, uppers over them; the selected cabinet last so its outline is never hidden.
   const hot = c => (ui.sel && ui.sel.id === c.id) || ui.dropCab === c.id;
   const order = [...S.cabinets].sort((a, b) => ((a.cat === 'Wall') - (b.cat === 'Wall')) || (hot(a) - hot(b)));
@@ -121,7 +121,7 @@ function cabPlanSVG(c) {
   s += planFrontsSVG(c);
   if (ui.open[c.id]) s += planOpenSVG(c);
   // Uppers are labeled near the wall and bases near the front, so a stacked pair never prints on top of each other.
-  const fs = Math.min(13 * px, c.w * 0.32, c.d * 0.3), at = cabPt(c, c.w / 2, c.cat === 'Wall' ? c.d * 0.36 : c.d * 0.62);
+  const fs = Math.min((ui.printing ? 9 : 13) * px, c.w * 0.32, c.d * 0.3), at = cabPt(c, c.w / 2, c.cat === 'Wall' ? c.d * 0.36 : c.d * 0.62);
   const showW = ui.dims.cab && c.w / px > 34;
   let t = `<text class="lbl ${c.cat === 'Wall' ? 'lbl-up' : ''}" x="${at.x}" y="${at.y - (showW ? fs * 0.15 : -fs * 0.35)}" font-size="${fs}" text-anchor="middle" font-weight="600">${LBL[c.id] || ''}</text>`;
   if (showW) t += `<text class="lbl-m" x="${at.x}" y="${at.y + fs * 0.95}" font-size="${fs * 0.85}" text-anchor="middle">${fmtLen(c.w)}</text>`;
@@ -781,7 +781,7 @@ function renderElev(pr) {
   const z = !pr && ui.elevZ && ui.elevZ.wall === w.id ? ui.elevZ : null;
   let vb = `${x0} ${top} ${vbW} ${vbH}`;
   if (z) { const zw = vbW / z.k, zh = vbH / z.k; px /= z.k; vb = `${z.cx - zw / 2} ${z.cy - zh / 2} ${zw} ${zh}`; }
-  const fs = 10.5 * px;
+  const fs = (pr ? 7.5 : 10.5) * px;
   ui.elevPx = px; ui.elevL = L;
   if (svg) svg.setAttribute('viewBox', vb);
   const zc = !pr && $('#elevzoom'); if (zc) zc.style.display = z ? '' : 'none';
@@ -803,7 +803,7 @@ function renderElev(pr) {
     else if ((ui.sel && ui.sel.type === 'cab' && ui.sel.id === c.id) || inMulti(c.id)) body += `<rect class="ev-halo nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/><rect class="ev-sel nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`;
     body += '</g>';
     // On paper the number sits in a white tag inside the cabinet's top, clear of tops and molding.
-    if (pr) { const t = LBL[c.id] || '', tw = t.length * fs * 0.62 + fs * 0.8, th = fs * 1.45, ty = by - c.h + Math.min(c.h * 0.5, fs * 1.6); labels += `<g class="ev-tag" pointer-events="none"><rect class="nss" x="${ex + c.w / 2 - tw / 2}" y="${ty - th / 2}" width="${tw}" height="${th}" rx="${th / 2}"/><text x="${ex + c.w / 2}" y="${ty}" font-size="${fs * 1.05}" text-anchor="middle" dominant-baseline="central" font-weight="700">${t}</text></g>`; }
+    if (pr) { const t = LBL[c.id] || '', tw = t.length * fs * 0.58 + fs * 0.7, th = fs * 1.35, ty = by - c.h + Math.min(c.h * 0.5, fs * 1.5); labels += `<g class="ev-tag" pointer-events="none"><rect class="nss" x="${ex + c.w / 2 - tw / 2}" y="${ty - th / 2}" width="${tw}" height="${th}" rx="${th / 2}"/><text x="${ex + c.w / 2}" y="${ty}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" font-weight="600">${t}</text></g>`; }
     else labels += `<text class="lbl dimtxt" x="${ex + c.w / 2}" y="${by - c.h - 2 * px}" font-size="${fs}" text-anchor="middle" font-weight="600" pointer-events="none">${LBL[c.id]}</text>`;
     if (!c.noDim) dims.push([ex, ex + c.w, c.cat === 'Wall' ? 'up' : 'down']);
     fillersOf(c).forEach(fl => { const fx = fl.end === 'L' ? ex - fl.gap : ex + c.w; dims.push([fx, fx + fl.gap, c.cat === 'Wall' ? 'up' : 'down', 'fill']); });

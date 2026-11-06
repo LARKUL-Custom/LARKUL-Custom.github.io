@@ -64,43 +64,59 @@ function printViewer3D() {
   }
   return printViewer.ok ? printViewer : null;
 }
-// The room's saved 3D views, or one view from the front corner when none are saved. Walls are left out.
+// The room's saved 3D views, or one view from the front corner when none are saved.
 const print3DViews = room => (room.views || []).length ? room.views : [{ id: 'iso', name: '3D view' }];
-function print3DShot(room, vw) {
+// o.real: the realistic look (the cover picture); o.aspect: width / height of the box the picture goes in.
+function print3DShot(room, vw, o = {}) {
   const v = printViewer3D(); if (!v) return null;
+  const W = 1600, H = Math.round(W / (o.aspect || 1.5));
+  v.host.style.width = W + 'px'; v.host.style.height = H + 'px';
   return withRoom(room, () => printQuiet(() => {
-    // Printed 3D shows the cabinets on their own: no walls or ceiling in the way.
-    const keepL = ui.layers; ui.layers = { ...(ui.layers || {}), walls: false, ceiling: false };
-    R3 = !!ui.render3d;
-    try { buildRoomScene(v); } finally { R3 = false; ui.layers = keepL; }
-    if (!ui.render3d) v.setBackground('#ffffff');
+    // Printed 3D keeps the walls but cuts away the ones between the camera and the cabinets, and drops the ceiling.
+    const keep = [ui.layers, ui.cutaway, ui.wallOp]; ui.layers = { ...(ui.layers || {}), walls: true, ceiling: false }; ui.cutaway = true; ui.wallOp = 1;
+    const real = o.real ?? !!ui.render3d;
+    R3 = real;
+    try { buildRoomScene(v); } finally { R3 = false; [ui.layers, ui.cutaway, ui.wallOp] = keep; }
+    if (!real) v.setBackground('#ffffff');
     v.resize();
     if (vw.pos) v.setView(vw); else view3dPreset(v, 'iso');
+    // o.tight (the cover): with no saved view, frame the cabinets themselves so they fill the picture.
+    if (o.tight && !vw.pos) {
+      const box = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && m.userData.cabId) box.expandByObject(m); });
+      if (!box.isEmpty()) { v.lookBox(box, { x: -1, y: 1.15, z: 1 }); v.orthoH = Math.max(12, box.getSize(new THREE.Vector3()).length() / 2) * 1.3; v.resize(); }
+    }
+    if (real) v.fitShadow();
     v.draw();
     return v.renderer.domElement.toDataURL('image/jpeg', 0.9);
   }));
 }
+// Pictures are kept while Print is open; each remembers how to take itself again once textures have loaded.
+const printShots = {};
+function printPic(key, shot) {
+  printShots[key] = shot;
+  if (!printPics[key]) { try { printPics[key] = shot(); } catch (_) { printPics[key] = null; } }
+  print3DLater();
+  return printPics[key];
+}
 function print3DPages(room, head) {
   return print3DViews(room).map(vw => {
-    const key = room.id + '|' + vw.id;
-    if (!printPics[key]) { try { printPics[key] = print3DShot(room, vw); } catch (_) { printPics[key] = null; } }
-    if (!printPics[key]) return '';
-    return `<section class="mp-page land mp-draw">${head(room.name, vw.name || '3D view')}<div class="mp-pic"><img src="${printPics[key]}" alt="${esc(room.name)} ${esc(vw.name || '3D view')}" data-pic="${esc(key)}"></div></section>`;
+    const key = room.id + '|' + vw.id, url = printPic(key, () => print3DShot(room, vw));
+    if (!url) return '';
+    return `<section class="mp-page land mp-draw">${head(room.name, vw.name || '3D view')}<div class="mp-pic"><img src="${url}" alt="${esc(room.name)} ${esc(vw.name || '3D view')}" data-pic="${esc(key)}"></div></section>`;
   }).join('');
 }
 // Wood textures load a moment after the first picture: take the pictures again once and swap them in.
-let printLate = 0;
+let printLate = 0, printLateDone = {};
 function print3DLater() {
   clearTimeout(printLate);
   printLate = setTimeout(() => {
-    document.querySelectorAll('#multiprint img[data-pic]').forEach(img => {
-      const [rid, vid] = img.dataset.pic.split('|'), room = S.rooms.find(r => r.id === rid), vw = room && print3DViews(room).find(x => x.id === vid);
-      if (!vw) return;
-      try { const url = print3DShot(room, vw); if (url) { printPics[img.dataset.pic] = url; img.src = url; } } catch (_) {}
+    document.querySelectorAll('img[data-pic]').forEach(img => {
+      const k = img.dataset.pic, shot = printShots[k]; if (!shot || printLateDone[k]) return;
+      try { const url = shot(); if (url) { printPics[k] = url; printLateDone[k] = true; document.querySelectorAll(`img[data-pic="${CSS.escape(k)}"]`).forEach(i => { i.src = url; }); } } catch (_) {}
     });
   }, 900);
 }
-function printPicsClear() { Object.keys(printPics).forEach(k => delete printPics[k]); }
+function printPicsClear() { Object.keys(printPics).forEach(k => delete printPics[k]); printLateDone = {}; }
 
 // All the drawing pages for the preset's picks, room by room (plan, then the walls, then 3D).
 function printDrawings(pr, rooms, head) {
@@ -112,6 +128,40 @@ function printDrawings(pr, rooms, head) {
     if (want('elev')) printWallSides(room).forEach(ws => out.push(printElevPage(room, ws, head)));
     if (want('3d')) out.push(print3DPages(room, head));
   });
-  if (want('3d')) print3DLater();
   return out.filter(Boolean);
+}
+
+/* ----- Job specs: what the job is made of, room by room (door style, finish, cabinet material, hardware, color) ----- */
+function printSpecRows(room) {
+  return withRoom(room, () => {
+    const rs = k => roomSet(k, room), nm = x => (x && x.name) || '';
+    const dt = doorTpl(rs('doorT')), fin = finishList().find(f => f.id === rs('finish')) || finishList()[0], cm = cabMatT(rs('cabMatT')), dm = drawerMatT(rs('drawerMatT'));
+    const pick = texPickOf('doors'), paint = TEX_PAINTS.find(([h]) => h.toLowerCase() === String(pick).toLowerCase());
+    const color = !pick ? `Natural ${esc(nm(fin))}` : pick[0] === '#' ? `<i class="mp-sw" style="background:${esc(pick)}"></i>${paint ? esc(paint[1]) + ' ' : ''}<span class="muted">${esc(pick)}</span>` : esc(nm(skinOf(pick, null)));
+    const pull = hw(rs('pull') || (dt && dt.pull));
+    const rows = [['Door style', esc(nm(dt))], ['Door and drawer front material', esc(nm(fin)) + (fin && mat(fin.front) ? ` <span class="muted">${esc(mat(fin.front).name)}</span>` : '')], ['Stain / paint color', color],
+      ['Cabinet material', esc(nm(cm)) + (cm && mat(cm.carcass) ? ` <span class="muted">${esc(mat(cm.carcass).name)}</span>` : '')], ['Drawer boxes', esc(nm(dm))],
+      ['Drawer guides', esc(nm(hw(rs('slide'))))], ['Hinges', esc(nm(hw(rs('hinge'))))], ['Pulls and knobs', esc(nm(pull)) || 'None'],
+      ['Countertops', esc(nm(countertop(rs('countertop'))))]];
+    // Cabinets that differ from their room, so the shop doesn't miss them.
+    const odd = [];
+    S.cabinets.forEach(c => {
+      const d = [];
+      if (c.doorT && c.doorT !== rs('doorT')) d.push('door style ' + nm(doorTpl(c.doorT)));
+      if (c.finish && c.finish !== rs('finish')) d.push('finish ' + nm(finishList().find(f => f.id === c.finish)));
+      if (c.cabMatT && c.cabMatT !== rs('cabMatT')) d.push('cabinet ' + nm(cabMatT(c.cabMatT)));
+      if (c.slide && c.slide !== rs('slide')) d.push('guides ' + nm(hw(c.slide)));
+      if (c.hinge && c.hinge !== rs('hinge')) d.push('hinges ' + nm(hw(c.hinge)));
+      if (c.tex && c.tex.doors && c.tex.doors !== pick) d.push('color ' + (c.tex.doors[0] === '#' ? c.tex.doors : nm(skinOf(c.tex.doors, null))));
+      if (d.length) odd.push(`<b>${esc(LBL[c.id] || '')}</b> ${esc(d.join(', '))}`);
+    });
+    return { rows, odd };
+  });
+}
+function printSpecPage(pr, rooms, head) {
+  const cards = rooms.map(room => {
+    const { rows, odd } = printSpecRows(room);
+    return `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v || '—'}</td></tr>`).join('')}</table>${odd.length ? `<div class="mp-odd"><b>Different on these cabinets</b><br>${odd.join('<br>')}</div>` : ''}</div>`;
+  }).join('');
+  return `<section class="mp-page land mp-draw">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Job specs')}<div class="mp-specs">${cards}</div>${S.job.notes ? `<div class="mp-notes"><b>Notes</b> ${esc(S.job.notes)}</div>` : ''}</section>`;
 }
