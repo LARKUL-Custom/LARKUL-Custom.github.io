@@ -809,44 +809,59 @@ function cutScope() {
   }));
   return { rooms, parts, tops, molds, cabs };
 }
+// Laid out like Pricing and the cabinet editor: the job's numbers and the material picker down the left,
+// one row of tabs over the work, and every button down the right.
 function renderCutlist() {
   if (ui.cutRoom !== 'all' && !roomById(ui.cutRoom)) ui.cutRoom = 'all';
+  const view = ['parts', 'tops', 'cnc'].includes(ui.cutView) ? ui.cutView : 'parts';
   const sc = cutScope(), multi = sc.rooms.length > 1;
   sc.parts.forEach((p, i) => p.key = p.cabId + '#' + i);
-  // Material and cabinet filters, like the dropdowns across the top of Mozaik's cut list.
   const mats = [...new Set(sc.parts.map(p => p.mat))], cabsIn = [...new Map(sc.parts.map(p => [p.cabId + '|' + p.room, (multi ? p.room + ' · ' : '') + p.cab])).entries()];
   if (ui.cutMat && !mats.includes(ui.cutMat)) ui.cutMat = '';
   if (ui.cutCab && !cabsIn.some(([k]) => k === ui.cutCab)) ui.cutCab = '';
-  const shown = sc.parts.filter(p => (!ui.cutMat || p.mat === ui.cutMat) && (!ui.cutCab || p.cabId + '|' + p.room === ui.cutCab));
+  const inCab = sc.parts.filter(p => !ui.cutCab || p.cabId + '|' + p.room === ui.cutCab);
+  const shown = inCab.filter(p => !ui.cutMat || p.mat === ui.cutMat);
   const sel = shown.find(p => p.key === ui.partSel) || shown[0];
-  const nParts = shown.reduce((a, p) => a + p.qty, 0), sqft = shown.reduce((a, p) => a + p.qty * p.L * p.W, 0) / 144;
+  const cnt = ps => ps.reduce((a, p) => a + p.qty, 0), area = ps => ps.reduce((a, p) => a + p.qty * p.L * p.W, 0) / 144;
+  const sheets = (m, ps) => { const M = mat(m); if (!M || !M.sheetW || !M.sheetL || M.kind === 'top') return 0; return Math.ceil(ps.reduce((a, p) => a + p.qty * p.L * p.W, 0) * 1.15 / (M.sheetW * M.sheetL)); };
   const byMat = {}; shown.forEach(p => (byMat[p.mat] = byMat[p.mat] || []).push(p));
+  const allMat = {}; inCab.forEach(p => (allMat[p.mat] = allMat[p.mat] || []).push(p));
+  const nSheets = Object.entries(allMat).reduce((a, [m, ps]) => a + sheets(m, ps), 0);
   const cabName = p => (multi ? esc(p.room) + ' · ' : '') + p.cab;
-  $('#tab-cutlist').innerHTML = `<div class="pagehead"><div><h2>Cut list</h2></div>
-    <div class="row-actions"><button class="btn primary" data-act="labels">Print labels</button><button class="btn" data-act="sv-open" data-id="${cutOneCab()}">${icon('list')}Shop view</button></div></div>
-  <div class="cl-filters"><label class="f wide"><span>Room</span><select id="cutroom"><option value="all">Whole job (${S.rooms.length} rooms)</option>${S.rooms.map(r => `<option value="${r.id}"${ui.cutRoom === r.id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
-    <label class="f wide"><span>Material</span><select id="cutmat"><option value="">All</option>${mats.map(m => `<option value="${esc(m)}"${ui.cutMat === m ? ' selected' : ''}>${esc((mat(m) || {}).name || m)}</option>`).join('')}</select></label>
-    <label class="f wide"><span>Cabinet</span><select id="cutcab"><option value="">All</option>${cabsIn.map(([k, l]) => `<option value="${esc(k)}"${ui.cutCab === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-    <label class="f wide cp-open"><span>What to cut</span><button class="btn${ui.cutPick ? ' on' : ''}" data-act="cut-pk-open" aria-expanded="${!!ui.cutPickOpen}">${icon('check')}${esc(cutPickText(sc.rooms))}</button></label></div>
-  ${cutPickCard(sc.rooms)}${cncCard()}${typeof recutCard === 'function' ? recutCard() : ''}
-  <div class="split2">
-    <div class="stack"><div class="card tscroll"><table class="t cl-t"><thead><tr><th class="r">Qty</th><th class="r">Width</th><th class="r">Length</th><th>Part</th><th>Edge</th><th>Cab</th><th class="r">Ops</th></tr></thead>
-    <tbody>${Object.entries(byMat).map(([mid, ps]) => `<tr><td colspan="7" class="grouprow">${swatch(mat(mid), 14)} <b>${esc((mat(mid) || {}).name || mid)}</b> <span class="muted">· ${fmtLen(ps[0].T)} · ${ps.reduce((a, p) => a + p.qty, 0)} parts</span></td></tr>` + ps.map(p => `<tr class="click${sel && p.key === sel.key ? ' on' : ''}" data-act="part" data-id="${p.key}" title="Double-click to open the part editor"><td class="n">${p.qty}</td><td class="n">${fmtLen(p.W)}</td><td class="n">${fmtLen(p.L)}</td><td>${esc(p.report || p.name)}${p.report ? ` <span class="muted">(${esc(p.name)})</span>` : ''}</td><td>${p.edges}</td><td>${cabName(p)}</td><td class="n">${p.ops.length || ''}</td></tr>`).join('')).join('') || `<tr><td colspan="7" class="muted">${ui.cutPick ? 'Nothing picked to cut. Use What to cut above to pick cabinets, fillers and panels.' : 'No parts yet. Place cabinets in the Room tab.'}</td></tr>`}${shown.length ? `<tr class="cl-tot"><td class="n">${nParts}</td><td colspan="6">Parts (total)</td></tr><tr class="cl-tot"><td class="n">${Math.round(sqft * 10) / 10}</td><td colspan="6">Sq ft (total)</td></tr>` : ''}</tbody></table></div>
-    ${!ui.cutPick && (sc.tops.length || sc.molds.length) ? `<div class="card tscroll"><table class="t"><thead><tr><th>Countertops and moldings</th><th class="r">Length</th><th class="r">Depth / height</th><th>Material</th></tr></thead><tbody>
-      ${sc.tops.map(r => `<tr><td>${esc(r.tpl.name)} · ${multi ? esc(r.room) + ' · ' : ''}${r.wallN}</td><td class="n">${fmtLen(r.len)}</td><td class="n">${fmtLen(r.depth)}</td><td>${esc((mat(r.tpl.mat) || {}).name || '')}</td></tr>`).join('')}
-      ${sc.molds.map(r => `<tr><td>${esc(r.m.name)} · ${multi ? esc(r.room) + ' · ' : ''}${r.wallN}</td><td class="n">${fmtLen(r.len)}</td><td class="n">${fmtLen(r.h)}</td><td>${esc((mat(r.m.mat) || {}).name || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}</div>
-    <div class="card sticky">${sel ? `${cardHead(`${cabName(sel)} · ${esc(sel.report || sel.name)}`, `<span class="mono">${fmtLen(sel.L)} × ${fmtLen(sel.W)} × ${fmtLen(sel.T)}</span>${sel.cabId && cab(sel.cabId) ? `<button class="btn sm primary" data-act="cut-edit-part" data-id="${esc(sel.cabId + '|' + peKeyOf(sel))}">Edit part</button>` : ''}<button class="btn sm" data-act="rc-add" data-id="${esc(sel.key)}" title="Add to the recut list">Recut</button>`)}
-      <div class="cardbody"><div class="preview">${partSVG(sel)}</div>
+  // Left: totals, then one tile per material that filters the list (the old Material dropdown).
+  const matTile = (m, ps) => { const M = mat(m) || {}, n = sheets(m, ps); return `<button class="cl-mat${ui.cutMat === m ? ' on' : ''}" data-act="cut-mat" data-id="${esc(m)}">${swatch(M, 26)}<span><b>${esc(M.name || m)}</b><small>${cnt(ps)} parts${n ? ` · about ${n} sheet${n === 1 ? '' : 's'}` : ''}</small></span></button>`; };
+  const side = `<div class="prx-grand cl-grand"><span>${ui.cutCab ? 'One cabinet' : ui.cutRoom === 'all' ? `Whole job, ${S.rooms.length} rooms` : esc((roomById(ui.cutRoom) || curRoom()).name)}</span><b>${cnt(inCab)} parts</b><small>${Math.round(area(inCab))} sq ft · about ${nSheets} sheets with waste</small></div>
+    <label class="cl-f"><span>Room</span><select id="cutroom"><option value="all">Whole job (${S.rooms.length} rooms)</option>${S.rooms.map(r => `<option value="${r.id}"${ui.cutRoom === r.id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
+    <label class="cl-f"><span>Cabinet</span><select id="cutcab"><option value="">All</option>${cabsIn.map(([k, l]) => `<option value="${esc(k)}"${ui.cutCab === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+    <label class="cl-f"><span>What to cut</span><button class="btn${ui.cutPick ? ' on' : ''}" data-act="cut-pk-open" aria-expanded="${!!ui.cutPickOpen}">${icon('check')}${esc(cutPickText(sc.rooms))}</button></label>
+    <div class="prx-navh">Materials</div><div class="cl-mats"><button class="cl-mat all${ui.cutMat ? '' : ' on'}" data-act="cut-mat" data-id=""><span class="cl-allic">${icon('stack')}</span><span><b>All materials</b><small>${cnt(inCab)} parts</small></span></button>${Object.entries(allMat).map(([m, ps]) => matTile(m, ps)).join('')}</div>`;
+  const tabs = `<div class="setx-tabs prx-tabs" role="tablist">${[['parts', 'Parts', 'list'], ['tops', 'Tops and molding', 'ruler'], ['cnc', 'Send to the CNC', 'download']].map(([k, l, ic]) => `<button role="tab" data-act="cut-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
+  const tones = ['teal', 'amber', 'violet', 'blue', 'green', 'rose'];
+  const matBox = ([mid, ps], i) => `<div class="psec box">${secHead('stack', `${esc((mat(mid) || {}).name || mid)} · ${fmtLen(ps[0].T)}`, tones[i % tones.length])}<div class="prx-roomh"><span class="note">${cnt(ps)} parts · ${Math.round(area(ps) * 10) / 10} sq ft</span></div>
+    <div class="tscroll"><table class="t cl-t"><thead><tr><th class="r">Qty</th><th class="r">Width</th><th class="r">Length</th><th>Part</th><th>Edge</th><th>Cabinet</th><th class="r">Ops</th></tr></thead><tbody>
+    ${ps.map(p => `<tr class="click${sel && p.key === sel.key ? ' on' : ''}" data-act="part" data-id="${p.key}" title="Double-click to open the part editor"><td class="n">${p.qty}</td><td class="n">${fmtLen(p.W)}</td><td class="n">${fmtLen(p.L)}</td><td>${esc(p.report || p.name)}${p.report ? ` <span class="muted">(${esc(p.name)})</span>` : ''}</td><td>${p.edges}</td><td>${cabName(p)}</td><td class="n">${p.ops.length || ''}</td></tr>`).join('')}</tbody></table></div></div>`;
+  const detail = sel ? `<div class="psec box cl-detail">${secHead('ruler', `${cabName(sel)} · ${esc(sel.report || sel.name)}`, 'blue')}
+      <div class="cl-dsize">${fmtLen(sel.L)} × ${fmtLen(sel.W)} × ${fmtLen(sel.T)} <span class="muted">${esc((mat(sel.mat) || {}).name || '')}</span></div>
+      <div class="preview">${partSVG(sel)}</div>
       ${EDGE_KEYS.some(k => sel.band[k]) ? `<table class="t"><thead><tr><th>Edge</th><th>Where</th><th>Edgeband</th></tr></thead><tbody>${EDGE_KEYS.filter(k => sel.band[k]).map(k => `<tr><td><b>${k}</b></td><td>${esc(partKind(sel.kind).edges[k])}</td><td>${swatchBand(edgeband(sel.band[k]))} ${esc(edgeband(sel.band[k]).name)}</td></tr>`).join('')}</tbody></table>` : '<div class="note">No edgebanding on this part.</div>'}
       <details class="pe-more"><summary>Edge and origin key</summary><div class="note">Origin (orange dot) is the top-left corner as drawn. L1 is the top edge as drawn, L2 the bottom, W1 the left end and W2 the right end. Cabinet sides: x runs up from the floor, y back from the front edge. Fronts: x up from the bottom edge, y from the left edge as seen from the front.</div></details>
-      <div class="tscroll" style="max-height:300px;overflow:auto"><table class="t"><thead><tr><th>Operation</th><th>For</th></tr></thead><tbody>${sel.ops.map(o => `<tr><td>${esc(opText(o))}</td><td class="muted">${esc(o.why || '')}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No machining on this part</td></tr>'}</tbody></table></div></div>` : '<div class="cardbody muted">Select a part.</div>'}</div>
-  </div>`;
+      <div class="tscroll" style="max-height:260px;overflow:auto"><table class="t"><thead><tr><th>Operation</th><th>For</th></tr></thead><tbody>${sel.ops.map(o => `<tr><td>${esc(opText(o))}</td><td class="muted">${esc(o.why || '')}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No machining on this part</td></tr>'}</tbody></table></div></div>` : '';
+  const empty = `<div class="psec box">${secHead('list', 'Parts', 'teal')}<div class="note">${ui.cutPick ? 'Nothing picked to cut. Use What to cut on the left to pick cabinets, fillers and panels.' : 'No parts yet. Place cabinets in the Room tab.'}</div></div>`;
+  const tops = `<div class="psec box">${secHead('ruler', 'Countertops', 'amber')}<div class="tscroll"><table class="t"><thead><tr><th>Top</th><th>Where</th><th class="r">Length</th><th class="r">Depth</th><th>Material</th></tr></thead><tbody>
+      ${sc.tops.map(r => `<tr><td>${esc(r.tpl.name)}</td><td>${multi ? esc(r.room) + ' · ' : ''}${r.wallN}</td><td class="n">${fmtLen(r.len)}</td><td class="n">${fmtLen(r.depth)}</td><td>${esc((mat(r.tpl.mat) || {}).name || '')}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No countertops. Build them on the Tops tab.</td></tr>'}</tbody></table></div></div>
+    <div class="psec box">${secHead('ruler', 'Molding', 'violet')}<div class="tscroll"><table class="t"><thead><tr><th>Molding</th><th>Where</th><th class="r">Length</th><th class="r">Height</th><th>Material</th></tr></thead><tbody>
+      ${sc.molds.map(r => `<tr><td>${esc(r.m.name)}</td><td>${multi ? esc(r.room) + ' · ' : ''}${r.wallN}</td><td class="n">${fmtLen(r.len)}</td><td class="n">${fmtLen(r.h)}</td><td>${esc((mat(r.m.mat) || {}).name || '')}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No molding. Build it on the Molding tab.</td></tr>'}</tbody></table></div></div>`;
+  const body = view === 'tops' ? tops : view === 'cnc' ? cncCard() : `<div class="cl-split"><div class="cl-list">${Object.entries(byMat).map(matBox).join('') || empty}</div><div class="cl-side">${detail}</div></div>`;
+  const b = (act, ic, l, x = '', id = '') => `<button class="btn${x}" data-act="${act}"${id ? ` data-id="${esc(id)}"` : ''}>${icon(ic)}${l}</button>`;
+  const acts = `<div class="prx-acts">${inHub() ? b('cnc-save', 'check', 'Save CNC parts to Files', ' primary') + b('cnc-download', 'download', 'Download parts file') : b('cnc-download', 'download', 'Download parts file', ' primary')}
+    ${b('labels', 'print', 'Print labels')}${b('sv-open', 'list', 'Shop view', '', cutOneCab())}${b('tab', 'stack', 'Other exports', '', 'export')}
+    ${sel && view === 'parts' ? `<span class="edx-sep"></span><div class="prx-acth">Picked part</div>${sel.cabId && cab(sel.cabId) ? b('cut-edit-part', 'edit', 'Edit part', '', sel.cabId + '|' + peKeyOf(sel)) : ''}${b('rc-add', 'plus', 'Add to recut list', '', sel.key)}` : ''}</div>`;
+  $('#tab-cutlist').innerHTML = `<div class="prx clx"><aside class="prx-side">${side}</aside>
+    <section class="prx-main"><div class="prx-top"><h2>Cut list</h2>${tabs}</div><div class="prx-body">${cutPickCard(sc.rooms)}${typeof recutCard === 'function' ? recutCard() : ''}${body}</div></section>${acts}</div>`;
   $('#cutroom').addEventListener('change', e => { ui.cutRoom = e.target.value; ui.partSel = null; renderCutlist(); });
-  $('#cutmat').addEventListener('change', e => { ui.cutMat = e.target.value; ui.partSel = null; renderCutlist(); });
   $('#cutcab').addEventListener('change', e => { ui.cutCab = e.target.value; ui.partSel = null; renderCutlist(); });
   document.querySelectorAll('.cut-pk[data-mixed]').forEach(x => { x.indeterminate = true; });
 }
-
 /* ---------- Export ---------- */
 function exportData(units) {
   const f = units === 'mm' ? 25.4 : 1, r = v => Math.round(v * f * 1000) / 1000;
@@ -920,7 +935,7 @@ function exportText() {
 function cncCard() {
   const f = cncPartFile(true).file, n = (f.parts || []).reduce((a, p) => a + (p.qty || 1), 0);
   const where = ui.cutRoom === 'all' ? 'the whole job' : esc((roomById(ui.cutRoom) || curRoom()).name);
-  return `<div class="card cardbody cnccard"><div class="pshead"><h3>${icon('export')}Send to the CNC</h3><span class="cnc-count">${n} part${n === 1 ? '' : 's'} from ${ui.cutPick ? 'what is picked in ' : ''}${where}</span><span class="note">In millimeters, for CNC Cutlist</span></div>
+  return `<div class="psec box cnccard">${secHead('download', 'Send to the CNC', 'blue')}<div class="pshead"><span class="cnc-count">${n} part${n === 1 ? '' : 's'} from ${ui.cutPick ? 'what is picked in ' : ''}${where}</span><span class="note">In millimeters, for CNC Cutlist</span></div>
     <div class="row-actions">${inHub() ? `<button class="btn primary" data-act="cnc-save">${icon('check')}Save CNC parts to Files</button>` : ''}<button class="btn${inHub() ? '' : ' primary'}" data-act="cnc-download">Download parts file</button><button class="btn" data-act="tab" data-id="export">Other exports</button></div>
     ${cncSkippedNote()}</div>`;
 }

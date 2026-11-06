@@ -108,7 +108,7 @@ function edTab(c, tab, qr) {
       return `${qeOpening(c, qr, 'face')}
         <div class="psec box">${secHead('door', 'Doors and drawers', 'violet')}
           <div class="grid2">${fld('Door template', R, 'doorT', c.doorT || '', 'select', { options: setOpts('doorT', opts(S.doorTemplates), 'cab') })}${fld('Pulls', R, 'pull', c.pull || '', 'select', { options: setOpts('pull', opts(hwOf('pull')), 'cab') })}
-          ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}</div></div>${ffBox(c)}`;
+          ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}</div></div>${ffBox(c)}${edFrontList(c, qr)}`;
     }
     case 'interior': return `${qeOpening(c, qr, 'inside')}${intLibrary(c, qr)}<div class="psec box">${intWhole(c)}</div>${typeof qInteriorExtras === 'function' ? qInteriorExtras(c) : ''}`;
     case 'materials': return `${finishedBox(c)}<div class="psec box">${secHead('palette', 'Materials and hardware', 'amber')}${dockBody('cab-tpl')}
@@ -131,8 +131,8 @@ function edTab(c, tab, qr) {
   }
   return '';
 }
-// Tabs that need the room: no front drawing beside them, like Mozaik's Shape, Parts and Parameters tabs.
-const ED_WIDE = ['materials', 'shape', 'params', 'parts', 'price', 'info', 'notes'];
+// Tabs with their own big drawing or table: no picture beside them.
+const ED_WIDE = ['shape', 'parts'];
 // Mozaik's product log: what's wrong with the cabinet and what was changed by hand, always in sight.
 function edLog(c, b) {
   const L = [], E = c.partEdits || {}, n = f => Object.values(E).filter(f).length;
@@ -149,35 +149,66 @@ function edLog(c, b) {
   if (c.shape && Object.values(c.shape).some(v => v && (v.pts || []).length)) L.push(['info', 'The cabinet has a shaped outline']);
   return L;
 }
-function edHead(c, b) {
-  const pic = typeof cabPic3D === 'function' ? cabPic3D(c, () => { const im = document.querySelector('.ed-pic img'); if (im && ui.quick) renderQuick(); }) : null, R = 'cab:' + c.id, log = edLog(c, b);
-  return `<div class="ed-head"><div class="ed-pic">${pic ? `<img src="${pic}" alt="">` : frontPreviewSVG(c, 90)}</div>
-    <div class="ed-ids">${fld('Name', R, 'name', c.name, 'text')}${fld('Description', R, 'desc', c.desc || '', 'text', { ph: (libItem(c.libId) || {}).name || '' })}<div class="ed-type muted">${esc(c.cat || '')}${c.corner ? ' · corner' : ''} · ${fmtLen(c.w, 1)} × ${fmtLen(c.h, 1)} × ${fmtLen(c.d, 1)}</div></div>
-    <div class="ed-log" role="log" aria-label="Product log"><div class="ed-logh">Product log</div>${log.map(([k, t]) => `<div class="ed-logl ${k}">${k === 'warn' ? '⚠' : 'ℹ'} ${esc(t)}</div>`).join('') || '<div class="ed-logl ok">✓ Nothing to check</div>'}</div></div>`;
+// The editor's picture: cropped to the cabinet, with its width under it and its height beside it, like a shop drawing.
+function edDimmed(c, svg) {
+  const u = Math.max(c.w, c.h) / 34, fs = u * 1.15, yb = u * 2.2, xl = -u * 2.2, tk = u * 0.6;
+  const dim = `<g class="edx-dim">
+    <line x1="0" y1="${yb}" x2="${c.w}" y2="${yb}"/><line x1="0" y1="${yb - tk}" x2="0" y2="${yb + tk}"/><line x1="${c.w}" y1="${yb - tk}" x2="${c.w}" y2="${yb + tk}"/>
+    <text x="${c.w / 2}" y="${yb + fs * 1.25}" font-size="${fs}" text-anchor="middle">${fmtLen(c.w, 1)}</text>
+    <line x1="${xl}" y1="0" x2="${xl}" y2="${-c.h}"/><line x1="${xl - tk}" y1="0" x2="${xl + tk}" y2="0"/><line x1="${xl - tk}" y1="${-c.h}" x2="${xl + tk}" y2="${-c.h}"/>
+    <text x="${xl - fs * 0.5}" y="${-c.h / 2}" font-size="${fs}" text-anchor="middle" transform="rotate(-90 ${xl - fs * 0.5} ${-c.h / 2})">${fmtLen(c.h, 1)}</text></g>`;
+  const x0 = xl - fs * 1.6, y1 = yb + fs * 1.8;
+  return svg.replace(/viewBox="[^"]*"/, `viewBox="${x0} ${-c.h - u} ${c.w + u - x0} ${c.h + u + y1}"`).replace(/<\/svg>$/, dim + '</svg>');
+}
+// Every front of the cabinet in one list, like Mozaik's face sections: click a row to pick its opening.
+function edFrontList(c, qr) {
+  const fr = computeFronts(c), kind = { door: 'Door', drawer: 'Drawer', false: 'False front', open: 'Open' };
+  if (!fr.length) return '';
+  const rows = fr.map(f => { let st = ''; try { st = f.type === 'open' ? '' : (frontStyle(c, f).ds || {}).name || ''; } catch (e) { st = ''; }
+    return `<tr class="click${f.row === qr ? ' on' : ''}" data-act="qe-row" data-id="${f.row}"><td class="n">${f.row + 1}</td><td>${kind[f.type] || f.type}${f.type === 'door' && f.hinge ? ` <span class="muted">hinged ${f.hinge === 'L' ? 'left' : 'right'}</span>` : ''}</td><td class="n">${fmtLen(f.x1 - f.x0, 1)}</td><td class="n">${fmtLen(f.z1 - f.z0, 1)}</td><td>${esc(st)}</td></tr>`; }).join('');
+  return `<div class="psec box">${secHead('list', `All fronts (${fr.filter(f => f.type !== 'open').length})`, 'teal')}<div class="tscroll"><table class="t edx-fronts"><thead><tr><th class="r">Opening</th><th>Front</th><th class="r">Width</th><th class="r">Height</th><th>Style</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+// Quick facts under the picture, coloured tiles you can click to jump to the tab behind them.
+function edStats(c, b) {
+  const fr = computeFronts(c), doors = fr.filter(f => f.type === 'door').length, drawers = fr.filter(f => f.type === 'drawer').length;
+  const parts = b.parts.reduce((a, p) => a + p.qty, 0);
+  let price = '';
+  try { const ps = typeof priceSheet === 'function' && priceSheet(); if (ps) price = money(priceCab(c, ps).total); } catch (e) { price = ''; }
+  const t = (tone, ic, n, l, tab) => `<button class="edx-stat ${tone}" data-act="ed-tab" data-id="${tab}">${icon(ic)}<b>${n}</b><span>${l}</span></button>`;
+  return `<div class="edx-stats">${t('violet', 'door', doors, doors === 1 ? 'Door' : 'Doors', 'face')}${t('teal', 'shelf', drawers, drawers === 1 ? 'Drawer' : 'Drawers', 'face')}${t('amber', 'list', parts, 'Parts', 'parts')}${price ? t('green', 'tag', price, 'Price', 'price') : ''}</div>`;
 }
 function renderEditor(el, c) {
   const id = c.id, rows = c.rows || [], qr = Math.min(Math.max(0, ui.qeRow | 0), Math.max(0, rows.length - 1));
   if (!ED_TABS.some(([k]) => k === ui.edTab)) ui.edTab = 'size';
-  const list = edOrder(), at = list.findIndex(x => x.id === id) + 1;
+  const list = edOrder(), at = list.findIndex(x => x.id === id) + 1, b = buildParts(c), log = edLog(c, b), R = 'cab:' + id;
   const keep = el.querySelector('.ed-main'), top = keep ? keep.scrollTop : 0;
   const act = (a, ic, l, x = '') => `<button class="btn${x}" data-act="${a}" data-id="${id}">${icon(ic)}${l}</button>`;
+  const wide = ED_WIDE.includes(ui.edTab), pv = ui.ed3d ? '3d' : ui.edPv || (ui.edTab === 'interior' ? 'inside' : 'front');
+  const pvSeg = `<div class="seg edx-pvseg" role="group" aria-label="Picture">${[['front', 'Front'], ['inside', 'Inside'], ['3d', '3D']].map(([k, l]) => `<button data-act="ed-pv" data-id="${k}" aria-pressed="${pv === k}">${l}</button>`).join('')}</div>`;
+  const pic = pv === '3d' ? `<div class="preview ed3d" id="ed3d" data-morph-keep></div><div class="note qe-tip helponly">Drag to turn it, right-drag to slide, scroll to zoom.</div>`
+    : `<div class="preview pad">${edDimmed(c, qeFaceSVG(c, qr, 900, pv === 'inside'))}</div><div class="note qe-tip helponly">${pv === 'inside' ? 'Inside view, with the doors and drawer fronts off. ' : ''}${isPhone() ? 'Tap' : 'Click'} an opening to edit it.</div>`;
+  const logBox = `<div class="edx-log" role="log" aria-label="Product log"><div class="edx-logh">Product log</div>${log.map(([k, t]) => `<div class="ed-logl ${k}">${k === 'warn' ? '⚠' : 'ℹ'} ${esc(t)}</div>`).join('') || '<div class="ed-logl ok">✓ Nothing to check</div>'}</div>`;
   el.hidden = false;
-  // Only the changes go in (see morph.js), so the editor does not flash as you edit.
-  setHTML(el, `<div class="qe big" role="dialog" aria-modal="true" aria-labelledby="qe-title">
-    <div class="qe-head"><span class="chip cab">${LBL[id] || ''}</span><b id="qe-title">${esc(c.name)}</b><span class="mono muted">${fmtLen(c.w, 1)} × ${fmtLen(c.h, 1)} × ${fmtLen(c.d, 1)}</span>
+  // Laid out like Mozaik's product editor: one name bar, the picture down the left on every tab,
+  // the tabs over the work, and the buttons down the right. Only the changes go in (see morph.js), so nothing flashes.
+  setHTML(el, `<div class="qe big edx" role="dialog" aria-modal="true" aria-labelledby="qe-title">
+    <div class="qe-head edx-top"><span class="chip cab">${LBL[id] || ''}</span><b id="qe-title" class="sr-only">${esc(c.name)}</b>
+      ${fld('Name', R, 'name', c.name, 'text')}${fld('Description', R, 'desc', c.desc || '', 'text', { ph: (libItem(c.libId) || {}).name || '' })}
+      <span class="edx-size">${esc(c.cat || '')}${c.corner ? ' corner' : ''} · ${fmtLen(c.w, 1)} W × ${fmtLen(c.h, 1)} H × ${fmtLen(c.d, 1)} D</span>
       <div class="ed-nav"><button class="btn sm" data-act="ed-step" data-id="-1" title="Previous cabinet">${icon('chevl')}Previous</button><span class="muted">${at} of ${list.length}</span><button class="btn sm" data-act="ed-step" data-id="1" title="Next cabinet">Next${icon('chevr')}</button></div>
       <button class="btn sm qe-x" data-act="qe-close" aria-label="Close the cabinet editor">${icon('close')}</button></div>
-    ${edHead(c, buildParts(c))}
-    <div class="ed-tabs" role="tablist" aria-label="Cabinet editor">${ED_TABS.map(([k, l, ic]) => `<button role="tab" data-act="ed-tab" data-id="${k}" aria-selected="${ui.edTab === k}">${icon(ic)}${l}</button>`).join('')}</div>
-    <div class="ed-body${ED_WIDE.includes(ui.edTab) ? ' wide' : ''}">
-      ${ED_WIDE.includes(ui.edTab) ? '' : `<div class="qe-prev${ui.edTab === 'face' ? ' tools' : ''}">${ui.edTab === 'face' ? edTools(c, qr) : ''}${ui.ed3d ? `<div class="preview ed3d" id="ed3d" data-morph-keep></div><div class="note qe-tip">Drag to turn it, right-drag to slide, scroll to zoom. <button class="linkbtn" data-act="ed-3d-fit">Reset view</button></div>` : `<div class="preview pad">${qeFaceSVG(c, qr, 620, ui.edTab === 'interior')}</div><div class="note qe-tip">${ui.edTab === 'interior' ? 'Inside view, with the doors and drawer fronts off. ' : ''}${isPhone() ? 'Tap' : 'Click'} an opening to edit it.</div>`}</div>`}
-      <div class="ed-main">${edTab(c, ui.edTab, qr)}</div>
-      <div class="ed-acts">${act('qe-close', 'check', 'Done', ' primary')}<div class="ed-undo"><button class="btn" data-act="ed-undo" title="Undo (Ctrl Z)">↶ Undo</button><button class="btn" data-act="ed-redo" title="Redo (Ctrl Y)">↷ Redo</button></div>
+    <div class="ed-tabs edx-tabs" role="tablist" aria-label="Cabinet editor">${ED_TABS.map(([k, l, ic], i) => `<button role="tab" class="tone${i % 6}" data-act="ed-tab" data-id="${k}" aria-selected="${ui.edTab === k}">${icon(ic)}${l}</button>`).join('')}</div>
+    <div class="edx-body${wide ? ' wide' : ''}">
+      ${wide ? '' : `<aside class="qe-prev edx-prev">${pvSeg}${ui.edTab === 'face' ? edTools(c, qr) : ''}${pic}${edStats(c, b)}${logBox}</aside>`}
+      <section class="edx-main">
+        <div class="ed-main">${wide && log.length ? logBox : ''}${edTab(c, ui.edTab, qr)}</div>
+      </section>
+      <div class="ed-acts">${act('qe-close', 'check', 'OK', ' primary')}<div class="ed-undo"><button class="btn" data-act="ed-undo" title="Undo (Ctrl Z)">↶ Undo</button><button class="btn" data-act="ed-redo" title="Redo (Ctrl Y)">↷ Redo</button></div>
+        <span class="edx-sep"></span>
         ${openable(c) ? act('open-toggle', 'open', ui.open[id] ? 'Close fronts' : 'Open fronts', ui.open[id] ? ' on' : '') : ''}
-        ${act('cab-dup', 'copy', 'Duplicate')}${act('cab-flip', 'flip', 'Flip')}${act('show-parts', 'list', 'View cut list')}${act('q-tolib', 'stack', 'Save to library')}${act('cab-to-designer', 'cube', 'Open in Designer')}${act('ed-3d', 'cube', ui.ed3d ? 'Back to drawing' : 'See it in 3D', ui.ed3d ? ' on' : '')}
-        <span class="ed-gap"></span>${act('cab-del', 'trash', 'Delete', ' danger')}</div>
-    </div>
-    <div class="qe-foot"><span class="note">Changes save as you go. Undo with Ctrl Z. Esc closes.</span></div></div>`);
+        ${act('cab-dup', 'copy', 'Duplicate')}${act('cab-flip', 'flip', 'Flip')}${act('show-parts', 'list', 'Cut list')}${act('q-tolib', 'stack', 'Save to library')}${act('cab-to-designer', 'cube', 'Open in Designer')}
+        <span class="ed-gap"></span><div class="note helponly">Changes save as you go. Esc closes.</div>${act('cab-del', 'trash', 'Delete', ' danger')}</div>
+    </div></div>`);
   const m = el.querySelector('.ed-main'); if (m) m.scrollTop = top;
-  if (ui.ed3d && typeof edView3D === 'function') edView3D(c);
+  if (pv === '3d' && typeof edView3D === 'function') edView3D(c);
 }

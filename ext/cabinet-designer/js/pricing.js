@@ -228,8 +228,10 @@ function priceJob(ps) {
     const all = S.cabinets.map(c => ({ c, label: LBL[c.id], ...priceCab(c, ps) })), cabs = all.filter(k => !k.own);
     // Products priced on their own go on the room as lines of their own, never in with the cabinets.
     const own = all.filter(k => k.own).map(k => ({ name: `${k.label} ${k.c.name} (${fmtLen(k.c.w, 1)} wide)`, amount: k.total, own: true }));
-    const tops = countertopRuns().filter(t => t.on).map(t => ({ name: `Countertop, ${wallName(wall(t.wall))} (${t.tpl.name})`, amount: t.len * t.depth / 144 * (+ps.tops[t.tpl.id] || 0) }));
-    const molds = moldingRuns().map(m => ({ name: `Molding, ${wallName(wall(m.wall))} (${m.m.name})`, amount: m.len / 12 * (+ps.molds[m.m.id] || 0) }));
+    // Tops and molding are one line each for the room, not one per wall (Ayden 2026-11-06). The kinds used go in brackets.
+    const oneLine = (name, runs, kind, amt) => { if (!runs.length) return []; const kinds = [...new Set(runs.map(kind))]; return [{ name: `${name} (${kinds.join(', ')})`, amount: runs.reduce((a, x) => a + amt(x), 0) }]; };
+    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on), t => t.tpl.name, t => t.len * t.depth / 144 * (+ps.tops[t.tpl.id] || 0));
+    const molds = oneLine('Molding', moldingRuns(), m => m.m.name, m => m.len / 12 * (+ps.molds[m.m.id] || 0));
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));
     // Installation by the foot of each type, like Mozaik's per-length install rows.
@@ -269,45 +271,53 @@ function quoteCSV(ps) {
 }
 
 /* ---------- Pricing tab ---------- */
+// Laid out like the cabinet editor and Settings: the job's numbers down the left, the work in the middle
+// under one row of tabs, and every button down the right.
 function renderPricing() {
-  const ps = priceSheet(), view = ui.priceView || 'quote';
-  // The sheet picker stays in view; making, copying, filing and deleting sheets sit in one menu.
-  const head = `<div class="pagehead"><div><h2>Pricing</h2><p>Price sheets are kept for your whole shop and save as you edit, so every job prices the same way. Save a sheet as a file to keep a copy or move it to another computer.</p></div>
-    <div class="row-actions"><label class="f wide pickps"><span>Price sheet</span><select data-act-change="ps-pick" aria-label="Price sheet">${(() => { const q = (ui.psFind || '').toLowerCase(), l = [...PRICES].sort((x, y) => String(x.name).localeCompare(String(y.name), undefined, { numeric: true })).filter(p => !q || p === ps || String(p.name).toLowerCase().includes(q)); return l.map(p => `<option value="${p.id}"${p.id === ps.id ? ' selected' : ''}>${esc(p.name)}</option>`).join(''); })()}</select></label>${PRICES.length > 5 ? `<label class="f"><span>Find</span><input type="search" class="ps-find" value="${esc(ui.psFind || '')}" placeholder="Part of a name" aria-label="Find a price sheet"></label>` : ''}
-    <details class="psmenu"${ui.psConfirm ? ' open' : ''}><summary class="btn">${icon('sliders')}Sheets</summary><div class="menu">
-      <button data-act="ps-new">${icon('plus')}New sheet</button><button data-act="ps-dup">${icon('copy')}Copy this sheet</button>
-      <button data-act="ps-export">${icon('download')}Save sheet as file</button><label>${icon('upload')}Open sheet file<input type="file" accept=".json,application/json" data-ps-import hidden></label>
-      ${PRICES.length > 1 ? `<button class="danger" data-act="ps-del">${icon('trash')}${ui.psConfirm ? 'Click again to delete' : 'Delete this sheet'}</button>` : ''}</div></details></div></div>
-    <div class="subtabs" role="tablist">${[['quote', 'Quote', 'list'], ['edit', 'Edit prices', 'sliders'], ['order', 'Order', 'export']].map(([k, l, ic]) => `<button role="tab" data-act="price-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
-  $('#tab-pricing').innerHTML = head + (view === 'edit' ? priceEditor(ps) : view === 'order' ? buyList() + exportHTML(false) : priceQuote(ps));
+  const ps = priceSheet(), view = ui.priceView || 'quote', q = priceJob(ps);
+  const sheetPick = `<label class="prx-sheet"><span>Price sheet</span><select data-act-change="ps-pick" aria-label="Price sheet">${(() => { const fq = (ui.psFind || '').toLowerCase(), l = [...PRICES].sort((x, y) => String(x.name).localeCompare(String(y.name), undefined, { numeric: true })).filter(p => !fq || p === ps || String(p.name).toLowerCase().includes(fq)); return l.map(p => `<option value="${p.id}"${p.id === ps.id ? ' selected' : ''}>${esc(p.name)}</option>`).join(''); })()}</select></label>${PRICES.length > 5 ? `<input type="search" class="ps-find" value="${esc(ui.psFind || '')}" placeholder="Find a sheet" aria-label="Find a price sheet">` : ''}`;
+  const tabs = `<div class="setx-tabs prx-tabs" role="tablist">${[['quote', 'Quote', 'list'], ['edit', 'Edit prices', 'sliders'], ['order', 'Order', 'download']].map(([k, l, ic]) => `<button role="tab" data-act="price-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
+  const body = view === 'edit' ? priceEditor(ps) : view === 'order' ? `<div class="prx-order">${buyList()}</div>${exportHTML(false)}` : priceQuote(ps, q);
+  const b = (act, ic, l, x = '') => `<button class="btn${x}" data-act="${act}">${icon(ic)}${l}</button>`;
+  const acts = `<div class="prx-acts">
+    ${b('quote-print', 'print', 'Print or save quote', ' primary')}
+    ${toggleBtn('quote-install', !S.job.noInstall, S.job.noInstall ? 'No installation' : 'Installation added')}
+    ${b('quote-copy', 'copy', 'Copy quote CSV')}${inHub() ? b('quote-save', 'folder', 'Save quote to Files') : ''}
+    <span class="edx-sep"></span><div class="prx-acth">Price sheet</div>
+    ${b('ps-new', 'plus', 'New sheet')}${b('ps-dup', 'copy', 'Copy this sheet')}${b('ps-export', 'download', 'Save sheet as file')}
+    <label class="btn">${icon('upload')}Open sheet file<input type="file" accept=".json,application/json" data-ps-import hidden></label>
+    <span class="ed-gap"></span>${PRICES.length > 1 ? `<button class="btn danger" data-act="ps-del">${icon('trash')}${ui.psConfirm ? 'Click again to delete' : 'Delete this sheet'}</button>` : ''}</div>`;
+  $('#tab-pricing').innerHTML = `<div class="prx"><aside class="prx-side">${priceSide(ps, q, view)}</aside>
+    <section class="prx-main"><div class="prx-top"><h2>Pricing</h2>${tabs}<div class="prx-r">${sheetPick}</div></div><div class="prx-body ${view}">${body}</div></section>${acts}</div>`;
 }
+// The left column: the job total, price per foot by type, the totals with markup, tax and payments, and where to jump.
+function priceSide(ps, q, view) {
+  const nCab = q.rooms.reduce((a, R) => a + R.cabs.length, 0);
+  const tone = { Base: 'amber', Wall: 'blue', Tall: 'violet' };
+  const tiles = q.perFt.map(t => `<div class="prx-ft ${tone[t.cat] || 'teal'}"><span>${esc(t.name)}</span><b>${t.n ? money(t.rate) + '<em>/ft</em>' : '–'}</b><small>${t.n ? `${ftLen(t.ft)} ft · ${money(t.total)}` : 'None in this job'}</small></div>`).join('');
+  const tot = `<table class="prx-tot"><tbody>${q.jobLines.map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}
+    <tr><td>Subtotal</td><td class="n">${money(q.sub)}</td></tr>${ps.markup ? `<tr><td>Markup ${ps.markup}%</td><td class="n">${money(q.markup)}</td></tr>` : ''}${ps.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="n">${money(q.tax)}</td></tr>` : ''}
+    <tr class="grand"><td>Total</td><td class="n">${money(q.total)}</td></tr>${q.payments.map(x => `<tr class="pay"><td>${esc(x.name)} (${x.pct}%)</td><td class="n">${money(x.amount)}</td></tr>`).join('')}</tbody></table>`;
+  const jump = view === 'edit' ? `<nav class="prx-nav"><div class="prx-navh">Jump to</div>${PRICE_SECS.map(([k, l, ic]) => `<a href="#ps-${k}" data-act="prx-jump" data-id="${k}">${icon(ic)}${l}</a>`).join('')}</nav>`
+    : view === 'quote' ? `<nav class="prx-nav"><div class="prx-navh">Rooms</div>${q.rooms.map((R, i) => `<a href="#prx-room-${i}" data-act="prx-jump" data-id="room-${i}">${icon('home')}<span>${esc(R.r.name)}</span><b>${money(R.total)}</b></a>`).join('')}<a href="#prx-room-paint" data-act="prx-jump" data-id="room-paint">${icon('palette')}<span>Paint</span><b>${sqft(q.sq.total)} sq ft</b></a></nav>` : '';
+  return `<div class="prx-grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${nCab} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>
+    <div class="prx-fts">${tiles}</div>${tot}${jump}`;
+}
+const PRICE_SECS = [['lib', 'Library prices', 'tag'], ['sheet', 'Markup and tax', 'tag'], ['install', 'Installation', 'home'], ['cab', 'Cabinets by type', 'box'], ['prod', 'Products', 'stack'], ['add', 'Adders', 'shelf'], ['panel', 'Panels', 'box'], ['doors', 'Doors and fronts', 'door'], ['mats', 'Materials', 'palette'], ['hw', 'Hardware', 'sliders'], ['paint', 'Paint', 'palette'], ['tops', 'Tops and molding', 'ruler'], ['extra', 'Extra charges', 'plus'], ['pay', 'Payment schedule', 'list']];
 function toggleBtn(act, on, label, id) { return `<button class="btn toggle${on ? ' on' : ''}" data-act="${act}"${id ? ` data-id="${id}"` : ''} aria-pressed="${!!on}">${icon(on ? 'check' : 'plus')}${label}</button>`; }
-function priceQuote(ps) {
-  const q = priceJob(ps);
+function priceQuote(ps, q = priceJob(ps)) {
   // Paint is inside each cabinet's price, so every room's total is what to quote for that room.
   const paintNote = R => R.sq.total ? `<span class="note">Includes ${sqft(R.sq.total)} sq ft paint${+paintOf(ps).rate ? `, ${money(R.cabs.reduce((a, k) => a + k.paint, 0))}` : ''}</span>` : '';
-  const room = R => `<div class="card"><div class="cardhead"><h3>${icon('home')}${esc(R.r.name)}</h3>${paintNote(R)}<b class="money">${money(R.total)}</b></div><div class="tscroll"><table class="t quote">
+  const room = (R, i) => `<div class="psec box prx-room" id="prx-room-${i}">${secHead('home', esc(R.r.name), 'teal')}<div class="prx-roomh">${paintNote(R)}<b class="money">${money(R.total)}</b></div><div class="tscroll"><table class="t quote">
     <thead><tr><th>Cabinet</th><th>Size</th><th class="r">Cabinet</th>${ps.doors.on ? '<th class="r">Doors and fronts</th>' : ''}<th class="r">Drawers, shelves, inserts</th><th class="r">Panels, fillers</th>${ps.hardware.on ? '<th class="r">Hardware</th>' : ''}${ps.materials.on ? '<th class="r">Materials</th>' : ''}<th class="r">Paint sq ft</th><th class="r">Total</th></tr></thead>
     <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || (R.lines.some(l => l.own) ? '' : '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>')}
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`;
-  return `<div class="quotetop">
-    <div class="qtile grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${q.rooms.reduce((a, R) => a + R.cabs.length, 0)} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>
-    ${q.perFt.map(t => `<div class="qtile cat-${t.cat}"><span>${t.name}</span><b>${t.n ? money(t.rate) + '<em>/ft</em>' : '–'}</b><small>${t.n ? `${ftLen(t.ft)} ft · ${money(t.total)}` : 'None in this job'}</small></div>`).join('')}
-    </div>
-    <div class="row-actions quotebar">${toggleBtn('quote-install', !S.job.noInstall, S.job.noInstall ? 'No installation' : 'Installation added')}<button class="btn primary" data-act="quote-print">${icon('print')}Print or save quote</button><button class="btn" data-act="quote-copy">${icon('copy')}Copy quote CSV</button>${inHub() ? `<button class="btn" data-act="quote-save">${icon('folder')}Save quote CSV to Files</button>` : ''}<span class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</span></div>
-    ${q.rooms.map(room).join('')}
-    ${paintCard(ps, q)}
-    <div class="card totals"><table class="t"><tbody>
-      ${q.jobLines.map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}
-      <tr><td>Subtotal</td><td class="n">${money(q.sub)}</td></tr>
-      ${ps.markup ? `<tr><td>Markup ${ps.markup}%</td><td class="n">${money(q.markup)}</td></tr>` : ''}${ps.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="n">${money(q.tax)}</td></tr>` : ''}
-      <tr class="grand"><td>Total for ${esc(S.job.name)}</td><td class="n">${money(q.total)}</td></tr>
-      ${q.payments.map(x => `<tr class="pay"><td>${esc(x.name)} (${x.pct}%)</td><td class="n">${money(x.amount)}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${q.rooms.map(room).join('')}${paintCard(ps, q)}`;
 }
 // Paint total for the job, with switches for which surfaces count.
 function paintCard(ps, q) {
   const po = paintOf(ps);
-  return `<div class="card paintcard"><div class="cardhead"><h3>${icon('palette')}Paint</h3><b class="money">${sqft(q.sq.total)} sq ft</b></div><div class="cardbody">
+  return `<div class="psec box paintcard" id="prx-room-paint">${secHead('palette', `Paint · ${sqft(q.sq.total)} sq ft`, 'violet')}<div>
     <div class="row-actions">${PAINT_PARTS.map(([k, l]) => toggleBtn('ps-paint', po[k], l, k)).join('')}${toggleBtn('ps-paint', po.bothSides, 'Both sides of doors and fronts', 'bothSides')}</div>
     <div class="tscroll"><table class="t"><thead><tr><th>Surface</th>${q.rooms.length > 1 ? q.rooms.map(R => `<th class="r">${esc(R.r.name)}</th>`).join('') : ''}<th class="r">Sq ft</th></tr></thead><tbody>
     ${PAINT_PARTS.filter(([k]) => po[k]).map(([k, l]) => `<tr><td>${l}</td>${q.rooms.length > 1 ? q.rooms.map(R => `<td class="n">${sqft(R.sq[k])}</td>`).join('') : ''}<td class="n">${sqft(q.sq[k])}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No surfaces counted</td></tr>'}
@@ -323,32 +333,32 @@ function priceEditor(ps) {
   const prods = S.library.filter(l => l.cat !== 'Shape' && (showProd || priced(ps.products[l.id]))).sort((a, b) => !!(ps.products[b.id] || {}).own - !!(ps.products[a.id] || {}).own);
   const hwNames = [...new Set([...Object.keys(used), ...Object.keys(ps.hardware.items)])].sort();
   return `${jobPriceCard(ps)}<div class="pricegrid">
-  <div class="card"><div class="cardhead"><h3>${icon('tag')}Sheet</h3></div><div class="cardbody">
+  <div class="psec box prx-sec" id="ps-sheet">${secHead('tag', 'Markup and tax', 'teal')}<div class="prx-h"></div><div class="cardbody">
     ${fld('Name', R, 'name', ps.name, 'text', { wide: true })}${fld('Markup %', R, 'markup', ps.markup, 'num')}${fld('Tax %', R, 'tax', ps.tax, 'num')}
     <div class="note">Markup on top of each group's cost, inside the cabinet prices:</div>${GROUP_MARKUPS.map(([k, l]) => fld(l + ' markup %', P('groupMarkup'), k, (ps.groupMarkup || {})[k] ?? 0, 'num')).join('')}</div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('home')}Installation</h3><span class="note">Per foot of cabinet width. Turn it off for a job on its Quote.</span></div><div class="cardbody">${CAT_FT.map(([k, l]) => fld(l + ' ($/ft)', P('install'), k, (ps.install || {})[k] ?? 0, 'num')).join('')}</div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('box')}Cabinets by type</h3><span class="note">Base price plus a price per foot of width</span></div><div class="tscroll"><table class="t"><thead><tr><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
+  <div class="psec box prx-sec" id="ps-install">${secHead('home', 'Installation', 'blue')}<div class="prx-h"><span class="note">Per foot of cabinet width. Turn it off for a job on its Quote.</span></div><div class="cardbody">${CAT_FT.map(([k, l]) => fld(l + ' ($/ft)', P('install'), k, (ps.install || {})[k] ?? 0, 'num')).join('')}</div></div>
+  <div class="psec box prx-sec" id="ps-cab">${secHead('box', 'Cabinets by type', 'amber')}<div class="prx-h"><span class="note">Base price plus a price per foot of width</span></div><div class="tscroll"><table class="t"><thead><tr><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${['Base', 'Wall', 'Tall'].map(cat => `<tr><td><span class="catpill cat-${cat}">${cat}</span></td><td style="width:110px">${num(P('cab.' + cat), 'base', ps.cab[cat].base)}</td><td style="width:110px">${num(P('cab.' + cat), 'perFt', ps.cab[cat].perFt)}</td></tr>`).join('')}</tbody></table></div></div>
-  <div class="card wide"><div class="cardhead"><h3>${icon('stack')}Products</h3><span class="note">Give any library product its own price. Blank uses its type. Tick Own price for items like floating shelves.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Show priced only' : `Show all ${S.library.filter(l => l.cat !== 'Shape').length}`}</button></div>${prods.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th title="Priced only by this row: not a cabinet, not in the cabinet count, no installation, doors, materials or hardware">Own price</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
+  <div class="psec box prx-sec wide" id="ps-prod">${secHead('stack', 'Products', 'violet')}<div class="prx-h"><span class="note">Give any library product its own price. Blank uses its type. Tick Own price for items like floating shelves.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Show priced only' : `Show all ${S.library.filter(l => l.cat !== 'Shape').length}`}</button></div>${prods.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th title="Priced only by this row: not a cabinet, not in the cabinet count, no installation, doors, materials or hardware">Own price</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${prods.map(l => { const o = ps.products[l.id] || {}, ph = k => String(o.own ? 0 : ps.cab[l.cat][k]); return `<tr${o.own ? ' class="own"' : ''}><td>${esc(l.name)}</td><td><span class="catpill cat-${l.cat}">${l.cat}</span></td><td style="width:90px">${ctl(P('products.' + l.id), 'own', !!o.own, 'bool', { label: l.name + ' has its own price' })}</td><td style="width:110px">${num(P('products.' + l.id), 'base', o.base, { blank: true, ph: ph('base') })}</td><td style="width:110px">${num(P('products.' + l.id), 'perFt', o.perFt, { blank: true, ph: ph('perFt') })}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="cardbody"><div class="note">No product has its own price yet. Show all to set one.</div></div>'}</div>
-  <div class="card"><div class="cardhead"><h3>${icon('shelf')}Adders</h3></div><div class="cardbody">${PRICE_ADDERS.map(([k, l]) => fld(l, P('adders'), k, ps.adders[k], 'num')).join('')}
+  <div class="psec box prx-sec" id="ps-add">${secHead('shelf', 'Adders', 'blue')}<div class="prx-h"></div><div class="cardbody">${PRICE_ADDERS.map(([k, l]) => fld(l, P('adders'), k, ps.adders[k], 'num')).join('')}
     <div class="note">Each insert has its own price in Libraries › Inserts.</div></div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('box')}Panels</h3><span class="note">Each panel, by height</span></div><div class="cardbody">${PANEL_CATS.map(([k, l]) => fld(l, P('panelAdd'), k, (ps.panelAdd || {})[k] ?? 0, 'num')).join('')}
+  <div class="psec box prx-sec" id="ps-panel">${secHead('box', 'Panels', 'teal')}<div class="prx-h"><span class="note">Each panel, by height</span></div><div class="cardbody">${PANEL_CATS.map(([k, l]) => fld(l, P('panelAdd'), k, (ps.panelAdd || {})[k] ?? 0, 'num')).join('')}
     <div class="note">Applied end panels get this on top of their door style's price. Loose panels drawn in the room get it on top of their material.</div></div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('door')}Doors and fronts</h3>${toggleBtn('ps-doors', ps.doors.on, ps.doors.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
+  <div class="psec box prx-sec" id="ps-doors">${secHead('door', 'Doors and fronts', 'amber')}<div class="prx-h">${toggleBtn('ps-doors', ps.doors.on, ps.doors.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
     <div class="note">Each door style's price per sq ft and minimum are set in the door designer (Libraries › Doors). Change them for this job only under Library prices on this job.</div></div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('palette')}Materials</h3>${toggleBtn('ps-mats', ps.materials.on, ps.materials.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
+  <div class="psec box prx-sec" id="ps-mats">${secHead('palette', 'Materials', 'violet')}<div class="prx-h">${toggleBtn('ps-mats', ps.materials.on, ps.materials.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
     <div class="note">Each material's price per sheet is set in Libraries › Materials. Each cabinet pays for the part of a sheet its parts use, plus waste.</div>
     ${fld('Waste %', P('materials'), 'waste', ps.materials.waste, 'num')}<div class="note">Edge banding is priced by the roll in Libraries › Edgebanding.</div></div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('sliders')}Hardware</h3>${toggleBtn('ps-hw', ps.hardware.on, ps.hardware.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
+  <div class="psec box prx-sec" id="ps-hw">${secHead('sliders', 'Hardware', 'amber')}<div class="prx-h">${toggleBtn('ps-hw', ps.hardware.on, ps.hardware.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
     <div class="note">Price each, for every hardware line on the cabinets' lists.</div>${hwNames.map(n => fld(esc(n), P('hardware.items'), n, ps.hardware.items[n] ?? 0, 'num')).join('')}</div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('palette')}Paint</h3></div><div class="cardbody">
+  <div class="psec box prx-sec" id="ps-paint">${secHead('palette', 'Paint', 'blue')}<div class="prx-h"></div><div class="cardbody">
     <div class="note">Price per square foot of painted surface. Leave it at 0 to only show the square footage. Pick which surfaces count on the quote.</div>${fld('Paint ($/sq ft)', P('paint'), 'rate', paintOf(ps).rate, 'num')}</div></div>
-  <div class="card"><div class="cardhead"><h3>${icon('ruler')}Tops and molding</h3></div><div class="cardbody">
+  <div class="psec box prx-sec" id="ps-tops">${secHead('ruler', 'Tops and molding', 'violet')}<div class="prx-h"></div><div class="cardbody">
     ${S.countertops.map(t => fld(esc(t.name) + ' ($/sq ft)', P('tops'), t.id, ps.tops[t.id] ?? 0, 'num')).join('')}${S.moldings.map(m => fld(esc(m.name) + ' ($/ft)', P('molds'), m.id, ps.molds[m.id] ?? 0, 'num')).join('')}</div></div>
-  <div class="card wide"><div class="cardhead"><h3>${icon('plus')}Extra charges</h3><button class="btn sm" data-act="ps-x-add">${icon('plus')}Add charge</button></div><div class="cardbody">
+  <div class="psec box prx-sec wide" id="ps-extra">${secHead('plus', 'Extra charges', 'teal')}<div class="prx-h"><button class="btn sm" data-act="ps-x-add">${icon('plus')}Add charge</button></div><div class="cardbody">
     ${ps.extras.map((x, i) => `<div class="xrow">${ctl(P('extras.' + i), 'name', x.name, 'text', { label: 'Charge name' })}${ctl(P('extras.' + i), 'amount', x.amount, 'num', { label: 'Amount' })}${ctl(P('extras.' + i), 'per', x.per, 'select', { label: 'Per', options: [{ v: 'job', l: 'Per job' }, { v: 'room', l: 'Per room' }, { v: 'cabinet', l: 'Per cabinet' }, { v: 'pct', l: '% of the job' }] })}<button class="btn sm danger" data-act="ps-x-del" data-id="${i}" aria-label="Remove charge">${icon('trash')}</button></div>`).join('') || '<div class="note">None</div>'}</div></div>
-  <div class="card wide"><div class="cardhead"><h3>${icon('list')}Payment schedule</h3>${(() => { const t = (ps.payments || []).reduce((a, x) => a + (+x.pct || 0), 0); return `<span class="note"${t !== 100 ? ' style="color:var(--danger,#c62828)"' : ''}>Adds up to ${t}%</span>`; })()}<button class="btn sm" data-act="ps-pay-add">${icon('plus')}Add payment</button></div><div class="cardbody">
+  <div class="psec box prx-sec wide" id="ps-pay">${secHead('list', 'Payment schedule', 'rose')}<div class="prx-h">${(() => { const t = (ps.payments || []).reduce((a, x) => a + (+x.pct || 0), 0); return `<span class="note"${t !== 100 ? ' style="color:var(--danger,#c62828)"' : ''}>Adds up to ${t}%</span>`; })()}<button class="btn sm" data-act="ps-pay-add">${icon('plus')}Add payment</button></div><div class="cardbody">
     ${(ps.payments || []).map((x, i) => `<div class="xrow pay">${ctl(P('payments.' + i), 'name', x.name, 'text', { label: 'Payment' })}${ctl(P('payments.' + i), 'pct', x.pct, 'num', { label: 'Percent of total' })}<button class="btn sm danger" data-act="ps-pay-del" data-id="${i}" aria-label="Remove payment">${icon('trash')}</button></div>`).join('') || '<div class="note">None</div>'}</div></div>
   </div>`;
 }
@@ -378,7 +388,7 @@ function jobPriceCard(ps) {
   const mIds = Object.keys(u.mats).filter(id => mat(id));
   if (mIds.length) rows.push(`<tr><td colspan="5" class="grouprow"><b>Materials, $/sheet</b> ${lib('materials')}</td></tr>`, ...mIds.map(id => { const m = mat(id), x = u.mats[id]; return `<tr><td>${swatch(m, 16)} ${esc(m.name)}</td><td class="n">${x.n} parts · ${sqft(x.sq)} sq ft</td><td class="n">${money(+m.cost || 0)}</td><td style="width:120px">${ov(O('mat')(id), 'cost', jobOver('mat', id).cost, +m.cost || 0, m.name + ' price for this job')}</td><td class="n">${ps.materials.on ? money(x.sq * 144 * matSqIn(m, ps)) : '<span class="muted">Not added</span>'}</td></tr>`; }));
   const n = ['door', 'mat', 'ins'].reduce((a, g) => a + Object.values((S.job.priceOver || {})[g] || {}).filter(o => Object.values(o).some(v => v !== '' && v != null)).length, 0);
-  return `<div class="card wide jobprices"><div class="cardhead"><h3>${icon('tag')}Library prices on this job</h3><span class="note">${n ? `${n} changed for ${esc(S.job.name)} only` : 'Blank uses the library price'}</span>${n ? '<button class="btn sm" data-act="pov-clear">Use library prices</button>' : ''}</div>
+  return `<div class="psec box prx-sec wide" id="ps-lib">${secHead('tag', 'Library prices on this job', 'green')}<div class="prx-h"><span class="note">${n ? `${n} changed for ${esc(S.job.name)} only` : 'Blank uses the library price'}</span>${n ? '<button class="btn sm" data-act="pov-clear">Use library prices</button>' : ''}</div>
     <div class="tscroll"><table class="t"><thead><tr><th>Item</th><th class="r">Used</th><th class="r">Library</th><th>This job</th><th class="r">Comes to</th></tr></thead><tbody>${rows.join('') || '<tr><td colspan="5" class="muted">Nothing from the libraries in this job yet</td></tr>'}</tbody></table></div></div>`;
 }
 // Resolves a price sheet ref: psh:<id> is the sheet, pshp:<id>:<a.b.c> an object inside it (made if missing).
@@ -391,6 +401,7 @@ function priceAction(a, id) {
   const ps = priceSheet();
   switch (a) {
     case 'price-view': ui.priceView = id; break;
+    case 'prx-jump': { const el = document.getElementById((id.startsWith('room-') ? 'prx-' : 'ps-') + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     case 'ps-new': { const n = defaultPriceSheet('New price sheet'); PRICES.push(n); S.job.priceSheet = n.id; save(); ui.priceView = 'edit'; break; }
     case 'ps-dup': { const n = { ...clone(ps), id: uid('ps'), name: ps.name + ' copy' }; PRICES.push(n); S.job.priceSheet = n.id; save(); break; }
     case 'ps-del': if (!ui.psConfirm) { ui.psConfirm = true; renderPricing(); return; } ui.psConfirm = false; PRICES = PRICES.filter(p => p !== ps); S.job.priceSheet = PRICES[0].id; save(); break;
@@ -468,30 +479,44 @@ const QUOTE_CSS = `
 @page{size:letter;margin:.5in}
 @media screen and (max-width:760px){.qpage{padding:16px;font-size:9.5pt}.qp-head{flex-direction:column;gap:6px}.qp-meta{text-align:left}.qp-totals,.qp-side{width:100%}}
 @media print{.qpage{width:auto;padding:0;margin:0}}`;
+// Two copies. The customer copy (the default) shows what each cabinet costs and what the painting costs, and nothing
+// that gives away how the price is built: no per foot prices, no markup, no percentage charges, no sheet name.
+// Markup and the percentage charges are spread into every price so the lines still add up to the total.
+// The shop copy (Shop copy on) shows the full breakdown.
+// The customer copy drops a line's working, like "(16.25 ft × $40.00)", and keeps what it is.
+const lineName = n => String(n).replace(/\s*\([^()]*×[^()]*\)/g, '');
 function quoteDoc(ps, detail, showPaint) {
-  // Without the breakdown, markup is spread into every price so the customer sees finished prices that add up.
-  const q = priceJob(ps), po = paintOf(ps), f = detail ? 1 : 1 + (q.sub ? q.markup / q.sub : 0), mm = v => money(v * f), date = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const q = priceJob(ps), po = paintOf(ps), date = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const jl = q.jobLines.reduce((a, l) => a + (+l.amount || 0), 0), base = q.sub - jl;
+  const f = detail ? 1 : base > 0 ? (q.sub + q.markup) / base : 1, mm = v => money(v * f);
+  const paintOn = !detail && +po.rate > 0, paintOf_ = k => paintOn ? (+k.paint || 0) : 0;
   const cols = detail ? [['box', 'Cabinet'], ...(ps.doors.on ? [['doors', 'Fronts']] : []), ['extras', 'Inserts'], ['ends', 'Panels'], ...(ps.hardware.on ? [['hardware', 'Hardware']] : []), ...(ps.materials.on ? [['materials', 'Materials']] : [])] : [];
-  const types = q.perFt.filter(t => t.n), span = 3 + cols.length + (showPaint ? 1 : 0);
-  const room = R => `<section><h2>${esc(R.r.name)}</h2><table><thead><tr><th>#</th><th>Cabinet</th><th>Size (W × H × D)</th>${cols.map(([, l]) => `<th class="r">${l}</th>`).join('')}${showPaint ? '<th class="r">Paint sq ft</th>' : ''}<th class="r">Price</th></tr></thead><tbody>
-    ${R.cabs.map(k => `<tr><td class="tag">${esc(k.label)}</td><td>${esc(k.c.name)}</td><td>${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td>${cols.map(([f]) => `<td class="r">${money(k[f])}</td>`).join('')}${showPaint ? `<td class="r">${sqft(k.sq.total)}</td>` : ''}<td class="r">${mm(k.total)}</td></tr>`).join('') || `<tr><td colspan="${span + 1}">No cabinets</td></tr>`}
-    ${R.lines.map(l => `<tr class="line"><td></td><td colspan="${span - 1}">${esc(l.name)}</td><td class="r">${mm(l.amount)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="${span}">${esc(R.r.name)} total${showPaint && R.sq.total ? ` (includes ${sqft(R.sq.total)} sq ft paint)` : ''}</td><td class="r">${mm(R.total)}</td></tr></tfoot></table></section>`;
-  const paint = showPaint ? `<section class="qp-side"><h2>Paint</h2><table><tbody>${PAINT_PARTS.filter(([k]) => po[k]).map(([k, l]) => `<tr><td>${l}${k === 'fronts' && po.bothSides ? ' (both faces)' : ''}</td><td class="r">${sqft(q.sq[k])} sq ft</td></tr>`).join('')}</tbody>
+  const sqCol = detail && showPaint;
+  const types = q.perFt.filter(t => t.n), span = 3 + cols.length + (sqCol ? 1 : 0);
+  const room = R => { const rp = R.cabs.reduce((a, k) => a + paintOf_(k), 0);
+    return `<section><h2>${esc(R.r.name)}</h2><table><thead><tr><th>#</th><th>Cabinet</th><th>Size (W × H × D)</th>${cols.map(([, l]) => `<th class="r">${l}</th>`).join('')}${sqCol ? '<th class="r">Paint sq ft</th>' : ''}<th class="r">Price</th></tr></thead><tbody>
+    ${R.cabs.map(k => `<tr><td class="tag">${esc(k.label)}</td><td>${esc(k.c.name)}</td><td>${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td>${cols.map(([c]) => `<td class="r">${money(k[c])}</td>`).join('')}${sqCol ? `<td class="r">${sqft(k.sq.total)}</td>` : ''}<td class="r">${mm(k.total - paintOf_(k))}</td></tr>`).join('') || `<tr><td colspan="${span + 1}">No cabinets</td></tr>`}
+    ${rp ? `<tr class="line"><td></td><td colspan="${span - 1}">Painting</td><td class="r">${mm(rp)}</td></tr>` : ''}
+    ${R.lines.map(l => `<tr class="line"><td></td><td colspan="${span - 1}">${esc(detail ? l.name : lineName(l.name))}</td><td class="r">${mm(l.amount)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="${span}">${esc(R.r.name)} total${sqCol && R.sq.total ? ` (includes ${sqft(R.sq.total)} sq ft paint)` : ''}</td><td class="r">${mm(R.total)}</td></tr></tfoot></table></section>`; };
+  const paint = sqCol ? `<section class="qp-side"><h2>Paint</h2><table><tbody>${PAINT_PARTS.filter(([k]) => po[k]).map(([k, l]) => `<tr><td>${l}${k === 'fronts' && po.bothSides ? ' (both faces)' : ''}</td><td class="r">${sqft(q.sq[k])} sq ft</td></tr>`).join('')}</tbody>
     <tfoot><tr><td>Total painted surface</td><td class="r">${sqft(q.sq.total)} sq ft</td></tr></tfoot></table></section>` : '';
+  const roomsSum = q.rooms.reduce((a, R) => a + R.total, 0);
+  const totals = detail ? `${q.jobLines.map(l => `<tr><td>${esc(l.name)}</td><td class="r">${money(l.amount)}</td></tr>`).join('')}
+    <tr><td>Subtotal</td><td class="r">${money(q.sub)}</td></tr>${q.markup ? `<tr><td>Markup ${ps.markup}%</td><td class="r">${money(q.markup)}</td></tr>` : ''}`
+    : `<tr><td>Subtotal</td><td class="r">${mm(roomsSum)}</td></tr>`;
   return `<div class="qpage">
-  <header class="qp-head"><div><h1>Quote</h1><div class="qp-job">${esc(S.job.name)}</div>${S.job.customer ? `<div class="qp-sub">For ${esc(S.job.customer)}</div>` : ''}</div>
+  <header class="qp-head"><div><h1>${detail ? 'Quote, shop copy' : 'Quote'}</h1><div class="qp-job">${esc(S.job.name)}</div>${S.job.customer ? `<div class="qp-sub">For ${esc(S.job.customer)}</div>` : ''}</div>
     <div class="qp-meta"><div>${date}</div><div>${q.rooms.reduce((a, R) => a + R.cabs.length, 0)} cabinets, ${q.rooms.length} ${q.rooms.length === 1 ? 'room' : 'rooms'}</div></div></header>
   ${q.rooms.map(room).join('')}
-  <table class="qp-totals"><tbody>${q.jobLines.map(l => `<tr><td>${esc(l.name)}</td><td class="r">${mm(l.amount)}</td></tr>`).join('')}
-    <tr><td>Subtotal</td><td class="r">${mm(q.sub)}</td></tr>${q.markup && detail ? `<tr><td>Markup ${ps.markup}%</td><td class="r">${money(q.markup)}</td></tr>` : ''}${q.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="r">${money(q.tax)}</td></tr>` : ''}
+  <table class="qp-totals"><tbody>${totals}${q.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="r">${money(q.tax)}</td></tr>` : ''}
     <tr class="grand"><td>Total</td><td class="r">${money(q.total)}</td></tr></tbody></table>
   ${q.payments.length ? `<table class="qp-totals"><thead><tr><th>Payment schedule</th><th class="r">Amount</th></tr></thead><tbody>${q.payments.map(x => `<tr><td>${esc(x.name)} (${x.pct}%)</td><td class="r">${money(x.amount)}</td></tr>`).join('')}</tbody></table>` : ''}
-  ${types.length ? `<section class="qp-side"><h2>Price per foot</h2><table><thead><tr><th>Type</th><th class="r">Linear ft</th><th class="r">Total</th><th class="r">Per ft</th></tr></thead><tbody>
-    ${types.map(t => `<tr><td>${t.name}</td><td class="r">${ftLen(t.ft)}</td><td class="r">${mm(t.total)}</td><td class="r">${mm(t.rate)}</td></tr>`).join('')}</tbody></table></section>` : ''}
+  ${detail && types.length ? `<section class="qp-side"><h2>Price per foot</h2><table><thead><tr><th>Type</th><th class="r">Linear ft</th><th class="r">Total</th><th class="r">Per ft</th></tr></thead><tbody>
+    ${types.map(t => `<tr><td>${t.name}</td><td class="r">${ftLen(t.ft)}</td><td class="r">${money(t.total)}</td><td class="r">${money(t.rate)}</td></tr>`).join('')}</tbody></table></section>` : ''}
   ${paint}
   ${S.job.notes ? `<div class="qp-notes"><b>Notes</b>\n${esc(S.job.notes)}</div>` : ''}
-  <div class="qp-foot">Prices from ${esc(ps.name)}. Sizes are width × height × depth in inches.</div></div>`;
+  <div class="qp-foot">${detail ? `Shop copy, not for the customer. Prices from ${esc(ps.name)}. ` : ''}Sizes are width × height × depth in inches.</div></div>`;
 }
 const quoteOpts = () => [!!ui.qsDetail, ui.qsPaint !== false];
 function quoteFile(ps) {
@@ -501,7 +526,7 @@ function showQuoteSheet() {
   let st = $('#quotecss'); if (!st) { st = document.createElement('style'); st.id = 'quotecss'; st.textContent = QUOTE_CSS; document.head.appendChild(st); }
   const [detail, paint] = quoteOpts(), el = $('#quotesheet');
   el.innerHTML = `<div class="lbbar"><b>Quote for ${esc(S.job.name)}</b><span class="note">Letter size, black on white. Print it, or pick Save as PDF in the print window.</span>
-    <div class="row-actions">${toggleBtn('qs-detail', detail, 'Price breakdown')}${toggleBtn('qs-paint', paint, 'Paint sq ft')}<button class="btn primary" data-act="qs-print">${icon('print')}Print</button><button class="btn" data-act="qs-save">${icon('download')}Save quote file</button><button class="btn" data-act="qs-close">Close</button></div></div>
+    <div class="row-actions">${toggleBtn('qs-detail', detail, detail ? 'Shop copy, full breakdown' : 'Show the shop copy')}${detail ? toggleBtn('qs-paint', paint, 'Paint sq ft') : ''}<button class="btn primary" data-act="qs-print">${icon('print')}Print</button><button class="btn" data-act="qs-save">${icon('download')}Save quote file</button><button class="btn" data-act="qs-close">Close</button></div></div>
   ${quoteDoc(priceSheet(), detail, paint)}`;
   el.hidden = false; document.body.classList.add('printing-quote');
 }
@@ -517,7 +542,7 @@ document.addEventListener('click', e => {
   document.querySelectorAll('.psmenu[open]').forEach(d => { if (!d.contains(e.target) || (e.target.closest('.menu button') && !e.target.closest('[data-act="ps-del"]'))) d.open = false; });
   const el = e.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act;
-  if (a === 'price-view' || a === 'pov-clear' || a.startsWith('ps-') || a.startsWith('quote-') || a.startsWith('qs-')) { e.stopPropagation(); priceAction(a, el.dataset.id); }
+  if (a === 'price-view' || a === 'prx-jump' || a === 'pov-clear' || a.startsWith('ps-') || a.startsWith('quote-') || a.startsWith('qs-')) { e.stopPropagation(); if (a === 'prx-jump') e.preventDefault(); priceAction(a, el.dataset.id); }
 }, true);
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-act-change="ps-pick"]'); if (!el) return;

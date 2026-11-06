@@ -757,7 +757,10 @@ function frontsSVG(c, ex, by, opts = {}) {
     const pp = pullPlacement(c, f);
     if (opts.dims) {
       // Finished front size, centered (drawers: above the pull so both stay readable).
-      const t = `${fmtLen(f.x1 - f.x0)} × ${fmtLen(h)}`, fz = Math.min(opts.dims, h * 0.3, w * 0.86 / (t.length * 0.6)), ty = f.type === 'drawer' && h < 12 ? y + h * 0.28 : y + h / 2;
+      // A sideways pull near the middle would strike through the numbers, so they go in the bigger space beside it.
+      const pyy = pp && !pp.vertical ? y + h - pp.z : null, up = pyy !== null && pyy - y >= y + h - pyy;
+      const room = pyy === null ? h : up ? pyy - y : y + h - pyy;
+      const t = `${fmtLen(f.x1 - f.x0)} × ${fmtLen(h)}`, fz = Math.min(opts.dims, h * 0.3, room * 0.5, w * 0.86 / (t.length * 0.6)), ty = pyy === null ? (f.type === 'drawer' && h < 12 ? y + h * 0.28 : y + h / 2) : up ? (y + pyy) / 2 : (pyy + y + h) / 2;
       if (fz > 0.5) s += `<text class="lbl dimtxt fdim" x="${x + w / 2}" y="${ty}" font-size="${fz}" text-anchor="middle" dominant-baseline="middle" pointer-events="none">${t}</text>`;
     }
     if (pp) {

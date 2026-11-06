@@ -995,6 +995,8 @@ document.addEventListener('click', e => {
       S.partTemplates.forEach(t => Object.values(t.rules || {}).forEach(r => EDGE_KEYS.forEach(k => { if (r[k] === id) r[k] = ''; })));
     }); break;
     case 'labels': showLabels(); break;
+    case 'cut-mat': ui.cutMat = id || ''; ui.partSel = null; renderCutlist(); break;
+    case 'cut-view': ui.cutView = id; renderCutlist(); break;
     case 'labels-print': window.print(); break;
     case 'labels-close': closeLabels(); break;
     case 'cab-del': if (ui.quick === id) ui.quick = null; mutate(() => { S.cabinets = S.cabinets.filter(c => c.id !== id); }); ui.sel = null; render(); break;
@@ -1090,7 +1092,7 @@ document.addEventListener('click', e => {
     case 'cs-preset': cabPresetApply(id); break;
     case 'ed-undo': case 'ed-redo': undoRedo(a === 'ed-undo' ? -1 : 1); if (ui.quick) renderQuick(); break;
     case 'ed-tab': {
-      ui.edTab = id;
+      ui.edTab = id; ui.edPv = ''; if (id === 'interior') ui.ed3d = false;
       // Interior opens on the first opening that has an inside (a door or open space), not a drawer.
       const c = qeCab(), rows = (c && c.rows) || [], r = rows[ui.qeRow | 0];
       if (id === 'interior' && r && !['door', 'open'].includes(r.type)) { const i = rows.findIndex(x => ['door', 'open'].includes(x.type)); if (i >= 0) ui.qeRow = i; }
@@ -1100,6 +1102,8 @@ document.addEventListener('click', e => {
     case 'ed-step': edStep(+id); break;
     // The editor's own preview turns into a 3D view of the cabinet (wide tabs have no preview, so Size opens).
     case 'ed-3d': ui.ed3d = !ui.ed3d; if (ui.ed3d && ED_WIDE.includes(ui.edTab)) ui.edTab = 'size'; renderQuick(); break;
+    // The picture on the left: the front, the inside with the fronts off, or 3D.
+    case 'ed-pv': ui.ed3d = id === '3d'; ui.edPv = id === '3d' ? '' : id; renderQuick(); break;
     case 'ed-3d-fit': if (typeof edView3DFit === 'function') edView3DFit(); break;
     case 'ed-split': { const c = qeCab(), [i, n] = id.split(':').map(Number); if (c) mutate(() => edSplitRows(c, i, n)); break; }
     case 'ed-hsplit': { const c = qeCab(); if (c && c.rows[+id]) mutate(() => edSplitRows(c, +id, 2)); break; }
