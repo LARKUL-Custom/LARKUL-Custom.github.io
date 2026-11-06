@@ -147,3 +147,7 @@ body.lk { font: 15px/1.55 var(--f-body); -webkit-font-smoothing: antialiased; }
 .lk .wc-tabs a { display: inline-flex; align-items: center; }
 .lk .wc-tabs .badge { line-height: 16px; min-width: 16px; font-size: 10px; }
 @media (max-width: 1120px) { .wc-title .tagline { display: none; } .lk .wc-tabs a { padding: 9px 8px; letter-spacing: .1em; } }
+
+/* Preview tab */
+.previewWrap{margin-top:10px;border:1px solid var(--line,#ddd);background:#fff}
+iframe.preview{display:block;width:100%;height:calc(100vh - 230px);min-height:520px;border:0}

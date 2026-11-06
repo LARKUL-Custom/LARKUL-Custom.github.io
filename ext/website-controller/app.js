@@ -155,7 +155,7 @@ async function sendLibraryFile(path, folder){
 }
 
 /* ---------- navigation ---------- */
-const TABS = [["home", "Overview"], ["work", "Past work"], ["prices", "Prices"], ["requests", "Requests"], ["backups", "Backups"], ["launch", "Launch & dates"], ["settings", "Settings"]];
+const TABS = [["home", "Overview"], ["preview", "Preview"], ["work", "Past work"], ["prices", "Prices"], ["requests", "Requests"], ["backups", "Backups"], ["launch", "Launch & dates"], ["settings", "Settings"]];
 let TAB = "home", NEW_REQUESTS = 0;
 try { TAB = sessionStorage.getItem("wc-tab") || "home"; } catch {}
 function drawTabs(){
@@ -184,7 +184,10 @@ V.home = async () => {
   if (!SETTINGS.siteUrl) return h("div", {}, head("Welcome", "This tab looks after your LARKUL website: past-work photos, prices, customer requests, backups and deploys."),
     h("div", { class: "box" }, h("h3", {}, "First, tell it where your website is"),
       h("p", { class: "muted", style: "margin-top:0" }, "Until the site is on Netlify, use the netlify.app address. After larkul.com points to Netlify, change it to https://larkul.com."),
-      h("button", { class: "btn primary", onclick: () => go("settings") }, "Open Settings")));
+      h("div", { class: "row" },
+        h("button", { class: "btn primary", onclick: () => go("preview") }, "Preview the site on this PC"),
+        h("button", { class: "btn", onclick: () => go("settings") }, "Open Settings"))),
+    h("p", { class: "muted small" }, "You don't need Netlify to look at or test the site. The Preview tab runs the copy that came with this update, right here on your PC."));
   const s = await api("/status");
   const pageOk = s.page?.ok, adminOk = s.admin?.ok;
   const card = (title, state, big, sub, ...extra) => h("div", { class: "box" }, h("div", { class: "small muted" }, h("span", { class: "dot " + state }), title), h("div", { class: "big" }, big), sub ? h("div", { class: "small muted" }, sub) : null, ...extra);
@@ -203,7 +206,8 @@ V.home = async () => {
         s.netlify?.missing ? "Add a Netlify token in Settings to see deploys and form requests." : !s.netlify?.ok ? s.netlify.error : d ? [ago(d.created), d.title].filter(Boolean).join(" · ") : "", deployBtn)),
     h("div", { class: "box", style: "margin-top:12px" }, h("h3", {}, "Open"),
       h("div", { class: "row" },
-        h("a", { class: "btn primary", href: s.siteUrl, target: "_blank", rel: "noopener" }, "Website"),
+        h("button", { class: "btn primary", onclick: () => go("preview") }, "Preview on this PC"),
+        h("a", { class: "btn", href: s.siteUrl, target: "_blank", rel: "noopener" }, "Website"),
         h("a", { class: "btn", href: s.siteUrl + "/admin", target: "_blank", rel: "noopener" }, "Admin page"),
         h("a", { class: "btn", href: s.siteUrl + "/#shop", target: "_blank", rel: "noopener" }, "Shop"),
         h("a", { class: "btn", href: s.siteUrl + "/#design", target: "_blank", rel: "noopener" }, "3D designer"),
@@ -218,6 +222,27 @@ V.home = async () => {
         h("button", { class: "btn", onclick: backupNow }, "Back up the site now"))));
   autoBackup(adminOk);
   return out;
+};
+/* ======================= Preview (the site copy bundled in site/, served by the hub) ======================= */
+const PREVIEW = "site/index.html";
+let PREVIEW_AT = "";
+V.preview = async () => {
+  const pages = [["", "Home"], ["shop", "Shop"], ["cabinets", "Custom cabinets"], ["design", "3D designer"], ["pricer", "Quick quote"], ["work", "Past work"], ["quote", "Free quote"], ["cart", "Cart"]];
+  const frame = h("iframe", { class: "preview", src: PREVIEW + (PREVIEW_AT ? "#" + PREVIEW_AT : ""), title: "LARKUL website preview" });
+  const open = h("a", { class: "btn", href: PREVIEW, target: "_blank", rel: "noopener" }, "Open in a new window");
+  const pick = (k, b) => {
+    PREVIEW_AT = k;
+    [...row.querySelectorAll("button")].forEach(x => x.classList.toggle("primary", x === b));
+    frame.src = PREVIEW + "?t=" + Date.now().toString(36) + (k ? "#" + k : "");
+    open.href = PREVIEW + (k ? "#" + k : "");
+  };
+  const row = h("div", { class: "row" }, pages.map(([k, l]) => { const b = h("button", { class: "btn sm" + (k === PREVIEW_AT ? " primary" : ""), onclick: () => pick(k, b) }, l); return b; }),
+    h("button", { class: "btn sm", onclick: () => { try { frame.contentWindow.location.reload(); } catch { frame.src = frame.src; } } }, "Reload page"), open);
+  return h("div", {}, head("Preview", "Your website, running on this PC from the copy that came with this update. Nothing here touches Netlify or your live site."),
+    row, h("div", { class: "previewWrap" }, frame),
+    h("details", { class: "box", style: "margin-top:12px" }, h("summary", {}, "What works in the preview"),
+      h("p", { class: "muted small" }, "Works: every page, the new look, photos, the shop, sizes and wood choices, bundles, the cart, the 3D kitchen designer and its estimates, and the quick quote."),
+      h("p", { class: "muted small" }, "Needs the live site (Netlify): actually sending a quote or order, customer sign-in, AI renders, and saving from the admin page. Buttons for those will show an error here, which is expected.")));
 };
 async function deployNow(e){
   if (!(await ask("Deploy the website now?", "Deploy", "Netlify rebuilds the site from GitHub. It takes about a minute and the site stays up meanwhile."))) return;
