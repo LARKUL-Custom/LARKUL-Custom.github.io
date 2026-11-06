@@ -3,7 +3,7 @@
   "name": "Website",
   "icon": "🌐",
   "description": "Runs the LARKUL website: past-work photos, prices, quote and order requests, backups, deploys and go-live dates.",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "ui": "index.html",
   "server": "server.js",
   "order": 10,
