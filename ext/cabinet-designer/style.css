@@ -2389,3 +2389,56 @@ table.t tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%,transpar
 .pl-side .pl-col{flex:0 0 auto}
 .pl-side .checkrow{align-self:center}
 .co-card{max-width:720px}
+
+/* 0.52.0: Settings rebuilt like Mozaik's settings screen. The sample cabinet fills a white column on the left with its pick under it;
+   on the right, who the picks are for and the template on one line, one row of tabs, and the picture tiles on plain white:
+   a name, a big picture and one dropdown, no boxes. */
+main:has(#tab-settings:not([hidden])){padding:0;background:var(--panel)}
+#tab-settings{max-width:none;gap:0;height:100%}
+.setx{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:100%;background:var(--panel)}
+.setx.noprev{grid-template-columns:minmax(0,1fr)}
+.setx-prev{display:flex;flex-direction:column;gap:10px;padding:14px;border-right:1px solid var(--line);position:sticky;top:0;align-self:start;height:calc(100vh - 70px)}
+.setx-pic{flex:1;min-height:0;display:flex;align-items:flex-end;justify-content:center;background:var(--paper);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.setx-pic.is3d{align-items:stretch}
+.setx-pic > div,.setx-pic #tpl3d{width:100%;height:100%}
+.setx-pic svg{width:100%;height:auto;max-height:100%}
+.setx-prevbar{display:flex;gap:8px;align-items:center}
+.setx-prevbar select{flex:1;min-width:0}
+.setx-main{display:flex;flex-direction:column;min-width:0;padding:14px 24px 24px}
+.setx-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.setx-top h2{font-size:20px}
+.setx-for,.setx-tpl{display:flex;align-items:center;gap:8px;font:600 15px var(--f-ui);color:var(--ink);white-space:nowrap}
+.setx-for select{min-width:200px;font-size:15px;font-weight:600}
+.setx-tpl select{min-width:280px;font-size:15px}
+.setx-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.setx-r .btn .ic{width:16px;height:16px}
+.setx-tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:22px}
+.setx-tabs button{border:0;border-bottom:3px solid transparent;background:none;padding:9px 14px 8px;font:500 15px var(--f-ui);color:var(--muted);cursor:pointer;margin-bottom:-1px}
+.setx-tabs button:hover{color:var(--ink);background:var(--sunk);border-radius:6px 6px 0 0}
+.setx-tabs button[aria-selected="true"]{color:var(--ink);font-weight:700;border-bottom-color:var(--accent)}
+.setx-body{min-width:0}
+.setx-body > .card{box-shadow:none}
+.setx .roomnotes{margin-bottom:12px;max-width:720px}
+/* Tiles: like Mozaik, no boxes; name, picture, dropdown. */
+.setx .tplgrid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:34px 28px}
+.setx .tpltile{padding:0;border:0;background:none;gap:8px;border-radius:0}
+.setx .tpltile.own{border:0}
+.setx .tpltile.own .tt-pic{box-shadow:0 0 0 2px var(--accent)}
+.setx .tt-h{font:600 15px/1.25 var(--f-ui);text-align:center}
+.setx .tt-pic{height:150px;border:0;border-radius:6px;background:#fff}
+.setx .tpltile select,.setx .tpltile input{font-size:14px}
+.tt-f{min-height:16px}
+.tt-f .linkbtn,.tt-f .tt-in{opacity:0;transition:opacity .12s}
+.tpltile:hover .tt-f .linkbtn,.tpltile:focus-within .tt-f .linkbtn,.tpltile:hover .tt-in,.tpltile:focus-within .tt-in{opacity:1}
+@media (pointer: coarse){ .tt-f .linkbtn,.tt-f .tt-in{opacity:1} }
+.tt-own{font:600 12px var(--f-ui);letter-spacing:0;text-transform:none;background:var(--accent-soft);padding:1px 7px;border-radius:5px}
+:root[data-help="hide"] .tplnote,:root[data-help="hide"] .setx-prev > .note,:root[data-help="hide"] .tplfoot.helponly,:root[data-help="hide"] #tab-settings .cardhead .note,:root[data-help="hide"] #tab-settings .cardbody > .note,:root[data-help="hide"] .lookrow .note{display:none}
+.tplfoot{margin-top:24px;padding-top:12px;font-size:14px;color:var(--ink)}
+.methods .mt-row{display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:10px}
+.methods .mt-row .f{display:flex;flex-direction:column;gap:4px;min-width:280px;font-size:13px}
+.methods .mt-row .f span{text-align:left}
+.methods .mt-row > .muted{align-self:center;margin-right:12px}
+.settable tr.pgroup th{font:700 14px var(--f-ui);letter-spacing:0;text-transform:none;color:var(--ink);background:var(--panel)}
+.co-card .f.wide{grid-template-columns:150px minmax(0,1fr);font-size:14px}
+@media (max-width: 900px){ .setx{grid-template-columns:minmax(0,1fr)} .setx-prev{position:static;height:340px;border-right:0;border-bottom:1px solid var(--line)} .setx-main{padding:12px} .setx-r{margin-left:0} }
+.methods .mt-row .f{align-items:flex-start}

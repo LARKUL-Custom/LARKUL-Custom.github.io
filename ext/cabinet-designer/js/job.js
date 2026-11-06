@@ -122,12 +122,10 @@ function saveMatSet() {
   const d = S.job.defaults, t = { id: uid('ms'), name: `${doorTpl(d.doorT).name}, ${(finishList().find(f => f.id === d.finish) || {}).name || cabMatT(d.cabMatT).name}`, doorT: d.doorT, finish: d.finish, cabMatT: d.cabMatT, drawerMatT: d.drawerMatT };
   mutate(() => matSets().push(t)); flash(`Saved as “${t.name}”. Rename it under Libraries › Materials.`);
 }
-function matSetBar() {
-  const now = matSetNow(), d = S.job.defaults, dt = doorTpl(d.doorT), fin = finishList().find(f => f.id === d.finish) || finishList()[0] || { name: '' }, cm = cabMatT(d.cabMatT), dm = drawerMatT(d.drawerMatT);
-  const part = (label, sw, name) => `<span class="ms-part">${sw}<span><span class="ms-l">${label}</span>${esc(name)}</span></span>`;
-  return `<div class="msbar"><label class="ms-pick"><span>Material template · whole job</span><select data-act-change="mat-set" aria-label="Material template for the whole job">${now ? '' : '<option value="" selected>Own picks (no template)</option>'}${matSets().map(t => `<option value="${t.id}"${now && now.id === t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
-    <div class="ms-parts">${part('Doors', swatch(mat(doorStyle(dt.door).mat), 18), dt.name)}${part('Finish', swatch(mat(fin.front), 18), fin.name)}${part('Cabinet', swatch(mat(cm.carcass), 18), cm.name)}${part('Drawers', swatch(mat(dm.sides), 18), dm.name)}</div>
-    <div class="ms-acts">${now ? '' : '<button class="btn sm" data-act="mat-set-save">Save as template</button>'}<button class="linkbtn" data-act="tab" data-id="materials">Edit templates</button></div></div>`;
+function matSetPick() {
+  const now = matSetNow();
+  return `<label class="setx-tpl"><span>Template</span><select data-act-change="mat-set" aria-label="Material template for the whole job">${now ? '' : '<option value="" selected>Own picks</option>'}${matSets().map(t => `<option value="${t.id}"${now && now.id === t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+    ${now ? '' : '<button class="btn" data-act="mat-set-save">Save as template</button>'}<button class="btn" data-act="tab" data-id="materials" title="Edit templates">${icon('edit')}</button>`;
 }
 /* ---------- Templates and hardware: picture tiles by category, like Mozaik ---------- */
 const TPL_CATS = [
@@ -195,8 +193,11 @@ function mountTpl3D(keep) {
   v.setBackground(cssVar('--paper')); v.clear();
   withRoom(r0, () => { const c = tplSample(prevId), m = cabinetMeshes(c); m.position.x = -c.w / 2; v.root.add(m);
     const fl = new THREE.Mesh(new THREE.PlaneGeometry(c.w + 40, c.d + 40), flat3(cssVar('--floor3d'))); fl.rotation.x = -Math.PI / 2; fl.position.set(0, -0.02, c.d / 2); fl.userData.noBounds = true; v.root.add(fl);
-    if (v.fittedFor !== prevId) { v.fittedFor = prevId; v.look({ x: -0.8, y: 0.55, z: 1.4 }); } });
-  v.resize(); v.requestRender();
+    v.resize();
+    // Frame it again when the cabinet or the size of the preview changes (the preview column is tall and narrow).
+    const sz = host.clientWidth + 'x' + host.clientHeight;
+    if (v.fittedFor !== prevId || v.fittedSz !== sz) { v.fittedFor = prevId; v.fittedSz = sz; v.look({ x: -0.8, y: 0.55, z: 1.4 }); if (v.cam.isPerspectiveCamera) { v.cam.position.lerp(v.controls.target, 0.28); v.controls.update(); } } });
+  v.requestRender();
 }
 function renderTplTab() {
   // Like Mozaik, settings open on the room you are working in; Whole job sets what every room starts from.
@@ -227,20 +228,19 @@ function renderTplTab() {
   const preview = is3d ? '<div id="tpl3d-slot"></div>' : withRoom(r0, () => frontPreviewSVG(tplSample(prevId), 360, 0, false));
   const own = scope ? Object.values(scope.settings || {}).filter(Boolean).length : 0;
   const cabOwn = scope ? scope.cabinets.reduce((n, c) => n + SETTING_FIELDS.filter(k => c[k]).length, 0) : 0;
-  return `<div class="tplwrap">
-    <div class="card tplprev"><div class="seg tplprev-mode" role="group" aria-label="Preview">${[['3d', '3D'], ['2d', 'Front']].map(([k, l]) => `<button data-act="tpl-3d" data-id="${k}" aria-pressed="${(k === '3d') === is3d}">${l}</button>`).join('')}</div><div class="tplprev-pic${is3d ? ' is3d' : ''}">${preview}</div>
-      <label class="f"><span>Preview</span><select data-act-change="tpl-prev" aria-label="Preview cabinet">${lib.map(l => `<option value="${l.id}"${l.id === prevId ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>
-      <div class="note">Shown with ${scope ? esc(scope.name) + "'s" : 'the job'} picks.</div></div>
-    <div class="tplmain">
-      <div class="tplbar"><div class="seg" role="group" aria-label="Settings for">${[['', 'Whole job'], ...S.rooms.map(r => [r.id, r.name])].map(([id, l]) => `<button data-act="tpl-scope" data-id="${id}" aria-pressed="${(scope ? scope.id : '') === id}">${esc(l)}</button>`).join('')}</div>
-        <div class="tplbar-r">${scope ? `<button class="btn sm${ui.roomNotes ? ' primary' : ''}" data-act="room-notes">${icon('list')}Room notes</button>` : ''}<button class="btn sm" data-act="set-tab" data-id="rooms">${icon('home')}Job dashboard</button></div></div>
-      ${scope && ui.roomNotes ? `<label class="f wide roomnotes"><span>Notes for ${esc(scope.name)}</span><textarea data-obj="room:${scope.id}" data-field="notes" data-type="text" rows="3" aria-label="Room notes">${esc(scope.notes || '')}</textarea></label>` : ''}
-      ${matSetBar()}
-      <div class="subtabs tplcats" role="tablist">${TPL_CATS.map(([id, l]) => `<button role="tab" data-act="tpl-cat" data-id="${id}" aria-selected="${cat[0] === id}">${l}</button>`).join('')}</div>
-      <div class="tplgrid">${cat[2].map(tile).join('')}</div>${cat[0] === 'fronts' ? `<div class="note tplnote">Base door, wall door and drawer front tiles change the door template itself, so every room using it changes too.</div>` : ''}
-      <div class="tplfoot">${scope ? `${own ? `${own} pick${own === 1 ? '' : 's'} in ${esc(scope.name)} differ from the job. <button class="linkbtn" data-act="set-room-job" data-id="${scope.id}">Use the job picks</button>` : `${esc(scope.name)} uses the job picks. Change a tile to give this room its own.`}${cabOwn ? ` · ${cabOwn} pick${cabOwn === 1 ? '' : 's'} on single cabinets. <button class="linkbtn" data-act="set-room-follow" data-id="${scope.id}">Make cabinets follow the room</button>` : ''}`
-        : `These picks are for every room. Pick a room above to give it its own.${S.rooms.some(r => Object.values(r.settings || {}).some(Boolean)) ? ' <button class="linkbtn" data-act="set-job-all">Make every room follow the job</button>' : ''}`}</div>
-    </div></div>`;
+  const foot = `<div class="tplfoot${(scope ? own || cabOwn : S.rooms.some(r => Object.values(r.settings || {}).some(Boolean))) ? '' : ' helponly'}">${scope ? `${own ? `${own} pick${own === 1 ? '' : 's'} in ${esc(scope.name)} differ from the job. <button class="linkbtn" data-act="set-room-job" data-id="${scope.id}">Use the job picks</button>` : `${esc(scope.name)} uses the job picks. Change a tile to give this room its own.`}${cabOwn ? ` · ${cabOwn} pick${cabOwn === 1 ? '' : 's'} on single cabinets. <button class="linkbtn" data-act="set-room-follow" data-id="${scope.id}">Make cabinets follow the room</button>` : ''}`
+        : `These picks are for every room. Pick a room above to give it its own.${S.rooms.some(r => Object.values(r.settings || {}).some(Boolean)) ? ' <button class="linkbtn" data-act="set-job-all">Make every room follow the job</button>' : ''}`}</div>`;
+  // The parts of the Settings screen that belong to these picks: the sample cabinet on the left, who the picks are for, and the tiles.
+  return {
+    prev: `<aside class="setx-prev"><div class="setx-pic${is3d ? ' is3d' : ''}">${preview}</div>
+      <div class="setx-prevbar"><select data-act-change="tpl-prev" aria-label="Preview cabinet">${lib.map(l => `<option value="${l.id}"${l.id === prevId ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select>
+      <div class="seg" role="group" aria-label="Preview">${[['3d', '3D'], ['2d', 'Front']].map(([k, l]) => `<button data-act="tpl-3d" data-id="${k}" aria-pressed="${(k === '3d') === is3d}">${l}</button>`).join('')}</div></div>
+      <div class="note">Shown with ${scope ? esc(scope.name) + "'s" : 'the job'} picks.</div></aside>`,
+    scope: `<label class="setx-for"><span>Settings for</span><select data-act-change="tpl-scope" aria-label="Settings for">${[['', 'Whole job'], ...S.rooms.map(r => [r.id, r.name])].map(([id, l]) => `<option value="${id}"${(scope ? scope.id : '') === id ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      ${scope ? `<button class="btn${ui.roomNotes ? ' primary' : ''}" data-act="room-notes">${icon('list')}Room notes</button>` : ''}`,
+    notes: scope && ui.roomNotes ? `<label class="f wide roomnotes"><span>Notes for ${esc(scope.name)}</span><textarea data-obj="room:${scope.id}" data-field="notes" data-type="text" rows="3" aria-label="Room notes">${esc(scope.notes || '')}</textarea></label>` : '',
+    body: `<div class="tplgrid">${cat[2].map(tile).join('')}</div>${cat[0] === 'fronts' ? `<div class="note tplnote">Base door, wall door and drawer front tiles change the door template itself, so every room using it changes too.</div>` : ''}${foot}`,
+  };
 }
 // Job dashboard: one row per room, a tab per group of settings, like Mozaik's. Picks left on "Job" follow the whole job.
 function renderDash() {
@@ -280,24 +280,32 @@ function renderSettings() {
         : ctl('roomp:' + r.id, pd.k, own ? r.params[pd.k] : '', pd.type, { label: pd.label + ' for ' + r.name, ph: 'Job ' + shown(jv), blank: true })}</td>`; }).join('')}</tr>`;
   };
   const pRows = paramGroups(PARAM_DEFS).map(([g, gl, ds]) => pgroupRow(g, gl, rooms.length + 2, ds.length) + (paramShut(g) ? '' : ds.map(pRow).join(''))).join('');
-  const tabsS = [['templates', 'Room settings', 'palette'], ['rooms', 'Job dashboard', 'home'], ['params', 'Construction parameters', 'sliders'], ['vars', 'Variables', 'calc'], ['look', 'Look and feel', 'eye'], ['company', 'Company', 'user']];
-  const st = ui.setTab || 'templates';
-  const dash = renderDash();
-  const body = st === 'rooms' ? dash
-    : st === 'templates' ? renderTplTab()
+  // One row of tabs like Mozaik's settings: the picture-tile groups first, then the rest.
+  const tabsS = [...TPL_CATS.map(([k, l]) => ['cat:' + k, l]), ['params', 'Construction'], ['rooms', 'Rooms'], ['vars', 'Variables'], ['look', 'Look and feel'], ['company', 'Company']];
+  if (!ui.setTab || ui.setTab === 'templates') ui.setTab = 'templates';
+  const st = ui.setTab, cur = st === 'templates' ? 'cat:' + ((TPL_CATS.find(c => c[0] === ui.tplCat) || TPL_CATS[0])[0]) : st;
+  const tp = st === 'templates' || st === 'params' ? renderTplTab() : null;
+  const body = st === 'rooms' ? renderDash()
+    : st === 'templates' ? tp.body
     : st === 'vars' ? renderVars() + (typeof fxVarsExtra === 'function' ? fxVarsExtra() : '')
     : st === 'look' ? renderLook()
     : st === 'company' && typeof companyCard === 'function' ? companyCard()
     : (typeof methodsBox === 'function' ? methodsBox() : '') + `<div class="card"><div class="cardhead"><h3>${icon('sliders')}Construction parameters</h3><span class="note">Leave a room cell blank to use the job value. Library templates and single cabinets can still override.</span></div>
     <div class="tscroll"><table class="t settable"><thead>${head}</thead><tbody>${pRows}</tbody></table></div></div>`;
   const keep3d = $('#tpl3d');
-  $('#tab-settings').innerHTML = `<div class="pagehead"><div><h2>Settings</h2><p>Set up the rooms in this job, pick templates, door styles and hardware for the whole job or one room, and tune construction and layout. Cabinets follow their room unless you pick something different on the cabinet itself.</p></div></div>
-  <div class="subtabs" role="tablist">${tabsS.map(([k, l, ic]) => `<button role="tab" data-act="set-tab" data-id="${k}" aria-selected="${st === k}">${icon(ic)}${l}</button>`).join('')}</div>
-  ${body}`;
-  if (st === 'templates' && ui.tpl3d !== false) requestAnimationFrame(() => mountTpl3D(keep3d));
+  $('#tab-settings').innerHTML = `<div class="setx${tp ? '' : ' noprev'}">
+    ${tp ? tp.prev : ''}
+    <section class="setx-main">
+      <div class="setx-top">${st === 'templates' ? tp.scope : '<h2>Settings</h2>'}<div class="setx-r">${matSetPick()}</div></div>
+      ${st === 'templates' ? tp.notes : ''}
+      <div class="setx-tabs" role="tablist">${tabsS.map(([k, l]) => `<button role="tab" data-act="${k.startsWith('cat:') ? 'set-cat' : 'set-tab'}" data-id="${k.replace('cat:', '')}" aria-selected="${cur === k}">${l}</button>`).join('')}</div>
+      <div class="setx-body">${body}</div>
+    </section></div>`;
+  if (tp && ui.tpl3d !== false) requestAnimationFrame(() => mountTpl3D(keep3d));
 }
 document.addEventListener('change', e => {
   const ms = e.target.closest('[data-act-change="mat-set"]'); if (ms) { applyMatSet(ms.value); return; }
+  const sc = e.target.closest('[data-act-change="tpl-scope"]'); if (sc) { ui.tplScope = sc.value || ''; renderSettings(); return; }
   const el = e.target.closest('[data-act-change="tpl-prev"]'); if (!el) return;
   ui.tplPrev = el.value; renderSettings();
 });

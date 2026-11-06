@@ -437,10 +437,12 @@ class Viewer3D {
     if (!this.ok) return;
     const b = this.bounds(), c = b.getCenter(new THREE.Vector3()), r = b.getSize(new THREE.Vector3()).length() / 2;
     const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
-    const dist = keepDistance ? this.cam.position.distanceTo(this.controls.target) : r / Math.sin((this.persp.fov * Math.PI / 180) / 2) * 1.1;
+    // In a tall, narrow view the side to side angle is the smaller one, so fit to whichever is smaller.
+    const asp = Math.min(1, this.persp.aspect || 1), half = Math.atan(Math.tan((this.persp.fov * Math.PI / 180) / 2) * asp);
+    const dist = keepDistance ? this.cam.position.distanceTo(this.controls.target) : r / Math.sin(half) * 1.1;
     this.controls.target.copy(c);
     this.cam.position.copy(c).add(d.multiplyScalar(dist));
-    this.orthoH = r * 1.6; this.ortho.zoom = 1; this.resize();
+    this.orthoH = r * 1.6 / asp; this.ortho.zoom = 1; this.resize();
     this.cam.lookAt(c); this.controls.update(); this.requestRender();
   }
   // Frame one box from direction dir.

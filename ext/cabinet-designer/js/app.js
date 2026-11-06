@@ -908,7 +908,7 @@ document.addEventListener('click', e => {
     case 'tpl-scope': ui.tplScope = id || ''; renderSettings(); break;
     case 'tpl-3d': ui.tpl3d = id === '3d'; renderSettings(); break;
     case 'room-notes': ui.roomNotes = !ui.roomNotes; renderSettings(); break;
-    case 'tpl-cat': ui.tplCat = id; renderSettings(); break;
+    case 'tpl-cat': case 'set-cat': ui.tplCat = id; ui.setTab = 'templates'; renderSettings(); break;
     case 'set-room-job': { const r = roomById(id); mutate(() => { r.settings = {}; }); flash(`${r.name} now follows the job picks`); break; }
     case 'set-job-all': mutate(() => S.rooms.forEach(r => { r.settings = {}; })); flash('Every room now follows the job settings'); break;
     case 'set-room-follow': { const r = roomById(id); mutate(() => r.cabinets.forEach(c => SETTING_FIELDS.forEach(k => { c[k] = ''; }))); flash(`Cabinets in ${r.name} now follow the room`); break; }
