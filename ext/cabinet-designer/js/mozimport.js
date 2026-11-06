@@ -307,7 +307,7 @@ async function importMozaik(files) {
   s.rooms = rooms; s.roomId = rooms[0].id; s.job.notes = 'Imported from Mozaik ' + new Date().toLocaleDateString();
   const folder = jobs.view || 'My jobs', p = freePath(folder, s.job.name);
   s.job.name = jobNameOf(p);
-  s.job.status = jobs.cats.stages[0].id; s.job.stageAt = new Date().toISOString();
+  ['status', 'stageAt', 'was', 'tag'].forEach(k => delete s.job[k]);
   await jobStore().mkdir(folder).catch(() => {}); await jobStore().write(p, JSON.stringify(s));
   await refreshJobs();
   loadJobState(attachRoom(s), p);

@@ -153,13 +153,12 @@ async function newJob(name, folder, customer) {
   name = safeName(name) || 'New job'; folder = safeFolder(folder) || 'My jobs';
   await flushJob();
   const s = blankJob(name, customer), p = freePath(folder, name);
-  // A new job starts in the category being looked at (or the first one).
-  s.job.status = jobs.cats.stages.some(x => x.id === jobs.tab) ? jobs.tab : jobs.cats.stages[0].id; s.job.stageAt = new Date().toISOString(); delete s.job.was; delete s.job.tag;
+  ['status', 'stageAt', 'was', 'tag'].forEach(k => delete s.job[k]);
   await jobStore().mkdir(folder).catch(() => {});
   await jobStore().write(p, JSON.stringify(s));
   await refreshJobs();
   // The new job shows in the job manager, picked, ready to open.
-  jobs.sel = p; jobs.tab = s.job.status; jobs.view = topFolder(folder); jobs.open[topFolder(folder)] = true; jobs.q = '';
+  jobs.sel = p; jobs.tab = ''; jobs.view = topFolder(folder); jobs.open[topFolder(folder)] = true; jobs.q = '';
   renderJobs(); flash('Made ' + name + '. Open it to start drawing.');
 }
 async function closeJob() {
@@ -168,7 +167,7 @@ async function closeJob() {
 }
 
 /* ---------- Job browser ---------- */
-function showJobs() { jobs.shown = true; jobs.confirm = null; Promise.all([refreshJobs(), stageStore.load()]).then(renderJobs); renderJobs(); }
+function showJobs() { jobs.shown = true; jobs.confirm = null; refreshJobs().then(renderJobs); renderJobs(); }
 function hideJobs() { if (jobs.closed) return; jobs.shown = false; $('#jobsheet').hidden = true; }
 // Reads each job once (per save) for its room count and a small plan picture.
 async function jobInfo(j) {
@@ -198,43 +197,25 @@ function planThumb(r) {
   return `<svg class="thumb" viewBox="${x0} ${y0} ${W} ${H}" aria-hidden="true">${s}</svg>`;
 }
 const when = iso => { if (!iso) return ''; const d = new Date(iso), now = new Date(); return d.toDateString() === now.toDateString() ? 'Today ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' }); };
-/* ---------- Job categories: shop-wide stages a job moves through (Estimates, Production, Finished), then Archived, Lost and Trash ---------- */
-const STAGE_DEF = { stages: [{ id: 'estimate', name: 'Estimates' }, { id: 'production', name: 'Production' }, { id: 'finished', name: 'Finished' }], archiveFrom: 'finished', archiveDays: 30 };
-const FIXED_TABS = [['archived', 'Archived'], ['lost', 'Lost'], ['trash', 'Trash']];
-jobs.cats = clone(STAGE_DEF);
-const stageStore = {
-  async load() {
-    let v = null;
-    if (inHub()) { try { const r = await Hub.storage.get('jobStages'); v = r && (r.value || r); } catch (_) {} }
-    else { try { v = JSON.parse(localStorage.getItem(KEY + '.stages')); } catch (_) {} }
-    if (v && Array.isArray(v.stages) && v.stages.length) jobs.cats = { ...clone(STAGE_DEF), ...v };
-  },
-  save() { const v = clone(jobs.cats); if (inHub()) return Hub.storage.set('jobStages', v).catch(() => {}); try { localStorage.setItem(KEY + '.stages', JSON.stringify(v)); } catch (_) {} },
-};
-const jobTabs = () => [...jobs.cats.stages.map(x => [x.id, x.name]), ...FIXED_TABS];
-const tabName = id => (jobTabs().find(t => t[0] === id) || [])[1] || '';
-// Jobs saved before categories (or in a category since deleted) land in the first one; Completed became Archived.
-function jobStatusId(st) {
-  if (st === 'completed') return 'archived';
-  return jobTabs().some(t => t[0] === st) ? st : jobs.cats.stages[0].id;
-}
+/* ---------- Trash: the only status a job has now. Customers and their folders do the sorting (the Estimates/Production/... tabs were removed 0.51.0). ---------- */
+const jobStatusId = st => st === 'trash' ? 'trash' : '';
 const jobMeta = j => jobs.info[j.path + '|' + j.modified] || {};
 const jobStatus = j => jobStatusId(jobMeta(j).status);
-// Job manager, laid out like Mozaik's: New job and the customer folders on the left, the category tabs and the job table in the middle,
+// Job manager, laid out like Mozaik's: New job, the customer folders and Trash on the left, search and the job table in the middle,
 // and one column of buttons on the right that act on the picked job. Customers are the top folders; each can hold folders of its own (Estimate, Order...).
 function renderJobs() {
   const el = $('#jobsheet'); if (!jobs.shown) { el.hidden = true; return; }
   el.hidden = false;
-  if (!jobTabs().some(t => t[0] === jobs.tab)) jobs.tab = jobs.cats.stages[0].id;
+  if (jobs.tab !== 'trash') jobs.tab = '';
   const q = jobs.q.toLowerCase(), cur = !jobs.closed && jobs.list.find(j => j.path === jobs.path);
   const custOf = j => jobMeta(j).customer || topFolder(j.folder);
   const subOf = j => j.folder.split('/').slice(1).join('/');
-  const inView = j => !jobs.view || jobs.q || inFolder(j.folder, jobs.view);
+  const inView = j => !jobs.view || jobs.q || jobs.tab === 'trash' || inFolder(j.folder, jobs.view);
   const match = j => !q || [j.name, j.folder, jobMeta(j).customer, jobMeta(j).tag].join(' ').toLowerCase().includes(q);
   const rows = jobs.list.filter(j => inView(j) && match(j) && jobStatus(j) === jobs.tab);
   const key = { name: j => j.name.toLowerCase(), customer: j => custOf(j).toLowerCase(), folder: j => subOf(j).toLowerCase(), tag: j => (jobMeta(j).tag || '').toLowerCase(), cabs: j => jobMeta(j).cabs || 0, modified: j => j.modified || '' }[jobs.sort] || (j => j.modified || '');
   rows.sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * jobs.dir; });
-  const tabN = t => jobs.list.filter(j => inView(j) && match(j) && jobStatus(j) === t).length;
+  const trashN = jobs.list.filter(j => jobStatus(j) === 'trash').length;
   const count = f => jobs.list.filter(j => inFolder(j.folder, f) && jobStatus(j) !== 'trash').length;
   const sel = rows.find(j => j.path === jobs.sel), sm = sel ? jobMeta(sel) : null, trash = jobs.tab === 'trash';
   const th = (k, l, cls = '') => `<th class="${cls}"><button class="jm-sort" data-act="jobs-sort" data-id="${k}" aria-pressed="${jobs.sort === k}">${l}${jobs.sort === k ? (jobs.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
@@ -248,21 +229,22 @@ function renderJobs() {
   const tree = custs.map(c => {
     const open = jobs.open[c] || viewTop === c, subs = subsOf(c);
     return `<div class="jm-cust${open ? ' open' : ''}">
-      <button class="folderbtn" data-act="jobs-folder" data-id="${esc(c)}" data-drop="${esc(c)}" aria-current="${jobs.view === c}" aria-expanded="${open}">
+      <button class="folderbtn" data-act="jobs-folder" data-id="${esc(c)}" data-drop="${esc(c)}" aria-current="${!trash && jobs.view === c}" aria-expanded="${open}">
         <i class="jm-caret" data-act="jobs-fold" data-id="${esc(c)}">${subs.length ? icon(open ? 'chevd' : 'chevr') : ''}</i>${icon('user')}<span>${esc(c)}</span><b>${count(c)}</b></button>
-      ${open ? subs.map(f => `<button class="folderbtn sub" data-act="jobs-folder" data-id="${esc(f)}" data-drop="${esc(f)}" aria-current="${jobs.view === f}">${icon('folder')}<span>${esc(f.slice(c.length + 1))}</span><b>${count(f)}</b></button>`).join('') : ''}
+      ${open ? subs.map(f => `<button class="folderbtn sub" data-act="jobs-folder" data-id="${esc(f)}" data-drop="${esc(f)}" aria-current="${!trash && jobs.view === f}">${icon('folder')}<span>${esc(f.slice(c.length + 1))}</span><b>${count(f)}</b></button>`).join('') : ''}
       ${open && jobs.view && topFolder(jobs.view) === c && !jobs.view.includes('/') ? `<div class="folderadd sub"><input type="text" id="nf-sub" placeholder="New folder in ${esc(c)}" aria-label="New folder in ${esc(c)}"><button class="btn sm" data-act="folder-add-sub">${icon('plus')}Add</button></div>` : ''}
     </div>`;
   }).join('');
   const left = `<nav class="jm-left" aria-label="Customers and folders">
     <button class="jm-new" data-act="job-new-show">${icon('plus')}<span>New job</span></button>
     <div class="folders">
-      <button class="folderbtn" data-act="jobs-folder" data-id="" aria-current="${!jobs.view}">${icon('stack')}<span>All jobs</span><b>${jobs.list.filter(j => jobStatus(j) !== 'trash').length}</b></button>
+      <button class="folderbtn" data-act="jobs-folder" data-id="" aria-current="${!trash && !jobs.view}">${icon('stack')}<span>All jobs</span><b>${jobs.list.filter(j => jobStatus(j) !== 'trash').length}</b></button>
       <div class="jm-sec">Customers</div>
       ${tree || '<div class="muted jm-none">No customers yet.</div>'}
       <div class="folderadd"><input type="text" id="nf-name" placeholder="New customer" aria-label="New customer name"><button class="btn sm" data-act="folder-add">${icon('plus')}Add</button></div>
+      <button class="folderbtn jm-trash" data-act="jobs-tab" data-id="trash" aria-current="${trash}">${icon('trash')}<span>Trash</span><b>${trashN}</b></button>
     </div>
-    ${jobs.view ? `<div class="folderops">${jobs.renFolder ? `<input type="text" id="rf-name" value="${esc(jobs.view.split('/').pop())}" aria-label="Folder name"><button class="btn sm primary" data-act="folder-rename">Save</button><button class="btn sm" data-act="folder-rename-show">Cancel</button>`
+    ${jobs.view && !trash ? `<div class="folderops">${jobs.renFolder ? `<input type="text" id="rf-name" value="${esc(jobs.view.split('/').pop())}" aria-label="Folder name"><button class="btn sm primary" data-act="folder-rename">Save</button><button class="btn sm" data-act="folder-rename-show">Cancel</button>`
       : `<button class="btn sm" data-act="folder-rename-show">${icon('edit')}Rename</button>${count(jobs.view) || jobs.list.some(j => inFolder(j.folder, jobs.view)) ? '' : `<button class="btn sm danger" data-act="folder-del">${icon('trash')}Delete</button>`}`}</div>` : ''}
   </nav>`;
 
@@ -286,12 +268,10 @@ function renderJobs() {
       <button class="btn" data-act="jobs-edit" data-id="move"${dis}>Move</button>
       <button class="btn danger" data-act="jobs-trash" data-id="${sid}"${dis}>Delete</button>
       <div class="jm-gap"></div>
-      <label class="f"><span>Category</span><select id="jm-status"${dis}>${jobTabs().filter(([k]) => k !== 'trash').map(([k, l]) => `<option value="${k}"${sel && jobStatus(sel) === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
       <label class="f"><span>Tag</span><input type="text" id="jm-tag" value="${esc(sm ? sm.tag || '' : '')}" placeholder="None"${dis}></label>
       <div class="jm-gap"></div>
       <button class="btn" data-act="jobs-export" data-id="${sid}"${dis}>${icon('download')}Export</button>
-      <label class="btn">${icon('upload')}Import job<input type="file" multiple data-job-import hidden title="A Cabinet Designer job, or a Mozaik job (zipped job folder or .moz room files)"></label>
-      <button class="btn" data-act="jobs-cats" aria-pressed="${!!jobs.catsOpen}">${icon('sliders')}Categories</button></div>`;
+      <label class="btn">${icon('upload')}Import job<input type="file" multiple data-job-import hidden title="A Cabinet Designer job, or a Mozaik job (zipped job folder or .moz room files)"></label></div>`;
 
   const editBar = !sel ? '' : jobs.edit === 'rename' ? `<div class="jm-bar"><label class="f"><span>New name for ${esc(sel.name)}</span><input type="text" id="jm-name" value="${esc(sel.name)}"></label><button class="btn primary" data-act="jobs-rename" data-id="${sid}">Rename</button><button class="btn" data-act="jobs-edit" data-id="">Cancel</button></div>`
     : jobs.edit === 'move' ? `<div class="jm-bar"><label class="f"><span>Move ${esc(sel.name)} to</span><select id="mv-folder">${jobs.folders.map(f => fopt(f, sel.folder)).join('')}</select></label><button class="btn primary" data-act="job-move" data-id="${sid}">Move</button><button class="btn" data-act="jobs-edit" data-id="">Cancel</button></div>` : '';
@@ -303,10 +283,9 @@ function renderJobs() {
     <div class="jm-body">
       ${left}
       <section class="joblist">
-        <div class="jm-top"><div class="seg jm-tabs" role="tablist" aria-label="Job category">${jobTabs().map(([k, l]) => `<button role="tab" data-act="jobs-tab" data-id="${k}" aria-selected="${jobs.tab === k}" aria-pressed="${jobs.tab === k}">${esc(l)} <b>${tabN(k)}</b></button>`).join('')}</div>
+        <div class="jm-top">${trash ? `<h3 class="jm-where">${icon('trash')}Trash</h3>` : ''}
           <div class="jobsearch">${icon('search')}<input type="text" id="jobq" placeholder="Search name, customer or tag" value="${esc(jobs.q)}" aria-label="Search jobs"></div></div>
         ${newForm}
-        ${jobs.catsOpen ? catsPanel() : ''}
         ${editBar}
         <div class="card tscroll jm-grid"><table class="t jm-table"><thead><tr><th class="jm-pic"></th>${th('name', 'Job name')}${th('customer', 'Customer', 'jm-opt')}${th('folder', 'Folder', 'jm-opt')}${th('tag', 'Tag', 'jm-opt')}${th('cabs', 'Rooms · cabinets', 'jm-opt')}${th('modified', 'Saved')}</tr></thead>
         <tbody>${rows.map(j => {
@@ -318,37 +297,13 @@ function renderJobs() {
             <td class="jm-opt">${m.tag ? `<span class="chip">${esc(m.tag)}</span>` : ''}</td>
             <td class="jm-opt n">${m.bad ? '<span class="muted">Can’t read</span>' : m.rooms != null ? `${m.rooms} · ${m.cabs}` : '…'}</td>
             <td class="n">${when(j.modified)}</td></tr>`;
-        }).join('') || `<tr><td colspan="7"><div class="empty-note">${jobs.q ? 'No jobs match that search.' : trash ? 'Trash is empty.' : `No jobs in ${esc(tabName(jobs.tab))} for ${esc(where)}.`}${trash || jobs.q ? '' : ' <button class="btn sm primary" data-act="job-new-show">New job</button>'}</div></td></tr>`}</tbody></table></div>
-        <div class="jm-foot">${rows.length} job${rows.length === 1 ? '' : 's'} in ${esc(tabName(jobs.tab))}, ${esc(where)}. Double-click a job to open it. Drag a job onto a customer or folder to move it.</div>
+        }).join('') || `<tr><td colspan="7"><div class="empty-note">${jobs.q ? 'No jobs match that search.' : trash ? 'Trash is empty.' : `No jobs in ${esc(where)}.`}${trash || jobs.q ? '' : ' <button class="btn sm primary" data-act="job-new-show">New job</button>'}</div></td></tr>`}</tbody></table></div>
+        <div class="jm-foot">${rows.length} job${rows.length === 1 ? '' : 's'} in ${trash ? 'Trash. Pick a job to restore it or delete it forever.' : esc(where) + '. Double-click a job to open it. Drag a job onto a customer or folder to move it.'}</div>
       </section>
       ${side}
     </div></div>`;
-  // Every job is read once so the category tabs count right; the table fills in as they arrive.
+  // Every job is read once so the Trash count is right; the table fills in as they arrive.
   jobs.list.forEach(j => { if (!jobs.info[j.path + '|' + j.modified]) jobInfo(j).then(() => { if (jobs.shown) renderJobsSoon(); }); });
-  autoArchive();
-}
-function catsPanel() {
-  const c = jobs.cats, n = c.stages.length;
-  return `<div class="card jm-cats"><h3>${icon('sliders')}Job categories</h3>
-    <div class="note">Jobs move through these in order. Archived, Lost and Trash are always there.</div>
-    ${c.stages.map((x, i) => `<div class="jm-cat"><input type="text" data-cat-name="${i}" value="${esc(x.name)}" aria-label="Category name" maxlength="30">
-      <button class="btn sm" data-act="jobs-cat-move" data-id="${i}:-1"${i ? '' : ' disabled'} aria-label="Move up">↑</button><button class="btn sm" data-act="jobs-cat-move" data-id="${i}:1"${i < n - 1 ? '' : ' disabled'} aria-label="Move down">↓</button>
-      <button class="btn sm danger" data-act="jobs-cat-del" data-id="${i}"${n > 1 ? '' : ' disabled'} aria-label="Delete ${esc(x.name)}">${icon('trash')}</button></div>`).join('')}
-    <div class="row-actions"><button class="btn sm" data-act="jobs-cat-add">${icon('plus')}Add category</button></div>
-    <div class="jm-arch"><span>Auto archive jobs in</span><select id="jm-archfrom" aria-label="Category to auto archive"><option value="">(off)</option>${c.stages.map(x => `<option value="${x.id}"${c.archiveFrom === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
-      <span>after</span><input type="number" id="jm-archdays" min="1" max="3650" value="${+c.archiveDays || 30}" aria-label="Days"><span>days</span></div>
-  </div>`;
-}
-// Jobs that have sat in the auto-archive category longer than the set days move to Archived. Runs when the job manager opens.
-let archiving = false;
-async function autoArchive() {
-  const c = jobs.cats, days = +c.archiveDays; if (archiving || !c.archiveFrom || !(days > 0)) return;
-  const due = jobs.list.filter(j => { const m = jobMeta(j); return m.status !== undefined && jobStatus(j) === c.archiveFrom && m.stageAt && Date.now() - Date.parse(m.stageAt) > days * 864e5; });
-  if (!due.length) return;
-  archiving = true;
-  try { for (const j of due) await setJobMeta(j.path, { status: 'archived' }); flash(`${due.length} finished job${due.length > 1 ? 's' : ''} moved to Archived`); }
-  catch (_) {} finally { archiving = false; }
-  if (jobs.shown) renderJobs();
 }
 // Changes the job file's status or tag. The open job changes in place; any other job is read, changed and written back.
 async function setJobMeta(path, patch) {
@@ -370,17 +325,8 @@ async function jobAction(a, id, id2) {
       case 'jobs': showJobs(); break;
       case 'jobs-back': hideJobs(); break;
       case 'job-close': await closeJob(); break;
-      case 'jobs-folder': jobs.view = id; jobs.renFolder = false; jobs.newCust = null; if (id) jobs.open[topFolder(id)] = true; renderJobs(); break;
+      case 'jobs-folder': jobs.tab = ''; jobs.sel = null; jobs.view = id; jobs.renFolder = false; jobs.newCust = null; if (id) jobs.open[topFolder(id)] = true; renderJobs(); break;
       case 'jobs-fold': jobs.open[id] = !(jobs.open[id] || topFolder(jobs.view) === id); if (!jobs.open[id] && topFolder(jobs.view) === id) jobs.view = id; renderJobs(); break;
-      case 'jobs-cats': jobs.catsOpen = !jobs.catsOpen; renderJobs(); break;
-      case 'jobs-cat-add': { const i = jobs.cats.stages.length + 1; jobs.cats.stages.push({ id: uid('st'), name: 'Category ' + i }); stageStore.save(); renderJobs(); requestAnimationFrame(() => { const e = document.querySelector(`[data-cat-name="${i - 1}"]`); if (e) { e.focus(); e.select(); } }); break; }
-      case 'jobs-cat-move': { const [i, d] = id.split(':').map(Number), a = jobs.cats.stages; [a[i], a[i + d]] = [a[i + d], a[i]]; stageStore.save(); renderJobs(); break; }
-      case 'jobs-cat-del': {
-        const x = jobs.cats.stages[+id], used = jobs.list.filter(j => jobStatus(j) === x.id).length;
-        if (used && jobs.confirm !== 'cat' + x.id) { jobs.confirm = 'cat' + x.id; flash(`${used} job${used > 1 ? 's are' : ' is'} in ${x.name}. Click delete again to move ${used > 1 ? 'them' : 'it'} to ${jobs.cats.stages.find(y => y !== x).name}.`); break; }
-        jobs.confirm = null; jobs.cats.stages.splice(+id, 1); if (jobs.cats.archiveFrom === x.id) jobs.cats.archiveFrom = '';
-        stageStore.save(); renderJobs(); break;
-      }
       case 'jobs-tab': jobs.tab = id; jobs.sel = null; jobs.edit = null; jobs.confirm = null; renderJobs(); break;
       case 'jobs-sort': if (jobs.sort === id) jobs.dir = -jobs.dir; else { jobs.sort = id; jobs.dir = id === 'modified' || id === 'cabs' ? -1 : 1; } renderJobs(); break;
       // A second click on the same row soon after opens it (the first click redraws the table, so dblclick can't be used).
@@ -408,14 +354,14 @@ async function jobAction(a, id, id2) {
       case 'jobs-empty': {
         if (jobs.confirm !== 'empty') { jobs.confirm = 'empty'; renderJobs(); break; }
         jobs.confirm = null;
-        for (const j of jobs.list.filter(x => jobStatus(x) === 'trash' && (!jobs.view || jobs.q || x.folder === jobs.view))) { if (j.path === jobs.path) { clearTimeout(jobTimer); await jobQueue; jobs.path = null; jobs.closed = true; } await st.remove(j.path); }
+        for (const j of jobs.list.filter(x => jobStatus(x) === 'trash')) { if (j.path === jobs.path) { clearTimeout(jobTimer); await jobQueue; jobs.path = null; jobs.closed = true; } await st.remove(j.path); }
         await refreshJobs(); renderJobs(); flash('Trash emptied'); break;
       }
       case 'jobs-export': {
         if (id === jobs.path) await flushJob();
         const s = await st.read(id); saveFile(new Blob([JSON.stringify(s)], { type: 'application/json' }), jobNameOf(id) + JOB_EXT, 'Cabinet Designer/Jobs'); break;
       }
-      case 'job-new-show': jobs.newOpen = true; jobs.newCust = null; jobs.catsOpen = false; renderJobs(); requestAnimationFrame(() => { const i = $('#nj-name'); if (i) i.focus(); }); break;
+      case 'job-new-show': jobs.newOpen = true; jobs.newCust = null; renderJobs(); requestAnimationFrame(() => { const i = $('#nj-name'); if (i) i.focus(); }); break;
       case 'job-new-hide': jobs.newOpen = false; renderJobs(); break;
       case 'job-create': {
         const n = $('#nj-name').value, c = safeName($('#nj-cust').value), sub = $('#nj-sub').value;
@@ -469,11 +415,7 @@ document.addEventListener('input', e => { if (e.target.id === 'jobq') { jobs.q =
 document.addEventListener('change', e => {
   if (!jobs.shown) return;
   if (e.target.id === 'nj-cust') { jobs.newCust = safeName(e.target.value); const n = $('#nj-name') && $('#nj-name').value; jobs.newName = n; renderJobs(); requestAnimationFrame(() => { const i = $('#nj-sub'); if (i) i.focus(); }); }
-  if (e.target.id === 'jm-status' && jobs.sel) setJobMeta(jobs.sel, { status: e.target.value }).then(() => { flash('Moved to ' + tabName(e.target.value)); jobs.sel = null; renderJobs(); }, err => flash('Could not save: ' + err.message));
   if (e.target.id === 'jm-tag' && jobs.sel) setJobMeta(jobs.sel, { tag: e.target.value.trim().slice(0, 40) }).then(renderJobs, err => flash('Could not save: ' + err.message));
-  if (e.target.dataset.catName !== undefined) { const x = jobs.cats.stages[+e.target.dataset.catName], v = e.target.value.trim().slice(0, 30); if (x && v) { x.name = v; stageStore.save(); } renderJobs(); }
-  if (e.target.id === 'jm-archfrom') { jobs.cats.archiveFrom = e.target.value; stageStore.save(); renderJobs(); }
-  if (e.target.id === 'jm-archdays') { jobs.cats.archiveDays = Math.max(1, Math.min(3650, +e.target.value || 30)); stageStore.save(); renderJobs(); }
   const inp = e.target.closest('input[data-job-import]');
   if (inp && inp.files[0]) { const f = [...inp.files]; (isMozaikPick(f) ? importMozaik(f).catch(err => flash('Could not import from Mozaik: ' + err.message)) : importJob(f[0])); inp.value = ''; }
 });
@@ -501,7 +443,7 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Enter' && e.target.id === 'rf-name') jobAction('folder-rename');
   else if (e.key === 'Enter' && e.target.id === 'jm-name') jobAction('jobs-rename', jobs.sel);
   else if (e.key === 'Enter' && e.target.id === 'mv-folder') jobAction('job-move', jobs.sel);
-  else if (e.key === 'Enter' && (e.target.id === 'jm-tag' || e.target.id === 'jm-archdays' || e.target.dataset.catName !== undefined)) e.target.blur();
+  else if (e.key === 'Enter' && (e.target.id === 'jm-tag')) e.target.blur();
   else if (e.key === 'Enter' && e.target.closest('tr.jm-row')) jobAction('job-open', e.target.closest('tr.jm-row').dataset.id);
   else if (e.key === 'Escape' && !jobs.closed) hideJobs();
 });
