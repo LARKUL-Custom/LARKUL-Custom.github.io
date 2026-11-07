@@ -31,8 +31,13 @@
   // Talk to the hub page this extension is shown inside.
   let seq = 0;
   const pending = new Map();
+  const groupListeners = new Set();
   window.addEventListener('message', (e) => {
     const m = e.data;
+    if (m && m.__hub === true && m.type === 'groupChanged' && e.source === window.parent) {
+      for (const fn of groupListeners) try { fn({ id: m.itemId, title: m.title, by: m.byName }); } catch (err) { console.error(err); }
+      return;
+    }
     if (!m || m.__hub !== true || !pending.has(m.replyTo)) return;
     const { resolve, reject } = pending.get(m.replyTo);
     pending.delete(m.replyTo);
@@ -109,6 +114,22 @@
     pickFile: () => toHub('pickFile', {}, true),
     /** Shows a small message in the corner of the hub. */
     notify: (text, level = 'info') => toHub('notify', { text, level }),
+    /**
+     * Work group: jobs shared with the company's other computers.
+     *   await Hub.group.status()   -> { joined, group, me, connected, people: [{ name, online, here }], shared: [{ id, title, path, live, last }] }
+     *   await Hub.group.share({ path: 'Jobs/My jobs/Kitchen.cdjob.json', title: 'Kitchen' })   // a path in Hub.myFiles
+     *   await Hub.group.share({ path: 'Bids/Smith', inFiles: true })                           // a folder in Hub.files
+     *   Hub.group.onChange(({ id, title, by }) => reloadJob())   // someone else's change just arrived on this computer
+     * Shared files sync by themselves: keep saving with Hub.myFiles / Hub.files as usual.
+     */
+    group: {
+      status: () => toHub('groupStatus', {}, true),
+      share: ({ path, title = '', inFiles = false }) => toHub('groupShare', { path, title, inFiles }, true),
+      onChange: (fn) => {
+        groupListeners.add(fn);
+        return () => groupListeners.delete(fn);
+      },
+    },
     /** Switches the hub to another tab, e.g. '#/files' or '#/ext/scheduler'. */
     navigate: (to) => toHub('navigate', { to }),
   };

@@ -326,3 +326,38 @@ body.nav-hidden .nav-show:hover { opacity: .8; }
   body.nav-hidden .sidebar { display: flex; }
   body.nav-hidden .layout { padding-left: 0; }
 }
+
+/* ---- work group ---- */
+.nav-item .dot.err { background: var(--warn); }
+.sync-ok { color: var(--ok); }
+.sync-bad { color: var(--warn); }
+.small { font-size: 12px; }
+.group-start .card h2 { margin-top: 0; }
+.group-start .field input { padding: 7px 9px; }
+.job-list { display: flex; flex-direction: column; }
+.job-row { display: flex; gap: 12px; align-items: center; padding: 10px 4px; border-top: 1px solid var(--border); }
+.job-row:first-child { border-top: 0; }
+.job-row a { color: var(--text); text-decoration: none; }
+.job-row a:hover { text-decoration: underline; }
+.job-icon { font-size: 22px; width: 28px; text-align: center; flex: none; }
+.job-row .grow, .person .grow { flex: 1; min-width: 0; }
+.live { color: var(--ok); font-size: 12px; font-weight: 600; }
+.people { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.person { display: flex; gap: 8px; align-items: center; }
+.person .dot, .people .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.person .dot.off { background: var(--border); }
+.activity { display: flex; flex-direction: column; gap: 8px; font-size: 13px; max-height: 340px; overflow-y: auto; }
+.invite { display: flex; gap: 24px; flex-wrap: wrap; margin: 8px 0 12px; }
+.invite > div { display: flex; flex-direction: column; gap: 4px; }
+.invite code { font-size: 20px; padding: 6px 10px; letter-spacing: .04em; }
+.group-leave { margin-top: 18px; }
+.err { color: var(--danger); }
+.shared-btn { color: var(--accent); }
+.picker-row { display: flex; align-items: center; gap: 8px; padding-right: 8px; border-top: 1px solid var(--border); }
+.picker-row:first-child { border-top: 0; }
+.picker-item { display: flex; gap: 8px; align-items: center; padding: 9px 10px; background: none; border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; width: 100%; }
+button.picker-item:hover { background: var(--surface-2); }
+.picker-list > .picker-item { border-top: 1px solid var(--border); }
+.picker-list > .picker-item:first-child { border-top: 0; }
+.picker-row .grow { flex: 1; min-width: 0; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }

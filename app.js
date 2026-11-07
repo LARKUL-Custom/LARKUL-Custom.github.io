@@ -67,6 +67,7 @@ function route() {
     $(`.nav-item[data-tab="ext:${CSS.escape(id)}"]`)?.classList.add('active');
     showExtension(id);
     setTitle();
+    groupPresence();
     return;
   }
   const view = document.getElementById(`view-${tab}`) || $('#view-home');
@@ -80,6 +81,8 @@ function route() {
   }
   if (view.id === 'view-manage') loadManage();
   if (view.id === 'view-store') loadStore();
+  if (view.id === 'view-group') loadGroup();
+  groupPresence();
 }
 window.addEventListener('hashchange', route);
 
@@ -353,6 +356,7 @@ async function loadFiles() {
           <td class="row-actions">
             ${zip ? '<button class="btn small" data-act="restore">Restore</button>' : ''}
             ${f.type === 'file' ? '<button class="btn ghost small" data-act="download">Download</button>' : ''}
+            ${state.group?.joined && !inArchive(f.path) ? (groupItemFor('library', f.path) ? '<button class="btn small shared-btn" data-act="group">👥 Shared</button>' : '<button class="btn ghost small" data-act="share">Share…</button>') : ''}
             ${inArchive(f.path) ? '' : '<button class="btn ghost small" data-act="archive">Archive…</button>'}
             <button class="btn ghost small" data-act="rename">Rename</button>
             <button class="btn ghost small danger" data-act="delete">Delete</button>
@@ -446,6 +450,10 @@ $('#file-list').onclick = async (e) => {
     } catch (err) { toast(err.message, 'error'); }
     loadFiles();
   }
+  if (act === 'share') {
+    if (await shareDialog({ scope: 'library', path, name, type })) loadFiles();
+  }
+  if (act === 'group') location.hash = '#/group';
   if (act === 'restore') {
     e.target.disabled = true;
     e.target.textContent = 'Restoring…';
@@ -950,6 +958,10 @@ window.addEventListener('message', async (e) => {
     if (msg.type === 'navigate') location.hash = msg.to;
     if (msg.type === 'pickFile') reply({ result: await pickFileDialog() });
     if (msg.type === 'remindersChanged' && !$('#view-home').hidden) loadHome();
+    // Which extension is asking comes from the frame itself, not from what the message says.
+    const fromExt = [...state.frames].find(([, f]) => f.querySelector('iframe')?.contentWindow === e.source)?.[0];
+    if (msg.type === 'groupStatus') reply({ result: await groupStatusFor(fromExt) });
+    if (msg.type === 'groupShare') reply({ result: await shareFromExtension(fromExt, msg) });
   } catch (err) {
     reply({ error: err.message });
   }
@@ -1037,6 +1049,425 @@ async function githubKeyDialog() {
   });
 }
 
+// ---- work group: jobs shared between the company's computers ---------------------
+
+const ago = (iso) => {
+  if (!iso) return '';
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return formatDate(iso);
+};
+
+// The shared job a path belongs to, if any.
+function groupItemFor(scope, p) {
+  return (state.group?.items || []).find((i) => {
+    if (i.scope !== scope) return false;
+    const full = i.base ? `${i.base}/${i.name}` : i.name;
+    return p === full || p.startsWith(`${full}/`);
+  });
+}
+
+const appName = (item) => (item.extId ? extById(item.extId)?.name || item.extId : 'Files');
+const appIcon = (item) => (item.extId ? extById(item.extId)?.icon || '🧩' : '📁');
+function openItemHref(item) {
+  if (item.extId && extById(item.extId)) return `#/ext/${encodeURIComponent(item.extId)}`;
+  if (item.scope === 'library') {
+    const folder = item.kind === 'folder' ? (item.base ? `${item.base}/${item.name}` : item.name) : item.base;
+    return `#/files/${folder.split('/').filter(Boolean).map(encodeURIComponent).join('/')}`;
+  }
+  return '#/group';
+}
+
+let lastPresence = '';
+function groupPresence(force = false) {
+  if (!state.group?.joined || state.remote) return;
+  const [, tab = 'home', id] = location.hash.split('/');
+  const ext = tab === 'ext' ? extById(decodeURIComponent(id || '')) : null;
+  const p = document.hidden ? null : ext ? { app: ext.id, appName: ext.name } : { app: tab, appName: $('.nav-item.active span:nth-child(2)')?.textContent || tab };
+  const key = JSON.stringify(p);
+  if (!force && key === lastPresence) return;
+  lastPresence = key;
+  api('/api/group/presence', { method: 'PUT', json: p || {} }).catch(() => {});
+}
+document.addEventListener('visibilitychange', () => groupPresence());
+
+let lastChange = null;
+async function pollGroup() {
+  let s;
+  try {
+    s = await api('/api/group/status');
+  } catch {
+    return;
+  }
+  const was = state.group;
+  state.group = s;
+  $('#group-dot').hidden = !s.joined;
+  $('#group-dot').classList.toggle('err', s.joined && !s.connected);
+  $('#group-dot').title = s.joined ? (s.connected ? 'Connected' : "Can't reach the host") : '';
+  // Tell people what others changed, and tell the extension so it can load the new version.
+  const changes = s.changes || [];
+  if (lastChange === null) lastChange = changes.length ? changes[changes.length - 1].n : 0;
+  const fresh = changes.filter((c) => c.n > lastChange);
+  if (fresh.length) lastChange = fresh[fresh.length - 1].n;
+  const byJob = new Map();
+  for (const c of fresh) byJob.set(c.itemId, c);
+  for (const c of byJob.values()) {
+    toast(`${c.byName} updated ${c.title}${c.extId ? ` in ${extById(c.extId)?.name || c.extId}` : ''}`);
+    const frame = c.extId && state.frames.get(c.extId)?.querySelector('iframe');
+    frame?.contentWindow?.postMessage({ __hub: true, type: 'groupChanged', itemId: c.itemId, title: c.title, byName: c.byName }, '*');
+  }
+  if (!$('#view-group').hidden && (s.joined || !was || was.joined !== s.joined)) renderGroup();
+  if (!$('#view-files').hidden && Boolean(was?.joined) !== Boolean(s.joined)) loadFiles();
+}
+
+async function loadGroup() {
+  await pollGroup();
+  renderGroup();
+}
+
+function renderGroup() {
+  const s = state.group || { joined: false };
+  const body = $('#group-body');
+  if (!s.joined) {
+    // Don't wipe what someone is typing.
+    if (body.querySelector('.group-start')) return;
+    $('#group-title').textContent = 'Work group';
+    $('#group-sub').textContent = 'Share jobs with the other computers in your company. Everyone sees who is working on what, and changes save on each computer and copy to the others by themselves.';
+    $('#group-actions').innerHTML = '';
+    body.innerHTML = state.remote ? '<div class="empty">Set up a work group on the PC.</div>' : `
+      <div class="home-grid group-start">
+        <form class="card span-2" id="group-folder-form">
+          <h2>☁️ Use a shared Dropbox folder</h2>
+          <p class="muted">Best when people work from home. Make a folder in Dropbox (for example "Extension Hub Group") and share it with your team in Dropbox. Then, on each computer, pick that folder here. The hub keeps only the shared jobs and the group's activity in it, never anything else, and Dropbox copies it between everyone. No computer has to stay on.</p>
+          <label class="field"><span>Your name</span><input name="name" placeholder="Your name" required autocomplete="name"></label>
+          <button class="btn primary" type="submit">Choose the Dropbox folder…</button>
+          ${s.dropbox?.length ? `<p class="muted small">Found Dropbox at <code>${esc(s.dropbox[0].path)}</code></p>` : '<p class="muted small">Dropbox doesn\'t seem to be installed on this computer yet. Install it and sign in first, or pick any other folder that a sync app shares.</p>'}
+        </form>
+        <form class="card" id="group-host-form">
+          <h2>Or: host on this computer</h2>
+          <p class="muted">For computers on the same office network. Pick one that's on most of the day, such as the office PC. It keeps the group's copy of every shared job, and the others connect to it.</p>
+          <label class="field"><span>Group name</span><input name="groupName" placeholder="Larkul" required></label>
+          <label class="field"><span>Your name</span><input name="name" placeholder="Ayden" required autocomplete="name"></label>
+          <button class="btn primary">Start the group</button>
+        </form>
+        <form class="card" id="group-join-form">
+          <h2>Or: join an office PC's group</h2>
+          <p class="muted">On the host computer, open <strong>Work group</strong> and read out the address and join code shown there.</p>
+          <label class="field"><span>Host address</span><input name="address" placeholder="192.168.1.20:4323" required></label>
+          <label class="field"><span>Join code</span><input name="code" placeholder="K7QM-2XPA" required autocapitalize="characters"></label>
+          <label class="field"><span>Your name</span><input name="name" placeholder="Your name" required autocomplete="name"></label>
+          <button class="btn primary">Join</button>
+        </form>
+      </div>`;
+    const submit = (form, url) => {
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = form.querySelector('button');
+        btn.disabled = true;
+        try {
+          state.group = await api(url, { method: 'POST', json: Object.fromEntries(new FormData(form)) });
+          toast(url.endsWith('host') ? 'Your group is ready. Share the address and code with the others.' : `You joined ${state.group.group.name}.`);
+          body.innerHTML = '';
+          await loadGroup();
+          groupPresence(true);
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+        }
+      };
+    };
+    if (!state.remote) {
+      $('#group-folder-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const name = $('#group-folder-form [name=name]').value.trim();
+        const pick = await groupFolderPicker();
+        if (!pick) return;
+        try {
+          state.group = await api('/api/group/use-folder', { method: 'POST', json: { ...pick, name } });
+          toast(pick.groupName ? `Your group is ready. Share the "${pick.groupName}" folder with your team in Dropbox.` : `You joined ${state.group.group.name}.`);
+          body.innerHTML = '';
+          await loadGroup();
+          groupPresence(true);
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      };
+      submit($('#group-host-form'), '/api/group/host');
+      submit($('#group-join-form'), '/api/group/join');
+    }
+    return;
+  }
+
+  $('#group-title').textContent = s.group.name;
+  const where = s.mode === 'folder' ? ` · shared folder <code>${esc(s.folder)}</code>` : s.hosting ? ' · this computer is the host' : ` to ${esc(s.hostUrl)}`;
+  $('#group-sub').innerHTML = `${s.connected
+    ? `<span class="sync-ok">● Connected</span>${where}`
+    : `<span class="sync-bad">● ${s.mode === 'folder' ? "Can't open the shared folder" : `Can't reach the host${s.hosting ? '' : ` at ${esc(s.hostUrl)}`}`}</span> · your changes are saved on this computer and will copy over when it's back`}${s.pending ? ` · ${s.pending} change${s.pending === 1 ? '' : 's'} waiting` : ''}`;
+  $('#group-actions').innerHTML = `
+    <button class="btn" id="group-sync">Sync now</button>
+    <button class="btn primary" id="group-share">Share a job…</button>`;
+  $('#group-sync').onclick = async (e) => {
+    e.target.disabled = true;
+    try { state.group = await api('/api/group/sync-now', { method: 'POST' }); renderGroup(); } catch (err) { toast(err.message, 'error'); }
+    e.target.disabled = false;
+  };
+  $('#group-share').onclick = () => sharePicker();
+
+  const me = s.me.id;
+  const others = s.members.filter((m) => m.id !== me);
+  const items = [...s.items].sort((a, b) => (b.last?.at || b.sharedAt).localeCompare(a.last?.at || a.sharedAt));
+  const working = (item) => s.members.filter((m) => m.presence && item.extId && m.presence.app === item.extId && m.id !== me);
+  body.innerHTML = `
+    ${s.error && s.connected ? `<p class="err">${esc(s.error)}</p>` : ''}
+    <div class="home-grid">
+      <div class="card span-2">
+        <div class="card-head"><h2>Shared jobs</h2></div>
+        ${items.length ? `<div class="job-list">${items.map((i) => {
+          const here = working(i);
+          return `
+          <div class="job-row" data-id="${esc(i.id)}">
+            <span class="job-icon">${appIcon(i)}</span>
+            <div class="grow">
+              <div><a href="${openItemHref(i)}"><strong>${esc(i.title)}</strong></a> <span class="tag">${esc(appName(i))}</span>${i.live ? ' <span class="live">● Live</span>' : ''}</div>
+              <div class="muted small">${i.last ? `${esc(i.last.by === me ? 'You' : i.last.byName)} ${esc(i.last.text)} ${ago(i.last.at)}` : ''}${here.length ? ` · ${here.map((m) => esc(m.name)).join(', ')} ${here.length === 1 ? 'has' : 'have'} ${esc(appName(i))} open` : ''}</div>
+              <div class="muted small">Shared by ${esc(i.sharedBy === me ? 'you' : i.sharedByName)} · ${i.files} file${i.files === 1 ? '' : 's'} · <code>${esc(i.scope === 'library' ? 'Files/' : '')}${esc(i.base ? `${i.base}/` : '')}${esc(i.name)}</code></div>
+            </div>
+            ${i.sharedBy === me || s.admin ? '<button class="btn ghost small" data-act="unshare">Stop sharing</button>' : ''}
+          </div>`;
+        }).join('')}</div>` : '<div class="empty">Nothing shared yet. Click <strong>Share a job…</strong>, or <strong>Share…</strong> next to a folder in Files.</div>'}
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>People</h2></div>
+        <div class="people">
+          <div class="person"><span class="dot ${s.connected ? '' : 'off'}"></span><strong>${esc(s.me.name)}</strong> <span class="muted">(you${s.hosting ? ', host' : s.admin ? ', started the group' : ''})</span></div>
+          ${others.map((m) => `
+            <div class="person" data-id="${esc(m.id)}">
+              <span class="dot ${m.online ? '' : 'off'}"></span>
+              <div class="grow"><strong>${esc(m.name)}</strong>${m.host ? ` <span class="muted">(${s.mode === 'folder' ? 'started the group' : 'host'})</span>` : ''}
+                <div class="muted small">${m.online ? (m.presence ? `In ${esc(m.presence.appName || m.presence.app)}` : 'Online') : m.lastSeen ? `Last on ${ago(m.lastSeen)}` : 'Not connected yet'}</div></div>
+              ${s.hosting && !m.host ? '<button class="btn ghost small danger" data-act="remove">Remove</button>' : ''}
+            </div>`).join('')}
+        </div>
+        <label class="toggle"><input type="checkbox" id="show-presence" ${s.showPresence ? 'checked' : ''}> Let others see which app I have open</label>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Recent activity</h2></div>
+        <div class="activity">${s.activity.length ? s.activity.slice(0, 25).map((a) => {
+          const item = s.items.find((i) => i.id === a.itemId);
+          return `<div><strong>${esc(a.by === me ? 'You' : a.byName)}</strong> ${esc(a.text)}${item && !/this job/.test(a.text) ? ` in ${esc(item.title)}` : item ? ` (${esc(item.title)})` : ''} <span class="muted small">${ago(a.at)}${a.count > 1 ? ` · ${a.count} saves` : ''}</span></div>`;
+        }).join('') : '<div class="empty">Nothing yet.</div>'}</div>
+      </div>
+
+      ${s.mode === 'folder' ? `
+      <div class="card span-2">
+        <div class="card-head"><h2>Add a computer</h2></div>
+        <p>In Dropbox, share the folder <code>${esc(s.folder.split(/[\\/]/).pop())}</code> with the person. On their computer, install Dropbox and sign in, then in the hub open <strong>Work group › Use a shared Dropbox folder</strong> and pick that folder.</p>
+        <p class="muted small">Changes copy between computers as fast as Dropbox does, usually within half a minute. Anyone the folder is shared with is in the group, so to take someone out, stop sharing the folder with them in Dropbox.</p>
+      </div>` : ''}
+      ${s.hosting ? `
+      <div class="card span-2">
+        <div class="card-head"><h2>Add a computer</h2><button class="btn ghost small" id="group-code">New join code</button></div>
+        ${s.host.error ? `<p class="err">${esc(s.host.error)}</p>` : ''}
+        <p>On the other computer, install Extension Hub, open <strong>Work group › Join a group</strong>, and type:</p>
+        <div class="invite">
+          <div><span class="muted">Host address</span><code>${esc(s.host.addresses[0]?.address || `this PC's address:${s.host.port}`)}</code></div>
+          <div><span class="muted">Join code</span><code>${esc(s.host.code)}</code></div>
+        </div>
+        ${s.host.addresses.length > 1 ? `<p class="muted small">Other addresses for this PC: ${s.host.addresses.slice(1).map((a) => `<code>${esc(a.address)}</code>${a.kind === 'tailscale' ? ' (Tailscale)' : ''}`).join(', ')}</p>` : ''}
+        <p class="muted small">This works for computers on the same office network. For someone working from home, install the free Tailscale app on this PC and theirs, signed in to the same account, and use this PC's Tailscale address (it starts with 100.). If Windows asks whether Extension Hub may use the network, click <strong>Allow</strong>. This PC needs the hub open for the others to sync; when it's off, everyone keeps working and catches up later.</p>
+        <p class="muted small">Making a new code stops it being used by anyone new. People already in the group stay in.</p>
+      </div>` : ''}
+    </div>
+    <p class="group-leave">${s.hosting
+      ? '<button class="btn ghost small danger" id="group-stop">Stop hosting and close the group…</button>'
+      : '<button class="btn ghost small danger" id="group-leave">Leave this group…</button>'}</p>`;
+
+  body.onclick = async (e) => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    const id = e.target.closest('[data-id]')?.dataset.id;
+    try {
+      if (act === 'unshare') {
+        const item = s.items.find((i) => i.id === id);
+        if (!(await confirmDialog(`Stop sharing "${item.title}"? Everyone keeps the copy they have now, but changes stop copying between computers.`, 'Stop sharing'))) return;
+        await api(`/api/group/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        toast(`${item.title} is no longer shared.`);
+      }
+      if (act === 'remove') {
+        const m = s.members.find((x) => x.id === id);
+        if (!(await confirmDialog(`Remove ${m.name} from the group? Their computer stops syncing. They keep the files they have.`, 'Remove'))) return;
+        await api(`/api/group/members/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      }
+      if (e.target.id === 'group-code') {
+        if (!(await confirmDialog('Make a new join code? The old one stops working for anyone new.', 'New code'))) return;
+        await api('/api/group/new-code', { method: 'POST' });
+      }
+      if (e.target.id === 'group-leave') {
+        if (!(await confirmDialog(`Leave ${s.group.name}? Shared jobs stay on this computer, but stop syncing.${s.mode === 'folder' ? ' The Dropbox folder stays as it is for the others.' : ''}`, 'Leave'))) return;
+        await api('/api/group/leave', { method: 'POST' });
+      }
+      if (e.target.id === 'group-stop') {
+        if (!(await confirmDialog(`Close ${s.group.name}? The other computers stop syncing and will need to join a new group. Everyone keeps the files they have now.`, 'Close the group'))) return;
+        await api('/api/group/stop-hosting', { method: 'POST' });
+      }
+      if (act || /^group-(code|leave|stop)$/.test(e.target.id)) {
+        body.innerHTML = '';
+        await loadGroup();
+      }
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+  $('#show-presence').onchange = (e) => api('/api/group/show-presence', { method: 'PUT', json: { on: e.target.checked } }).then(() => groupPresence(true));
+}
+
+// Pick the shared Dropbox folder. Resolves to { folder } to join a group already there,
+// { folder, groupName } to start one, or null.
+async function groupFolderPicker(dir = '') {
+  let r;
+  try {
+    r = await api(`/api/group/folders${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`);
+  } catch (err) {
+    toast(err.message, 'error');
+    if (dir) return groupFolderPicker('');
+    return null;
+  }
+  return new Promise((resolve) => {
+    openDialog(`
+      <form method="dialog" class="folder-picker">
+        <h2>Choose the shared folder</h2>
+        ${r.dropbox.length > 1 ? `<p class="muted small">Dropbox: ${r.dropbox.map((d) => `<button class="linkish" value="open:${esc(d.path)}">${esc(d.kind)}</button>`).join(' · ')}</p>` : ''}
+        <p class="muted small"><code>${esc(r.at)}</code></p>
+        ${r.isGroup ? '<p><strong>👥 This folder has a group in it.</strong></p>' : ''}
+        <div class="picker-list">
+          ${r.parent ? `<button class="picker-item" value="open:${esc(r.parent)}"><span>⬆️</span><span>Up a level</span></button>` : ''}
+          ${r.folders.map((f) => `<div class="picker-row">
+            <button class="picker-item grow" value="open:${esc(f.path)}"><span>${f.group ? '👥' : '📁'}</span><span>${esc(f.name)}</span></button>
+            ${f.group ? `<button class="btn small primary" value="join:${esc(f.path)}">Join</button>` : ''}
+          </div>`).join('') || '<div class="empty">No folders here.</div>'}
+        </div>
+        ${r.isGroup ? '' : `
+        <label class="field"><span>Or start a new group: make a folder here called</span>
+          <div class="row"><input name="newName" placeholder="Extension Hub Group"><button class="btn" value="new">Start group</button></div>
+        </label>`}
+        <div class="dialog-actions">
+          <button class="btn" value="cancel">Cancel</button><span class="grow"></span>
+          ${r.isGroup ? `<button class="btn primary" value="join:${esc(r.at)}">Join this group</button>` : ''}
+        </div>
+      </form>`, (d) => {
+      const v = d.returnValue || '';
+      if (v.startsWith('open:')) return resolve(groupFolderPicker(v.slice(5)));
+      if (v.startsWith('join:')) return resolve({ folder: v.slice(5) });
+      if (v === 'new') {
+        const name = ($('input[name=newName]', d).value.trim() || 'Extension Hub Group').replace(/[\\/:*?"<>|]/g, '_');
+        const sep = r.at.includes('\\') ? '\\' : '/';
+        return resolve({ folder: r.at.replace(/[\\/]+$/, '') + sep + name, groupName: name });
+      }
+      resolve(null);
+    });
+  });
+}
+
+// Share one folder or file. Resolves true if it was shared.
+async function shareDialog({ scope, path, name, type }) {
+  const where = scope === 'library' ? 'Files' : extById(scope.slice(4))?.name || scope.slice(4);
+  const suggested = type === 'folder' ? String(name) : String(name).replace(/\.cdjob\.json$|\.[^.]+$/, '');
+  const title = await new Promise((resolve) => {
+    openDialog(`
+      <form method="dialog">
+        <h2>Share with ${esc(state.group.group.name)}</h2>
+        <p class="muted">Every computer in the group gets a copy of ${type === 'folder' ? 'this folder and everything in it' : 'this file'}. When anyone saves a change, it copies to the others by itself, and everyone sees who changed it.</p>
+        <label class="field"><span>Job name</span><input name="v" value="${esc(suggested)}" autofocus></label>
+        <div class="dialog-actions"><button class="btn" value="cancel" type="button" onclick="this.closest('dialog').close('cancel')">Cancel</button><button class="btn primary" value="ok">Share</button></div>
+      </form>`, (d) => resolve(d.returnValue === 'ok' ? $('input', d).value.trim() : null));
+  });
+  if (title == null) return false;
+  try {
+    await api('/api/group/share', { method: 'POST', json: { scope, path, title } });
+    toast(`${title || name} from ${where} is shared.`);
+    await pollGroup();
+    return true;
+  } catch (err) {
+    toast(err.message, 'error');
+    return false;
+  }
+}
+
+// Pick a job to share: in Files, or in an extension's own folder (Cabinet Designer keeps its jobs there).
+async function sharePicker(scope = '', folder = '') {
+  if (!scope) {
+    const exts = state.extensions.filter((e) => !e.error);
+    openDialog(`
+      <form method="dialog" class="folder-picker">
+        <h2>Share a job</h2>
+        <p class="muted">Where is the job saved?</p>
+        <div class="picker-list">
+          <button class="picker-item" value="library"><span>📁</span><span>Files <span class="muted">(bids, schedules, documents)</span></span></button>
+          ${exts.map((e) => `<button class="picker-item" value="ext:${esc(e.id)}"><span>${esc(e.icon)}</span><span>${esc(e.name)} <span class="muted">(its own saved jobs)</span></span></button>`).join('')}
+        </div>
+        <div class="dialog-actions"><button class="btn" value="cancel">Cancel</button></div>
+      </form>`, (d) => {
+      if (d.returnValue && d.returnValue !== 'cancel') sharePicker(d.returnValue, '');
+    });
+    return;
+  }
+  const list = await api(`/api/group/browse?scope=${encodeURIComponent(scope)}&folder=${encodeURIComponent(folder)}`).catch((err) => (toast(err.message, 'error'), []));
+  const label = scope === 'library' ? 'Files' : extById(scope.slice(4))?.name || scope;
+  const parts = folder ? folder.split('/') : [];
+  openDialog(`
+    <form method="dialog" class="folder-picker">
+      <h2>Share a job from ${esc(label)}</h2>
+      <nav class="crumbs"><button class="linkish" value="open:">${esc(label)}</button>${parts.map((p, i) => `<span>/</span><button class="linkish" value="open:${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`).join('')}</nav>
+      <div class="picker-list">
+        ${list.length ? list.map((f) => `
+          <div class="picker-row">
+            ${f.type === 'folder' ? `<button class="picker-item grow" value="open:${esc(f.path)}"><span>📁</span><span>${esc(f.name)}</span></button>` : `<span class="picker-item grow"><span>${fileIcon(f)}</span><span>${esc(f.name)}</span></span>`}
+            ${f.shared ? '<span class="tag">Shared</span>' : `<button class="btn small" value="share:${esc(f.type)}:${esc(f.path)}">Share</button>`}
+          </div>`).join('') : `<div class="empty">${folder ? 'This folder is empty.' : `${esc(label)} hasn't saved anything yet.`}</div>`}
+      </div>
+      <p class="muted small">Share a whole folder to share everything in it, including files added later.</p>
+      <div class="dialog-actions"><button class="btn" value="back">Back</button><span class="grow"></span><button class="btn" value="cancel">Close</button></div>
+    </form>`, async (d) => {
+    const v = d.returnValue || '';
+    if (v === 'back') return sharePicker();
+    if (v.startsWith('open:')) return sharePicker(scope, v.slice(5));
+    if (v.startsWith('share:')) {
+      const [, type, ...rest] = v.split(':');
+      const p = rest.join(':');
+      if (await shareDialog({ scope, path: p, name: p.split('/').pop(), type })) renderGroup();
+      else sharePicker(scope, folder);
+    }
+  });
+}
+
+// For extensions (Hub.group in hub-sdk.js).
+async function groupStatusFor(extId) {
+  const s = state.group || (await api('/api/group/status'));
+  if (!s.joined) return { joined: false };
+  return {
+    joined: true,
+    group: s.group.name,
+    me: s.me.name,
+    connected: s.connected,
+    people: s.members.map((m) => ({ name: m.name, online: m.online, here: Boolean(extId && m.presence?.app === extId), me: m.id === s.me.id })),
+    shared: s.items.filter((i) => i.scope === `ext:${extId}` || (i.extId && i.extId === extId)).map((i) => ({
+      id: i.id, title: i.title, path: i.base ? `${i.base}/${i.name}` : i.name, inFiles: i.scope === 'library', live: i.live, last: i.last,
+    })),
+  };
+}
+
+async function shareFromExtension(extId, { path, title, inFiles }) {
+  if (!extId) throw new Error('Unknown extension');
+  const s = state.group || (await api('/api/group/status'));
+  if (!s.joined) throw new Error('This computer is not in a work group. Set one up under Work group.');
+  const item = await api('/api/group/share', { method: 'POST', json: { scope: inFiles ? 'library' : `ext:${extId}`, path, title } });
+  await pollGroup();
+  return { id: item.id, title: item.title };
+}
+
 // ---- boot -------------------------------------------------------------------
 
 // ---- phone and tablet access -------------------------------------------------
@@ -1121,8 +1552,12 @@ if (info.standalone) {
   };
 }
 await loadExtensions();
+await pollGroup();
 if (!location.hash) location.hash = '#/home';
 route();
+setInterval(pollGroup, 5000);
+// Keeps "In Cabinet Designer" fresh for the others while this window is open.
+setInterval(() => groupPresence(true), 20000);
 // Hub updates are installed on the PC, not from a phone.
 if (!state.remote) {
   checkAppUpdate();

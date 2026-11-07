@@ -26,6 +26,7 @@
       <div class="nav-section">
         <a class="nav-item" href="#/home" data-tab="home"><span class="nav-icon">🏠</span><span>Home</span></a>
         <a class="nav-item" href="#/files" data-tab="files"><span class="nav-icon">📁</span><span>Files</span></a>
+        <a class="nav-item" href="#/group" data-tab="group"><span class="nav-icon">👥</span><span>Work group</span><span class="dot" id="group-dot" hidden></span></a>
       </div>
       <div class="nav-label">Extensions</div>
       <div class="nav-section" id="ext-nav"></div>
@@ -129,6 +130,17 @@
         </header>
         <div id="store-errors"></div>
         <div id="store-list" class="store-grid"></div>
+      </section>
+
+      <section class="view" id="view-group" hidden>
+        <header class="page-head">
+          <div>
+            <h1 id="group-title">Work group</h1>
+            <p class="muted" id="group-sub">Share jobs with the other computers in your company.</p>
+          </div>
+          <div class="actions" id="group-actions"></div>
+        </header>
+        <div id="group-body"></div>
       </section>
 
       <div id="ext-frames"></div>

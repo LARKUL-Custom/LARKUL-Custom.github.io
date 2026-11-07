@@ -447,3 +447,20 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Enter' && e.target.closest('tr.jm-row')) jobAction('job-open', e.target.closest('tr.jm-row').dataset.id);
   else if (e.key === 'Escape' && !jobs.closed) hideJobs();
 });
+
+/* ---------- Work group: someone on another computer saved this job ---------- */
+// The hub copies a shared job's new version onto this computer and says so here. Show it right
+// away, so the next save builds on their changes instead of writing over them.
+if (inHub() && window.Hub && Hub.group) Hub.group.onChange(async ({ by }) => {
+  await jobQueue;
+  if (jobs.shown) { await refreshJobs(); renderJobs(); }
+  if (!jobs.path || jobs.closed || jobs.status === 'saving') return;
+  try {
+    const s = migrate(await jobStore().read(jobs.path));
+    if (!s || JSON.stringify(s) === JSON.stringify(S)) return;
+    const keepRoom = S.roomId;
+    undoStack.push(JSON.stringify(S)); redoStack = [];
+    S = attachRoom(s); if (S.rooms.some(r => r.id === keepRoom)) S.roomId = keepRoom;
+    fixSel(); render(); flash(`${by || 'Someone'} saved changes to this job. You're looking at the latest.`);
+  } catch (_) {}
+});
