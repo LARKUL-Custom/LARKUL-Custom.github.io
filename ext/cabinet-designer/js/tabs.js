@@ -100,20 +100,29 @@ function renderLibrary() {
   const fake = l ? { ...newCab(S, l, null, 1, 0), id: '_lib' } : null;
   $('#tab-library').innerHTML = `<div class="pagehead"><div><h2>Products${(S.libSet || 'main') !== 'main' ? ` <span class="muted">· ${esc((PRODUCT_LIBS.find(x => x.id === S.libSet) || {}).name || '')}</span>` : ''}</h2></div>
     <div class="row-actions"><button class="btn primary" data-act="designer-new">${icon('plus')}Design a new cabinet</button></div></div>
-  <div class="split">
-    <div class="card cardbody libtree">${productPageTree()}
-      <button class="btn sm" data-act="shape-new">${icon('plus')}Draw a new shape</button></div>
-    ${sl ? shapeLibCard(sl) : l ? `<div class="card">${cardHead(esc(l.name), `<button class="btn sm primary" data-act="designer-load" data-id="${l.id}">${icon('edit')}Edit in Designer</button><button class="btn sm" data-act="lib-place" data-id="${l.id}">Place in room</button>${dupBtn('lib-dup', l.id)}${delBtn('lib-del', l.id)}`)}
-      <div class="cardbody"><div class="split2">
-        <div class="stack">
+  <div class="plx">
+    <div class="card plx-list">${cardHead('Product list', `<span class="ln-n">${S.library.filter(x => x.cat !== 'Shape').length + (S.shapeLib || []).length}</span>`)}<div class="cardbody libtree">${productPageTree()}
+      <button class="btn sm" data-act="shape-new">${icon('plus')}Draw a new shape</button></div></div>
+    ${sl ? shapeLibCard(sl) : l ? `<div class="plx-main">
+      <div class="card plx-pic">${cardHead(esc(l.name), `<button class="btn sm primary" data-act="designer-load" data-id="${l.id}">${icon('edit')}Edit in Designer</button><button class="btn sm" data-act="lib-place" data-id="${l.id}">Place in room</button>${dupBtn('lib-dup', l.id)}${delBtn('lib-del', l.id)}`)}
+        <div class="plx-pv">${typeof edDimmed === 'function' ? edDimmed(fake, frontPreviewSVG(fake, 520)) : frontPreviewSVG(fake, 520)}</div>
+        ${libStats(l, fake)}</div>
+      <div class="card plx-props">${cardHead('Product', '')}<div class="cardbody">
           ${fld('Name', 'lib:' + l.id, 'name', l.name, 'text', { wide: true })}
-          <div class="grid2">${fld('Category', 'lib:' + l.id, 'cat', l.cat, 'select', { options: cats })}${fld('Products group', 'lib:' + l.id, 'group', libGroup(l), 'select', { options: LIB_GROUPS.map(([v, t]) => ({ v, l: t })) })}</div>
-          ${fld('Folder', 'lib:' + l.id, 'folder', l.folder || '', 'text', { wide: true, ph: libFolder({ ...l, folder: '' }) })}
-          <div class="grid2">${fld('Width', 'lib:' + l.id, 'w', l.w, 'len')}${fld('Height', 'lib:' + l.id, 'h', l.h, 'len')}${fld('Depth', 'lib:' + l.id, 'd', l.d, 'len')}${fld('Elevation', 'lib:' + l.id, 'elev', l.elev, 'len')}</div>
-        </div>
-        <div class="preview pad">${frontPreviewSVG(fake, 320)}</div>
-      </div></div></div>` : '<div class="card cardbody">No templates yet.</div>'}
+          ${fld('Category', 'lib:' + l.id, 'cat', l.cat, 'select', { options: cats })}${fld('Products group', 'lib:' + l.id, 'group', libGroup(l), 'select', { options: LIB_GROUPS.map(([v, t]) => ({ v, l: t })) })}
+          ${fld('Folder', 'lib:' + l.id, 'folder', l.folder || '', 'text', { wide: true, ph: libFolder({ ...l, folder: '' }) })}</div>
+        ${cardHead('Size', '')}<div class="cardbody">${fld('Width', 'lib:' + l.id, 'w', l.w, 'len')}${fld('Height', 'lib:' + l.id, 'h', l.h, 'len')}${fld('Depth', 'lib:' + l.id, 'd', l.d, 'len')}${fld('Elevation', 'lib:' + l.id, 'elev', l.elev, 'len')}</div>
+      </div></div>` : '<div class="card cardbody">No templates yet.</div>'}
   </div>`;
+}
+// Coloured tiles under the product picture: how it is built, how many are in this job, what one costs.
+function libStats(l, fake) {
+  let fr = [], parts = 0, price = '';
+  try { fr = computeFronts(fake); parts = buildParts(fake).parts.filter(p => p.cabId === fake.id).reduce((a, p) => a + p.qty, 0); } catch (_) {}
+  try { const ps = typeof priceSheet === 'function' && priceSheet(); if (ps) price = money(priceCab(fake, ps).total); } catch (_) { price = ''; }
+  const used = (() => { try { return allCabs().filter(c => c.libId === l.id).length; } catch (_) { return 0; } })();
+  const n = t => fr.filter(f => f.type === t).length, t = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${v}</b><span>${lb}</span></div>`;
+  return `<div class="edx-stats plx-stats">${t('violet', 'door', n('door'), 'Doors')}${t('teal', 'shelf', n('drawer'), 'Drawers')}${t('amber', 'list', parts, 'Parts')}${t('blue', 'home', used, 'In this job')}${price ? t('green', 'tag', price, 'Price each') : ''}</div>`;
 }
 // Short name for the Small library: "Base 3 Drawer" → "Base 3-D", "Base 1 Door 1 Drawer" → "Base 1-DR 1-D".
 // The Products page list: the same folding groups and folders as the room's product tree, with a Find box.
@@ -177,41 +186,95 @@ function materialUsage() {
   }));
   return { use, bom };
 }
+// Materials page, Mozaik style: a grouped list with swatches on the left, one material's picture and boxes on the right.
+// Group names in the order shown: the saved order first, then any new ones A to Z, then No group.
+function matGroups() {
+  const all = [...new Set(S.materials.map(m => m.group || ''))], ord = (S.matGroupOrder || []).filter(g => all.includes(g));
+  return [...ord, ...all.filter(g => !ord.includes(g)).sort((a, b) => (a === '') - (b === '') || a.localeCompare(b))];
+}
+// Drag a material onto another material (goes just above it, into its group) or onto a group heading (goes to the end of that group).
+// Drag a group heading onto another group heading to move the whole group above it.
+function matDrop(kind, from, to, toGrp, before) {
+  mutate(() => {
+    if (kind === 'grp') {
+      const gs = matGroups().filter(g => g !== from), i = gs.indexOf(toGrp);
+      gs.splice(i < 0 ? gs.length : i + (before ? 0 : 1), 0, from); S.matGroupOrder = gs;
+      return;
+    }
+    const m = S.materials.find(x => x.id === from); if (!m) return;
+    if (!S.matGroupOrder) S.matGroupOrder = matGroups();
+    S.materials.splice(S.materials.indexOf(m), 1); m.group = toGrp || '';
+    let i;
+    if (to) { i = S.materials.findIndex(x => x.id === to); if (i < 0) i = S.materials.length; else if (!before) i++; }
+    else { const last = S.materials.map(x => x.group || '').lastIndexOf(m.group); i = last < 0 ? S.materials.length : last + 1; }
+    S.materials.splice(i, 0, m);
+  });
+  foldOpen('mat/' + (toGrp || ''));
+}
+(() => {
+  let drag = null;
+  const clear = () => document.querySelectorAll('.mdrop-a,.mdrop-b,.mdrop-in').forEach(x => x.classList.remove('mdrop-a', 'mdrop-b', 'mdrop-in'));
+  const target = e => { const t = e.target.closest && e.target.closest('#tab-materials [data-mdrag]'); if (!t || !drag) return null; if (drag.kind === 'grp' && t.dataset.mdrag !== 'grp') return null; const r = t.getBoundingClientRect(); return { t, before: e.clientY < r.top + r.height / 2 }; };
+  document.addEventListener('dragstart', e => { const t = e.target.closest && e.target.closest('#tab-materials [data-mdrag]'); if (!t) return; drag = { kind: t.dataset.mdrag, id: t.dataset.mdrag === 'grp' ? t.dataset.mgrp : t.dataset.id }; e.dataTransfer.setData('text/x-cdmat', '1'); e.dataTransfer.effectAllowed = 'move'; t.classList.add('mdragging'); });
+  document.addEventListener('dragend', e => { drag = null; clear(); document.querySelectorAll('.mdragging').forEach(x => x.classList.remove('mdragging')); });
+  document.addEventListener('dragover', e => { const h = target(e); if (!h) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; clear(); h.t.classList.add(drag.kind === 'mat' && h.t.dataset.mdrag === 'grp' ? 'mdrop-in' : h.before ? 'mdrop-b' : 'mdrop-a'); });
+  document.addEventListener('drop', e => { const h = target(e); if (!h) return; e.preventDefault(); const d = drag; clear(); drag = null;
+    if (d.kind === 'grp') { if (h.t.dataset.mgrp !== d.id) matDrop('grp', d.id, null, h.t.dataset.mgrp, h.before); return; }
+    if (h.t.dataset.mdrag === 'grp') matDrop('mat', d.id, null, h.t.dataset.mgrp);
+    else if (h.t.dataset.id !== d.id) matDrop('mat', d.id, h.t.dataset.id, h.t.dataset.mgrp, h.before);
+  });
+})();
+function matListHTML(use, sheetsOf) {
+  // Your own order: groups in S.matGroupOrder (new ones after, A to Z), materials in library order. Drag to change either.
+  pickState(); const fq = (ui.pickQ.mat || '').toLowerCase();
+  const shown = S.materials.filter(x => pickMatch(x, fq) || String(x.group || '').toLowerCase().includes(fq));
+  const rows = [];
+  matGroups().forEach(g => { const items = shown.filter(x => (x.group || '') === g); if (!items.length && fq) return; const fk = 'mat/' + g, shut = !fq && foldShut(fk); rows.push({ hdr: g || 'No group', g, fk, n: items.length, shut }); if (!shut) items.forEach(x => rows.push(x)); });
+  const anyOpen = rows.some(x => x.hdr && !x.shut);
+  const body = rows.map(x => x.hdr ? `<div class="lgrp mg" draggable="true" data-mdrag="grp" data-mgrp="${esc(x.g)}">${foldHead(x.fk, esc(x.hdr), x.n, x.shut, 'lgrp-h')}</div>`
+    : `<button class="mli${x.id === ui.matSel ? ' on' : ''}" draggable="true" data-mdrag="mat" data-mgrp="${esc(x.group || '')}" data-act="mat-sel" data-id="${x.id}">${swatch(x, 30)}<span><b>${esc(x.name)}</b><small>${esc(fmtLen(x.thick))}${(use[x.id] || {}).count ? ` · ${sheetsOf(x)} ${x.kind === 'top' ? 'tops' : 'sheets'}` : ''}</small></span></button>`).join('');
+  const q = (ui.pickQ || {}).mat || '';
+  return `<div class="cardbody libtree"><label class="f pick-findf"><span>Find</span><input type="search" class="pick-find" data-key="mat" value="${esc(q)}" placeholder="Find a material" aria-label="Find materials"></label>
+    <div class="mlx-tools"><button class="btn sm" data-act="mat-sort" title="Put the materials in each group thickest first, then by name. Drag to change it after.">${icon('sort')}Sort</button><button class="btn sm" data-act="lp-expall" data-id="mat" title="Save every material to a file">${icon('download')}Export</button><label class="btn sm" title="Add materials from a file">${icon('upload')}Import<input type="file" class="lp-imp" data-key="mat" accept=".json,application/json" hidden></label></div>
+    <button class="mlx-foldall" data-act="mat-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${anyOpen ? 'Close all groups' : 'Open all groups'}</button>
+    ${body || '<div class="note show">No materials match.</div>'}</div>`;
+}
+function matDetailHTML(m, u, sheets, kinds) {
+  const R = 'mat:' + m.id, tx = texURL(m), sheet = (m.kind || 'sheet') === 'sheet';
+  const t = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${v}</b><span>${lb}</span></div>`;
+  return `<div class="plx-main mlx-main">
+    <div class="card plx-pic">${cardHead(esc(m.name), `${libRowBtns('mat', m.id)}<button class="btn sm danger" data-act="mat-del" data-id="${m.id}">${icon('trash')}Delete</button>`)}
+      <div class="mlx-pv"><label class="mlx-sw" title="Click to upload a texture photo" style="background-color:${esc(m.color || '#ccc')}${tx ? `;background-image:url('${tx}')` : ''}"><input type="file" accept="image/*" data-tex="${m.id}" hidden><span class="mlx-up">${icon('upload')}Upload a photo</span></label>
+        <div class="mlx-cap"><b>${esc(m.name)}</b><span>${esc((kinds.find(k => k.v === (m.kind || 'sheet')) || {}).l || '')} · ${fmtLen(m.thick)} thick${sheet ? ` · ${fmtLen(m.sheetW)} × ${fmtLen(m.sheetL)} sheet` : ''}</span></div></div>
+      <div class="edx-stats plx-stats mlx-stats">${t('amber', 'list', u.count, 'Parts in this job')}${t('blue', 'cube', (u.area / 144).toFixed(1), 'Square feet')}${t('violet', 'stack', sheets, m.kind === 'top' ? 'Tops' : 'Sheets with waste')}${t('green', 'tag', '$' + Math.round(sheets * (m.cost || 0)).toLocaleString(), 'Cost in this job')}</div></div>
+    <div class="card plx-props mlx-props">
+      ${cardHead('Material', '')}<div class="cardbody">${fld('Name', R, 'name', m.name, 'text', { wide: true })}${fld('Group', R, 'group', m.group || '', 'text', { ph: 'No group', list: 'matgroups' })}${fld('Kind', R, 'kind', m.kind || 'sheet', 'select', { options: kinds })}</div>
+      ${cardHead('Size', '')}<div class="cardbody">${fld('Thickness', R, 'thick', m.thick, 'len')}${sheet || m.kind === 'top' ? fld('Sheet width', R, 'sheetW', m.sheetW, 'len') + fld('Sheet length', R, 'sheetL', m.sheetL, 'len') : ''}<div class="mlx-checks">${fld('Has grain', R, 'grain', m.grain, 'bool')}${fld('Takes the room finish', R, 'dynamic', !!m.dynamic, 'bool')}</div></div>
+      ${cardHead('Look', '')}<div class="cardbody">${fld('Color', R, 'color', m.color, 'color')}${fld('Texture size', R, 'texScale', m.texScale || 24, 'len')}<div class="mlx-tex"><button class="btn sm" data-act="tex-lib" data-id="${m.id}">${icon('palette')}Texture library</button>${m.texture ? `<button class="btn sm" data-act="tex-clear" data-id="${m.id}">Clear texture</button>` : ''}</div></div>
+      ${cardHead('Price and CNC', '')}<div class="cardbody">${fld(m.kind === 'top' ? 'Cost per top' : 'Cost per sheet', R, 'cost', m.cost, 'num')}${sheet ? fld('CNC feed %', R, 'feedRate', m.feedRate || 100, 'num') : ''}</div>
+    </div><datalist id="matgroups">${[...new Set(S.materials.map(x => x.group).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('')}</datalist></div>`;
+}
 function renderMaterials() {
   ensureLibPrices();
   const { use, bom } = materialUsage();
   let totalCost = 0, totalSheets = 0;
   const kinds = [{ v: 'sheet', l: 'Sheet' }, { v: 'top', l: 'Countertop' }, { v: 'solid', l: 'Solid wood' }];
   S.materials.forEach(m => { const u = use[m.id], sheets = u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0; totalSheets += m.kind === 'top' ? 0 : sheets; totalCost += sheets * (m.cost || 0); });
-  const rows = libRows('mat', S.materials).map(m => {
-    if (m.hdr) return libGroupRow(m, 19);
-    const u = use[m.id], sheets = u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0;
-    const R = 'mat:' + m.id;
-    return `<tr><td style="width:46px"><label class="texup" title="Upload a texture photo">${swatch(m, 30)}<input type="file" accept="image/*" data-tex="${m.id}" hidden></label></td>
-      <td style="min-width:170px">${ctl(R, 'name', m.name, 'text', { label: 'Material name' })}</td>
-      <td style="width:110px">${ctl(R, 'group', m.group || '', 'text', { label: 'Group', ph: 'Group', list: 'matgroups' })}</td>
-      <td style="width:124px">${ctl(R, 'kind', m.kind || 'sheet', 'select', { options: kinds, label: 'Kind' })}</td>
-      <td style="width:76px">${ctl(R, 'thick', m.thick, 'len', { label: 'Thickness' })}</td>
-      <td style="width:64px">${ctl(R, 'sheetW', m.sheetW, 'len', { label: 'Sheet width' })}</td>
-      <td style="width:64px">${ctl(R, 'sheetL', m.sheetL, 'len', { label: 'Sheet length' })}</td>
-      <td style="width:40px;text-align:center">${ctl(R, 'grain', m.grain, 'bool', { label: 'Grain' })}</td>
-      <td style="width:40px;text-align:center">${ctl(R, 'dynamic', !!m.dynamic, 'bool', { label: 'Dynamic (takes the room\'s finish)' })}</td>
-      <td style="width:44px">${ctl(R, 'color', m.color, 'color', { label: 'Color' })}</td>
-      <td style="width:60px">${ctl(R, 'texScale', m.texScale || 24, 'len', { label: 'Texture size' })}</td>
-      <td style="width:70px">${ctl(R, 'cost', m.cost, 'num', { label: 'Cost per sheet' })}</td>
-      <td style="width:60px">${m.kind === 'sheet' || !m.kind ? ctl(R, 'feedRate', m.feedRate || 100, 'num', { label: 'CNC feed rate percent' }) : ''}</td>
-      <td class="n">${u.count}</td><td class="n">${(u.area / 144).toFixed(1)}</td><td class="n"><b>${sheets}</b></td>
-      <td style="width:120px;white-space:nowrap"><button class="btn sm" data-act="tex-lib" data-id="${m.id}" title="Pick a texture from the shop's texture library">Library</button>${m.texture ? ` <button class="btn sm" data-act="tex-clear" data-id="${m.id}">Clear</button>` : ''}</td>
-      <td style="width:110px">${libRowBtns('mat', m.id)}</td><td style="width:30px"><button class="btn sm" data-act="mat-del" data-id="${m.id}" aria-label="Delete material">×</button></td></tr>`;
-  }).join('');
+  const sheetsOf = m => { const u = use[m.id]; return u && u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0; };
+  if (!mat(ui.matSel)) ui.matSel = (S.materials[0] || {}).id;
+  const view = ['mats', 'finishes', 'templates', 'hw'].includes(ui.matView) ? ui.matView : 'mats';
   const mc = S.matTemplates.cabinet, md = S.matTemplates.drawer;
-  $('#tab-materials').innerHTML = `<div class="pagehead"><div><h2>Materials</h2><p>The material library holds every sheet, top and solid you use. Pick a texture from the library, or click a swatch to upload your own photo; it shows in the elevation, 3D and Realistic views. Templates bundle materials so a cabinet picks one template instead of five materials.</p></div><div class="row-actions"><button class="btn" data-act="tex-lib" data-id="">From texture library</button><button class="btn primary" data-act="mat-add">Add material</button></div></div>
-  <div class="card stats"><div class="stat"><span class="eyebrow">Sheets</span><b>${totalSheets}</b></div><div class="stat"><span class="eyebrow">Material cost</span><b>$${totalCost.toLocaleString()}</b></div><div class="stat"><span class="eyebrow">Cabinets, all rooms</span><b>${allCabs().length}</b></div>${saveNote ? `<div class="warnbox">${esc(saveNote)}</div>` : ''}</div>
-  <div class="card">${cardHead('Material library')}${libTableBar('mat', 'Materials')}<datalist id="matgroups">${[...new Set(S.materials.map(m => m.group).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('')}</datalist><div class="tscroll"><table class="t"><thead><tr><th>Texture</th><th>Name</th><th>Group</th><th>Kind</th><th>Thick</th><th>Sheet W</th><th>Sheet L</th><th>Grain</th><th title="Takes the look of the material picked for each room">Dynamic</th><th>Color</th><th>Tex size</th><th>$/unit</th><th title="CNC feed rate, as a percent of the post's feeds (100 = as set). Goes to CNC Cutlist with the part file.">Feed %</th><th class="r">Parts</th><th class="r">Sq ft</th><th class="r">Sheets</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
-  <div class="card">${cardHead('Finishes', '<span class="note">Pick a finish by name (Alder, Paint grade…) for the job or a room. It says what every finished part is cut from; unfinished parts use the cabinet material.</span><button class="btn sm" data-act="fin-add">Add</button>')}<div class="cardbody">${finishList().map(f => { const n = allCabs().filter(c => (finishOf(c) || {}).id === f.id).length; return `<div class="tplrow msrow">
+  const m = mat(ui.matSel), tabs = [['mats', 'Materials', S.materials.length, 'palette'], ['finishes', 'Finishes', finishList().length, 'face'], ['templates', 'Material templates', matSets().length + mc.length + md.length, 'stack'], ['hw', 'Hardware list', Object.keys(bom).length, 'sliders']];
+  const tabRow = `<div class="mlx-tabs" role="tablist">${tabs.map(([k, l, n, ic]) => `<button role="tab" data-act="mat-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}<span>${l}</span><span class="ct">${n}</span></button>`).join('')}</div>`;
+  const totals = `<span class="mlx-sum"><b>${totalSheets}</b> sheets<i></i><b>$${totalCost.toLocaleString()}</b> material<i></i><b>${allCabs().length}</b> cabinets</span>`;
+  $('#tab-materials').innerHTML = `<div class="pagehead"><div><h2>Materials</h2><p>Pick a material on the left to see and change it. Click the big swatch to upload your own texture photo. Finishes say what finished parts are cut from; templates bundle materials so a cabinet picks one template instead of five materials.</p></div><div class="row-actions">${totals}${view === 'mats' ? `<button class="btn" data-act="tex-lib" data-id="">From texture library</button><button class="btn primary" data-act="mat-add">${icon('plus')}Add material</button>` : ''}</div></div>
+  ${saveNote ? `<div class="warnbox">${esc(saveNote)}</div>` : ''}${tabRow}
+  ${view === 'mats' ? `<div class="plx mlx"><div class="card plx-list">${matListHTML(use, sheetsOf)}</div>${m ? matDetailHTML(m, use[m.id] || { area: 0, count: 0, edge: 0 }, sheetsOf(m), kinds) : '<div class="card cardbody note">No materials yet.</div>'}</div>` : ''}
+  ${view === 'finishes' ? `  <div class="card">${cardHead('Finishes', '<span class="note">Pick a finish by name (Alder, Paint grade…) for the job or a room. It says what every finished part is cut from; unfinished parts use the cabinet material.</span><button class="btn sm" data-act="fin-add">Add</button>')}<div class="cardbody">${finishList().map(f => { const n = allCabs().filter(c => (finishOf(c) || {}).id === f.id).length; return `<div class="tplrow msrow">
       <div class="tplhead">${swatch(mat(f.front), 22)}${ctl('fin:' + f.id, 'name', f.name, 'text', { label: 'Finish name' })}<span class="note">${nCab(n)}</span>${delBtn('fin-del', f.id, finishList().length < 2, '×')}</div>
       <div class="autogrid">${FINISH_ROLES.map(([k, l]) => fld(l, 'fin:' + f.id, k, f[k] || '', 'select', { options: k === 'solid' || k === 'front' ? azOpts(S.materials, m => (m.kind || 'sheet') !== 'top') : matOpts('sheet') })).join('')}</div></div>`; }).join('')}</div></div>
-  <div class="card">${cardHead('Material templates', '<span class="note">Doors, finish, cabinet and drawers in one pick. Swap the whole job under Settings › Room settings.</span><button class="btn sm" data-act="mset-add">Add</button>')}<div class="cardbody">${matSets().map(t => { const on = MAT_SET_KEYS.every(k => t[k] === S.job.defaults[k]); return `<div class="tplrow msrow">
+` : ''}
+  ${view === 'templates' ? `<div class="card">${cardHead('Material templates', '<span class="note">Doors, finish, cabinet and drawers in one pick. Swap the whole job under Settings › Room settings.</span><button class="btn sm" data-act="mset-add">Add</button>')}<div class="cardbody">${matSets().map(t => { const on = MAT_SET_KEYS.every(k => t[k] === S.job.defaults[k]); return `<div class="tplrow msrow">
       <div class="tplhead">${swatch(mat(doorStyle(doorTpl(t.doorT).door).mat), 22)}${ctl('mset:' + t.id, 'name', t.name, 'text', { label: 'Material template name' })}${on ? '<span class="chip cab">This job</span>' : ''}${delBtn('mset-del', t.id, false, '×')}</div>
       <div class="autogrid">${fld('Doors', 'mset:' + t.id, 'doorT', t.doorT, 'select', { options: opts(S.doorTemplates) })}${fld('Finish', 'mset:' + t.id, 'finish', t.finish || '', 'select', { options: opts(finishList()) })}${fld('Cabinet', 'mset:' + t.id, 'cabMatT', t.cabMatT, 'select', { options: opts(mc) })}${fld('Drawers', 'mset:' + t.id, 'drawerMatT', t.drawerMatT, 'select', { options: opts(md) })}</div></div>`; }).join('') || '<div class="note">No material templates yet.</div>'}</div></div>
   <div class="cards">
@@ -222,8 +285,9 @@ function renderMaterials() {
       <div class="tplhead">${swatch(mat(t.sides), 22)}${ctl('mtd:' + t.id, 'name', t.name, 'text', { label: 'Template name' })}<span class="note">${nCab(usedBy(c => cabSet(c, 'drawerMatT') === t.id))}</span>${delBtn('mtd-del', t.id, md.length < 2, '×')}</div>
       <div class="autogrid">${fld('Sides, front, back', 'mtd:' + t.id, 'sides', t.sides, 'select', { options: matOpts('sheet') })}${fld('Bottom', 'mtd:' + t.id, 'bottom', t.bottom, 'select', { options: matOpts('sheet') })}</div></div>`).join('')}</div></div>
   </div>
-  <div class="card">${cardHead('Hardware list', '<span class="note">Counted from every cabinet in the job</span>')}
-    <div class="tscroll"><table class="t"><thead><tr><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${Object.entries(bom).sort().map(([k, q]) => `<tr><td>${esc(k)}</td><td class="n">${q}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No hardware yet</td></tr>'}</tbody></table></div></div>`;
+` : ''}
+  ${view === 'hw' ? `<div class="card">${cardHead('Hardware list', '<span class="note">Counted from every cabinet in the job</span>')}
+    <div class="tscroll"><table class="t"><thead><tr><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${Object.entries(bom).sort().map(([k, q]) => `<tr><td>${esc(k)}</td><td class="n">${q}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No hardware yet</td></tr>'}</tbody></table></div></div>` : ''}`;
 }
 
 /* ---------- Doors ---------- */

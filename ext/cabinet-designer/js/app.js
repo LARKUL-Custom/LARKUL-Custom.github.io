@@ -55,10 +55,36 @@ function render() {
   if (ui.tab !== 'room') $('#quickedit').hidden = true;
   if (ui.tab !== 'room') $('#dock').innerHTML = '';
   $('#main').classList.toggle('is-room', ui.tab === 'room');
+  renderLibNav(libOn);
   $('[data-act="undo"]').disabled = !undoStack.length;
   $('[data-act="redo"]').disabled = !redoStack.length;
   showSaveState();
   RENDER()[ui.tab]();
+}
+/* ---------- Library side list (Mozaik style): every library one click away, with how many items each holds ---------- */
+const LIB_NAV = [
+  ['Cabinets', [['library', 'stack', 'amber'], ['doors', 'door', 'violet'], ['faceframes', 'face', 'teal'], ['panels', 'ends', 'stone'], ['inserts', 'shelf', 'green']]],
+  ['Materials and hardware', [['materials', 'palette', 'blue'], ['hardware', 'sliders', 'slate'], ['parts', 'list', 'teal']]],
+  ['Shop', [['cnctools', 'cube', 'indigo'], ['rules', 'ruler', 'amber'], ['remnants', 'box', 'teal']]],
+];
+function libCount(k) {
+  try {
+    return { library: S.library.filter(x => x.cat !== 'Shape').length + (S.shapeLib || []).length, materials: S.materials.length, doors: S.doorStyles.length, hardware: S.hardware.length, inserts: INSERT_TYPES.length, panels: S.panels.length, faceframes: S.faceFrames.length, parts: S.partTemplates.length, cnctools: CNC_LIB.tools.length, rules: RULES.length, remnants: REMNANTS.length }[k];
+  } catch (_) { return undefined; }
+}
+function renderLibNav(on) {
+  const nav = $('#libnav'), main = $('#main');
+  nav.hidden = !on; main.classList.toggle('lib-on', on);
+  if (!on) return;
+  const cur = ui.tab === 'designer' ? 'library' : ui.tab;
+  const name = k => LIB_TABS.find(([x]) => x === k)[1];
+  setHTML(nav, `<div class="ln-head"><span class="tabic tone-amber"><svg viewBox="0 0 20 20" aria-hidden="true">${TAB_ICONS.libs}</svg></span><b>Libraries</b></div>`
+    + LIB_NAV.map(([g, items]) => `<div class="ln-group"><div class="ln-gh">${g}</div>${items.map(([k, ic, tone]) => {
+      const n = libCount(k);
+      return `<button class="ln-item tone-${tone}" data-act="tab" data-id="${k}" aria-current="${cur === k ? 'page' : 'false'}"><span class="ln-ic">${icon(ic)}</span><span class="ln-l">${name(k)}</span>${n == null ? '' : `<span class="ln-n">${n}</span>`}</button>`;
+    }).join('')}</div>`).join(''));
+  const it = LIB_NAV.flatMap(([, x]) => x).find(([k]) => k === cur);
+  if (it) { main.style.setProperty('--libtone', `var(--t-${it[2]})`); main.style.setProperty('--libic', `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="#000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[it[1]]}</svg>`)}")`); }
 }
 function select(sel, keepMulti) {
   ui.sel = sel; if (!keepMulti) ui.multi = [];
@@ -1203,7 +1229,11 @@ document.addEventListener('click', e => {
       else flash(a === 'des-update' ? 'Library template updated' : 'Saved to the library');
       break;
     }
-    case 'mat-add': foldOpen('mat/'); mutate(() => S.materials.push({ id: uid('m'), name: 'New material', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 0, color: '#d8cfc0', texture: null, procedural: null, texScale: 24 })); break;
+    case 'mat-sel': ui.matSel = id; renderMaterials(); break;
+    case 'mat-sort': mutate(() => { S.materials.sort((a, b) => (b.thick || 0) - (a.thick || 0) || String(a.name).localeCompare(String(b.name), undefined, { numeric: true })); }); flash('Sorted thickest first in each group'); break;
+    case 'mat-fold-all': { const f = pageFold(); [...new Set(S.materials.map(m => m.group || ''))].forEach(g => { if (id === 'open') f['mat/' + g] = 1; else delete f['mat/' + g]; }); try { localStorage.setItem(KEY + '.pfold', JSON.stringify(f)); } catch (_) {} renderMaterials(); break; }
+    case 'mat-view': ui.matView = id; renderMaterials(); break;
+    case 'mat-add': foldOpen('mat/'); mutate(() => { ui.matSel = uid('m'); S.materials.push({ id: ui.matSel, name: 'New material', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 0, color: '#d8cfc0', texture: null, procedural: null, texScale: 24 }); }); break;
     case 'mat-del': {
       const inUse = JSON.stringify({ t: S.matTemplates, d: S.doorStyles, p: S.panels, c: S.countertops, m: S.moldings }).includes('"' + id + '"');
       if (inUse) { el.textContent = 'In use'; el.disabled = true; break; }
