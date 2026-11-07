@@ -414,7 +414,7 @@ const APP=typeof window.Neutralino!=='undefined'&&typeof window.NL_PORT!=='undef
 /* inside the Extension Hub (http://localhost:4321): data in Hub.storage, documents in the Files library under Schedules/, dates as hub reminders */
 const HUB=!APP&&typeof window.Hub!=='undefined';
 const LIB='Schedules';
-let state=freshState(),tab='calendar',selJob=null,focusJob=null,armed=null,weekOff=0,monthOff=null,calShow='jobs',selBill=null,q='',jf='active',selType='kitchen',draft=null;
+let calSlim=false,state=freshState(),tab='calendar',selJob=null,focusJob=null,armed=null,weekOff=0,monthOff=null,calShow='jobs',selBill=null,q='',jf='active',selType='kitchen',draft=null;
 let undoStack=[],lastJSON='',dataDir=null,saveTimer=null,savePending=false,backupDay=null;
 const WEEKS=4;
 
@@ -682,15 +682,29 @@ function installDay(j,used,from,cap,hours){
   }
   return from;
 }
+/* Ayden, Nov 7 2026: install dates are only ever set by hand. A job without one gets its shop work planned,
+   but the schedule never picks an install day (or a same-day delivery, or finish) for it. */
+function installSet(j){
+  if(Array.isArray(j.installDates)&&j.installDates.some(isDate))return [...j.installDates].filter(isDate).sort()[0];
+  if(isDate(j.installStart))return j.installStart;
+  if(j.fixed&&Array.isArray(j.fixed.install)){const d=j.fixed.install.filter(g=>g&&isDate(g.d)).map(g=>g.d).sort()[0];if(d)return d}
+  return null;
+}
+const needsInstallDate=j=>applies(j,'install')&&!j.done.install&&!installSet(j);
+/* the shop takes jobs in install-date order (jobs that aren't installed go by their promised date), as early as it can */
+const shopDate=j=>applies(j,'install')&&!j.done.install?installSet(j):isDate(j.due)?j.due:null;
 function schedule(jobs=state.jobs){
   const used={},out={};
-  /* Ayden, Oct 31 2026: a job placed by hand stays exactly where it was put (j.fixed holds its days for each step) */
-  const order=[...jobs.filter(j=>j.fixed&&!j.hold),...jobs.filter(j=>!(j.fixed&&!j.hold))];
+  /* a job whose shop days were placed by hand on the Manufacturing tab is booked first, then everything else by install date */
+  const byDate=(a,b)=>{const x=shopDate(a)||'9999',y=shopDate(b)||'9999';return x<y?-1:x>y?1:0};
+  const order=[...jobs.filter(j=>j.fixed&&!j.hold),...jobs.filter(j=>!(j.fixed&&!j.hold)).sort(byDate)];
   for(const j of order){
     let cursor=nextWork(isDate(j.start)&&j.start>TODAY?j.start:TODAY),conflict=null,afterCnc=cursor,paintReady=null;const stages=[];
     if(j.hold){out[j.id]={stages:[],finish:null,key:null,slack:null,status:'hold',next:null,fixes:[],conflict:null,install:null};continue}
+    const noDate=needsInstallDate(j);
     for(const s of STEPS){
       if(!applies(j,s))continue;
+      if(noDate&&!j.done[s]&&(s==='install'||s==='finish'||(s==='delivery'&&sameDay(j)&&!(j.pins&&isDate(j.pins.delivery)))))continue;
       if(['delivery','install','finish'].includes(s)&&paintReady){if(paintReady>cursor)cursor=paintReady;paintReady=null}
       if(j.done[s]){stages.push({s,done:true});continue}
       const fx=j.fixed&&Array.isArray(j.fixed[s])&&j.fixed[s].length?j.fixed[s].filter(g=>g&&isDate(g.d)).sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0):null;
@@ -732,7 +746,7 @@ function schedule(jobs=state.jobs){
     for(const f of j.fixups||[]){if(f.done)continue;const b=bookCrew(used,fc,num(f.days,1),isDate(f.date)?f.date:null);fixes.push({f,...b});fc=addDays(b.end,1)}
     const slack=key&&isDate(j.due)?workBetween(key,j.due):null;
     const status=!live.length?(fixes.length?'fixup':'done'):slack==null?'ok':slack<0?'late':slack===0?'risk':'ok';
-    out[j.id]={stages,finish,key,slack,status,next:live[0],fixes,conflict,install:inst};
+    out[j.id]={stages,finish,key,slack,status,next:live[0],fixes,conflict,install:inst,noDate};
   }
   return out;
 }
@@ -779,6 +793,8 @@ function attention(sch,mats){
       items.push({c:'warn',p:'Check date',t:`<b>${esc(j.name)}</b>: ${a==='paint'?coatName(j):STEP_NAME[a]} is set for ${fmt(A.start)}, before ${b==='paint'?coatName(j).toLowerCase():STEP_NAME[b].toLowerCase()} is done (${fmt(B.end)}). Drag one of them, or leave it if that's right.`,job:j.id})}
     for(const x of r.fixes)items.push({c:'warn',p:'Fix-up',t:`<b>${esc(j.name)}</b>: ${esc(x.f.note||'fix-up visit')}, ${when(x.start)}.`,job:j.id});
   }
+  const nd=state.jobs.filter(j=>sch[j.id]&&sch[j.id].noDate&&!j.hold);
+  if(nd.length)items.push({c:'warn',p:'Install date',t:nd.length<=2?nd.map(j=>`<b>${esc(j.name)}</b> needs an install date${sch[j.id].finish?` (the shop can have it ready ${fmt(sch[j.id].finish)})`:''}.`).join(' '):`<b>${nd.length} jobs</b> need an install date: ${nd.slice(0,5).map(j=>esc(j.name)).join(', ')}${nd.length>5?' and more':''}. Drag each onto a day on the Calendar.`,job:nd.length<=2?nd[0].id:null,cal:nd.length>2});
   items.push(...billAlerts());
   for(const x of cdPending())items.push({c:'warn',p:'New job',t:`Cabinet Designer sent <b>${esc(x.d.job.name||'a job')}</b>: ${cdText(x)}.`,cd:x.path});
   const ord=mats.filter(x=>x.status!=='ok').sort((a,b)=>a.orderBy<b.orderBy?-1:1);
@@ -786,7 +802,7 @@ function attention(sch,mats){
     items.push({c:ord.some(x=>x.status==='short')?'bad':'warn',p:'Order',mat:1,t:now.length?`Order <b>${plural(now.length,'material')} today</b>: ${now.map(x=>esc(x.m.name)).join(', ')}.${ord.length>now.length?` ${ord.length-now.length} more soon.`:''}`:`Order ${esc(ord[0].m.name)} by <b>${fmt(ord[0].orderBy)}</b>.${ord.length>1?` ${ord.length-1} more soon.`:''}`});}
   if(!items.length)return `<ul class="alerts"><li class="ok"><span class="pill ok">All good</span><span>Every job is on time and you have the materials you need.</span></li></ul>`;
   const shown=allAlerts?items:items.slice(0,3);
-  return `<ul class="alerts">${shown.map(i=>`<li class="${i.c}"><span class="pill ${i.c}">${i.p}</span><span>${i.t}</span>${i.job?`<button class="btn sm" data-act="open" data-id="${i.job}">Open</button>`:i.bill?`<button class="btn sm" data-act="calshow" data-id="bills">Bills</button>`:i.cd?`<button class="btn sm" data-act="cdadd" data-id="${esc(i.cd)}">${cdMatch(cdInbox.find(x=>x.path===i.cd)||{d:{job:{}}})?'Update counts':'Add to schedule'}</button>`:`<button class="btn sm" data-act="tab" data-id="materials">Materials</button>`}</li>`).join('')}</ul>
+  return `<ul class="alerts">${shown.map(i=>`<li class="${i.c}"><span class="pill ${i.c}">${i.p}</span><span>${i.t}</span>${i.job?`<button class="btn sm" data-act="open" data-id="${i.job}">Open</button>`:i.cal?`<button class="btn sm" data-act="tab" data-id="calendar">Calendar</button>`:i.bill?`<button class="btn sm" data-act="calshow" data-id="bills">Bills</button>`:i.cd?`<button class="btn sm" data-act="cdadd" data-id="${esc(i.cd)}">${cdMatch(cdInbox.find(x=>x.path===i.cd)||{d:{job:{}}})?'Update counts':'Add to schedule'}</button>`:`<button class="btn sm" data-act="tab" data-id="materials">Materials</button>`}</li>`).join('')}</ul>
     ${items.length>3?`<button class="more" data-act="allalerts">${allAlerts?'Show fewer':`Show ${items.length-3} more`}</button>`:''}`;
 }
 function exampleBanner(){
@@ -862,7 +878,8 @@ function billAlerts(){
 const SITE_STEPS=['delivery','install','finish','fixup'],MFG_STEPS=['cnc','edge','paint','assembly'];
 const STEP_SHORT={cnc:'CNC',edge:'Edgeband',paint:'Paint',assembly:'Assembly',delivery:'Delivery',install:'Install',finish:'Finish',fixup:'Fix-up'};
 function viewCalendar(sch,mats,mode='site'){
-  const shop=mode==='shop',keep=shop?MFG_STEPS:SITE_STEPS;
+  /* Ayden, Nov 7 2026: a switch to see just installs and deliveries, with finish, fix-ups, promised dates and bills hidden */
+  const shop=mode==='shop',slim=!shop&&calSlim,keep=shop?MFG_STEPS:slim?['delivery','install']:SITE_STEPS;
   const cols=state.settings.saturdays?6:5;
   const monday=x=>{while(parse(x).getDay()!==1)x=addDays(x,-1);return x};
   let d,end,mFirst=null,mLast=null;
@@ -870,16 +887,16 @@ function viewCalendar(sch,mats,mode='site'){
     mFirst=iso(a);mLast=iso(b);d=monday(mFirst);end=addDays(monday(mLast),6)}
   else{d=addDays(monday(TODAY),weekOff*7);end=addDays(d,WEEKS*7-1)}
   const first=d;
-  const byDay={},showJobs=shop||calShow!=='bills',showBills=!shop&&calShow!=='jobs';
+  const byDay={},showJobs=shop||slim||calShow!=='bills',showBills=!shop&&!slim&&calShow!=='jobs';
   if(showBills)for(const b of state.bills||[])for(const x of billDates(b,addDays(first,-2),addDays(end,2))){const k=billShowDay(x);(byDay[k]=byDay[k]||[]).push({bill:b,date:x,paid:billPaid(b,x),pri:2000})}
   if(showJobs)state.jobs.forEach((j,pri)=>{const r=sch[j.id];
     const per={};
     const part={};
     for(const st of r.stages)if(!st.done&&keep.includes(st.s))st.segs.forEach((g,k)=>{(per[g.d]=per[g.d]||[]).push(st.s);if(st.s==='install'&&st.segs.length>1)part[g.d]=` ${k+1}/${st.segs.length}`});
     const pinned=new Set(r.stages.filter(st=>!st.done&&st.segs.length&&(st.pinned||(st.s==='install'&&isDate(j.installStart)))).map(st=>st.start+'|'+st.s));
-    if(!shop)for(const x of r.fixes)for(const g of x.segs)(per[g.d]=per[g.d]||[]).push('fixup');
+    if(!shop&&!slim)for(const x of r.fixes)for(const g of x.segs)(per[g.d]=per[g.d]||[]).push('fixup');
     for(const k in per){const ss=[...new Set(per[k])];(byDay[k]=byDay[k]||[]).push({j,ss,pri:shop?pri:(ss.includes('install')?0:ss.includes('delivery')?100:200)*1000+pri,pin:ss.some(s=>pinned.has(k+'|'+s)),part:part[k]||''})}
-    if(!shop&&isDate(j.due)&&r.status!=='done'&&r.status!=='fixup')(byDay[j.due]=byDay[j.due]||[]).push({j,due:true,late:r.status==='late',pri:1000+pri});
+    if(!shop&&!slim&&isDate(j.due)&&r.status!=='done'&&r.status!=='fixup')(byDay[j.due]=byDay[j.due]||[]).push({j,due:true,late:r.status==='late',pri:1000+pri});
   });
   const dows=['Mon','Tue','Wed','Thu','Fri','Sat'].slice(0,cols).map(x=>`<div class="dow">${x}</div>`).join('');
   let cells='';
@@ -907,11 +924,11 @@ function viewCalendar(sch,mats,mode='site'){
   <div class="calwrap"><section class="panel">
     ${shop?'<h2 class="ctitle">Manufacturing</h2>':'<h2 class="ctitle">Deliveries and installs</h2>'}
     <div class="row spread"><div class="calhead">${nav}${clearBtn(sch)}</div>
-      ${shop?'':`<div class="seg" role="group" aria-label="Show on the calendar">${[['jobs','Jobs'],['bills','Bills'],['both','Both']].map(([v,l])=>`<button class="btn sm" data-act="calshow" data-id="${v}" aria-pressed="${calShow===v}">${l}</button>`).join('')}</div>`}</div>
-    <div class="legend">${showJobs?(shop?MFG_STEPS:SITE_STEPS).map(s=>`<span><i class="dot" style="background:${sv(s)}"></i>${STEP_NAME[s]}</span>`).join('')+(shop?'':'<span style="color:var(--ok);font-weight:700">⚑ Promised date</span>'):''}${showBills?'<span><i class="dot billdot"></i>Bill</span>':''}</div>
+      ${shop?'':`<div class="row"><button class="btn sm" data-act="calslim" aria-pressed="${slim}" title="Show only installs and deliveries">Installs and deliveries only</button>${slim?'':`<div class="seg" role="group" aria-label="Show on the calendar">${[['jobs','Jobs'],['bills','Bills'],['both','Both']].map(([v,l])=>`<button class="btn sm" data-act="calshow" data-id="${v}" aria-pressed="${calShow===v}">${l}</button>`).join('')}</div>`}</div>`}</div>
+    <div class="legend">${showJobs?(shop?MFG_STEPS:keep).map(s=>`<span><i class="dot" style="background:${sv(s)}"></i>${STEP_NAME[s]}</span>`).join('')+(shop||slim?'':'<span style="color:var(--ok);font-weight:700">⚑ Promised date</span>'):''}${showBills?'<span><i class="dot billdot"></i>Bill</span>':''}</div>
     ${focusBar}
     <div class="cal${fj?' focus':''}" style="--cols:${cols}">${dows}${cells}</div>
-    <p class="note">${shop?'CNC, edgebanding, paint and assembly. Deliveries and installs are on the Calendar tab.':'Deliveries, installs and fix-ups. CNC, edgebanding, paint and assembly are on the Manufacturing tab.'} Drag a job to move it (📌 = date you set)${shop?'':'; drag one install day to move just that day'}. Double-click a job to open it.</p>
+    <p class="note">${shop?'CNC, edgebanding, paint and assembly. Deliveries and installs are on the Calendar tab.':(slim?'Only installs and deliveries.':'Deliveries, installs and fix-ups.')+' CNC, edgebanding, paint and assembly are on the Manufacturing tab.'} Drag a job to move it (📌 = date you set)${shop?'':'; drag one install day to move just that day'}. Double-click a job to open it.</p>
   </section><div class="sidecol">${showJobs?jobSide(sch,mode):''}${showBills?billSide():''}</div></div>`;
 }
 /* the current jobs beside the calendar: drag one onto a day to start it there */
@@ -926,15 +943,15 @@ function idaysCtl(j){const d=installDays(j);
 function jobSide(sch,mode='shop'){
   const live=state.jobs.filter(j=>!['done','hold'].includes(sch[j.id].status)),held=state.jobs.filter(j=>j.hold);
   const away=held.map(j=>`<button class="jrow held${focusJob===j.id?' sel':''}" data-act="open" data-id="${j.id}" data-drag="job" data-mode="${mode}" title="Drag onto a day to place ${esc(j.name)} there"><i class="dot" style="background:var(--line)"></i><span class="jt"><b>${esc(j.name)}</b><span class="small muted">${esc(typeOf(j).name)}${j.customer?' · '+esc(j.customer):''}</span></span></button>`).join('');
-  const rows=live.map(j=>{const r=sch[j.id],n=r.next,fx=!n&&r.fixes[0];
+  const rows=[...live].sort((a,b)=>{const x=shopDate(a)||'9999',y=shopDate(b)||'9999';return x<y?-1:x>y?1:0}).map(j=>{const r=sch[j.id],n=r.next,fx=!n&&r.fixes[0];
     const dl=r.stages.find(x=>x.s==='delivery'&&!x.done);
-    const what=mode==='site'?[dl?`Delivery ${fmtS(dl.start)}`:'',r.install?`Install ${fmtS(r.install.start)}`:'',!r.install&&fx?`Fix-up ${when(fx.start)}`:''].filter(Boolean).join(' · ')||(n?`${STEP_NAME[n.s]} ${when(n.start)}`:'')
+    const what=mode==='site'?[dl?`Delivery ${fmtS(dl.start)}`:'',r.install?`Install ${fmtS(r.install.start)}`:r.noDate?'No install date yet':'',!r.install&&fx?`Fix-up ${when(fx.start)}`:''].filter(Boolean).join(' · ')||(n?`${STEP_NAME[n.s]} ${when(n.start)}`:'')
       :n?`${STEP_NAME[n.s]} ${when(n.start)}`:fx?`Fix-up ${when(fx.start)}`:'';
     return `<button class="jrow${focusJob===j.id?' sel':''}" data-act="focus" data-id="${j.id}" data-drag="job" data-mode="${mode}" title="${mode==='site'?`Drag onto a day to install ${esc(j.name)} then`:`Drag onto a day to start ${esc(j.name)} there`}. Double-click to open it.">
       <i class="dot" style="background:${sv(mode==='site'?(r.install?'install':'delivery'):n?n.s:'fixup')}"></i><span class="jt"><b>${esc(j.name)}</b><span class="small muted">${what}${mode!=='site'&&r.install&&n&&n.s!=='install'?` · install ${fmtS(r.install.start)}`:''}</span></span>
       ${r.status==='late'||r.status==='risk'?pill(r.status):''}</button>${mode==='site'&&r.install?idaysCtl(j):''}`}).join('');
   return `<aside class="panel side"><div class="row spread"><h2>Current jobs</h2><button class="btn primary sm" data-act="new" data-drag="new" title="Click to add a job, or drag onto a day to start it there">+ New job</button></div>
-    <p class="note">${mode==='site'?'Drag a job onto a day to set its install date. Use − and + to change how many days the install takes.':'Drag a job onto a day to start it there. Jobs higher up get the shop first.'}</p>
+    <p class="note">${mode==='site'?'Drag a job onto a day to set its install date. The shop days are planned around it. Use − and + to change how many days the install takes.':'The shop takes jobs in install-date order, as early as it can. Drag a job onto a day only to force its shop start there.'}</p>
     <div class="jside">${rows||(held.length?'<p class="note">Nothing on the schedule. Drag jobs from Put away onto the days you want.</p>':'<p class="note">No jobs yet. Press New job, or drag it onto a day.</p>')}</div>
     <div class="awaybox" data-drop-away="1"><h3>Put away${held.length?` (${held.length})`:''}</h3><p class="note awayhint">Drop a job here to take it off the calendar.</p>${away?`<div class="jside">${away}</div>`:''}</div></aside>`;
 }
@@ -1067,7 +1084,7 @@ function viewJobs(sch){
     ${cdBox()}
     <input type="search" id="jobsearch" placeholder="Search jobs or customers" value="${esc(q)}" aria-label="Search jobs">
     <div class="row">${fbtn('active','In progress')}${fbtn('finished','Finished')}${fbtn('all','All')}</div>
-    ${list?'<p class="small muted" style="margin:0">Jobs higher up get the shop first. Drag ⠿ to reorder.</p>':''}
+    ${list?'<p class="small muted" style="margin:0">The shop takes jobs in install-date order. Among jobs with the same date or no date, higher up goes first. Drag ⠿ to reorder.</p>':''}
     ${list||'<p class="note">No jobs match.</p>'}</div>${bulkOpen?bulkHTML():detail}</div>`;
 }
 
@@ -1671,6 +1688,23 @@ function bringForward(j,s,target){
 }
 /* a new job with a first day set by hand goes far enough up the line to start that day */
 /* take a job off the calendar; its dates set by hand go too, so placing it again starts fresh */
+/* set a job's install start by hand; its shop days are re-planned around it */
+function setInstall(j,d){
+  delete j.hold;delete j.installDates;j.installStart=d||'';
+  if(j.fixed){delete j.fixed.install;if(!Object.keys(j.fixed).length)delete j.fixed}
+}
+/* 0.15.0, once: shop days that were frozen by dragging go back to the schedule's plan; install days set by hand stay */
+function handInstalls(){
+  if(state.settings.handInstalls)return [];
+  state.settings.handInstalls=true;const out=[];
+  for(const j of state.jobs){
+    if(!j.fixed&&!(j.pins&&Object.keys(j.pins).length)&&!isDate(j.start))continue;
+    const inst=j.fixed&&Array.isArray(j.fixed.install)?j.fixed.install.filter(g=>g&&isDate(g.d)).map(g=>g.d).sort():[];
+    if(inst.length){j.installStart=inst[0];if(inst.length>1)j.installDates=inst}
+    delete j.fixed;delete j.pins;j.start='';out.push(j.name);
+  }
+  return out;
+}
 function putAway(j){j.hold=true;delete j.fixed;delete j.pins;delete j.installDates;j.start='';j.installStart=''}
 /* keep a job's days as they are now: from here on it only moves when it's dragged */
 function freeze(j,r){
@@ -1719,7 +1753,9 @@ function dropOn(src,day){
     const shopLeft=STEPS.some(x=>applies(j,x)&&!j.done[x]&&!['delivery','install','finish'].includes(x));
     if(!site&&!shopLeft&&!STEPS.some(x=>applies(j,x)&&!j.done[x])){const r0=schedule()[j.id];if(r0.fixes.length)src={...src,drag:'step',stage:'fixup',day:r0.fixes[0].start};else return}
     else{
-      placeJob(j,x=>{if(site)x.installStart=d;else x.start=d});
+      if(site){setInstall(j,d);const c=schedule()[j.id].conflict;
+        commit(c?`Install for ${esc(j.name)} set for ${fmt(d)}, but the shop can't have it ready until ${fmt(c.ready)}. Pick a later day, or leave it and push the shop.`:`Install for ${esc(j.name)} set for ${fmt(d)}. The shop days are planned around it.`);return}
+      placeJob(j,x=>{x.start=d});
       const r=schedule()[j.id],bad=orderIssues(j,r).length;
       commit(`${esc(j.name)} placed: ${site?`install ${fmt(d)}`:shopLeft?`starts in the shop ${fmt(d)}`:`goes out ${fmt(d)}`}. It stays where you put it.${bad?' Some steps are out of order; see Needs attention.':''}`);return;
     }
@@ -1727,12 +1763,21 @@ function dropOn(src,day){
   if(src.drag==='due'){if(j.due!==day){j.due=day;commit(`Promised date for ${esc(j.name)} is now ${fmt(day)}`)}return}
   const r=schedule()[j.id],s=src.stage,shift=workBetween(src.day,day);
   if(!shift)return;
-  const clampDay=d=>d<TODAY?nextWork(TODAY):d;
+  const clampDay=d=>d<TODAY?nextWork(TODAY):d,d0=d=>clampDay(nextWork(d));
   if(s==='fixup'){
     const x=r.fixes.find(f=>f.segs.some(g=>g.d===src.day)),f=x&&j.fixups.find(y=>y.id===x.f.id);if(!f)return;
     f.date=clampDay(addWork(x.start,shift));commit(`Fix-up for ${esc(j.name)} moved to ${fmt(f.date)}`);return;
   }
   const st=r.stages.find(x=>x.s===s&&!x.done);if(!st)return;
+  if(!j.fixed&&(s==='install'||String(src.stages||'').split(',').includes('install'))){
+    const to=d0(day),days=st.segs.map(g=>g.d);
+    if(days.length<=1||!src.day){setInstall(j,to)}
+    else{const k=days.indexOf(src.day);if(k<0)return;if(days.includes(to)&&to!==src.day){toast(`${esc(j.name)} already installs that day.`);return}
+      if(k===0){setInstall(j,to)}else{days[k]=to;days.sort();j.installDates=days;j.installStart=days[0]}}
+    const c=schedule()[j.id].conflict;
+    commit(c?`Install for ${esc(j.name)} set for ${fmt(installSet(j))}, but the shop can't have it ready until ${fmt(c.ready)}.`:`Install for ${esc(j.name)} moved to ${fmt(installSet(j))}. The shop days are planned around it.`);return;
+  }
+  if(!j.fixed&&s==='delivery'){j.pins={...(j.pins||{}),delivery:d0(day)};j.sameDay=false;commit(`Delivery for ${esc(j.name)} moved to ${fmt(d0(day))}`);return}
   /* moving a step by hand moves just that step (the steps in the same box go with it); nothing else is moved for it */
   if(!j.fixed)freeze(j,r);
   const to=clampDay(nextWork(day)),moved=[];
@@ -1983,6 +2028,7 @@ document.addEventListener('click',async e=>{
       L.forEach(putAway);commit(`${plural(L.length,'job')} put away. Drag them onto the days you want.`);break}
     case 'clearpins':if(job){delete job.fixed;delete job.pins;delete job.installDates;job.start='';job.installStart='';commit(`Dates set by hand cleared for ${esc(job.name)}`)}break;
     case 'allalerts':allAlerts=!allAlerts;break;
+    case 'calslim':calSlim=!calSlim;try{localStorage.setItem(KEY+'-slim',calSlim?'1':'')}catch(_){}break;
     case 'calshow':calShow=id;if(tab!=='calendar')setTab('calendar');try{localStorage.setItem(KEY+'-show',id)}catch(_){}break;
     case 'addbill':{const b={id:uid('b'),name:'',amount:0,due:TODAY,repeat:'monthly',paid:[],notes:''};(state.bills=state.bills||[]).push(b);selBill=b.id;if(calShow==='jobs')calShow='both';commit('Bill added');
       setTimeout(()=>{const n=document.getElementById('bill-name');if(n)n.focus()},0);break}
@@ -2079,15 +2125,17 @@ async function boot(){
     else{state=freshState();state.jobs=exampleJobs();state=normalize(state)}
   }
   refreshOff();lastJSON=JSON.stringify(state);
+  try{calSlim=localStorage.getItem(KEY+'-slim')==='1'}catch(e){}
   try{const v=localStorage.getItem(KEY+'-show');if(['jobs','bills','both'].includes(v))calShow=v}catch(e){}
   try{const t=localStorage.getItem(KEY+'-tab');if(['calendar','shop','jobs','materials','settings','claude'].includes(t))tab=t}catch(e){}
   if(['calendar','shop','jobs','materials','settings','claude'].includes(location.hash.slice(1)))tab=location.hash.slice(1);
   if(tab==='claude'&&!HUB)tab='calendar';
   const added=addStarterJobs();
-  const before=JSON.stringify(state),oct30=applyOct30(),ticked=autoAdvance();
+  const before=JSON.stringify(state),oct30=applyOct30(),freed=handInstalls(),ticked=autoAdvance();
   /* on a first run, Undo already takes the starter jobs back out in one step */
-  if((ticked.length||oct30.length)&&!added){undoStack.push(before);document.getElementById('undoBtn').hidden=false}
+  if((ticked.length||oct30.length||freed.length)&&!added){undoStack.push(before);document.getElementById('undoBtn').hidden=false}
   save();render(true);loadInbox();
+  if(freed.length)setTimeout(()=>toast(`The shop days for ${plural(freed.length,'job')} are planned by the schedule again, around your install dates. Undo puts them back.`,true),added?9000:5600);
   if(oct30.length)setTimeout(()=>toast(`${esc(oct30.join(', '))}: shop work marked done, finishing ${TODAY>OCT30?'done':'today'} (Oct 30). Undo puts them back.`,true),added?4500:300);
   else if(ticked.length)setTimeout(()=>toast(`Marked done since last time: ${esc(ticked.slice(0,4).join(', '))}${ticked.length>4?` and ${ticked.length-4} more`:''}. Click a step on the job to reopen it.`,true),added?4500:300);
   /* left open overnight: start the new day fresh, once nothing is waiting to save */

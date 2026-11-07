@@ -3,7 +3,7 @@
   "name": "Scheduler",
   "icon": "📅",
   "description": "Larkul shop schedule: jobs through CNC, edgebanding, paint, assembly, delivery and install, with Claude reading order sheets and a chat to adjust the schedule",
-  "version": "0.13.0",
+  "version": "0.15.0",
   "ui": "index.html",
   "server": "server.js",
   "order": 30,
