@@ -38,47 +38,65 @@ function cncPasses(toolId, depth) {
   const n = Math.ceil(depth / pd - 1e-6); return Array.from({ length: n }, (_, i) => Math.round(depth * (i + 1) / n * 1000) / 1000);
 }
 
+const CT_TONE = { cutout: 'blue', pocket: 'teal', drill: 'amber', vbit: 'violet', engrave: 'green' };
+function ctPic(t, big) {
+  const ty = t.type || 'cutout', a = Math.max(10, Math.min(170, +t.angle || 90)), col = `var(--t-${CT_TONE[ty] || 'blue'})`;
+  let cut;
+  if (ty === 'vbit' || ty === 'engrave') { const h = Math.min(60, 15 / Math.tan(a * Math.PI / 360)), w = ty === 'engrave' ? 8 : 15; cut = `<path d="M35 70 L65 70 L65 78 L${50 + w} 78 L50 ${78 + (ty === 'engrave' ? 40 : h)} L${50 - w} 78 L35 78 Z" fill="${col}" stroke="#0005"/>`; }
+  else if (ty === 'drill') cut = `<path d="M37 70 L63 70 L63 116 L50 128 L37 116 Z" fill="${col}" stroke="#0005"/>${[80, 92, 104].map(y => `<path d="M37 ${y} L63 ${y + 8}" stroke="#0004" stroke-width="2"/>`).join('')}`;
+  else cut = `<path d="M35 70 L65 70 L65 ${ty === 'pocket' ? 120 : 126} L35 ${ty === 'pocket' ? 120 : 126} Z" fill="${col}" stroke="#0005"/>${[76, 88, 100, 112].map(y => `<path d="M35 ${y} L65 ${y + 10}" stroke="#0004" stroke-width="2.5"/>`).join('')}`;
+  const shank = `<rect x="38" y="4" width="24" height="66" rx="2" fill="#b8bec7" stroke="#0005"/><rect x="38" y="4" width="8" height="66" fill="#fff6"/>`;
+  if (!big) return `<svg viewBox="20 0 60 135" aria-hidden="true">${shank}${cut}</svg>`;
+  const dim = `<g class="ctx-dim"><line x1="35" y1="136" x2="65" y2="136"/><line x1="35" y1="132" x2="35" y2="140"/><line x1="65" y1="132" x2="65" y2="140"/><text x="50" y="149" text-anchor="middle">${r3(+t.dia || 0)} mm</text></g>`;
+  const ang = ty === 'vbit' ? `<text x="72" y="96" class="ctx-ang">${r3(a)}°</text>` : '';
+  return `<svg viewBox="0 0 100 154" class="ctx-big" aria-hidden="true">${shank}${cut}${dim}${ang}</svg>`;
+}
 function renderCncTools() {
-  const T = CNC_LIB.tools, m = CNC_LIB.machine, n = (k, v, step = 'any') => `<input type="number" step="${step}" class="ct-in" data-k="${k}" value="${esc(String(v ?? ''))}" aria-label="${k}">`;
-  $('#tab-cnctools').innerHTML = `<div class="pagehead"><div><h2>CNC tools</h2><p>Every tool the part editor, the Carve tab and the CNC file can use. Sizes in millimeters, rates in mm a minute. Pass depth splits deep cuts into passes; 0 cuts the full depth at once. These are kept for every job.</p></div>
-    <div class="row-actions"><button class="btn primary" data-act="ct-add">${icon('plus')}Add tool</button><button class="btn" data-act="ct-reset">Back to the starting tools</button></div></div>
-    <div class="card tscroll"><table class="t cttab"><thead><tr><th>Name</th><th class="r">Number</th><th>Type</th><th class="r">Diameter</th><th class="r">Pass depth</th><th class="r">Stepover %</th><th class="r">Plunge rate</th><th class="r">Feed rate</th><th class="r">Through-cut extra</th><th class="r" title="V-bits only: the angle of the V">V angle°</th><th class="r">Spindle RPM</th><th></th></tr></thead><tbody>
-    ${T.map((t, i) => `<tr data-i="${i}"><td><input class="ct-in" data-k="id" value="${esc(t.id)}" aria-label="Tool name"></td><td>${n('number', t.number, 1)}</td><td><select class="ct-in" data-k="type" aria-label="Tool type">${CNC_TOOL_TYPES.map(([v, l]) => `<option value="${v}"${t.type === v ? ' selected' : ''}>${l}</option>`).join('')}</select></td>
-      <td>${n('dia', t.dia)}</td><td>${n('passDepth', t.passDepth)}</td><td>${n('stepover', t.stepover, 1)}</td><td>${n('plunge', t.plunge, 1)}</td><td>${n('feed', t.feed, 1)}</td><td>${n('thruExtra', t.thruExtra)}</td><td>${t.type === 'vbit' ? n('angle', t.angle ?? 90) : ''}</td><td>${n('rpm', t.rpm ?? 18000, 100)}</td>
-      <td><button class="btn sm danger" data-act="ct-del" data-id="${i}"${T.length < 2 ? ' disabled' : ''} aria-label="Delete ${esc(t.id)}">×</button></td></tr>`).join('')}</tbody></table></div>
-    <div class="card cardbody"><h3>Machine settings</h3><div class="note">Sent with the parts file so CNC Cutlist can use them when it cuts the parts out.</div>
-      <div class="grid4 ctmach">
-        <label class="f chk"><input type="checkbox" class="cm-in" data-k="edgeDrill"${m.edgeDrill ? ' checked' : ''}> <span>Machine drills into edges</span></label>
-        <label class="f chk"><input type="checkbox" class="cm-in" data-k="tabs"${m.tabs ? ' checked' : ''}> <span>Tabs hold small parts</span></label>
-        <label class="f"><span>Tab length (mm)</span><input type="number" class="cm-in" data-k="tabLen" value="${m.tabLen}"></label>
-        <label class="f"><span>Tab height (mm)</span><input type="number" class="cm-in" data-k="tabH" value="${m.tabH}"></label>
-        <label class="f"><span>Tabs on parts under (sq ft)</span><input type="number" step="any" class="cm-in" data-k="tabsUnder" value="${m.tabsUnder}"></label>
-        <label class="f"><span>Onion skin left on cut-outs (mm)</span><input type="number" step="any" class="cm-in" data-k="onion" value="${m.onion}"></label>
-        <label class="f chk"><input type="checkbox" class="cm-in" data-k="ramp"${m.ramp ? ' checked' : ''}> <span>Ramp in instead of plunging</span></label>
-        <label class="f"><span>Ramp length (mm)</span><input type="number" class="cm-in" data-k="rampLen" value="${m.rampLen}"></label>
-        <label class="f"><span>Cut direction</span><select class="cm-in" data-k="climb"><option value="1"${m.climb ? ' selected' : ''}>Climb</option><option value=""${m.climb ? '' : ' selected'}>Conventional</option></select></label>
-        <label class="f chk"><input type="checkbox" class="cm-in" data-k="pass2"${m.pass2 ? ' checked' : ''}> <span>Second (finish) pass on cut-outs</span></label>
-        ${m.pass2 ? `<label class="f"><span>Second pass direction</span><select class="cm-in" data-k="pass2Climb"><option value="1"${m.pass2Climb ? ' selected' : ''}>Climb</option><option value=""${m.pass2Climb ? '' : ' selected'}>Conventional</option></select></label>` : ''}
-        <label class="f chk"><input type="checkbox" class="cm-in" data-k="returnSkin"${m.returnSkin ? ' checked' : ''}> <span>Come back and cut the onion skin</span></label>
-        <label class="f chk"><input type="checkbox" class="cm-in" data-k="stayDown"${m.stayDown ? ' checked' : ''}> <span>Stay down between passes</span></label>
-        <label class="f"><span>Brad point tip allowance (mm)</span><input type="number" step="any" class="cm-in" data-k="bradTip" value="${m.bradTip ?? 0}"></label>
-        <label class="f"><span>Forstner tip allowance (mm)</span><input type="number" step="any" class="cm-in" data-k="forstnerTip" value="${m.forstnerTip ?? 0}"></label>
-        <label class="f"><span>Keep a remnant when its short side is over (mm, 0 = off)</span><input type="number" step="any" class="cm-in" data-k="remnantMin" value="${m.remnantMin ?? 0}"></label>
-        <label class="f"><span>Parts file name</span><input type="text" class="cm-in cm-txt" data-k="fileName" value="${esc(m.fileName || '{JOB} parts')}" placeholder="{JOB} parts"></label>
-        <label class="f"><span>CNC program name</span><input type="text" class="cm-in cm-txt" data-k="cixName" value="${esc(m.cixName || '')}" placeholder="{JOB} {MATERIAL} {SHEET}"></label>
-      </div><div class="note">Names can use {JOB}, {CUSTOMER}, {DATE}, and for programs {MATERIAL} and {SHEET}. Allowances go on blind holes 15 mm and up (Forstner) or smaller (brad point). The second pass, return skin, stay down and remnant size go to CNC Cutlist with the file.</div></div>`;
+  const el = $('#tab-cnctools'); if (!el) return;
+  const T = CNC_LIB.tools, m = CNC_LIB.machine, view = ui.ctView === 'machine' ? 'machine' : 'tools';
+  const head = libHead('CNC tools', [['tools', 'Tools', 'magnet'], ['machine', 'Machine', 'sliders']], view, 'ct-view',
+    view === 'tools' ? `<button class="btn" data-act="ct-reset">Back to the starting tools</button><button class="btn primary" data-act="ct-add">${icon('plus')}Add tool</button>` : '');
+  const chk = (k, l) => `<label class="f chk"><input type="checkbox" class="cm-in" data-k="${k}"${m[k] ? ' checked' : ''}> <span>${l}</span></label>`;
+  const num = (k, l, d = 0) => `<label class="f"><span>${l}</span><input type="number" step="any" class="cm-in" data-k="${k}" value="${m[k] ?? d}"></label>`;
+  const dir = (k, l) => `<label class="f"><span>${l}</span><select class="cm-in" data-k="${k}"><option value="1"${m[k] ? ' selected' : ''}>Climb</option><option value=""${m[k] ? '' : ' selected'}>Conventional</option></select></label>`;
+  const txt = (k, l, ph) => `<label class="f"><span>${l}</span><input type="text" class="cm-in cm-txt" data-k="${k}" value="${esc(m[k] || (k === 'fileName' ? ph : ''))}" placeholder="${esc(ph)}"></label>`;
+  if (view === 'machine') {
+    const box = (ic, title, tone, body) => `<div class="card ctx-mbox">${secHead(ic, title, tone)}<div class="cardbody">${body}</div></div>`;
+    el.innerHTML = `${head}<div class="ctx-mach">
+      ${box('magnet', 'Holding small parts', 'teal', chk('tabs', 'Tabs hold small parts') + num('tabLen', 'Tab length (mm)') + num('tabH', 'Tab height (mm)') + num('tabsUnder', 'Tabs on parts under (sq ft)') + num('onion', 'Onion skin left on cut-outs (mm)') + chk('returnSkin', 'Come back and cut the onion skin'))}
+      ${box('play', 'Cutting', 'blue', chk('ramp', 'Ramp in instead of plunging') + num('rampLen', 'Ramp length (mm)') + dir('climb', 'Cut direction') + chk('pass2', 'Second (finish) pass on cut-outs') + (m.pass2 ? dir('pass2Climb', 'Second pass direction') : '') + chk('stayDown', 'Stay down between passes'))}
+      ${box('ruler', 'Drilling', 'amber', chk('edgeDrill', 'Machine drills into edges') + num('bradTip', 'Brad point tip allowance (mm)') + num('forstnerTip', 'Forstner tip allowance (mm)') + '<div class="note help">Allowances go on blind holes 15 mm and up (Forstner) or smaller (brad point).</div>')}
+      ${box('download', 'Files and remnants', 'violet', num('remnantMin', 'Keep a remnant when its short side is over (mm, 0 = off)') + txt('fileName', 'Parts file name', '{JOB} parts') + txt('cixName', 'CNC program name', '{JOB} {MATERIAL} {SHEET}') + '<div class="note help">Names can use {JOB}, {CUSTOMER}, {DATE}, and for programs {MATERIAL} and {SHEET}. These settings go to CNC Cutlist with the parts file.</div>')}
+    </div>`;
+    return;
+  }
+  const list = libSimpleList('ct', T, t => ctPic(t), t => `#${t.number ?? ''} · ${(CNC_TOOL_TYPES.find(x => x[0] === t.type) || ['', t.type])[1]} · ${r3(+t.dia || 0)} mm`, { tools: '', name: t => String(t.id || '').replace(/_/g, ' ') });
+  if (!T.length) { el.innerHTML = `${head}<div class="plx mlx">${list}<div class="card cardbody note show">No tools yet.</div></div>`; return; }
+  const id = pickId('ct', T), i = Math.max(0, T.findIndex(x => x.id === id)), t = T[i];
+  const n = (k, l, v, step = 'any') => `<label class="f"><span>${l}</span><input type="number" step="${step}" class="ct-in" data-k="${k}" value="${esc(String(v ?? ''))}"></label>`;
+  el.innerHTML = `${head}<div class="plx mlx ilx ctx">${list}<div class="plx-main mlx-main">
+    <div class="card plx-pic">${cardHead(esc(String(t.id).replace(/_/g, ' ')), `<button class="btn sm danger" data-act="ct-del" data-id="${i}"${T.length < 2 ? ' disabled' : ''}>${icon('trash')}Delete</button>`)}
+      <div class="plx-pv ilx-pv">${ctPic(t, 1)}</div>
+      <div class="edx-stats plx-stats mlx-stats">${libTile('blue', 'list', '#' + (t.number ?? ''), 'Tool number')}${libTile('teal', 'ruler', r3(+t.dia || 0) + ' mm', 'Diameter')}${libTile('amber', 'play', (+t.feed || 0).toLocaleString(), 'Feed, mm a minute')}${libTile('violet', 'magnet', (+(t.rpm ?? 18000)).toLocaleString(), 'Spindle RPM')}</div></div>
+    <div class="card plx-props mlx-props" data-i="${i}">
+      ${cardHead('Tool', '')}<div class="cardbody"><label class="f wide"><span>Name</span><input class="ct-in" data-k="id" value="${esc(t.id)}"></label>${n('number', 'Number', t.number, 1)}<label class="f"><span>Type</span><select class="ct-in" data-k="type">${CNC_TOOL_TYPES.map(([v, l]) => `<option value="${v}"${t.type === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label></div>
+      ${cardHead('Cutting', '')}<div class="cardbody">${n('dia', 'Diameter (mm)', t.dia)}${t.type === 'vbit' ? n('angle', 'V angle°', t.angle ?? 90) : ''}${n('passDepth', 'Pass depth (mm)', t.passDepth)}${n('stepover', 'Stepover %', t.stepover, 1)}${n('thruExtra', 'Through-cut extra (mm)', t.thruExtra)}<div class="note help">Pass depth splits deep cuts into passes; 0 cuts the full depth at once.</div></div>
+      ${cardHead('Speeds', '')}<div class="cardbody">${n('plunge', 'Plunge rate (mm/min)', t.plunge, 1)}${n('feed', 'Feed rate (mm/min)', t.feed, 1)}${n('rpm', 'Spindle RPM', t.rpm ?? 18000, 100)}</div>
+    </div></div></div>`;
 }
 document.addEventListener('change', ev => {
   const t = ev.target;
   if (t.classList && t.classList.contains('ct-in')) {
-    const i = +t.closest('tr').dataset.i, tool = CNC_LIB.tools[i], k = t.dataset.k; if (!tool) return;
+    const i = +t.closest('[data-i]').dataset.i, tool = CNC_LIB.tools[i], k = t.dataset.k; if (!tool) return;
     tool[k] = k === 'id' ? (t.value.trim().replace(/\s+/g, '_') || tool.id) : k === 'type' ? t.value : (isFinite(+t.value) ? +t.value : 0);
+    if (k === 'id') pickState().pick.ct = tool.id;
     saveCncLib(); renderCncTools();
   } else if (t.classList && t.classList.contains('cm-in')) {
     const k = t.dataset.k; CNC_LIB.machine[k] = t.type === 'checkbox' ? t.checked : t.classList.contains('cm-txt') ? t.value : (k === 'climb' || k === 'pass2Climb') ? !!t.value : +t.value || 0; saveCncLib(); if (k === 'pass2') renderCncTools();
   }
 });
 function cncToolsAct(a, id) {
+  if (a === 'ct-view') { ui.ctView = id; renderCncTools(); return true; }
   if (a === 'ct-add') { const n = Math.max(0, ...CNC_LIB.tools.map(t => t.number || 0)) + 1; CNC_LIB.tools.push({ id: 'TOOL' + n, number: n, dia: 6, type: 'pocket', passDepth: 6, stepover: 60, plunge: 2000, feed: 6000, thruExtra: 0.3 }); }
   else if (a === 'ct-del') CNC_LIB.tools.splice(+id, 1);
   else if (a === 'ct-reset') CNC_LIB.tools = defaultCncTools();

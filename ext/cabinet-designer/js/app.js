@@ -10,7 +10,7 @@ const ui = {
 // Main toolbar, in Mozaik's order, then the libraries that sit behind the Libraries menu.
 // Shop order, left to right: set up the job, draw it, dress it, then order, price and cut it.
 const MAIN_TABS = [['job', 'Job'], ['settings', 'Settings'], ['room', 'Room'], ['countertops', 'Tops'], ['moldings', 'Molding'], ['pricing', 'Pricing'], ['cutlist', 'Cutlist'], ['carve', 'Carve']];
-const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['inserts', 'Inserts'], ['panels', 'Applied panels'], ['faceframes', 'Face frames'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['rules', 'Rules'], ['remnants', 'Remnants']];
+const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['inserts', 'Inserts'], ['panels', 'Applied panels'], ['faceframes', 'Face frames'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['rules', 'Rules']];
 // The Designer opens from Products (and from a cabinet); it has no button of its own.
 const HIDDEN_TABS = [['designer', 'Designer'], ['shop', 'Shop view'], ['export', 'Order']];
 const TABS = [...MAIN_TABS, ...LIB_TABS, ...HIDDEN_TABS];
@@ -30,7 +30,7 @@ const TAB_ICONS = {
 };
 const TAB_TONES = { job: 'indigo', settings: 'slate', room: 'teal', library: 'amber', designer: 'violet', countertops: 'stone', moldings: 'rose', cutlist: 'green', carve: 'rose', pricing: 'teal', export: 'blue', libs: 'amber', materials: 'amber', doors: 'violet', hardware: 'slate', panels: 'stone', parts: 'green' };
 const tabIcon = k => `<span class="tabic tone-${TAB_TONES[k] || 'slate'}"><svg viewBox="0 0 20 20" aria-hidden="true">${TAB_ICONS[k]}</svg></span>`;
-const RENDER = () => ({ job: renderJob, settings: renderSettings, room: renderRoom, designer: renderDesigner, library: renderLibrary, materials: renderMaterials, doors: renderDoors, hardware: renderHardware, countertops: renderCountertops, moldings: renderMoldings, panels: renderPanels, faceframes: renderFaceFrames, inserts: renderInserts, parts: renderPartTemplates, cnctools: renderCncTools, rules: renderRules, remnants: renderRemnants, shop: renderShop, cutlist: renderCutlist, carve: renderCarve, pricing: renderPricing, export: renderExport });
+const RENDER = () => ({ job: renderJob, settings: renderSettings, room: renderRoom, designer: renderDesigner, library: renderLibrary, materials: renderMaterials, doors: renderDoors, hardware: renderHardware, countertops: renderCountertops, moldings: renderMoldings, panels: renderPanels, faceframes: renderFaceFrames, inserts: renderInserts, parts: renderPartTemplates, cnctools: renderCncTools, rules: renderRules, shop: renderShop, cutlist: renderCutlist, carve: renderCarve, pricing: renderPricing, export: renderExport });
 function fixSel() {
   if (ui.sel && ui.sel.type === 'cab' && !cab(ui.sel.id)) ui.sel = null;
   if (ui.sel && ui.sel.type === 'wall' && !wall(ui.sel.id)) ui.sel = null;
@@ -65,11 +65,11 @@ function render() {
 const LIB_NAV = [
   ['Cabinets', [['library', 'stack', 'amber'], ['doors', 'door', 'violet'], ['faceframes', 'face', 'teal'], ['panels', 'ends', 'stone'], ['inserts', 'shelf', 'green']]],
   ['Materials and hardware', [['materials', 'palette', 'blue'], ['hardware', 'sliders', 'slate'], ['parts', 'list', 'teal']]],
-  ['Shop', [['cnctools', 'cube', 'indigo'], ['rules', 'ruler', 'amber'], ['remnants', 'box', 'teal']]],
+  ['Shop', [['cnctools', 'cube', 'indigo'], ['rules', 'ruler', 'amber']]],
 ];
 function libCount(k) {
   try {
-    return { library: S.library.filter(x => x.cat !== 'Shape').length + (S.shapeLib || []).length, materials: S.materials.length, doors: S.doorStyles.length, hardware: S.hardware.length, inserts: INSERT_TYPES.length, panels: S.panels.length, faceframes: S.faceFrames.length, parts: S.partTemplates.length, cnctools: CNC_LIB.tools.length, rules: RULES.length, remnants: REMNANTS.length }[k];
+    return { library: S.library.filter(x => x.cat !== 'Shape').length + (S.shapeLib || []).length, materials: S.materials.length, doors: S.doorStyles.length, hardware: S.hardware.length, inserts: INSERT_TYPES.length, panels: S.panels.length, faceframes: S.faceFrames.length, parts: S.partTemplates.length, cnctools: CNC_LIB.tools.length, rules: RULES.length }[k];
   } catch (_) { return undefined; }
 }
 function renderLibNav(on) {
@@ -1230,6 +1230,10 @@ document.addEventListener('click', e => {
       break;
     }
     case 'mat-sel': ui.matSel = id; renderMaterials(); break;
+    case 'door-view': ui.doorView = id; renderDoors(); break;
+    case 'dtpl-sel': pickState().pick.doorT = id; renderDoors(); break;
+    case 'dtpl-pv': ui.dtplPv = id; renderDoors(); break;
+    case 'gaps-settings': ui.setTab = 'params'; goTab('settings'); break;
     case 'mat-sort': mutate(() => { S.materials.sort((a, b) => (b.thick || 0) - (a.thick || 0) || String(a.name).localeCompare(String(b.name), undefined, { numeric: true })); }); flash('Sorted thickest first in each group'); break;
     case 'mat-fold-all': { const f = pageFold(); [...new Set(S.materials.map(m => m.group || ''))].forEach(g => { if (id === 'open') f['mat/' + g] = 1; else delete f['mat/' + g]; }); try { localStorage.setItem(KEY + '.pfold', JSON.stringify(f)); } catch (_) {} renderMaterials(); break; }
     case 'mat-view': ui.matView = id; renderMaterials(); break;
@@ -1275,16 +1279,22 @@ document.addEventListener('click', e => {
     case 'dtpl-add': mutate(() => S.doorTemplates.push({ ...clone(S.doorTemplates[0]), id: uid('door'), name: 'New door template' })); break;
     case 'dtpl-dup': { const t = S.doorTemplates.find(x => x.id === id); mutate(() => S.doorTemplates.push({ ...clone(t), id: uid('door'), name: t.name + ' copy' })); break; }
     case 'dtpl-del': mutate(() => { S.doorTemplates = S.doorTemplates.filter(x => x.id !== id); unsetPick('doorT', id, S.doorTemplates[0].id); }); break;
-    case 'panel-add': mutate(() => S.panels.push({ id: uid('p'), name: 'New panel fit', frontOverhang: 0.75, scribe: 0.5, toFloor: true })); break;
+    case 'panel-add': { const nid = uid('p'); mutate(() => S.panels.push({ id: nid, name: 'New panel fit', frontOverhang: 0.75, scribe: 0.5, toFloor: true })); pickState().pick.panel = nid; render(); break; }
+    case 'lp-pick': render(); break;
+    case 'pt-view': ui.ptView = id; render(); break;
+    case 'pt-part': ui.ptKind = id; render(); break;
     case 'panel-del': mutate(() => { S.panels = S.panels.filter(x => x.id !== id); unsetPick('panelStyle', id, S.panels[0].id); }); break;
-    case 'hw-kind': ui.hwKind = id; renderHardware(); break;
+    case 'hw-kind': ui.hwKind = id; ui.hwPv = 0; renderHardware(); break;
+    case 'hw-pv': ui.hwPv = +id; renderHardware(); break;
+    case 'ins-view': ui.insView = id; renderInserts(); break;
+    case 'hw-sel': { const h = hw(id); if (h) pickState().pick['hw-' + h.kind] = id; renderHardware(); break; }
     case 'hw-add': {
       const base = hwOf(id)[0];
       const blank = { slide: hwOf('slide')[0], hinge: hwOf('hinge')[0], pull: hwOf('pull')[0], shelfpin: hwOf('shelfpin')[0], joint: defaultJoints()[0], leg: { kind: 'leg', feet: true, ...LEG_DEF } }[id];
-      mutate(() => S.hardware.push(base || blank ? { ...clone(base || blank), id: uid('hw'), name: 'New ' + (HW_KINDS.find(k => k[0] === id) || [, 'hardware'])[1].toLowerCase() } : { id: uid('hw'), kind: 'other', name: 'New hardware', perCabinet: 1, cats: ['Base', 'Wall', 'Tall'] }));
+      mutate(() => { S.hardware.push(base || blank ? { ...clone(base || blank), id: uid('hw'), name: 'New ' + ({ slide: 'drawer slide', hinge: 'hinge', pull: 'pull', shelfpin: 'shelf pin', joint: 'joint template', leg: 'leg' }[id] || 'hardware') } : { id: uid('hw'), kind: 'other', name: 'New hardware', perCabinet: 1, cats: ['Base', 'Wall', 'Tall'] }); const nh = S.hardware[S.hardware.length - 1]; pickState().pick['hw-' + nh.kind] = nh.id; });
       break;
     }
-    case 'hw-dup': { const h = hw(id); mutate(() => S.hardware.push({ ...clone(h), id: uid('hw'), name: h.name + ' copy' })); break; }
+    case 'hw-dup': { const h = hw(id), nid = uid('hw'); mutate(() => S.hardware.push({ ...clone(h), id: nid, name: h.name + ' copy' })); pickState().pick['hw-' + h.kind] = nid; break; }
     case 'hw-del': mutate(() => {
       const k = hw(id).kind; S.hardware = S.hardware.filter(h => h.id !== id); const f = hwOf(k)[0];
       if (['slide', 'hinge', 'pull', 'shelfpin', 'leg'].includes(k)) unsetPick(k, id, k === 'pull' ? '' : f && f.id);
@@ -1293,9 +1303,15 @@ document.addEventListener('click', e => {
     }); break;
     case 'pin-use': mutate(() => { S.job.defaults.shelfpin = id; }); break;
     case 'leg-use': mutate(() => { S.job.defaults.leg = id; }); break;
-    case 'top-add': mutate(() => S.countertops.push({ ...clone(S.countertops[0]), id: uid('top'), name: 'New countertop' })); break;
+    case 'top-add': { const nid = uid('top'); mutate(() => S.countertops.push({ ...clone(S.countertops[0]), id: nid, name: 'New countertop' })); pickState().pick.top = nid; ui.topView = 'styles'; render(); break; }
+    case 'top-pick': pickState().pick.top = id; ui.topView = 'styles'; renderCountertops(); break;
+    case 'top-view': ui.topView = id; renderCountertops(); break;
+    case 'top-run': ui.topRun = ui.topRun === id ? '' : id; renderCountertops(); break;
     case 'top-del': mutate(() => { S.countertops = S.countertops.filter(t => t.id !== id); unsetPick('countertop', id, S.countertops[0].id); S.rooms.forEach(r => Object.values(r.ctRuns || {}).forEach(o => { if (o.top === id) delete o.top; })); }); break;
-    case 'mold-add': mutate(() => S.moldings.push({ id: uid('mo'), name: 'New molding', profile: 'crown', h: 3, d: 2, fill: false, mat: S.materials[0].id })); break;
+    case 'mold-add': { const nid = uid('mo'); mutate(() => S.moldings.push({ id: nid, name: 'New molding', profile: 'crown', h: 3, d: 2, fill: false, mat: S.materials[0].id })); pickState().pick.mold = nid; ui.moldView = 'styles'; render(); break; }
+    case 'mold-pick': pickState().pick.mold = id; ui.moldView = 'styles'; renderMoldings(); break;
+    case 'mold-view': ui.moldView = id; renderMoldings(); break;
+    case 'mold-run': ui.moldRun = ui.moldRun === +id ? -1 : +id; renderMoldings(); break;
     case 'mold-del': mutate(() => { S.moldings = S.moldings.filter(m => m.id !== id); allCabs().forEach(c => { if (c.molding === id) c.molding = null; }); unsetPick('molding', id, S.moldings[0].id); }); break;
     case 'mold-quick': {
       const box = el.closest('.qm-box'), q = k => box.querySelector('.qm-' + k);
@@ -1546,3 +1562,6 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('change', e => { if (e.target.id === 'edgridstyle') ui.edGridStyle = e.target.value; });
 document.addEventListener('pointerdown', e => { const d = $('#layers3d'); if (d && d.open && !e.target.closest('#layers3d')) d.open = false; });
+
+// Hardware fold sections remember whether they are open across re-renders.
+document.addEventListener('toggle', e => { const d = e.target; if (!d.classList || !d.classList.contains('hwx-fold')) return; ui.hwOpen = ui.hwOpen || {}; ui.hwOpen[d.querySelector('summary').textContent.trim()] = d.open; }, true);

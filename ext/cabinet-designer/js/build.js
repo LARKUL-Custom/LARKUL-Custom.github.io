@@ -319,6 +319,8 @@ function interiorLayout(c, p, fronts) {
   const used = new Set();
   ins.forEach(it => {
     const low = (it.row !== undefined && it.row !== '' && zones.find(z => z.row === +it.row)) || out.low;
+    // A product made in the insert designer builds its own parts (dpBuild); it is still drawn like its kind.
+    const designed = typeof intItemOf === 'function' && ((intItemOf(it) || {}).parts || []).length > 0;
     // These fill their opening top to bottom, so it gets no adjustable shelves (tray dividers would have to go through them).
     if (SHELF_BLOCKERS.includes(it.type) && low) used.add(low);
     if (it.type === 'divider') out.divX = it.x > 0 ? Math.min(c.w - t * 1.5, t + it.x) : c.w / 2;
@@ -326,8 +328,8 @@ function interiorLayout(c, p, fronts) {
       // Roll-out trays and shelves are roll-outs with low sides (a lip on a shelf).
       const label = { rollout: 'Roll-out', rotray: 'Roll-out tray', roshelf: 'Roll-out shelf' }[it.type];
       const n = Math.max(1, it.n | 0), h = it.h > 0 ? it.h : { rollout: 4, rotray: 2.5, roshelf: 1.5 }[it.type], step = (low[1] - low[0]) / n;
-      for (let i = 0; i < n; i++) out.rollouts.push({ z: low[0] + 0.5 + i * step, h: Math.min(h, step - 1), label });
-    } else if (it.type === 'traydiv' && low) out.trays.push({ n: Math.max(1, it.n | 0), z0: low[0], z1: low[1] });
+      for (let i = 0; i < n; i++) out.rollouts.push({ z: low[0] + 0.5 + i * step, h: Math.min(h, step - 1), label, designed });
+    } else if (it.type === 'traydiv' && low) out.trays.push({ n: Math.max(1, it.n | 0), z0: low[0], z1: low[1], designed });
     else if (it.type === 'trash') { if (low) out.bins.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('trash').def.name); }
     else if (it.type === 'lazy') { if (low) out.lazy.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('lazy').def.name); }
     else if (it.type === 'pullout') { if (low) out.pulls.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('pullout').def.name); }
@@ -368,6 +370,35 @@ function edgeSummary(kind, band) {
 }
 const bandLen = p => EDGE_KEYS.reduce((a, k) => a + (p.band && p.band[k] ? (k[0] === 'L' ? p.L : p.W) : 0), 0);
 
+/* ---------- Legs and drawer boxes, shared by the cut list and the 3D ---------- */
+// Where the legs stand under a plain cabinet: x from its left outside, y from the front of the box (D deep).
+function legLayout(c, p, leg, D) {
+  const W = c.w, xl = endFinished(c, 'L') ? +leg.inFin : +leg.inUnfin, xr = W - (endFinished(c, 'R') ? +leg.inFin : +leg.inUnfin), span = xr - xl;
+  const per = +leg.maxSep > 0 ? Math.ceil(span / +leg.maxSep) + 1 : (p.feetCount | 0) > 0 ? Math.max(2, Math.ceil((p.feetCount | 0) / (leg.noBack ? 1 : 2))) : W > 36 ? 3 : 2;
+  return { xs: Array.from({ length: per }, (_, i) => xl + span * i / Math.max(1, per - 1)), ys: leg.noBack ? [+leg.inToe] : [+leg.inToe, D - +leg.inBack] };
+}
+const cabLeg = () => { const l = hw(roomSet('leg')) || S.hardware.find(h => h.feet); return l && l.kind === 'leg' ? l : null; };
+// The drawer box behind a drawer front, as it is cut: x0/x1 across the cabinet outside, z up from the cabinet bottom,
+// d long (the runner length), st side and bt bottom thickness, rec the bottom's recess. Null when no runner fits.
+function drawerBoxAt(c, p, f) {
+  const sl = hwPick(cabSet(c, 'slide'), 'slide'); if (!sl || f.face) return null;
+  const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = drawerMatT(cabSet(c, 'drawerMatT'));
+  const cm = mat(mt.carcass) || S.materials[0], t = cm.thick, bm = mat(mt.back) || cm, bt = bm.thick;
+  const ffr = faceFrame(c), W = c.w, D = c.d - (ffr ? ffr.thick : 0), tk = hasToe(c) ? p.toeKickHeight : 0, inD = D - p.backInset - bt, inW = W - 2 * t;
+  const nominal = nominalFor(sl, inD); if (!nominal) return null;
+  const ffOpen = !!(ffr && f.open && !blindCorner(c)), z0 = Math.max(ffOpen ? f.open.z0 : f.z0, tk + t), z1 = Math.min(ffOpen ? f.open.z1 : f.z1, c.h - t);
+  const bh = Math.floor(((z1 - z0) - (sl.bottomClearMM + sl.topClearMM) * MM) * 4) / 4; if (bh < 2.5) return null;
+  const bwD = blindCorner(c) ? blindWidth(c) : 0;
+  let ox0, openW;
+  if (ffOpen) { ox0 = f.open.x0; openW = f.open.x1 - f.open.x0; }
+  else if (bwD) { openW = W - t - bwD; ox0 = cornerSide(c) === 'L' ? bwD : t; }
+  else if (f.n > 1) { openW = (inW - (f.n - 1) * t) / f.n; ox0 = t + f.idx * (openW + t); }
+  else { openW = inW; ox0 = t; }
+  const ow = openW - sl.widthDeductMM * MM, x0 = ox0 + (openW - ow) / 2;
+  const dm = mat(dmt.sides) || cm, dbm = mat(dmt.bottom) || bm;
+  return { x0, x1: x0 + ow, z: z0 + sl.bottomClearMM * MM, h: bh, d: nominal, st: dm.thick, bt: dbm.thick, rec: sl.bottomRecessMM * MM, front: D, side: dm, bottom: dbm };
+}
+
 /* ---------- Parts ---------- */
 function buildParts(c) {
   // Mozaik products (fillers, C mold, hoods...) bring their own parts (js/mozprod.js).
@@ -390,6 +421,8 @@ function buildParts(c) {
   const zIn0 = tk + t, zIn1 = H - t, inW = W - 2 * t;
   const backY = D - p.backInset - bt, inD = backY;
   const leftOps = [], rightOps = [];
+  // Where each hinge's mounting plate sits on a side, so shelf pin holes stay out from under it.
+  const plateZones = [];
   const fronts = computeFronts(c, p);
   if (fronts.overfull) warn.push('Front rows are taller than the cabinet. Reduce a fixed row height.');
 
@@ -400,7 +433,8 @@ function buildParts(c) {
     const hinges = [];
     if (isDoor && hg) {
       const n = fh <= hg.max2 ? 2 : fh <= hg.max3 ? 3 : 4;
-      const a = p.hingeInset, b = fh - p.hingeInset;
+      // Measured from the door's own bottom and top, so the hinges (and the plates that follow them) fit any door height.
+      const a = p.hingeInsetB ?? p.hingeInset, b = fh - p.hingeInset;
       for (let i = 0; i < n; i++) hinges.push(a + (b - a) * i / (n - 1));
       const hk = cornerHinge(c, f, hg);
       // On a face frame the plates screw to the frame's stile, so the box sides get no plate holes.
@@ -409,6 +443,8 @@ function buildParts(c) {
       if (!f.face && !ffr) hinges.forEach(hp => {
         const z = f.z0 + hp, ops = f.hinge === 'L' ? leftOps : rightOps;
         hg.plateHoles.forEach(ph => ops.push({ type: 'bore', x: z + ph.dz * MM, y: ph.y * MM, dia: ph.dia * MM, depth: ph.depth * MM, face: 'inside', why: 'hinge plate' }));
+        if (hg.plateHoles.length) { const ys = hg.plateHoles.map(ph => ph.y * MM), half = Math.max(25, ...hg.plateHoles.map(ph => Math.abs(ph.dz) + 10)) * MM;
+          plateZones.push({ ops, z0: z - half, z1: z + half, y0: Math.min(...ys) - 12 * MM, y1: Math.max(...ys) + 12 * MM }); }
       });
     }
     // Cup holes in front-local coordinates, y from the left edge as seen from the front.
@@ -477,7 +513,9 @@ function buildParts(c) {
         if (fl.pt === 'raised') ops.push({ type: 'profile', ...pk, inset: ds.raiseW, depth: ds.pocketDepth, face: 'front', tool: 'raised panel bit', why: 'raised panel' });
         ops.push(...grooveOps(fl, 0, 0, ds.pocketDepth));
       });
-      part(label, dm, fh, fw, { kind: label === 'Drawer front' ? 'drawerFront' : 'door', ops });
+      const fp = part(label, dm, fh, fw, { kind: label === 'Drawer front' ? 'drawerFront' : 'door', ops });
+      // CNC Cutlist cuts the recess and edges of a made door with its own panel tool group.
+      if (ds.cncGroup) fp.cncGroup = ds.cncGroup;
       Object.values(inserts).forEach(pn => part(label + (ds.type === 'twopiece' ? ' panel' : ' insert panel'), mat(ds.panelMat) || dm, pn.L, pn.Wd, { qty: pn.qty, kind: 'frame', ops: pn.ops }));
     }
   };
@@ -537,7 +575,7 @@ function buildParts(c) {
   // Interior: roll-outs take over their door opening, shelves use the rest.
   const lay = interiorLayout(c, p, fronts);
   lay.rollouts.forEach((ro, i) => {
-    if (!sl) return;
+    if (!sl || ro.designed) return;
     const nominal = nominalFor(sl, inD); if (!nominal) { if (!i) warn.push(`No ${sl.name} length fits behind the doors for roll-outs.`); return; }
     const dm = mat(dmt.sides) || cm, dbm = mat(dmt.bottom) || bm, st = dm.thick, bdT = dbm.thick, bd = p.drawerBottomDado, rec = sl.bottomRecessMM * MM;
     const ow = lay.inW - 2 * lay.spacer - sl.widthDeductMM * MM, bh = ro.h;
@@ -551,8 +589,9 @@ function buildParts(c) {
     addB(slideBomName(sl, nominal), 1);
   });
   if (lay.divX !== null) part('Vertical divider', cm, lay.zIn1 - lay.zIn0, inD - 0.0625, { kind: 'divider' });
-  lay.trays.forEach(tr => part('Tray divider', bm, tr.z1 - tr.z0 - 1, inD - 1, { qty: tr.n, kind: 'divider' }));
+  lay.trays.forEach(tr => { if (!tr.designed) part('Tray divider', bm, tr.z1 - tr.z0 - 1, inD - 1, { qty: tr.n, kind: 'divider' }); });
   lay.bom.forEach(n => addB(n, 1));
+  if (typeof dpBuild === 'function') dpBuild(c, part, addB, warn);
 
   // Shelf pins over the door openings that have no roll-outs
   let shelves = lay.perRow ? lay.perRow.reduce((a, r) => a + r.k, 0) : Math.max(0, p.shelfCount | 0);
@@ -578,7 +617,8 @@ function buildParts(c) {
       for (const z of holeZs(a, b, perZone[zi] || 0)) {
         ys.forEach(y => {
           [leftOps, rightOps].forEach(ops => {
-            const clash = ops.some(o => o.why !== 'shelf pin' && o.type === 'bore' && Math.hypot(o.x - z, o.y - y) < 12 * MM);
+            const clash = ops.some(o => o.why !== 'shelf pin' && o.type === 'bore' && Math.hypot(o.x - z, o.y - y) < 12 * MM)
+              || plateZones.some(pz => pz.ops === ops && z > pz.z0 && z < pz.z1 && y > pz.y0 && y < pz.y1);
             if (!clash) ops.push({ type: 'bore', x: z, y, dia: pin.pinDiaMM * MM, depth: pin.pinDepthMM * MM, face: 'inside', why: 'shelf pin' });
           });
           if (lay.divX !== null) ['left', 'right'].forEach(face => divOps.push({ type: 'bore', x: z - lay.zIn0, y, dia: pin.pinDiaMM * MM, depth: Math.min(pin.pinDepthMM * MM, t * 0.4), face, why: 'shelf pin' }));
@@ -628,9 +668,7 @@ function buildParts(c) {
         bot.ops.push({ type: 'bore', x: r3(q.x + dx - t), y: r3(D - q.y + dy), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name }); }));
       n = spots.length;
     } else if (leg && leg.kind === 'leg' && bot) {
-      const xl = endFinished(c, 'L') ? +leg.inFin : +leg.inUnfin, xr = W - (endFinished(c, 'R') ? +leg.inFin : +leg.inUnfin), span = xr - xl;
-      const per = +leg.maxSep > 0 ? Math.ceil(span / +leg.maxSep) + 1 : (p.feetCount | 0) > 0 ? Math.max(2, Math.ceil((p.feetCount | 0) / (leg.noBack ? 1 : 2))) : W > 36 ? 3 : 2;
-      const xs = Array.from({ length: per }, (_, i) => xl + span * i / Math.max(1, per - 1)), ys = leg.noBack ? [+leg.inToe] : [+leg.inToe, D - +leg.inBack];
+      const { xs, ys } = legLayout(c, p, leg, D);
       // A leg with a screw pattern (holesMM, offsets from its centre) gets each screw marked; the pattern's x offset
       // points toward the middle of the cabinet, so legs on the right half mirror it.
       const pat = (leg.holesMM || []).length ? leg.holesMM : [{ x: 0, y: 0 }];
@@ -663,10 +701,13 @@ function buildParts(c) {
   // vertical ones (zr = [z0, z1]) sit at the back, in front of the back panel.
   const joinSides = (type, pt, fx, zr, a = 0, b = backY) => ['L', 'R'].forEach(end => {
     const J = jFor(end), sp = sideP[end]; if (!J || !sp || !pt) return;
+    // A side that is not the full depth (the open end of a 45° or 90° corner) starts that much further back:
+    // its holes are measured from its own front edge, the panel's from the cabinet front.
+    const off = sp.outline ? 0 : Math.max(0, r3(D - sp.W));
     const fem = [], label = `${J.name} (${pt.name.toLowerCase()})`;
     let pairs;
-    if (zr) pairs = jtSpots(J, type, zr[0], zr[1], spots, t).map(z => ({ x: z, y: r3(backY - t / 2), m: r3(zr[1] - z) }));
-    else pairs = jtSpots(J, type, a, b, spots, t).map(y => ({ x: fx, y, m: y }));
+    if (zr) pairs = jtSpots(J, type, zr[0], zr[1], spots, t).map(z => ({ x: z, y: r3(backY - off - t / 2), m: r3(zr[1] - z) }));
+    else pairs = jtSpots(J, type, Math.max(a, off), b, spots, t).map(y => ({ x: fx, y: r3(y - off), m: y }));
     jx.a = zr ? undefined : a; jx.b = zr ? undefined : b;
     jtFasten(J, fem, pt, end === 'L' ? 0 : r3(pt.L), end === 'L' ? 'W1' : 'W2', pairs, label, jx);
     sp.ops.push(...fem.map(down));

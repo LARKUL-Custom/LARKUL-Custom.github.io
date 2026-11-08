@@ -174,7 +174,12 @@ function cabinetMeshes(c, opts = {}) {
   if (feet) {
     const n = feetCount(c, p), per = Math.ceil(n / 2), leg = R3 ? metal3('#2b2f33') : flat3('#2b2f33');
     if (angledCorner(c)) cornerLegSpots(c, p).forEach(q => grp.add(box3(1.6, tk, 1.6, leg, q.x, tk / 2, q.y, false)));
-    else for (let i = 0; i < per; i++) { const x = per > 1 ? 3 + (W - 6) * i / (per - 1) : W / 2; [D - sb - t - 1.5, 3].forEach(z => grp.add(box3(1.6, tk, 1.6, leg, x, tk / 2, z, false))); }
+    else {
+      // The legs stand where their holes are drilled in the bottom (legLayout in build.js).
+      const lg = typeof cabLeg === 'function' && cabLeg();
+      if (lg) { const { xs, ys } = legLayout(c, p, lg, D); xs.forEach(x => ys.forEach(y => grp.add(box3(1.6, tk, 1.6, leg, x, tk / 2, D - y, false)))); }
+      else for (let i = 0; i < per; i++) { const x = per > 1 ? 3 + (W - 6) * i / (per - 1) : W / 2; [D - sb - t - 1.5, 3].forEach(z => grp.add(box3(1.6, tk, 1.6, leg, x, tk / 2, z, false))); }
+    }
   }
   if (c.addParts && c.addParts.length && typeof addedParts3d === 'function') addedParts3d(c, grp, M);
   const fronts = computeFronts(c, p), lay = interiorLayout(c, p, fronts);
@@ -192,9 +197,23 @@ function cabinetMeshes(c, opts = {}) {
     [x0 + st / 2, x1 - st / 2].forEach(x => g.add(box3(st, h, d, dbx, x, z + h / 2, zBack + d / 2)));
     [zBack + st / 2, zBack + d - st / 2].forEach(zz => g.add(box3(w - 2 * st, h, st, dbx, (x0 + x1) / 2, z + h / 2, zz)));
   };
+  // A drawer or roll-out box as it is cut: sides the runner's length, front and back between them, the back on the bottom.
+  const cutBox = (bx, into) => {
+    const g = into ? { add: o => { o.userData.layer = 'drawerBox'; into.add(o); } } : grp, sM = L3(bx.side, 'drawerBox'), bM = L3(bx.bottom, 'drawerBox'), zb = bx.front - bx.d, w = bx.x1 - bx.x0, cx = (bx.x0 + bx.x1) / 2;
+    [bx.x0 + bx.st / 2, bx.x1 - bx.st / 2].forEach(x => g.add(box3(bx.st, bx.h, bx.d, sM, x, bx.z + bx.h / 2, zb + bx.d / 2)));
+    g.add(box3(w - 2 * bx.st, bx.h, bx.st, sM, cx, bx.z + bx.h / 2, bx.front - bx.st / 2));
+    const bkH = Math.max(0.5, bx.h - bx.rec - bx.bt); g.add(box3(w - 2 * bx.st, bkH, bx.st, sM, cx, bx.z + bx.h - bkH / 2, zb + bx.st / 2));
+    g.add(box3(w - 2 * bx.st, bx.bt, bx.d - bx.st, bM, cx, bx.z + bx.rec + bx.bt / 2, zb + (bx.d - bx.st) / 2, false));
+  };
   const ix0 = t + lay.spacer, ix1 = W - t - lay.spacer, idx = (ix1 - ix0);
   if (lay.spacer && lay.rollouts.length) [t + lay.spacer / 2, W - t - lay.spacer / 2].forEach(x => grp.add(box3(lay.spacer, 2.5, inD, cmM, x, lay.rollouts[0].z + 1.25, p.backInset + bt + inD / 2)));
-  lay.rollouts.forEach(ro => trayBox(ix0 + 0.5, ix1 - 0.5, ro.z, ro.h, inD - 1.5, p.backInset + bt + 0.5));
+  // Roll-outs on the cabinet's runner, sized like their cut parts (buildParts): the runner length deep, opening less the runner's allowance wide.
+  const sl3 = hwPick(cabSet(c, 'slide'), 'slide'), nom3 = sl3 && nominalFor(sl3, inD), rbm = mat(dmt.bottom) || bm, rsm = mat(dmt.sides) || cm;
+  lay.rollouts.forEach(ro => {
+    if (ro.designed || !nom3) return trayBox(ix0 + 0.5, ix1 - 0.5, ro.z, ro.h, inD - 1.5, p.backInset + bt + 0.5);
+    const ow = idx - sl3.widthDeductMM * MM, x0 = ix0 + (idx - ow) / 2;
+    cutBox({ x0, x1: x0 + ow, z: ro.z, h: ro.h, d: nom3, st: rsm.thick, bt: rbm.thick, rec: sl3.bottomRecessMM * MM, front: D, side: rsm, bottom: rbm });
+  });
   lay.trays.forEach(tr => { for (let i = 1; i <= tr.n; i++) grp.add(box3(0.25, tr.z1 - tr.z0 - 1, inD - 1, M(bm), t + (W - 2 * t) * i / (tr.n + 1), (tr.z0 + tr.z1) / 2, p.backInset + bt + (inD - 1) / 2)); });
   lay.bins.forEach(bn => { const bh = Math.min(20, bn.z1 - bn.z0 - 2); [0.27, 0.73].forEach(k => grp.add(box3(idx * 0.42, bh, inD * 0.7, flat3('#8d949a'), ix0 + idx * k, bn.z0 + bh / 2 + 0.5, p.backInset + bt + inD * 0.45))); });
   // On a corner the susan sits in the corner of the L, pie cut on a 90° corner.
@@ -220,8 +239,13 @@ function cabinetMeshes(c, opts = {}) {
     }
     if (f.type === 'drawer' && f.face) host.add(fg);
     else if (f.type === 'drawer') {
-      const bl = blindCorner(c), fo = f.open && !bl, ox0 = fo ? f.open.x0 : f.n > 1 || bl ? f.x0 + 0.5 : t + 0.5, ox1 = fo ? f.open.x1 : f.n > 1 || bl ? f.x1 - 0.5 : W - t - 0.5, bd = Math.min(inD - 1, 21);
-      trayBox(ox0 + 0.2, ox1 - 0.2, Math.max(f.z0, tk + t) + 0.5, Math.max(2.5, fh - 2.5), bd, D - ffThick(c) - bd, fg);
+      // The box as it is cut (drawerBoxAt in build.js): runner length, width and height, bottom let in its recess.
+      const bx = typeof drawerBoxAt === 'function' && drawerBoxAt(c, p, f);
+      if (bx) cutBox(bx, fg);
+      else {
+        const bl = blindCorner(c), fo = f.open && !bl, ox0 = fo ? f.open.x0 : f.n > 1 || bl ? f.x0 + 0.5 : t + 0.5, ox1 = fo ? f.open.x1 : f.n > 1 || bl ? f.x1 - 0.5 : W - t - 0.5, bd = Math.min(inD - 1, 21);
+        trayBox(ox0 + 0.2, ox1 - 0.2, Math.max(f.z0, tk + t) + 0.5, Math.max(2.5, fh - 2.5), bd, D - ffThick(c) - bd, fg);
+      }
       fg.userData.open = { kind: 'drawer', travel: drawerTravel(c) };
       host.add(fg);
     } else if (f.type === 'door') {

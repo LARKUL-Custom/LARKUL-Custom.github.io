@@ -53,6 +53,8 @@ function cncPartFile(scoped) {
     const top = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
     const faceOf = o => !o.face || o.face === top ? 'top' : o.face === CNC_OPPOSITE[top] ? 'back' : null;
 
+    // A made door's recess and edges are cut by its style's panel tool group in CNC Cutlist.
+    const group = p.cncGroup || '';
     const ops = [];
     for (const o of p.ops) {
       if (o.type === 'notch') continue;
@@ -77,7 +79,7 @@ function cncPartFile(scoped) {
         cncRoutes(ops, { type: 'route', face, tool: bit[0], path: (o.closed ? [...pts, pts[0]] : pts).map(q => P(q.x, q.y)), ...kind }, depth);
         continue;
       }
-      if (o.type !== 'bore' && o.type !== 'groove') { skipped.push(`${where}: ${what} (${o.type}) not cut by the CNC yet`); continue; }
+      if (o.type !== 'bore' && o.type !== 'groove') { if (!(group && (o.type === 'pocket' || o.type === 'edge' || o.type === 'profile'))) skipped.push(`${where}: ${what} (${o.type}) not cut by the CNC yet`); continue; }
       if (!face) { skipped.push(`${where}: ${what} is on the ${o.face} face, which the CNC can't reach with this part's ${top} face up`); continue; }
       if (o.type === 'bore') {
         if (o.through) ops.push({ type: 'drill', face, diameter: o.dia, depth: r3(T), points: [P(o.x, o.y)] });
@@ -105,7 +107,7 @@ function cncPartFile(scoped) {
     used.add(m.id);
     parts.push({
       id: `${ri + 1}-${c.label}-${pi + 1}`, name: p.name, cabinet: c.label, ...(c.category ? { cabinetType: String(c.category).toLowerCase() } : {}), material: m.id, quantity: p.qty,
-      outline, grain: m.grain ? 'x' : 'none', ...(frontEdge >= 0 ? { frontEdge } : {}), ops,
+      outline, grain: m.grain ? 'x' : 'none', ...(frontEdge >= 0 ? { frontEdge } : {}), ...(group ? { panelGroup: group } : {}), ops,
     });
   })));
   // Custom shapes cut as their outline, with no machining.
@@ -132,9 +134,7 @@ function cncPartFile(scoped) {
   }));
   // The tool library and machine settings go along, so CNC Cutlist cuts with the same tools, tabs and ramps (O12, O14).
   const lib = typeof CNC_LIB !== 'undefined' ? { tools: CNC_LIB.tools.map(t => ({ ...t })), machine: { ...CNC_LIB.machine } } : {};
-  // Shop remnants of these materials, for the nester to fill first (L6).
-  const rem = typeof cncRemnants === 'function' ? cncRemnants(materials.map(m => m.id)) : [];
-  return { file: { format: 'cabinet-cnc-parts', version: 1, units: 'mm', job: { name: d.job.name }, ...lib, materials, parts, ...(rem.length ? { remnants: rem } : {}) }, skipped };
+  return { file: { format: 'cabinet-cnc-parts', version: 1, units: 'mm', job: { name: d.job.name }, ...lib, materials, parts }, skipped };
 }
 
 // Centre paths for a straight groove cut with a bit of diameter `dia`: enough

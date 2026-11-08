@@ -176,22 +176,46 @@ function fxApplyRules(c, parts, warn, part, x) {
     }
   });
 }
+const RULE_LOOK = { hide: ['eye', 'amber'], size: ['ruler', 'teal'], addop: ['magnet', 'violet'], addpart: ['plus', 'blue'] };
+const RULE_CATS = [['', 'cabinet'], ['Base', 'Base cabinet'], ['Wall', 'Wall cabinet'], ['Tall', 'Tall cabinet']];
+// How many cabinets in this job the rule reaches.
+function ruleHits(r) {
+  return usedBy(c => { if (r.cat && r.cat !== c.cat) return false; if (!String(r.when || '').trim()) return true; try { return !!evalExpr(r.when, fxVarsFor('cab:' + c.id, null)); } catch (_) { return false; } });
+}
 function renderRules() {
-  const tpls = typeof OP_TEMPLATES !== 'undefined' ? OP_TEMPLATES : [], inp = (i, k, v, ph, w) => `<input class="rl-in" data-i="${i}" data-k="${k}" value="${esc(v ?? '')}" placeholder="${esc(ph || '')}" aria-label="${esc(ph || k)}"${w ? ` style="width:${w}"` : ''}>`;
-  $('#tab-rules').innerHTML = `<div class="pagehead"><div><h2>Rules</h2><p>Shop standards worked into every cabinet of every job, like "every Base cabinet wider than 30 gets a center support". Conditions and sizes are formulas.</p></div>
-    <div class="row-actions"><button class="btn primary" data-act="rl-add">${icon('plus')}Add rule</button></div></div>
-    ${RULES.map((r, i) => `<div class="card cardbody rl-card${r.on === false ? ' off' : ''}"><div class="rl-row">
-      <label class="checkrow"><input type="checkbox" class="rl-in" data-i="${i}" data-k="on"${r.on === false ? '' : ' checked'}> <b>On</b></label>${inp(i, 'name', r.name, 'Rule name', '16em')}
-      <span>For every</span><select class="rl-in" data-i="${i}" data-k="cat" aria-label="Cabinet type">${[['', 'cabinet'], ['Base', 'Base cabinet'], ['Wall', 'Wall cabinet'], ['Tall', 'Tall cabinet']].map(([v, l]) => `<option value="${v}"${(r.cat || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
-      <span>where</span>${inp(i, 'when', r.when, 'W > 30 (blank = always)', '14em')}</div>
-      <div class="rl-row"><select class="rl-in" data-i="${i}" data-k="act" aria-label="What the rule does">${RULE_ACTS.map(([v, l]) => `<option value="${v}"${r.act === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
-      ${r.act === 'addpart' ? `${inp(i, 'newName', r.newName, 'Part name', '12em')}${inp(i, 'newL', r.newL, 'Length, like H - 1.5', '11em')}${inp(i, 'newW', r.newW, 'Width, like D - 1', '10em')}${inp(i, 'newQty', r.newQty, 'Qty', '4em')}`
-        : `<span>on parts named</span>${inp(i, 'part', r.part, 'Bottom (blank = all)', '11em')}${r.act === 'size' ? `${inp(i, 'L', r.L, 'Length, like PartL - 1', '11em')}${inp(i, 'W', r.W, 'Width', '9em')}${inp(i, 'qty', r.qty, 'Qty', '4em')}` : ''}${r.act === 'addop' ? `<select class="rl-in" data-i="${i}" data-k="tpl" aria-label="Operation template"><option value="">Pick a template…</option>${tpls.map(t => `<option value="${esc(t.id)}"${r.tpl === t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>` : ''}`}
-      <span class="sp"></span><button class="btn sm danger" data-act="rl-del" data-id="${i}" aria-label="Delete rule">${icon('trash')}</button></div></div>`).join('') || '<div class="card cardbody note">No rules yet. Rules are kept for every job.</div>'}`;
+  const el = $('#tab-rules'); if (!el) return;
+  RULES.forEach(r => { if (!r.id) r.id = uid('rl'); });
+  const tpls = typeof OP_TEMPLATES !== 'undefined' ? OP_TEMPLATES : [];
+  const head = libHead('Rules', null, '', '', `<button class="btn primary" data-act="rl-add">${icon('plus')}Add rule</button>`);
+  const pic = r => { const [ic, tone] = RULE_LOOK[r.act] || RULE_LOOK.hide; return `<span class="rlx-ic t-${tone}">${icon(ic)}</span>`; };
+  const actName = r => (RULE_ACTS.find(x => x[0] === r.act) || RULE_ACTS[0])[1];
+  const list = libSimpleList('rl', RULES, pic, r => `${r.on === false ? 'Off · ' : ''}${esc((RULE_CATS.find(x => x[0] === (r.cat || '')) || RULE_CATS[0])[1])}${r.when ? ' · ' + esc(r.when) : ''}`, { tools: '', off: r => r.on === false, none: 'No rules yet.' });
+  if (!RULES.length) {
+    el.innerHTML = `${head}<div class="plx mlx">${list}<div class="card rlx-empty"><div class="rlx-art">${icon('list')}</div><h3>No rules yet</h3><p>Rules are shop standards worked into every cabinet of every job, like "every Base cabinet wider than 30 gets a center support".</p><button class="btn primary" data-act="rl-add">${icon('plus')}Add rule</button></div></div>`;
+    return;
+  }
+  const id = pickId('rl', RULES), i = Math.max(0, RULES.findIndex(x => x.id === id)), r = RULES[i];
+  const inp = (k, l, ph) => `<label class="f"><span>${l}</span><input class="rl-in" data-i="${i}" data-k="${k}" value="${esc(r[k] ?? '')}" placeholder="${esc(ph || '')}"></label>`;
+  const chip = (v, tone) => `<span class="rlx-chip t-${tone}">${esc(v)}</span>`;
+  const cat = (RULE_CATS.find(x => x[0] === (r.cat || '')) || RULE_CATS[0])[1], hits = ruleHits(r);
+  const what = r.act === 'addpart' ? `${chip('add a part', 'blue')} called ${chip(r.newName || 'Rule part', 'violet')}${r.newL ? `, ${chip(r.newL, 'teal')} long` : ''}${r.newW ? ` by ${chip(r.newW, 'teal')}` : ''}`
+    : `${chip(actName(r).toLowerCase(), (RULE_LOOK[r.act] || RULE_LOOK.hide)[1])} ${r.act === 'addop' ? `(${chip((tpls.find(x => x.id === r.tpl) || {}).name || 'no template yet', 'violet')}) ` : ''}on ${r.part ? `parts named ${chip(r.part, 'blue')}` : chip('every part', 'blue')}${r.act === 'size' && r.L ? `, length ${chip(r.L, 'teal')}` : ''}${r.act === 'size' && r.W ? `, width ${chip(r.W, 'teal')}` : ''}`;
+  const sentence = `<div class="rlx-say${r.on === false ? ' off' : ''}"><div class="rlx-big">${pic(r)}</div><p>For every ${chip(cat, 'amber')}${r.when ? ` where ${chip(r.when, 'teal')}` : ''}, ${what}.</p></div>`;
+  el.innerHTML = `${head}<div class="plx mlx ilx rlx">${list}<div class="plx-main mlx-main">
+    <div class="card plx-pic">${cardHead(esc(r.name || 'Rule'), `<button class="btn sm danger" data-act="rl-del" data-id="${i}">${icon('trash')}Delete</button>`)}
+      <div class="plx-pv rlx-pv">${sentence}</div>
+      <div class="edx-stats plx-stats mlx-stats">${libTile(r.on === false ? 'amber' : 'green', r.on === false ? 'close' : 'check', r.on === false ? 'Off' : 'On', 'This rule')}${libTile('blue', 'home', hits, 'Cabinets it reaches in this job')}${libTile('teal', 'list', RULES.filter(x => x.on !== false).length + ' of ' + RULES.length, 'Rules on')}${libTile('violet', (RULE_LOOK[r.act] || RULE_LOOK.hide)[0], actName(r), 'What it does')}</div></div>
+    <div class="card plx-props mlx-props">
+      ${cardHead('Rule', '')}<div class="cardbody"><label class="f chk"><input type="checkbox" class="rl-in" data-i="${i}" data-k="on"${r.on === false ? '' : ' checked'}> <span>Rule is on</span></label>${inp('name', 'Name', 'Rule name')}<div class="note help">Rules are kept for every job.</div></div>
+      ${cardHead('Which cabinets', '')}<div class="cardbody"><label class="f"><span>For every</span><select class="rl-in" data-i="${i}" data-k="cat">${RULE_CATS.map(([v, l]) => `<option value="${v}"${(r.cat || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>${inp('when', 'Where', 'W > 30 (blank = always)')}<div class="note help">A formula with the cabinet's sizes and parameters, like W &gt; 30 or H &lt;= 30.</div></div>
+      ${cardHead('What it does', '')}<div class="cardbody"><label class="f"><span>Does</span><select class="rl-in" data-i="${i}" data-k="act">${RULE_ACTS.map(([v, l]) => `<option value="${v}"${r.act === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        ${r.act === 'addpart' ? inp('newName', 'Part name', 'Center support') + inp('newL', 'Length', 'H - 1.5') + inp('newW', 'Width', 'D - 1') + inp('newQty', 'Qty', '1')
+          : inp('part', 'On parts named', 'Bottom (blank = all)') + (r.act === 'size' ? inp('L', 'Length', 'PartL - 1') + inp('W', 'Width', 'PartW') + inp('qty', 'Qty', '') : '') + (r.act === 'addop' ? `<label class="f"><span>Operation template</span><select class="rl-in" data-i="${i}" data-k="tpl"><option value="">Pick a template…</option>${tpls.map(x => `<option value="${esc(x.id)}"${r.tpl === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : '')}</div>
+    </div></div></div>`;
 }
 document.addEventListener('change', e => {
   const t = e.target; if (!t.classList) return;
-  if (t.classList.contains('rl-in')) { const r = RULES[+t.dataset.i]; if (!r) return; r[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value; saveRules(); if (['act', 'on'].includes(t.dataset.k)) renderRules(); render(); }
+  if (t.classList.contains('rl-in')) { const r = RULES[+t.dataset.i]; if (!r) return; r[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value; saveRules(); render(); }
 });
 
 /* ----- F11: a formula that fails shows on its field ----- */

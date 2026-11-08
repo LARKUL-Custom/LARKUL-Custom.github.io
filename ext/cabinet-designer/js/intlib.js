@@ -81,6 +81,11 @@ function ensureInteriorLib(s) {
   if (!Array.isArray(s.interiorLib) || !s.interiorLib.length) s.interiorLib = defaultInteriorLib();
   // A library made before the Mozaik products came in gets them once (deleting one later keeps it deleted).
   else if (!s.interiorLibMz) { const have = new Set(s.interiorLib.map(x => x.id)); s.interiorLib.push(...clone(MOZ_INT_LIB.filter(x => !have.has(x.id)))); }
+  // Mozaik products get the parts and settings from Ayden's Mozaik insert library once (the insert designer).
+  if (!s.interiorLibParts && typeof MOZ_INS !== 'undefined') {
+    s.interiorLib.forEach(x => { const m = x.src === 'Mozaik' && !x.parts && MOZ_INS.find(y => y.id === x.id); if (m && m.parts) { x.parts = clone(m.parts); if (m.params) x.params = clone(m.params); } });
+    s.interiorLibParts = 1;
+  }
   s.interiorLibMz = 1; return s;
 }
 const intItem = id => (S.interiorLib || []).find(x => x.id === id);
@@ -101,6 +106,19 @@ const INT_PIC = {
   finint: '<rect x="6" y="6" width="28" height="28" class="ip-box fin"/><path d="M12 24l5 5 11-12" class="ip-check"/>',
 };
 const intPic = k => `<svg class="ip" viewBox="0 0 40 40" aria-hidden="true">${INT_PIC[k] || INT_PIC.shelf}</svg>`;
+// The product's picture: its own, else the Mozaik one with the same id or name (pulled out of the Mozaik model),
+// else a stock picture for its kind, else the line drawing.
+let MZ_IMG = null;
+const mzNorm = n => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const KIND_IMG = { lazy: 'Lazy Susan Round', trash: 'Trash Pullout (2 Can)', pullout: '_PAC Spice 563H Wide', rollout: 'Pull Out Shelf 24' };
+function intImg(x) {
+  if (!x) return '';
+  if (x.img) return x.img;
+  if (typeof MOZ_INS === 'undefined') return '';
+  if (!MZ_IMG) { MZ_IMG = {}; MOZ_INS.forEach(m => { if (!m.img) return; MZ_IMG[m.id] = MZ_IMG[m.id] || m.img; const k = 'n:' + mzNorm(m.name); MZ_IMG[k] = MZ_IMG[k] || m.img; }); }
+  return MZ_IMG[x.id] || MZ_IMG['n:' + mzNorm(x.name)] || (KIND_IMG[x.kind] && MZ_IMG['n:' + mzNorm(KIND_IMG[x.kind])]) || '';
+}
+const intThumb = (x, k) => { const u = intImg(x); return u ? `<img class="ip ipimg" src="${esc(u)}" alt="" loading="lazy" draggable="false">` : intPic(k || (x && x.kind)); };
 const intName = k => (INT_KINDS.find(x => x[0] === k) || [k, k])[1];
 const rowInserts = (c, i) => (c.inserts || []).filter(it => it.row !== undefined && it.row !== '' && +it.row === i);
 
@@ -112,7 +130,7 @@ function intLibrary(c, qr) {
   const favs = ui.intFavs || (ui.intFavs = loadIntFavs()), q = (ui.intFind || '').trim().toLowerCase(), fold = ui.intFold || (ui.intFold = Object.fromEntries(INT_FOLDERS.map(f => [f, true])));
   const fits = x => { const why = intFitWhy(c, qr, x); return !why; };
   const hit = x => !q || (x.name + ' ' + (x.part || '') + ' ' + (x.folder || '')).toLowerCase().includes(q);
-  const item = x => `<div class="il-row"><button class="il-item${ok && !fits(x) ? ' nofit' : ''}" draggable="true" data-act="int-add" data-id="${esc(x.id)}" data-intdrag="${esc(x.id)}" title="${esc(x.name)}${x.part ? ' · ' + esc(x.part) : ''}${x.note ? ' · ' + esc(x.note) : ''}${ok && !fits(x) ? ' · ' + esc(intFitWhy(c, qr, x)) : ''}">${intPic(x.kind)}<span><b>${esc(x.name)}</b>${x.part || x.minW ? `<small>${[x.part, x.minW ? 'needs ' + fmtLen(+x.minW) + ' wide' : ''].filter(Boolean).map(esc).join(' · ')}</small>` : ''}</span></button><button class="favbtn${favs.includes(x.id) ? ' on' : ''}" data-act="int-fav" data-id="${esc(x.id)}" aria-label="Favorite ${esc(x.name)}">★</button></div>`;
+  const item = x => `<div class="il-row"><button class="il-item${ok && !fits(x) ? ' nofit' : ''}" draggable="true" data-act="int-add" data-id="${esc(x.id)}" data-intdrag="${esc(x.id)}" title="${esc(x.name)}${x.part ? ' · ' + esc(x.part) : ''}${x.note ? ' · ' + esc(x.note) : ''}${ok && !fits(x) ? ' · ' + esc(intFitWhy(c, qr, x)) : ''}">${intThumb(x)}<span><b>${esc(x.name)}</b>${x.part || x.minW ? `<small>${[x.part, x.minW ? 'needs ' + fmtLen(+x.minW) + ' wide' : ''].filter(Boolean).map(esc).join(' · ')}</small>` : ''}</span></button><button class="favbtn${favs.includes(x.id) ? ' on' : ''}" data-act="int-fav" data-id="${esc(x.id)}" aria-label="Favorite ${esc(x.name)}">★</button></div>`;
   const list = (S.interiorLib || []).filter(hit);
   const folders = [...new Set([...INT_FOLDERS, ...list.map(x => x.folder || 'Other')])].filter(f => list.some(x => (x.folder || 'Other') === f));
   const head = (k, label, n, shut) => `<button class="lfold-h" data-act="int-fold" data-id="${esc(k)}" aria-expanded="${!shut}"><span class="arr" aria-hidden="true">${shut ? '▸' : '▾'}</span><span>${esc(label)}</span><span class="ct">${n}</span></button>`;
@@ -128,7 +146,8 @@ function intLibrary(c, qr) {
 // The opening's inside size, for the fit check: width between the sides, height of the opening, depth to the back.
 function intOpening(c, i) {
   const p = effParams(c), lay = interiorLayout(c, p, computeFronts(c, p)), z = lay.zones.find(zz => zz.row === i);
-  return z ? { w: lay.inW, h: z[1] - z[0], d: c.d - lay.t - (faceFrame(c) ? ffThick(c) : 0) } : null;
+  // Depth like Mozaik's: from the front of the box to the back face of the back panel (so "d - uback.th" is the room in front of it).
+  return z ? { w: lay.inW, h: z[1] - z[0], d: c.d - (faceFrame(c) ? ffThick(c) : 0) - p.backInset } : null;
 }
 // Why item x does not fit opening i, or '' when it fits (blank minimums always fit).
 function intFitWhy(c, i, x) {
@@ -147,18 +166,18 @@ function intContents(c, i) {
     const t = insertType(it.type), n = t.fields.includes('n') ? Math.max(1, it.n | 0) : 0;
     const nm = (intItemOf(it) || {}).name || intName(it.type), label = n ? `${n} × ${nm}` : (it.name || nm);
     const hf = t.fields.includes('h') ? `<label class="il-h"><span>Box height</span>${fctl('sub:inserts|cab:' + c.id, k + '.h', it.h, 'len', { label: 'Box height' })}</label>` : '';
-    lines.push([it.type, label, 'ins:' + k, hf]);
+    lines.push([it.type, label, 'ins:' + k, hf, intItemOf(it)]);
   });
-  return `<div class="il-in"><div class="il-head"><span class="eyebrow">In opening ${i + 1}</span>${intSelBtn()}${lines.length ? `<button class="btn sm" data-act="qe-clear-row" data-id="${i}" title="Take everything out of this opening">${icon('trash')}Clear</button>` : ''}</div>${lines.length ? lines.map(([k, l, ref, extra]) => intLine(i, k, l, ref, extra)).join('') + `<div class="note">Click lines to pick them, then Delete selected or press Delete.</div>` : '<div class="note show">Empty. Drag something in from the library.</div>'}</div>`;
+  return `<div class="il-in"><div class="il-head"><span class="eyebrow">In opening ${i + 1}</span>${intSelBtn()}${lines.length ? `<button class="btn sm" data-act="qe-clear-row" data-id="${i}" title="Take everything out of this opening">${icon('trash')}Clear</button>` : ''}</div>${lines.length ? lines.map(([k, l, ref, extra, x]) => intLine(i, k, l, ref, extra, x)).join('') + `<div class="note">Click lines to pick them, then Delete selected or press Delete.</div>` : '<div class="note show">Empty. Drag something in from the library.</div>'}</div>`;
 }
 // One line of what is inside. Clicking the name picks it (click more to pick several); × takes one out.
 function intSelSet() {
   const id = (qeCab() || {}).id; if (ui.intSelCab !== id) { ui.intSel = []; ui.intSelCab = id; }
   return ui.intSel || (ui.intSel = []);
 }
-function intLine(i, k, l, ref, extra) {
+function intLine(i, k, l, ref, extra, x) {
   const key = i + ':' + ref, on = intSelSet().includes(key);
-  return `<div class="il-line${on ? ' sel' : ''}"><button class="il-pick" data-act="int-sel" data-id="${esc(key)}" aria-pressed="${on}" title="${on ? 'Picked. Click again to unpick.' : 'Click to pick'}">${intPic(k)}<b>${esc(l)}</b></button>${extra || ''}<button class="btn sm" data-act="int-del" data-id="${esc(key)}" title="Take one out" aria-label="Take one out">×</button></div>`;
+  return `<div class="il-line${on ? ' sel' : ''}"><button class="il-pick" data-act="int-sel" data-id="${esc(key)}" aria-pressed="${on}" title="${on ? 'Picked. Click again to unpick.' : 'Click to pick'}">${x ? intThumb(x, k) : intPic(k)}<b>${esc(l)}</b></button>${extra || ''}<button class="btn sm" data-act="int-del" data-id="${esc(key)}" title="Take one out" aria-label="Take one out">×</button></div>`;
 }
 function intSelBtn() { const n = intSelSet().length; return n ? `<button class="btn sm danger" data-act="int-delsel" data-id="" title="Delete the picked lines (Delete key)">${icon('trash')}Delete selected (${n})</button>` : ''; }
 function intWhole(c) {
@@ -258,6 +277,74 @@ document.addEventListener('input', e => {
 });
 
 /* ----- Libraries › Inserts: the interior products the shop buys ----- */
+// Inserts › Interior products, like the Materials page: products grouped by folder on the left,
+// the picked one drawn inside a sample cabinet in the middle, its boxes on the right.
+function intProductsView() {
+  const lib = S.interiorLib || [];
+  if (!lib.some(x => x.id === ui.ilibSel)) ui.ilibSel = (lib[0] || {}).id;
+  const x = lib.find(y => y.id === ui.ilibSel), used = id => allCabs().reduce((a, c) => a + (c.inserts || []).filter(it => it.item === id).length, 0);
+  const q = ((ui.pickQ || {}).ilib || '').toLowerCase(), shown = lib.filter(y => !q || y.name.toLowerCase().includes(q) || String(y.folder || '').toLowerCase().includes(q));
+  const folders = [...new Set(lib.map(y => y.folder || ''))];
+  const list = folders.map(f => { const items = shown.filter(y => (y.folder || '') === f); if (!items.length) return ''; const fk = 'ilib/' + f, shut = !q && foldShut(fk) && !items.some(y => y.id === ui.ilibSel);
+    return `<div class="lgrp mg">${foldHead(fk, esc(f || 'No folder'), items.length, shut, 'lgrp-h')}</div>${shut ? '' : items.map(y => { const n = used(y.id); return `<button class="mli illi${y.id === ui.ilibSel ? ' on' : ''}" data-act="ilib-sel" data-id="${esc(y.id)}"><span class="ilpic">${intThumb(y)}</span><span><b>${esc(y.name)}</b><small>${y.price !== '' && y.price != null ? money(+y.price) : 'Kind price'}${n ? ` · ${n} in this job` : ''}</small></span></button>`; }).join('')}`; }).join('');
+  const listCard = `<div class="card plx-list"><div class="cardbody libtree"><label class="f pick-findf"><span>Find</span><input type="search" class="pick-find" data-key="ilib" value="${esc((ui.pickQ || {}).ilib || '')}" placeholder="Find a product" aria-label="Find interior products"></label>${list || '<div class="note show">No products match.</div>'}</div></div>`;
+  if (!x) return `<div class="plx mlx">${listCard}<div class="card cardbody note show">No interior products yet.</div></div>`;
+  const R = 'ilib:' + x.id, n = used(x.id), kindName = (INT_KINDS.find(([v]) => v === x.kind) || [, ''])[1];
+  const img = intImg(x), pv = ui.ilibPv === 'des' ? 'des' : img && ui.ilibPv !== 'cab' ? 'pic' : 'cab';
+  let pic = '';
+  if (pv === 'des') pic = `<div class="ilx-des">${dpCard(x)}</div>`;
+  else if (pv === 'pic') pic = `<img class="ilx-img" src="${esc(img)}" alt="${esc(x.name)}">`;
+  else try {
+    const tall = x.kind === 'rod' || +x.minH > 30, c = sampleCab({ w: Math.max(24, Math.ceil(+x.minW || 0)), d: Math.max(24, Math.ceil(+x.minD || 0)), ...(tall ? { cat: 'Tall', h: 84 } : {}), rows: [{ type: 'door', h: '*', count: 1 }], inserts: [], libParams: { shelfCount: 0 } });
+    const why = intApply(c, 0, x.id); pic = why ? `<div class="note show">${esc(why)}</div>` : edDimmed(c, qeFaceSVG(c, 0, 620, true));
+  } catch (e) { pic = `<div class="ilbig">${intPic(x.kind)}</div>`; }
+  const t = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${esc(String(v))}</b><span>${lb}</span></div>`;
+  const need = ['minW', 'minH', 'minD'].map(k => +x[k] > 0 ? fmtLen(+x[k]) : 'any').join(' × ');
+  return `<div class="plx mlx ilx">${listCard}<div class="plx-main mlx-main">
+    <div class="card plx-pic">${cardHead(esc(x.name), `<button class="btn sm danger" data-act="ilib-del" data-id="${esc(x.id)}">${icon('trash')}Delete</button>`)}
+      <div class="plx-pv ilx-pv${pv === 'des' ? ' des' : ''}">${`<div class="seg ilx-seg">${[...(img ? [['pic', 'Product']] : []), ['cab', 'In a cabinet'], ['des', `Designer${(x.parts || []).length ? ` (${x.parts.length})` : ''}`]].map(([k, l]) => `<button data-act="ilib-pv" data-id="${k}" aria-pressed="${pv === k}">${l}</button>`).join('')}</div>`}${pic}</div>
+      <div class="edx-stats plx-stats mlx-stats">${t('violet', 'shelf', kindName, 'Builds as')}${t('green', 'tag', x.price !== '' && x.price != null ? money(+x.price) : 'Kind price', 'Price')}${t('amber', 'ruler', need, 'Needs W × H × D')}${t('blue', 'home', n, 'In this job')}</div></div>
+    <div class="card plx-props mlx-props">
+      ${cardHead('Product', '')}<div class="cardbody">${fld('Name', R, 'name', x.name, 'text', { wide: true })}${fld('Folder', R, 'folder', x.folder || '', 'text')}${fld('Builds as', R, 'kind', x.kind, 'select', { options: INT_KINDS.map(([v, l]) => ({ v, l })) })}${fld('Part number', R, 'part', x.part || '', 'text', { ph: 'optional' })}</div>
+      ${cardHead('Price', '')}<div class="cardbody">${fld('Price', R, 'price', x.price ?? '', 'num', { ph: 'Kind price', blank: true })}<div class="note show">Blank uses the ${esc(kindName.toLowerCase())} price under Insert prices.</div></div>
+      ${cardHead('Smallest opening it fits', '')}<div class="cardbody">${fld('Width', R, 'minW', x.minW ?? '', 'len', { blank: true, ph: 'any' })}${fld('Height', R, 'minH', x.minH ?? '', 'len', { blank: true, ph: 'any' })}${fld('Depth', R, 'minD', x.minD ?? '', 'len', { blank: true, ph: 'any' })}</div>
+    </div></div></div>`;
+}
+// The parts Mozaik makes for an insert, with the formulas it sizes them by.
+function mzPartsCard(x) {
+  const f = v => `<code>${esc(String(v ?? ''))}</code>`;
+  return `${cardHead(`Parts <span class="ct">${x.parts.length}</span>`, '')}<div class="cardbody"><div class="tscroll"><table class="t mzparts"><thead><tr><th>Part</th><th>Kind</th><th>Qty</th><th>Width</th><th>Length</th></tr></thead><tbody>${x.parts.map(p => `<tr><td><b>${esc(p.n)}</b></td><td>${esc(p.t || '')}</td><td>${f(p.q || 1)}</td><td>${f(p.w)}</td><td>${f(p.l)}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+// Inserts › Mozaik libraries: every insert from Ayden's Mozaik insert libraries, by library. Add one to your
+// products with a click; it keeps its picture, price, size and parts.
+function mozCatalogView() {
+  if (typeof MOZ_INS === 'undefined') return '<div class="card cardbody note show">The Mozaik libraries did not load.</div>';
+  const mine = new Set((S.interiorLib || []).map(y => y.src === 'Mozaik' ? y.id : '').filter(Boolean));
+  if (!MOZ_INS.some(m => m.id === ui.mzcSel)) ui.mzcSel = MOZ_INS[0].id;
+  const x = MOZ_INS.find(m => m.id === ui.mzcSel), q = ((ui.pickQ || {}).mzc || '').toLowerCase();
+  const shown = MOZ_INS.filter(m => !q || (m.name + ' ' + m.lib).toLowerCase().includes(q));
+  const list = MOZ_INS_LIBS.map(L => { const items = shown.filter(m => m.lib === L); if (!items.length) return ''; const fk = 'mzc/' + L, shut = !q && foldShut(fk) && !items.some(m => m.id === ui.mzcSel);
+    return `<div class="lgrp mg">${foldHead(fk, esc(L), items.length, shut, 'lgrp-h')}</div>${shut ? '' : items.map(m => `<button class="mli illi${m.id === ui.mzcSel ? ' on' : ''}" data-act="mzc-sel" data-id="${esc(m.id)}"><span class="ilpic">${intThumb(m)}</span><span><b>${esc(m.name)}</b><small>${m.price !== '' ? money(+m.price) : intName(m.kind)}${mine.has(m.id) ? ' · in your products' : ''}</small></span></button>`).join('')}`; }).join('');
+  const listCard = `<div class="card plx-list"><div class="cardbody libtree"><label class="f pick-findf"><span>Find</span><input type="search" class="pick-find" data-key="mzc" value="${esc((ui.pickQ || {}).mzc || '')}" placeholder="Find a Mozaik insert" aria-label="Find Mozaik inserts"></label>${list || '<div class="note show">Nothing matches.</div>'}</div></div>`;
+  const t = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${esc(String(v))}</b><span>${lb}</span></div>`;
+  const img = intImg(x), have = mine.has(x.id);
+  const size = ['minW', 'minH', 'minD'].map(k => +x[k] > 0 ? fmtLen(+x[k]) : 'opening').join(' × ');
+  const fills = (x.fill || '').split('').map(c => ({ w: 'width', h: 'height', d: 'depth' })[c]).filter(Boolean);
+  const at = (x.at || '').split(',').map(a => ({ WCenter: 'centered across', WRight: 'to the right side', HCenter: 'centered up and down', HTop: 'at the top', DBack: 'at the back' })[a]).filter(Boolean);
+  const row = (l, v) => v ? `<div class="mzrow"><span>${l}</span><b>${esc(v)}</b></div>` : '';
+  return `<div class="plx mlx ilx">${listCard}<div class="plx-main mlx-main">
+    <div class="card plx-pic">${cardHead(esc(x.name), have ? `<button class="btn sm" data-act="mzc-open" data-id="${esc(x.id)}">${icon('shelf')}Open in your products</button>` : `<button class="btn sm primary" data-act="mzc-add" data-id="${esc(x.id)}">${icon('plus')}Add to your products</button>`)}
+      <div class="plx-pv ilx-pv">${img ? `<img class="ilx-img" src="${esc(img)}" alt="${esc(x.name)}">` : `<div class="ilbig">${intPic(x.kind)}</div>`}</div>
+      <div class="edx-stats plx-stats mlx-stats">${t('violet', 'shelf', intName(x.kind), 'Builds as')}${t('green', 'tag', x.price !== '' ? money(+x.price) : 'Kind price', 'Price')}${t('amber', 'ruler', size, 'Size W × H × D')}${t('blue', 'list', (x.parts || []).length || 'Model', (x.parts || []).length ? 'Parts' : 'Made from')}</div></div>
+    <div class="card plx-props mlx-props">
+      ${cardHead('From Mozaik', '')}<div class="cardbody mzinfo">${row('Library', x.lib)}${row('Model', x.model)}${row('Stretches to the opening', fills.join(', '))}${row('Sits', at.join(', '))}${row('Set in from the front', x.inset ? fmtLen(x.inset) : '')}${row('Note', x.note)}${x.graphic ? row('Shows only', 'Drawing only, not built') : ''}</div>
+      ${(x.parts || []).length ? mzPartsCard(x) : ''}
+    </div></div></div>`;
+}
+function mzcToProduct(m) {
+  const fold = { lazy: 'Lazy susans', trash: 'Waste bins', pullout: 'Pull-outs', rollout: 'Pull-outs', traydiv: 'Organizers', rod: 'Closet' }[m.kind];
+  return { id: m.id, name: m.name, kind: m.kind, folder: m.lib === '2026 Larkul' ? (fold || 'Other') : m.lib, part: '', price: m.price, minW: m.minW, minH: m.minH, minD: m.minD, img: m.img || '', model: m.model || '', ...(m.parts ? { parts: clone(m.parts) } : {}), ...(m.params ? { params: clone(m.params) } : {}), ...(m.note ? { note: m.note } : {}), src: 'Mozaik' };
+}
 function interiorLibCard() {
   ensureInteriorLib(S);
   const used = id => allCabs().reduce((a, c) => a + (c.inserts || []).filter(it => it.item === id).length, 0);
@@ -276,8 +363,18 @@ function interiorLibCard() {
     <div class="tscroll"><table class="t ilibt"><thead><tr><th></th><th>Name</th><th>Folder</th><th>Builds as</th><th>Part number</th><th>Price</th><th>Width</th><th>Height</th><th>Depth</th><th class="r">Used</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 document.addEventListener('click', e => {
-  const b = e.target.closest && e.target.closest('[data-act^="ilib-"]'); if (!b) return;
+  const b = e.target.closest && e.target.closest('[data-act^="ilib-"],[data-act^="mzc-"]'); if (!b) return;
+  if (b.dataset.act === 'mzc-sel') { e.stopPropagation(); ui.mzcSel = b.dataset.id; renderInserts(); return; }
+  if (b.dataset.act === 'mzc-open' || b.dataset.act === 'mzc-add') {
+    e.stopPropagation(); const m = MOZ_INS.find(y => y.id === b.dataset.id); if (!m) return;
+    const go = () => { const x = intItem(m.id); ui.insView = 'products'; ui.ilibSel = m.id; if (x) foldOpen('ilib/' + (x.folder || '')); };
+    if (b.dataset.act === 'mzc-add') { if (!intItem(m.id)) { const p = mzcToProduct(m); foldOpen('ilib/' + p.folder); ui.insView = 'products'; ui.ilibSel = m.id; mutate(() => S.interiorLib.push(p)); flash(`Added ${m.name} to your products.`); } else { go(); renderInserts(); } }
+    else { go(); renderInserts(); }
+    return;
+  }
   e.stopPropagation();
-  if (b.dataset.act === 'ilib-add') mutate(() => S.interiorLib.push({ id: uid('il'), name: 'New product', kind: 'lazy', folder: 'Lazy susans', part: '', price: '', minW: '', minH: '', minD: '' }));
+  if (b.dataset.act === 'ilib-sel') { ui.ilibSel = b.dataset.id; renderInserts(); return; }
+  if (b.dataset.act === 'ilib-pv') { ui.ilibPv = b.dataset.id; renderInserts(); return; }
+  if (b.dataset.act === 'ilib-add') { const id = uid('il'), x = S.interiorLib.find(y => y.id === ui.ilibSel); ui.ilibSel = id; foldOpen('ilib/' + ((x && x.folder) || 'Lazy susans')); mutate(() => S.interiorLib.push({ id, name: 'New product', kind: (x && x.kind) || 'lazy', folder: (x && x.folder) || 'Lazy susans', part: '', price: '', minW: '', minH: '', minD: '' })); }
   else if (b.dataset.act === 'ilib-del') mutate(() => { S.interiorLib = S.interiorLib.filter(x => x.id !== b.dataset.id); });
 }, true);

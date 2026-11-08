@@ -43,6 +43,8 @@ function resolve(ref) {
   switch (k) {
     case 'layout': return (S.job.layout = S.job.layout || {});
     case 'job': return S.job; case 'jobp': return S.job.params; case 'jobd': return S.job.defaults;
+    // One gap for doors, drawers and cabinets: half of it goes at each cabinet edge, so neighbours meet at the same gap.
+    case 'jobgap': return { get gap() { return S.job.params.frontGap ?? SHOP_PARAMS.frontGap; }, set gap(v) { S.job.params.frontGap = v; S.job.params.frontSideReveal = v / 2; } };
     case 'room': return id ? roomById(id) : curRoom();
     case 'rset': { const r = roomById(id); return r && (r.settings = r.settings || {}); }
     case 'roomp': { const r = roomById(id); return r && (r.params = r.params || {}); }
@@ -63,6 +65,8 @@ function resolve(ref) {
     case 'panel': return S.panels.find(p => p.id === id);
     case 'ff': return (S.faceFrames || []).find(f => f.id === id);
     case 'ilib': return (S.interiorLib || []).find(x => x.id === id);
+    // Insert designer: dpart:<product>:<n> is a part, dparm:<product>:<n> a setting.
+    case 'dpart': case 'dparm': { const [pid, n] = id.split(':'), x = (S.interiorLib || []).find(y => y.id === pid); return x && (x[k === 'dpart' ? 'parts' : 'params'] || [])[+n]; }
     case 'cabff': { const c = cab(id); return c && (c.ffSize = c.ffSize || {}); }
     // Insert library prices, and this job's own prices for library items: pov:<door|mat|ins>:<id>
     case 'insp': return ((S.insertPrices = S.insertPrices || {})[id] = S.insertPrices[id] || {});

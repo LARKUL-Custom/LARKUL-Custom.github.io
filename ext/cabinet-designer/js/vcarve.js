@@ -475,10 +475,16 @@ function renderCarve() {
   const el = $('#tab-carve'); if (!el) return;
   const B = vcBoards(), b = vcBoard();
   if (b && ui.vcBoard !== b.id) ui.vcBoard = b.id;
-  const head = `<div class="pagehead"><div><h2>Carve</h2><p class="note">V-carve signs, logos, text and shapes, then save G-code for the router. Carve a part from this room the same way, like a door.</p></div>
-    <div class="row-actions">${B.length ? `<select class="vc-pick" aria-label="Board">${B.map(x => `<option value="${x.id}"${x.id === (b && b.id) ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : ''}
-    <button class="btn" data-act="vc-new">${icon('plus')}New sign</button><button class="btn" data-act="vc-import" title="A picture or logo (PNG, JPG, SVG) or a DXF. You can also drop a file on the board.">${icon('upload')}Import picture, logo or DXF</button>${b ? `<button class="btn" data-act="vc-del" title="Delete this sign">${icon('trash')}</button><button class="btn primary" data-act="vc-gcode">${icon('download')}Save G-code</button>` : ''}</div></div>`;
-  if (!b) { el.innerHTML = `${head}<div class="card cardbody vc-empty"><h3>Nothing to carve yet</h3><p>Start a sign, then add text in any font on this computer, a picture or logo, a DXF drawing or a shape.</p><div class="row-actions"><button class="btn primary" data-act="vc-new">${icon('plus')}New sign</button><button class="btn" data-act="vc-import">${icon('upload')}Import picture, logo or DXF</button></div></div>`; return; }
+  // Laid out like Pricing and Cutlist: signs and designs on the left, the board in the middle, the picked design
+  // and the board, bit and G-code settings on the right.
+  const signTile = x => { const z = vcSize(x); return `<button class="cl-mat vcx-sign${b && x.id === b.id ? ' on' : ''}" data-act="vc-board" data-id="${x.id}"><span class="vcx-ic">${icon(x.part ? 'door' : 'edit')}</span><span><b>${esc(x.name)}</b><small>${fmtLen(z.L, 1)} × ${fmtLen(z.W, 1)}${(x.items || []).length ? ` · ${x.items.length} design${x.items.length === 1 ? '' : 's'}` : ''}</small></span></button>`; };
+  const signs = `<div class="prx-navh">Signs and parts</div><div class="cl-mats">${B.map(signTile).join('')}<button class="cl-mat vcx-new" data-act="vc-new"><span class="vcx-ic add">${icon('plus')}</span><span><b>New sign</b><small>Text, logos, pictures, shapes</small></span></button></div>`;
+  if (!b) {
+    el.innerHTML = `<div class="prx vcx"><aside class="prx-side"><div class="prx-grand vcx-grand"><span>Carve</span><b>Nothing yet</b><small>V-carve signs, logos, text and shapes</small></div>${signs}</aside>
+      <section class="prx-main"><div class="prx-top"><h2>Carve</h2></div><div class="prx-body"><div class="vcx-empty"><div class="vcx-empty-art">${icon('edit')}</div><h3>Nothing to carve yet</h3><p>Start a sign, then add text in any font on this computer, a picture or logo, a DXF drawing or a shape. You can also carve a part from this room, like a door.</p><div class="row-actions"><button class="btn primary" data-act="vc-new">${icon('plus')}New sign</button><button class="btn" data-act="vc-import">${icon('upload')}Import picture, logo or DXF</button></div></div></div></section>
+      <div class="prx-acts"><button class="btn primary" data-act="vc-new">${icon('plus')}New sign</button><button class="btn" data-act="vc-import">${icon('upload')}Import picture or DXF</button></div></div>`;
+    return;
+  }
   const sel = (b.items || []).find(i => i.id === ui.vcSel), sz = vcSize(b), vb = vcVbits(), st = vcStraights();
   if (!vb.length) b.vbit = '';
   const vbOpts = vb.length ? vb.map(t => ({ v: t.id, l: `${t.id} (${vcAngle(t)}°, ${fmtLen(t.dia / 25.4, 1)})` })) : [{ v: '', l: 'Add a V-bit in Libraries › CNC tools' }];
@@ -496,28 +502,22 @@ function renderCarve() {
     <div class="vc-row2">${vcNum('Safe height (mm)', 'm.gSafe', M.gSafe)}${vcSel('Tool changes', 'm.gChange', M.gChange, [{ v: 'atc', l: 'Tool changer (T# M6)' }, { v: 'pause', l: 'Stop for a hand change (M0)' }, { v: 'files', l: 'One file per bit' }])}</div>
     <div class="note">Feeds, spindle speed and tool numbers come from Libraries › CNC tools. These settings are kept for every job.</div>`;
   const designForm = sel ? vcItemForm(sel) : `<div class="vc-hint">${(b.items || []).length ? 'Click a design on the board to change it, or drag it to move it.' : 'Add a design to start.'}</div>`;
-  const list = (b.items || []).length ? `<div class="vc-list">${b.items.map(it => `<button class="vc-li${it.id === ui.vcSel ? ' on' : ''}${it.off ? ' off' : ''}" data-act="vc-sel" data-id="${it.id}">${esc(vcItemName(it))}</button>`).join('')}</div>` : '';
-  el.innerHTML = `${head}
-    <div class="vc-layout">
-      <div class="card vc-stage">
-        <div class="vc-bar"><div class="seg sm" role="group" aria-label="View">${[['shade', 'Carved'], ['paths', 'Toolpaths']].map(([k, l]) => `<button data-act="vc-view" data-id="${k}" aria-pressed="${(ui.vcView || 'shade') === k}">${l}</button>`).join('')}</div>
-          <div class="seg sm" role="group" aria-label="Units">${[['in', 'Inches'], ['mm', 'mm']].map(([k, l]) => `<button data-act="vc-units" data-id="${k}" aria-pressed="${(ui.vcMM ? 'mm' : 'in') === k}">${l}</button>`).join('')}</div>
-          <span class="grow"></span><span class="vc-stats" id="vc-stats">Working…</span></div>
-        <div class="vc-view" id="vc-view"><div class="vc-wrap" id="vc-wrap" style="aspect-ratio:${r3(sz.L)} / ${r3(sz.W)}"><canvas id="vc-canvas" aria-label="Carving preview"></canvas><svg id="vc-over" viewBox="0 0 ${r3(sz.L)} ${r3(sz.W)}" preserveAspectRatio="none"></svg></div></div>
-        <div id="vc-warn"></div>
-      </div>
-      <div class="card vc-side">
-        <div class="vc-add"><span class="eyebrow">Add</span><div class="row-actions">
-          <button class="btn sm" data-act="vc-add" data-id="text">Text</button>
-          <select class="vc-addshape" aria-label="Add a shape"><option value="">Shape…</option>${VC_SHAPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}${(S.shapeLib || []).length ? `<optgroup label="Shape library">${S.shapeLib.map(l => `<option value="lib:${esc(l.id)}">${esc(l.name)}</option>`).join('')}</optgroup>` : ''}</select></div>
-          <div class="note">Put a shape around text to carve the background and leave the letters raised.</div></div>
-        ${list}
-        <div class="vc-form">${designForm}</div>
-        ${vcFold('board', b.part ? 'Part' : 'Board', boardBox)}
-        ${vcFold('bits', 'Bits', bits)}
-        ${vcFold('gcode', 'G-code settings', gset)}
-      </div>
-    </div>`;
+  const kindIc = it => it.kind === 'text' ? 'edit' : it.kind === 'art' ? 'upload' : 'cube';
+  const designs = `<div class="prx-navh">On this ${b.part ? 'part' : 'sign'}</div><div class="vcx-add"><button class="btn sm" data-act="vc-add" data-id="text">${icon('plus')}Text</button>
+      <select class="vc-addshape" aria-label="Add a shape"><option value="">${'+ Shape…'}</option>${VC_SHAPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}${(S.shapeLib || []).length ? `<optgroup label="Shape library">${S.shapeLib.map(l => `<option value="lib:${esc(l.id)}">${esc(l.name || l.id)}</option>`).join('')}</optgroup>` : ''}</select>
+      <button class="btn sm" data-act="vc-import" title="A picture or logo (PNG, JPG, SVG) or a DXF. You can also drop a file on the board.">${icon('upload')}Picture</button></div>
+    <div class="cl-mats">${(b.items || []).map(it => `<button class="cl-mat vcx-item${it.id === ui.vcSel ? ' on' : ''}${it.off ? ' off' : ''}" data-act="vc-sel" data-id="${it.id}"><span class="vcx-ic k-${it.kind}">${icon(kindIc(it))}</span><span><b>${esc(vcItemName(it))}</b><small>${it.kind === 'text' ? esc(it.font || 'Arial') + ' · ' : ''}${fmtLen(+it.h || 0, 1)} high</small></span></button>`).join('') || '<div class="note show">Nothing on it yet. Add text, a shape or a picture.</div>'}</div>
+    <div class="note help">Put a shape around text to carve the background and leave the letters raised.</div>`;
+  const sz2 = vcSize(b);
+  el.innerHTML = `<div class="prx vcx"><aside class="prx-side"><div class="prx-grand vcx-grand"><span>${esc(b.name)}</span><b>${fmtLen(sz2.L, 1)} × ${fmtLen(sz2.W, 1)}</b><small id="vc-stats">Working…</small></div>${signs}${designs}</aside>
+    <section class="prx-main"><div class="prx-top"><h2>Carve</h2><div class="setx-tabs prx-tabs" role="tablist">${[['shade', 'Carved', 'cube'], ['paths', 'Toolpaths', 'ruler']].map(([k, l, ic]) => `<button role="tab" data-act="vc-view" data-id="${k}" aria-selected="${(ui.vcView || 'shade') === k}">${icon(ic)}${l}</button>`).join('')}</div>
+        <span class="grow"></span><div class="seg sm" role="group" aria-label="Units">${[['in', 'Inches'], ['mm', 'mm']].map(([k, l]) => `<button data-act="vc-units" data-id="${k}" aria-pressed="${(ui.vcMM ? 'mm' : 'in') === k}">${l}</button>`).join('')}</div></div>
+      <div class="prx-body vcx-body"><div class="psec box vc-stage vcx-stage"><div class="vc-view" id="vc-view"><div class="vc-wrap" id="vc-wrap" style="aspect-ratio:${r3(sz2.L)} / ${r3(sz2.W)}"><canvas id="vc-canvas" aria-label="Carving preview"></canvas><svg id="vc-over" viewBox="0 0 ${r3(sz2.L)} ${r3(sz2.W)}" preserveAspectRatio="none"></svg></div></div><div id="vc-warn"></div></div></div></section>
+    <aside class="vcx-right"><div class="vcx-acts"><button class="btn primary" data-act="vc-gcode">${icon('download')}Save G-code</button><button class="btn danger" data-act="vc-del" title="Delete this sign">${icon('trash')}Delete</button></div>
+      <div class="psec box vcx-form">${secHead(sel ? kindIc(sel) : 'edit', 'Picked design', 'rose')}<div class="vc-form">${designForm}</div></div>
+      ${vcFold('board', b.part ? 'Part' : 'Board', boardBox)}
+      ${vcFold('bits', 'Bits', bits)}
+      ${vcFold('gcode', 'G-code settings', gset)}</aside></div>`;
   requestAnimationFrame(vcPaint);
 }
 function vcItemForm(it) {
@@ -626,6 +626,7 @@ function vcAct(a, id) {
     case 'vc-units': ui.vcMM = id === 'mm'; renderCarve(); return true;
     case 'vc-fold': (ui.vcFold = ui.vcFold || {})[id] = !ui.vcFold[id]; renderCarve(); return true;
     case 'vc-sel': ui.vcSel = id; renderCarve(); return true;
+    case 'vc-board': ui.vcBoard = id; ui.vcSel = ''; renderCarve(); return true;
     case 'vc-desel': ui.vcSel = ''; renderCarve(); return true;
     case 'vc-rm': if (it) mutate(() => { b.items = b.items.filter(x => x !== it); ui.vcSel = ''; }); return true;
     case 'vc-dup': if (it) { const c = clone(it); c.id = uid('vi'); c.x = r3((+c.x || 0) + 0.5); c.y = r3((+c.y || 0) - 0.5); if (vcLastImg && vcLastImg.id === it.id) vcLastImg = null; mutate(() => { b.items.push(c); ui.vcSel = c.id; }); } return true;

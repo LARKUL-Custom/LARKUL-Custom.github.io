@@ -140,27 +140,53 @@ function ffPic(t) {
   const r = (x, y, w, h) => `<rect x="${x}" y="${-y - h}" width="${w}" height="${h}" fill="${esc(col)}" stroke="#555" stroke-width=".25"/>`;
   return `<svg viewBox="-2 ${-H - 2} ${W + 4} ${H + 4}" class="ffpic" aria-hidden="true">${r(0, 0, s, H)}${r(W - s, 0, s, H)}${r(s, H - tr, W - 2 * s, tr)}${r(s, 0, W - 2 * s, br)}${r(s, H - tr - 6 - mr, W - 2 * s, mr)}</svg>`;
 }
+// Shared by Face frames and Applied panels: the library list down the left, like Materials and Hardware.
+function libSimpleList(key, items, pic, sub, o = {}) {
+  const id = items.length ? pickId(key, items) : '', nm = o.name || (x => x.name);
+  const tools = o.tools !== undefined ? o.tools : `<button class="btn sm" data-act="lp-expall" data-id="${key}">${icon('download')}Export</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="${key}" accept=".json,application/json" hidden></label>`;
+  return `<div class="card plx-list"><div class="cardbody libtree">${tools ? `<div class="mlx-tools">${tools}</div>` : ''}
+    ${items.map(x => `<button class="mli sli${x.id === id ? ' on' : ''}${o.off && o.off(x) ? ' off' : ''}" data-act="lp-pick" data-id="${key}|${esc(x.id)}"><span class="sli-pic">${pic(x)}</span><span><b>${esc(nm(x))}</b><small>${sub(x)}</small></span></button>`).join('') || `<div class="note show">${o.none || 'None yet.'}</div>`}</div></div>`;
+}
+// The library pages' page heading: title, a view switch (Mozaik's tabs), and the buttons.
+function libHead(title, views, cur, act, btns) {
+  const seg = views ? `<div class="seg lbx-views" role="tablist">${views.map(([k, l, ic]) => `<button role="tab" data-act="${act}" data-id="${k}" aria-pressed="${cur === k}">${icon(ic)}${l}</button>`).join('')}</div>` : '';
+  return `<div class="pagehead lbx-head"><div><h2>${title}</h2></div>${seg}<span class="grow"></span><div class="row-actions">${btns}</div></div>`;
+}
+const libTile = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${esc(String(v))}</b><span>${lb}</span></div>`;
 function renderFaceFrames() {
   const el = $('#tab-faceframes'); if (!el) return;
   const list = S.faceFrames || [];
   if (typeof LIB_REFS === 'object' && !LIB_REFS.ff) LIB_REFS.ff = ['ff', () => S.faceFrames];
-  el.innerHTML = `<div class="pagehead"><div><h2>Face frames</h2><p>Stile and rail sizes for face frame cabinets. Pick one for the whole job under Settings › Cabinet and panels, or for one cabinet in its editor.</p></div><button class="btn primary" data-act="ff-add">${icon('plus')}Add face frame</button></div>
-  <div class="card"><div class="cardbody"><div class="roomsum"><span>This job is <b>${esc(ffJobName())}</b></span><button class="linkbtn" data-act="ff-settings">Change for the whole job</button></div></div></div>
-  ${pickBar('ff', list, 'Face frame')}<div class="cards">${picked('ff', list).map(t => {
-    const R = 'ff:' + t.id, L = (k, l) => fld(l, R, k, t[k], 'len');
-    return `<div class="card ffcard">${cardHead(esc(t.name), `<span class="note">${nCab(usedBy(c => !!faceFrame(c) && faceFrame(c).id === t.id))}</span>`)}
-    <div class="cardbody"><div class="cardsplit"><div class="stack">
-      ${fld('Name', R, 'name', t.name, 'text', { wide: true })}
-      <div class="grid2">${L('stile', 'Stiles')}${L('topRail', 'Top rail')}${L('topRailWall', 'Top rail, wall cabinets')}${L('bottomRail', 'Bottom rail')}${L('midRail', 'Mid rails')}${L('midStile', 'Center stiles')}${L('thick', 'Thickness')}${L('overlay', 'Door overlay')}</div>
-      <div class="note">Cut from the room's finish (Face frames material). Set finishes under Libraries › Materials.</div>
-    </div><div class="preview pad">${ffPic(t)}</div></div></div></div>`;
-  }).join('')}</div>`;
+  const used = f => usedBy(c => !!faceFrame(c) && faceFrame(c).id === f.id);
+  const head = `<div class="pagehead"><div><h2>Face frames</h2><p>Stile and rail sizes for face frame cabinets. Pick one for the whole job under Settings › Cabinet and panels, or for one cabinet in its editor.</p></div><div class="row-actions"><button class="btn ffx-job" data-act="ff-settings">${icon('sliders')}This job: <b>${esc(ffJobName())}</b></button><button class="btn primary" data-act="ff-add">${icon('plus')}Add face frame</button></div></div>`;
+  const listCard = libSimpleList('ff', list, ffPic, f => { const n = used(f); return `${fmtLen(ffNum(f.stile, 1.5))} stiles${n ? ` · ${nCab(n)}` : ''}`; });
+  if (!list.length) { el.innerHTML = `${head}<div class="plx mlx">${listCard}<div class="card cardbody note show">No face frames yet.</div></div>`; return; }
+  const id = pickId('ff', list), t = list.find(x => x.id === id) || list[0], R = 'ff:' + t.id, L = (k, l) => fld(l, R, k, t[k], 'len');
+  const pv = ['base', 'wall', 'drawers'].includes(ui.ffPv) ? ui.ffPv : 'base';
+  let pic = '';
+  try {
+    const c = sampleCab(pv === 'wall' ? { faceFrame: t.id, cat: 'Wall', h: 30, d: 12, rows: [{ type: 'door', h: '*', count: 2 }], construction: { toeKick: false, top: 'full' }, libParams: { shelfCount: 2 }, w: 30 }
+      : pv === 'drawers' ? { faceFrame: t.id, rows: [{ type: 'drawer', h: 6, count: 1 }, { type: 'drawer', h: '*', count: 1 }, { type: 'drawer', h: '*', count: 1 }], libParams: { shelfCount: 0 }, w: 21 }
+      : { faceFrame: t.id, w: 30, rows: [{ type: 'drawer', h: 6, count: 2 }, { type: 'door', h: '*', count: 2 }] });
+    pic = edDimmed(c, frontPreviewSVG(c, 620, true));
+  } catch (e) { pic = `<div class="ffx-big">${ffPic(t)}</div>`; }
+  const seg = `<div class="seg ilx-seg">${[['base', 'Base cabinet'], ['wall', 'Wall cabinet'], ['drawers', 'Drawer bank']].map(([k, l]) => `<button data-act="ff-pv" data-id="${k}" aria-pressed="${pv === k}">${l}</button>`).join('')}</div>`;
+  el.innerHTML = `${head}<div class="plx mlx ilx ffx">${listCard}<div class="plx-main mlx-main">
+    <div class="card plx-pic">${cardHead(esc(t.name), `<button class="btn sm" data-act="lp-copy" data-id="ff">${icon('copy')}Copy</button><button class="btn sm danger" data-act="lp-del" data-id="ff">${icon('trash')}Delete</button>`)}
+      <div class="plx-pv ilx-pv">${seg}${pic}</div>
+      <div class="edx-stats plx-stats mlx-stats">${libTile('teal', 'ruler', fmtLen(ffNum(t.stile, 1.5)), 'Stiles')}${libTile('amber', 'ruler', fmtLen(ffNum(t.topRail, 1.5)) + ' / ' + fmtLen(ffNum(t.topRailWall, 3)), 'Top rail, base / wall')}${libTile('violet', 'door', fmtLen(+t.overlay || 0), 'Door overlay')}${libTile('blue', 'home', used(t), 'Cabinets in this job')}</div></div>
+    <div class="card plx-props mlx-props">
+      ${cardHead('Face frame', '')}<div class="cardbody">${fld('Name', R, 'name', t.name, 'text', { wide: true })}${L('thick', 'Thickness')}${L('overlay', 'Door overlay')}<div class="note help">Cut from the room's finish (Face frames material). Set finishes under Libraries › Materials.</div></div>
+      ${cardHead('Stiles', '')}<div class="cardbody">${L('stile', 'End stiles')}${L('midStile', 'Center stiles')}</div>
+      ${cardHead('Rails', '')}<div class="cardbody">${L('topRail', 'Top rail')}${L('topRailWall', 'Top rail, wall cabinets')}${L('bottomRail', 'Bottom rail')}${L('midRail', 'Mid rails')}</div>
+    </div></div></div>`;
 }
 document.addEventListener('click', e => {
   const b = e.target.closest && e.target.closest('[data-act^="ff-"]'); if (!b) return;
   e.stopPropagation();
   const a = b.dataset.act;
   if (a === 'ff-add') { const nid = uid('ff'); mutate(() => S.faceFrames.push({ ...FF_DEFAULTS, id: nid, name: 'New face frame' })); pickState().pick.ff = nid; render(); }
+  else if (a === 'ff-pv') { ui.ffPv = b.dataset.id; renderFaceFrames(); }
   else if (a === 'ff-reset') { const c = cab(b.dataset.id); if (c) mutate(() => { delete c.ffSize; }); if (ui.quick) renderQuick(); }
   else if (a === 'ff-settings') { ui.setTab = 'templates'; ui.tplScope = ''; ui.tplCat = 'box'; ui.tab = 'settings'; render(); }
 }, true);

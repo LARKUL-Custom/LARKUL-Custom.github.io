@@ -172,7 +172,10 @@ function applyCabShape(c, parts, k) {
     const inside = (x, y) => inPoly({ x: D - (y + dy), y: x + dx + sh }, pc.poly);
     const shaped = !isRect(pc.poly, b);
     if (shaped && src.ops.some(o => o.type === 'notch')) warn.push(`${name}: the toe kick notch is not cut on a shaped side. Use cabinet feet or cut it by hand.`);
-    const ops = src.ops.filter(o => !(shaped && o.type === 'notch')).map(o => ({ ...o, ...(o.x !== undefined ? { x: r3(o.x - dx) } : {}), ...(o.y !== undefined ? { y: r3(o.y - dy) } : {}), ...(o.x1 !== undefined ? { x1: r3(Math.max(0, o.x1 - dx)), x2: r3(Math.min(L, o.x2 - dx)) } : {}), ...(o.y1 !== undefined ? { y1: r3(o.y1 - dy), y2: r3(o.y2 - dy) } : {}) }))
+    // A plain side that is shallower than the cabinet (the open end of a corner) keeps the holes drilled from the front
+    // (shelf pins, hinge plates, runners) that far from its own front edge; the ones from the back move with the back.
+    const fromFront = o => !shaped && dy > 0.01 && o.type === 'bore' && o.y !== undefined && o.y <= D / 2;
+    const ops = src.ops.filter(o => !(shaped && o.type === 'notch')).map(o => ({ ...o, ...(o.x !== undefined ? { x: r3(o.x - dx) } : {}), ...(o.y !== undefined ? { y: fromFront(o) ? o.y : r3(o.y - dy) } : {}), ...(o.x1 !== undefined ? { x1: r3(Math.max(0, o.x1 - dx)), x2: r3(Math.min(L, o.x2 - dx)) } : {}), ...(o.y1 !== undefined ? { y1: r3(o.y1 - dy), y2: r3(o.y2 - dy) } : {}) }))
       .filter(o => o.x === undefined || o.y === undefined || inside(o.x, o.y));
     insert({ ...src, L, W, ops, outline: shaped ? pc.poly.map(q => ({ x: r3(q.y - b.y0), y: r3(q.x - b.x0) })) : undefined }, at);
   });

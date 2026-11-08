@@ -1,5 +1,5 @@
 // Section L of the Mozaik list: door size rule use (L4), label layouts and multi-print presets (L5),
-// remnants and recuts (L6), the paperless shop view (L7) and construction methods (L8).
+// recuts (L6), the paperless shop view (L7) and construction methods (L8).
 'use strict';
 
 // Shop-wide lists kept in Hub storage (or this browser outside the hub), like the CNC tools and rules.
@@ -117,29 +117,7 @@ document.addEventListener('change', e => {
   mpSave(); showMultiPrint();
 });
 
-/* ----- L6: remnants (shop-wide offcuts) and recuts (broken or miscut parts to run again) ----- */
-let REMNANTS = [];
-shopLoad('remnants', v => { if (Array.isArray(v)) REMNANTS = v; });
-function renderRemnants() {
-  const el = $('#tab-remnants'); if (!el) return;
-  const mats = azOpts(S.materials, m => (m.kind || 'sheet') === 'sheet');
-  el.innerHTML = `<div class="pagehead"><div><h2>Remnants</h2><p>Offcuts in the shop that are big enough to use again. They go out with the CNC parts file for the nester to fill first.</p></div><button class="btn primary" data-act="rem-add">${icon('plus')}Add remnant</button></div>
-  <div class="card"><div class="tscroll"><table class="t"><thead><tr><th>Material</th><th>Length</th><th>Width</th><th>Qty</th><th>Where / note</th><th></th></tr></thead><tbody>${REMNANTS.map((r, i) => `<tr>
-    <td><select class="rem-in" data-i="${i}" data-k="mat" aria-label="Material">${mats.map(o => `<option value="${esc(o.v)}"${o.v === r.mat ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}</select></td>
-    <td style="width:100px"><input type="text" class="rem-in num" data-i="${i}" data-k="L" value="${fmtLen(r.L)}" aria-label="Length"></td><td style="width:100px"><input type="text" class="rem-in num" data-i="${i}" data-k="W" value="${fmtLen(r.W)}" aria-label="Width"></td>
-    <td style="width:70px"><input type="text" class="rem-in num" data-i="${i}" data-k="qty" value="${r.qty || 1}" aria-label="Quantity"></td><td><input type="text" class="rem-in" data-i="${i}" data-k="note" value="${esc(r.note || '')}" aria-label="Note" placeholder="Rack 2"></td>
-    <td style="width:40px"><button class="btn sm" data-act="rem-del" data-id="${i}" aria-label="Remove remnant">×</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No remnants yet.</td></tr>'}</tbody></table></div></div>`;
-}
-document.addEventListener('change', e => {
-  const t = e.target; if (!t.classList || !t.classList.contains('rem-in')) return;
-  const r = REMNANTS[+t.dataset.i], k = t.dataset.k; if (!r) return;
-  if (k === 'L' || k === 'W') { const v = parseLen(t.value); if (isFinite(v) && v > 0) r[k] = v; } else if (k === 'qty') r.qty = Math.max(1, parseInt(t.value, 10) || 1); else r[k] = t.value;
-  shopSave('remnants', REMNANTS, 'remnants'); renderRemnants();
-});
-// Remnants of the materials in the file, in mm, for CNC Cutlist's nester.
-function cncRemnants(matIds) {
-  return REMNANTS.filter(r => matIds.includes(r.mat) && r.L > 0 && r.W > 0).map(r => ({ material: r.mat, length: Math.round(Math.max(r.L, r.W) * 25.4 * 10) / 10, width: Math.round(Math.min(r.L, r.W) * 25.4 * 10) / 10, quantity: r.qty || 1, ...(r.note ? { note: r.note } : {}) }));
-}
+/* ----- L6: recuts (broken or miscut parts to run again). Remnants are kept in CNC Cutlist. ----- */
 // The recut file: the same CNC file with only the parts on the recut list, at the recut quantity.
 function cncRecutFile() {
   const all = cncPartFile(), list = S.job.recuts || [];
@@ -148,7 +126,7 @@ function cncRecutFile() {
   const fits = (r, p) => { if (!(r.L > 0)) return true; const z = size(p); if (!z) return true; const w = [r.L, r.W].sort((a, b) => b - a); return Math.abs(z[0] - w[0]) < 0.05 && Math.abs(z[1] - w[1]) < 0.05; };
   const pick = list.map(r => { const p = all.file.parts.find(q => q.cabinet === r.cab && q.name === r.name && fits(r, q)); return p ? { ...p, id: p.id + '-R', quantity: r.qty, recut: true } : null; }).filter(Boolean);
   const mats = new Set(pick.map(p => p.material));
-  return { ...all.file, job: { ...all.file.job, name: all.file.job.name + ' recuts' }, materials: all.file.materials.filter(m => mats.has(m.id)), parts: pick, remnants: cncRemnants([...mats]) };
+  return { ...all.file, job: { ...all.file.job, name: all.file.job.name + ' recuts' }, materials: all.file.materials.filter(m => mats.has(m.id)), parts: pick };
 }
 function recutCard() {
   const list = S.job.recuts || []; if (!list.length) return '';
@@ -220,8 +198,6 @@ function libs2Act(a, id) {
     case 'mp-print': document.body.classList.add('printing-multi'); setTimeout(() => { window.print(); document.body.classList.remove('printing-multi'); }, 50); return true;
     case 'mp-new': { const p = { id: uid('pp'), name: 'New preset', title: '{JOB}', items: ['cutlist'] }; PRINT_PRESETS.push(p); ui.mpPreset = p.id; mpSave(); showMultiPrint(); return true; }
     case 'mp-del': { const pr = mpPreset(); PRINT_PRESETS = PRINT_PRESETS.filter(p => p !== pr); ui.mpPreset = PRINT_PRESETS[0].id; mpSave(); showMultiPrint(); return true; }
-    case 'rem-add': REMNANTS.push({ id: uid('rm'), mat: (S.materials.find(m => (m.kind || 'sheet') === 'sheet') || {}).id, L: 48, W: 24, qty: 1, note: '' }); shopSave('remnants', REMNANTS, 'remnants'); renderRemnants(); return true;
-    case 'rem-del': REMNANTS.splice(+id, 1); shopSave('remnants', REMNANTS, 'remnants'); renderRemnants(); return true;
     case 'rc-add': {
       const sc = cutScope(), p = sc.parts.find((q, i) => q.cabId + '#' + i === id); if (!p) return true;
       mutate(() => { S.job.recuts = S.job.recuts || []; const ex = S.job.recuts.find(r => r.cab === p.cab && r.name === p.name && r.room === p.room && Math.abs((r.L || 0) - p.L) < 0.01 && Math.abs((r.W || 0) - p.W) < 0.01); if (ex) ex.qty++; else S.job.recuts.push({ room: p.room, cab: p.cab, name: p.name, L: p.L, W: p.W, qty: 1, why: '' }); });
