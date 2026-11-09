@@ -5,6 +5,7 @@ const ICON_PATHS = {
   user: '<circle cx="10" cy="6.8" r="3.3"/><path d="M3.5 17c.6-3.4 3.2-5.4 6.5-5.4s5.9 2 6.5 5.4"/>',
   stack: '<path d="M3 7l7-3.5L17 7l-7 3.5z"/><path d="M3 10.5l7 3.5 7-3.5M3 14l7 3.5 7-3.5"/>',
   plus: '<path d="M10 4v12M4 10h12"/>',
+  sparkle: '<path d="M9 2.5l1.6 4.4 4.4 1.6-4.4 1.6L9 14.5l-1.6-4.4L3 8.5l4.4-1.6z"/><path d="M15 12.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
   print: '<path d="M6 7.5V3h8v4.5"/><rect x="3" y="7.5" width="14" height="6.5" rx="1"/><path d="M6 11.5h8V17H6z"/>',
   download: '<path d="M10 3v9.5M6 9l4 4 4-4M4 16.5h12"/>',
   upload: '<path d="M10 13.5V4M6 7.5l4-4 4 4M4 16.5h12"/>',

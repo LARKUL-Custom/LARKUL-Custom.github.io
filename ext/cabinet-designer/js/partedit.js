@@ -86,7 +86,7 @@ function peOutline(list, vars, L, W, bad) {
 function peTransform(q, xf) {
   const mx = !!xf.mx, my = !!xf.my, L = q.L, W = q.W; if (!mx && !my && !xf.face) return;
   const X = x => mx ? r3(L - x) : x, Y = y => my ? r3(W - y) : y, OPP = typeof CNC_OPPOSITE !== 'undefined' ? CNC_OPPOSITE : {};
-  if (q.outline) { q.outline = q.outline.map(p => ({ x: X(p.x), y: Y(p.y) })); if (mx !== my) q.outline.reverse(); }
+  if (q.outline) { q.outline = q.outline.map(p => ({ x: X(p.x), y: Y(p.y) })); if (mx !== my) q.outline.reverse(); delete q.outlineEdges; }
   if (!q.outline && (mx || my)) q.ops.forEach(o => { if (o.type === 'notch') { if (mx) o.x = r3(L - o.x - o.w); if (my) o.y = r3(W - o.y - o.h); } });
   q.ops.forEach(o => {
     if (o.type === 'notch' || o.type === 'hbore' || o.type === 'edge') { /* notches done above; edge work follows the edges */ }
@@ -126,7 +126,7 @@ function applyPartEdits(c, parts, warn, ptT) {
     vars = partVars(c, q);
     const P = pt => peXY(pt, vars, q.L, q.W, bad);
     if (e.pts && e.pts.length >= 3) {
-      const o = peOutline(e.pts, vars, q.L, q.W, bad); if (o) { q.outline = o; q.ops = q.ops.filter(z => z.type !== 'notch'); }
+      const o = peOutline(e.pts, vars, q.L, q.W, bad); if (o) { q.outline = o; delete q.outlineEdges; q.ops = q.ops.filter(z => z.type !== 'notch'); }
     }
     if (e.hide && e.hide.length) q.ops = q.ops.filter(o => !e.hide.includes(opText(o)));
     // O1: a generated operation can be hidden by a formula, like PartW < 12.

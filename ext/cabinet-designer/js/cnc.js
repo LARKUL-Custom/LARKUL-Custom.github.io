@@ -34,7 +34,7 @@ function cncPartFile(scoped) {
     let outline = [[0, 0], [L, 0], [L, W], [0, W]], edgeKeys = ['L2', 'W2', 'L1', 'W1'];
     const notches = p.ops.filter(o => o.type === 'notch');
     // A shaped part (cabinet shape) brings its own outline, measured from its bottom left like ours.
-    if (p.outline && p.outline.length >= 3) { outline = p.outline.map(q => [q.x, q.y]); edgeKeys = outline.map(() => null); }
+    if (p.outline && p.outline.length >= 3) { outline = p.outline.map(q => [q.x, q.y]); edgeKeys = p.outlineEdges && p.outlineEdges.length === outline.length ? p.outlineEdges.slice() : outline.map(() => null); }
     else if (notches.length) {
       const n = notches[0];
       if (notches.length > 1 || n.x !== 0 || n.y !== 0 || !(n.w > 0 && n.w < L && n.h > 0 && n.h < W)) {

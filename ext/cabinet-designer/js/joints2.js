@@ -8,7 +8,11 @@ const JT_KINDS = [
   { v: 'holes', l: 'Holes (female and male, as set below)' }, { v: 'confirmat', l: 'Confirmat screws' }, { v: 'dowel', l: 'Dowels' },
   { v: 'combo', l: 'Dowel and confirmat (dowels either side)' }, { v: 'pocket', l: 'Pocket screws' }, { v: 'lamello', l: 'Lamello (Clamex) connectors' },
   { v: 'route', l: 'Route (dado the panel into the side)' },
+  { v: 'ledge', l: 'Locating rabbet the side rests on, plus screws or dowels' },
 ];
+// What a locating rabbet (ledge) template drills along with the rabbet.
+const JT_LEDGE_WITH = [{ v: 'confirmat', l: 'Confirmat screws' }, { v: 'dowel', l: 'Dowels (no screw heads outside)' }, { v: 'combo', l: 'Dowel and confirmat' }, { v: 'none', l: 'Nothing (glue only)' }];
+const JT_LEDGE_TYPES = ['bottom', 'top', 'stretcher', 'shelf'];
 // Back and toe joints only count fasteners for the hardware list: the back sits in a dado and the toe skin clips on.
 const JT_COUNT_ONLY = ['back', 'toe'];
 
@@ -48,6 +52,7 @@ function jtKind(J) { return J.fastener || 'holes'; }
 // J5: the machining for one joint. pairs: [{x, y, m}] — x, y on the female panel (the side), m along the male panel's edge.
 function jtFasten(J, fem, male, edgeX, edge, pairs, why, x) {
   const k = jtKind(J), t = x.t, F = J.female || {}, M = J.male || {};
+  if (k === 'ledge') return jtLedge(J, fem, male, edgeX, edge, pairs, why, x);
   const bore = (q, dia, depth) => fem.push({ type: 'bore', x: r3(q.x), y: r3(q.y), dia, depth: +depth > 0 ? +depth : t, through: !(+depth > 0), face: 'inside', why });
   const hb = (m, dia, depth, w) => male && male.ops.push({ type: 'hbore', edge, x: edgeX, y: r3(m), dia, depth, inset: r3(t / 2), why: w || why });
   if (k === 'route') {
@@ -76,6 +81,58 @@ function jtFasten(J, fem, male, edgeX, edge, pairs, why, x) {
     }
     bore(q, F.dia, F.depth); hb(q.m, M.dia, M.depth); x.addB(J.name, 1);
   });
+}
+// Easy assembly (0.55.6): a shallow rabbet or dado in the inside of the side that the panel's end drops into, so the side
+// rests on the bottom (and the stretchers or top rest on the side) at the right height while it is screwed or doweled.
+// It stops short of the front so no joint shows on the front edge, and runs out the back. The panel gets longer by the
+// depth at each end and has a small ear cut off each front corner to clear the stopped end of the rabbet.
+function jtLedge(J, fem, male, edgeX, edge, pairs, why, x) {
+  const withK = J.routeWith || 'confirmat', sub = withK === 'none' ? null : { ...J, fastener: withK };
+  const fasten = eX => { if (sub) jtFasten(sub, fem, male, eX, edge, pairs, why, x); };
+  const sp = x.side, types = Array.isArray(J.routeTypes) ? J.routeTypes : JT_LEDGE_TYPES;
+  // Shaped panels, short sides (open corner ends) and joints that don't take a ledge just get the fasteners.
+  if (!male || !sp || !pairs.length || !types.includes(x.type) || sp.outline || x.off > 0 || (male.outline && !male.ledgeEars) || (edge !== 'W1' && edge !== 'W2')) return fasten(edgeX);
+  const d = +J.routeDepth > 0 ? +J.routeDepth : 0.125, T = male.T || x.t, w = r3(T + (+(J.routeClear ?? 0.03125) || 0));
+  const fx = pairs[0].x, stop = Math.max(0, +J.routeStop || 0), front = x.a || 0, zs = x.zs || [-Infinity, Infinity];
+  // Flush first: the rabbet never decides where a panel's outside face ends up. A rabbet on the top edge keeps its open
+  // edge exact and puts the clearance below (the top's face is set flush on the table); a rabbet on the bottom edge or a
+  // dado puts it above. Sheets a little thicker than the library says, or a bit a little off size, still drop in.
+  const gx = fx + T / 2 >= zs[1] - 0.001 ? r3(fx + T / 2 - w / 2) : r3(fx - T / 2 + w / 2);
+  const y1 = r3(Math.max(stop, front)), y2 = r3(sp.W);
+  // Front and rear stretchers share one rabbet along the top of the side.
+  const led = sp.ledges || (sp.ledges = []);
+  if (y2 > y1 && !led.some(l => Math.abs(l.x - fx) < 0.01 && l.y1 <= y1 + 1e-6)) {
+    fem.push({ type: 'groove', x1: gx, y1, x2: gx, y2, width: w, depth: d, face: 'inside', why: why + ' locating rabbet' });
+    led.push({ x: fx, y1 });
+  }
+  jtLedgeGrow(male, edge, d);
+  // The stopped end is rounded by the bit, so the ear runs a bit radius (plus 1/32") past the stop.
+  const bits = typeof cncBits === 'function' ? cncBits() : [], bit = bits.find(([, dia]) => dia <= w * 25.4 + 0.01), rad = bit ? bit[1] / 25.4 / 2 : 0.25;
+  const e = stop > 0 ? r3(stop + rad + 0.03125 - front) : 0;
+  if (e > 0) { male.ledgeEars = male.ledgeEars || {}; male.ledgeEars[edge] = [d, e]; jtLedgeOutline(male); }
+  const n0 = male.ops.length; fasten(edge === 'W1' ? 0 : r3(male.L));
+  // A fastener that lands on an ear goes into the end where the ear leaves it.
+  if (e > 0) male.ops.slice(n0).forEach(o => { if (o.type === 'hbore' && o.edge === edge && o.y < e) o.x = edge === 'W1' ? r3(d) : r3(male.L - d); });
+}
+// The panel gets longer at one end. Machining measured from that end moves with it; work that runs to an edge still does.
+function jtLedgeGrow(pt, edge, d) {
+  const L0 = pt.L, L1 = r3(L0 + d), start = edge === 'W1';
+  pt.ops.forEach(o => ['x', 'x1', 'x2'].forEach(k => {
+    const v = o[k]; if (typeof v !== 'number') return;
+    if (start) o[k] = Math.abs(v) < 1e-6 && (o.type === 'groove' || o.edge === 'W1') ? 0 : r3(v + d);
+    else if (Math.abs(v - L0) < 1e-6) o[k] = L1;
+  }));
+  pt.L = L1;
+}
+// The panel's outline with the front-corner ears cut off (CNC frame: origin bottom left, y up, front edge at y = W).
+// outlineEdges names the edge each outline segment starts, so CNC Cutlist still knows the front and the banded edges.
+function jtLedgeOutline(pt) {
+  const L = pt.L, W = pt.W, [d1, e1] = pt.ledgeEars.W1 || [0, 0], [d2, e2] = pt.ledgeEars.W2 || [0, 0];
+  const P = [[0, 0, 'L2'], [L, 0, 'W2']];
+  if (d2 > 0) P.push([L, W - e2, null], [L - d2, W - e2, null], [L - d2, W, 'L1']); else P.push([L, W, 'L1']);
+  if (d1 > 0) P.push([d1, W, null], [d1, W - e1, null], [0, W - e1, 'W1']); else P.push([0, W, 'W1']);
+  pt.outline = P.map(([x, y]) => ({ x: r3(x), y: r3(y) }));
+  pt.outlineEdges = P.map(q => q[2]);
 }
 // A routed panel drops into the dado, so it gets longer by the dado depth on that end.
 function jtGrow(pt, edge, d) {
@@ -132,8 +189,8 @@ function jtTypesBox(h) {
 function jtFastenerBox(h, R) {
   const k = jtKind(h);
   return `<div class="autogrid"><label class="f wide"><span>Fastener</span>${ctl(R, 'fastener', k, 'select', { label: 'Fastener', options: JT_KINDS })}</label>
-    ${k === 'route' ? fld('Dado depth', R, 'routeDepth', h.routeDepth ?? 0.25, 'num') : ''}${k === 'lamello' ? fld('Connector length', R, 'lamLen', h.lamLen ?? 2.2, 'num') : ''}${k === 'combo' ? fld('Dowels this far either side', R, 'comboOff', h.comboOff ?? 1.26, 'num') : ''}</div>
-    ${k === 'pocket' ? '<div class="note">Pocket holes are marked on the panel and counted, but angled holes are drilled by hand.</div>' : ''}${k === 'lamello' ? '<div class="note">The face slots are cut on the CNC; the edge slots are marked for the Lamello tool.</div>' : ''}${k === 'route' ? '<div class="note">Panels that drop into a dado get longer by the dado depth.</div>' : ''}`;
+    ${k === 'route' ? fld('Dado depth', R, 'routeDepth', h.routeDepth ?? 0.25, 'num') : ''}${k === 'ledge' ? fld('Rabbet depth', R, 'routeDepth', h.routeDepth ?? 0.125, 'num') + fld('Stops this far from the front', R, 'routeStop', h.routeStop ?? 1, 'num') + fld('Extra room for thick sheets', R, 'routeClear', h.routeClear ?? 0.03125, 'num') + `<label class="f wide"><span>Also drill</span>${ctl(R, 'routeWith', h.routeWith || 'confirmat', 'select', { label: 'Also drill', options: JT_LEDGE_WITH })}</label>` : ''}${k === 'lamello' ? fld('Connector length', R, 'lamLen', h.lamLen ?? 2.2, 'num') : ''}${k === 'combo' ? fld('Dowels this far either side', R, 'comboOff', h.comboOff ?? 1.26, 'num') : ''}</div>
+    ${k === 'pocket' ? '<div class="note">Pocket holes are marked on the panel and counted, but angled holes are drilled by hand.</div>' : ''}${k === 'lamello' ? '<div class="note">The face slots are cut on the CNC; the edge slots are marked for the Lamello tool.</div>' : ''}${k === 'route' ? '<div class="note">Panels that drop into a dado get longer by the dado depth.</div>' : ''}${k === 'ledge' ? '<div class="note">Bottom, top, stretchers and fixed shelves drop into a shallow rabbet in the side that lines them up and keeps the box square. The rabbet is 1/32" roomier than the panel so a thicker sheet or a bit a little off size still fits; the outside faces are set flush on a flat table. The rabbet stops short of the front (nothing shows) and runs out the back; panels get longer by the depth and lose a small ear at each front corner. Other joints just get the screws or dowels.</div>' : ''}`;
 }
 function jtResolve(kind, id) {
   const [hid, type, i] = id.split(':'), h = hw(hid); if (!h) return null;

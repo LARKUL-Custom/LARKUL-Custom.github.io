@@ -35,7 +35,7 @@ function libTools(key, items, label) {
   const id = ui.pick && ui.pick[key] || items[0].id, cur = items.find(x => x.id === id) || items[0], groups = [...new Set(r[1]().map(x => x.group).filter(Boolean))].sort();
   const b = (act, ic, t) => `<button class="btn sm" data-act="${act}" data-id="${esc(key)}" title="${t}" aria-label="${t}">${icon(ic)}</button>`;
   return `<label class="f lp-group"><span>Group</span>${ctl(r[0] + ':' + cur.id, 'group', cur.group || '', 'text', { label: 'Group header', ph: 'No group', list: 'lpg-' + key })}${groups.length ? `<datalist id="lpg-${esc(key)}">${groups.map(g => `<option value="${esc(g)}">`).join('')}</datalist>` : ''}</label>
-    <div class="lp-tools" role="group" aria-label="${esc(label)} library">${b('lp-copy', 'copy', 'Copy')}${b('lp-ren', 'edit', 'Rename')}${b('lp-up', 'up', 'Move up')}${b('lp-down', 'down', 'Move down')}${b('lp-az', 'sort', 'Sort A to Z')}${b('lp-exp', 'download', 'Export')}<label class="btn sm" title="Import" aria-label="Import">${icon('upload')}<input type="file" class="lp-imp" data-key="${esc(key)}" accept=".json,application/json" hidden></label>${b('lp-del', 'trash', 'Delete')}</div>`;
+    <div class="lp-tools" role="group" aria-label="${esc(label)} library">${b('lp-copy', 'copy', 'Copy')}${b('lp-ren', 'edit', 'Rename')}${b('lp-up', 'up', 'Move up')}${b('lp-down', 'down', 'Move down')}${b('lp-az', 'sort', 'Sort A to Z')}${b('lp-exp', 'download', 'Export')}<label class="btn sm" title="Import" aria-label="Import">${icon('upload')}<input type="file" class="lp-imp" data-key="${esc(key)}" accept=".json,application/json" hidden></label>${aiAskBtn(key, true)}${b('lp-del', 'trash', 'Delete')}</div>`;
 }
 function libCur(key) {
   const r = libRef(key); if (!r) return {};
@@ -74,10 +74,16 @@ async function libImport(key, file) {
   let d; try { d = JSON.parse(await file.text()); } catch (e) { flash('That file is not a library file'); return; }
   const list = Array.isArray(d) ? d : Array.isArray(d.items) ? d.items : [d], r = libRef(key);
   if (d.kind && d.kind !== key) { flash(`That file holds ${d.kind} items, not these`); return; }
+  const n = libAddItems(key, list);
+  flash(n ? `Imported ${n}` : 'Nothing to import in that file');
+}
+// Adds items to a library (from a file or from Ask Claude). Ids and names that are taken get new ones; the last one added is picked.
+function libAddItems(key, list) {
+  const r = libRef(key); if (!r) return 0;
   const kind = /^hw-/.test(key) ? key.slice(3) : null, ok = list.filter(x => x && typeof x === 'object' && (!kind || x.kind === kind));
-  if (!ok.length) { flash('Nothing to import in that file'); return; }
-  mutate(() => { const arr = r[1](); ok.forEach(x => { const c = JSON.parse(JSON.stringify(x)); if (arr.some(y => y.id === c.id)) c.id = uid(String(c.id).split('-')[0] || r[0]); if (arr.some(y => y.name === c.name)) c.name += ' (imported)'; arr.push(c); pickState().pick[key] = c.id; }); });
-  flash(`Imported ${ok.length}`);
+  if (!ok.length) return 0;
+  mutate(() => { const arr = r[1](); ok.forEach(x => { const c = JSON.parse(JSON.stringify(x)); if (!c.id || arr.some(y => y.id === c.id)) c.id = uid(String(c.id || r[0]).split('-')[0] || r[0]); if (arr.some(y => y.name === c.name)) c.name += ' (imported)'; arr.push(c); pickState().pick[key] = c.id; }); });
+  return ok.length;
 }
 document.addEventListener('change', e => { const f = e.target.closest && e.target.closest('.lp-imp'); if (f && f.files[0]) { libImport(f.dataset.key, f.files[0]); f.value = ''; } });
 function picked(key, items) { if (items.length < 2) return items; const id = pickId(key, items); return items.filter(x => x.id === id); }
@@ -95,7 +101,7 @@ document.addEventListener('input', e => {
 function libTableBar(key, label) {
   const q = (ui.pickQ || {})[key] || '';
   return `<div class="pickbar lt-bar"><label class="f pick-findf"><span>Find</span><input type="search" class="pick-find" data-key="${esc(key)}" value="${esc(q)}" placeholder="Type part of a name" aria-label="Find ${esc(label)}"></label>
-    <div class="lp-tools" role="group" aria-label="${esc(label)} library"><button class="btn sm" data-act="lp-az" data-id="${esc(key)}">${icon('sort')}A to Z</button><button class="btn sm" data-act="lp-expall" data-id="${esc(key)}">${icon('download')}Export all</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="${esc(key)}" accept=".json,application/json" hidden></label></div></div>`;
+    <div class="lp-tools" role="group" aria-label="${esc(label)} library"><button class="btn sm" data-act="lp-az" data-id="${esc(key)}">${icon('sort')}A to Z</button><button class="btn sm" data-act="lp-expall" data-id="${esc(key)}">${icon('download')}Export all</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="${esc(key)}" accept=".json,application/json" hidden></label>${aiAskBtn(key)}</div></div>`;
 }
 // Folding menus shared by the library pages (Products, Materials, Edgebanding): one open/closed list, kept between visits.
 // Groups start closed; a search opens every group with a match.

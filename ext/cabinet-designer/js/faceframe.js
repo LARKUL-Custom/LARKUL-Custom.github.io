@@ -143,7 +143,7 @@ function ffPic(t) {
 // Shared by Face frames and Applied panels: the library list down the left, like Materials and Hardware.
 function libSimpleList(key, items, pic, sub, o = {}) {
   const id = items.length ? pickId(key, items) : '', nm = o.name || (x => x.name);
-  const tools = o.tools !== undefined ? o.tools : `<button class="btn sm" data-act="lp-expall" data-id="${key}">${icon('download')}Export</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="${key}" accept=".json,application/json" hidden></label>`;
+  const tools = o.tools !== undefined ? o.tools : `<button class="btn sm" data-act="lp-expall" data-id="${key}">${icon('download')}Export</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="${key}" accept=".json,application/json" hidden></label>${aiAskBtn(key)}`;
   return `<div class="card plx-list"><div class="cardbody libtree">${tools ? `<div class="mlx-tools">${tools}</div>` : ''}
     ${items.map(x => `<button class="mli sli${x.id === id ? ' on' : ''}${o.off && o.off(x) ? ' off' : ''}" data-act="lp-pick" data-id="${key}|${esc(x.id)}"><span class="sli-pic">${pic(x)}</span><span><b>${esc(nm(x))}</b><small>${sub(x)}</small></span></button>`).join('') || `<div class="note show">${o.none || 'None yet.'}</div>`}</div></div>`;
 }

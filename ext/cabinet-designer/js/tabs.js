@@ -235,7 +235,7 @@ function matListHTML(use, sheetsOf) {
     : `<button class="mli${x.id === ui.matSel ? ' on' : ''}" draggable="true" data-mdrag="mat" data-mgrp="${esc(x.group || '')}" data-act="mat-sel" data-id="${x.id}">${swatch(x, 30)}<span><b>${esc(x.name)}</b><small>${esc(fmtLen(x.thick))}${(use[x.id] || {}).count ? ` · ${sheetsOf(x)} ${x.kind === 'top' ? 'tops' : 'sheets'}` : ''}</small></span></button>`).join('');
   const q = (ui.pickQ || {}).mat || '';
   return `<div class="cardbody libtree"><label class="f pick-findf"><span>Find</span><input type="search" class="pick-find" data-key="mat" value="${esc(q)}" placeholder="Find a material" aria-label="Find materials"></label>
-    <div class="mlx-tools"><button class="btn sm" data-act="mat-sort" title="Put the materials in each group thickest first, then by name. Drag to change it after.">${icon('sort')}Sort</button><button class="btn sm" data-act="lp-expall" data-id="mat" title="Save every material to a file">${icon('download')}Export</button><label class="btn sm" title="Add materials from a file">${icon('upload')}Import<input type="file" class="lp-imp" data-key="mat" accept=".json,application/json" hidden></label></div>
+    <div class="mlx-tools"><button class="btn sm" data-act="mat-sort" title="Put the materials in each group thickest first, then by name. Drag to change it after.">${icon('sort')}Sort</button><button class="btn sm" data-act="lp-expall" data-id="mat" title="Save every material to a file">${icon('download')}Export</button><label class="btn sm" title="Add materials from a file">${icon('upload')}Import<input type="file" class="lp-imp" data-key="mat" accept=".json,application/json" hidden></label>${aiAskBtn('mat')}</div>
     <button class="mlx-foldall" data-act="mat-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${anyOpen ? 'Close all groups' : 'Open all groups'}</button>
     ${body || '<div class="note show">No materials match.</div>'}</div>`;
 }
@@ -491,7 +491,7 @@ function doorTplView(styleOpts, pullOpts) {
   const sn = k => (S.doorStyles.find(x => x.id === k) || {}).name || '–', pn = k => (hw(k) || {}).name || 'No pull';
   const t = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${esc(v)}</b><span>${lb}</span></div>`;
   const same = (v, l) => [{ v: '', l }, ...styleOpts];
-  return `<div class="plx mlx dtx"><div class="card plx-list"><div class="cardbody libtree"><div class="mlx-tools"><button class="btn sm" data-act="lp-expall" data-id="doorT">${icon('download')}Export</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="doorT" accept=".json,application/json" hidden></label></div>${list}</div></div>
+  return `<div class="plx mlx dtx"><div class="card plx-list"><div class="cardbody libtree"><div class="mlx-tools"><button class="btn sm" data-act="lp-expall" data-id="doorT">${icon('download')}Export</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="doorT" accept=".json,application/json" hidden></label>${aiAskBtn('doorT')}</div>${list}</div></div>
     <div class="plx-main mlx-main">
       <div class="card plx-pic">${cardHead(esc(d.name), `${dupBtn('dtpl-dup', d.id)}${delBtn('dtpl-del', d.id, S.doorTemplates.length < 2)}`)}
         <div class="plx-pv dtx-pv"><div class="seg dtx-seg" role="group" aria-label="Sample">${[['base', 'Base cabinet'], ['drawers', 'Drawer stack'], ['wall', 'Wall cabinet']].map(([k, l]) => `<button data-act="dtpl-pv" data-id="${k}" aria-pressed="${pv === k}">${l}</button>`).join('')}</div>${dtplScene(d, pv)}</div>
@@ -696,7 +696,7 @@ function hwList(k, items) {
   const id = items.length ? pickId('hw-' + k, items) : '', key = 'hw-' + k;
   const used = h => { try { return allCabs().filter(c => JSON.stringify([c.slide, c.hinge, c.pull, cabSet(c, 'slide'), cabSet(c, 'hinge'), cabSet(c, 'pull')]).includes('"' + h.id + '"')).length; } catch (_) { return 0; } };
   const [ic, tone] = HW_ICONS[k] || HW_ICONS.other;
-  return `<div class="cardbody libtree"><div class="mlx-tools"><button class="btn sm" data-act="lp-expall" data-id="${key}">${icon('download')}Export</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="${key}" accept=".json,application/json" hidden></label></div>
+  return `<div class="cardbody libtree"><div class="mlx-tools"><button class="btn sm" data-act="lp-expall" data-id="${key}">${icon('download')}Export</button><label class="btn sm">${icon('upload')}Import<input type="file" class="lp-imp" data-key="${key}" accept=".json,application/json" hidden></label>${aiAskBtn(key)}</div>
     ${items.map(h => { const n = used(h); return `<button class="mli hwli tone-${tone}${h.id === id ? ' on' : ''}" data-act="hw-sel" data-id="${h.id}" data-drag="hw:${h.id}"><span class="ln-ic">${icon(ic)}</span><span><b>${esc(h.name)}</b><small>${esc(h.notes || '')}${n ? `${h.notes ? ' · ' : ''}${n} cabinet${n === 1 ? '' : 's'}` : ''}</small></span></button>`; }).join('') || '<div class="note show">None yet.</div>'}</div>`;
 }
 // Hinge placement: three sample doors with the hinges measured from the door's top and bottom,
@@ -1242,7 +1242,7 @@ function exportData(units) {
         parameters: pp, custom: Object.fromEntries((c.custom || []).filter(x => x.k).map(x => [x.k, x.v])),
         warnings: b.warn, hardware: b.bom,
         parts: (c.noCut ? [] : b.parts).map(q => ({ name: q.report || q.name, ...(q.report ? { partName: q.name } : {}), kind: q.kind, material: q.mat, qty: q.qty, length: r(q.L), width: r(q.W), thickness: r(q.T), grain: q.grain, edges: q.edges,
-          edgebanding: Object.fromEntries(EDGE_KEYS.map(k => { const eb = edgeband(q.band[k]); return [k, eb ? { edge: partKind(q.kind).edges[k], band: eb.name, thicknessMM: eb.thickMM } : null]; })), ops: q.ops.map(conv), ...(q.note ? { comment: q.note } : {}), ...(q.cncGroup ? { cncGroup: q.cncGroup } : {}), ...(q.outline ? { outline: q.outline.map(o => ({ x: r(o.x), y: r(o.y) })) } : {}) })),
+          edgebanding: Object.fromEntries(EDGE_KEYS.map(k => { const eb = edgeband(q.band[k]); return [k, eb ? { edge: partKind(q.kind).edges[k], band: eb.name, thicknessMM: eb.thickMM } : null]; })), ops: q.ops.map(conv), ...(q.note ? { comment: q.note } : {}), ...(q.cncGroup ? { cncGroup: q.cncGroup } : {}), ...(q.outline ? { outline: q.outline.map(o => ({ x: r(o.x), y: r(o.y) })) } : {}), ...(q.outline && q.outlineEdges ? { outlineEdges: q.outlineEdges.slice() } : {}) })),
       };
     }),
     shapes: S.shapes.map(s => { const b = shapeBox(s.pts); return { name: s.name, lies: s.plane, material: s.mat, wall: s.wall, side: s.side, positionAlongWall: r(s.off), outset: r(s.outset || 0), elevation: r(s.elev), thickness: r(s.thick), width: r(b.w), depth: r(b.h), points: s.pts.map(q => ({ x: r(q.x), y: r(q.y), ...(q.r ? { cornerRadius: r(q.r) } : {}), ...(q.b ? { bulge: r(q.b) } : {}) })), outline: shapeOutline(s.pts).map(q => [r(q.x - b.x0), r(q.y - b.y0)]) }; }),

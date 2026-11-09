@@ -471,7 +471,7 @@ class Viewer3D {
   }
   // Frame one box from direction dir.
   lookBox(box, dir) {
-    const c = box.getCenter(new THREE.Vector3()), r = Math.max(12, box.getSize(new THREE.Vector3()).length() / 2);
+    const c = box.getCenter(new THREE.Vector3()), r = Math.max(1.5, box.getSize(new THREE.Vector3()).length() / 2); // 1.5 so a dollhouse cabinet fills the view
     const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
     this.controls.target.copy(c);
     this.cam.position.copy(c).add(d.multiplyScalar(r / Math.sin((this.persp.fov * Math.PI / 180) / 2) * 1.7));
@@ -605,8 +605,10 @@ function buildRoomScene(v) {
     });
     if ((ui.dims.cab && !R3 && L.labels) || hot) {
       // Printed pictures show just the cabinet number, smaller; the sizes are on the elevation pages.
-      const sp = textSprite(ui.printing ? LBL[c.id] || '' : `${LBL[c.id] || ''}  ${fmtLen(c.w)} × ${fmtLen(c.h)}`, (ui.printing ? 1.7 : 2.6) * k, hot ? { onTop: true, bg: hot, color: '#ffffff' } : { onTop: true });
-      sp.position.set(c.w / 2, c.h + 2.2 * k, D * 0.6); m.add(sp);
+      // Tiny cabinets (the dollhouse set) get a tag in proportion, so it doesn't bury them.
+      const ks = k * Math.min(1, Math.max(c.w, c.h) / 24);
+      const sp = textSprite(ui.printing ? LBL[c.id] || '' : `${LBL[c.id] || ''}  ${fmtLen(c.w)} × ${fmtLen(c.h)}`, (ui.printing ? 1.7 : 2.6) * ks, hot ? { onTop: true, bg: hot, color: '#ffffff' } : { onTop: true });
+      sp.position.set(c.w / 2, c.h + 2.2 * ks, D * 0.6); m.add(sp);
     }
     v.root.add(grp);
     if (hot) {

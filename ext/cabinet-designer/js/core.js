@@ -226,6 +226,24 @@ function defaultJoints() {
       ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 }, stretchers: { n: 2 } },
   ];
 }
+// Easy assembly joint templates (0.55.6) for the "Easy assembly (test)" product library: a 1/8" locating rabbet in each side
+// that the bottom, top, stretchers and fixed shelves drop into, stopped 1" from the front so nothing shows. Unfinished ends
+// add confirmats; finished ends add dowels so no screw heads show outside. Only added to a job when that library is opened.
+function easyJoints() {
+  const led = { fastener: 'ledge', routeDepth: 0.125, routeStop: 1, routeClear: 0.03125, routeTypes: ['bottom', 'top', 'stretcher', 'shelf'], breakDado: 0, stretchers: { n: 2 } };
+  return [
+    { id: 'jt-easy-u', kind: 'joint', name: 'Easy assembly: rabbet + confirmat', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true }, ...led, routeWith: 'confirmat',
+      female: { dia: 0.1969, depth: 0 }, male: { dia: 0.1969, depth: 1.75, center: true }, ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC } },
+    { id: 'jt-easy-f', kind: 'joint', name: 'Easy assembly: rabbet + dowels (finished ends)', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false }, ...led, routeWith: 'dowel',
+      female: { dia: 0.315, depth: 0.5003 }, male: { dia: 0.315, depth: 1, center: true }, ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 } },
+  ];
+}
+function ensureEasyJoints(s) { if (Array.isArray(s.hardware)) easyJoints().forEach(j => { if (!s.hardware.some(h => h.id === j.id)) s.hardware.push(j); }); }
+// The test library is a copy of My library whose products use the easy assembly joints. My library is not changed.
+function easyLibItems() {
+  const main = (S.libSet || 'main') === 'main' ? S.library : ((S.libSets || {}).main || []);
+  return clone(main).map(l => ({ ...l, id: 'ea-' + l.id, jointU: 'jt-easy-u', jointF: 'jt-easy-f' }));
+}
 // Leg layout like Mozaik's Legs tab. Insets are from the outside of the cabinet: toe (front), finished end, unfinished end, back.
 const LEG_DEF = { inToe: 3.9685, inFin: 2.1969, inUnfin: 1.4094, inBack: 3.9685, maxSep: 0, noBack: false, holeDia: 0.3937, holeDepth: 0.4724, width: 2.2441, depth: 2.5827 };
 // Ayden's shop hardware, copied from his Mozaik exports (2026-11-02): Blum CLIP top BLUMOTION with the old plate, 71B35xx
@@ -395,8 +413,10 @@ function newCab(S, lib, wallId, side, off) {
     id: uid('c'), libId: lib.id, name: lib.name, cat: lib.cat, w: lib.w, h: lib.h, d: lib.d, elev: lib.elev,
     wall: wallId, side, off,
     cabMatT: lib.cabMatT || '', drawerMatT: lib.drawerMatT || '', doorT: lib.doorT || '',
-    slide: lib.slide || '', hinge: lib.hinge || '', pull: '', panelStyle: lib.panelStyle || '', partT: lib.partT || '',
+    slide: lib.slide || '', hinge: lib.hinge || '', pull: lib.pull || '', panelStyle: lib.panelStyle || '', partT: lib.partT || '',
     panelL: lib.appliedL ? 'on' : '', panelR: lib.appliedR ? 'on' : '', molding: null,
+    // Products that bring their own finish, joints, filler rule or no countertop (the dollhouse set) keep them.
+    ...['finish', 'jointU', 'jointF', 'fillL', 'fillR', 'noTop'].reduce((o, k) => (lib[k] && (o[k] = lib[k]), o), {}),
     construction: clone(lib.construction || defaultConstruction(lib.cat)),
     rows: clone(lib.rows), libParams: { ...(lib.params || {}) }, params: {}, custom: clone(lib.custom || []), vars: clone(lib.vars || []), inserts: clone(lib.inserts || []),
     ...(lib.corner ? { corner: clone(lib.corner) } : {}), ...(lib.moz ? { moz: lib.moz } : {}),
@@ -505,6 +525,10 @@ function migrate(s) {
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
   if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
   if (typeof ensureMozLib === 'function') ensureMozLib(s);
+  if (s.dollKit && typeof ensureDollKit === 'function') ensureDollKit(s);
+  // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.
+  if (!s.miniGone) { const used = s.rooms.some(r => (r.cabinets || []).some(c => c.libId === 'mini-ad')), L = !s.libSet || s.libSet === 'main' ? s.library : (s.libSets || {}).main;
+    if (!used && Array.isArray(L)) { const i = L.findIndex(l => l.id === 'mini-ad'); if (i >= 0) L.splice(i, 1); } s.miniGone = 1; }
   return attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))))));
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
@@ -544,13 +568,17 @@ const SKINS = {};
 const mat = id => S.materials.find(m => m.id === id) || (id && SKINS[id]) || undefined;
 // Product libraries: the job's own, plus backup sets (like American Cabinets) to swap to when a job wants them.
 // The set not in use waits in S.libSets, so its edits are kept, and cabinets placed from it still find their product.
-const PRODUCT_LIBS = [{ id: 'main', name: 'My library' }, { id: 'american', name: 'American Cabinets', items: () => typeof AMERICAN_LIB !== 'undefined' ? AMERICAN_LIB : [] }];
+const PRODUCT_LIBS = [{ id: 'main', name: 'My library' }, { id: 'american', name: 'American Cabinets', items: () => typeof AMERICAN_LIB !== 'undefined' ? AMERICAN_LIB : [] },
+  { id: 'easy', name: 'Easy assembly (test)', items: easyLibItems },
+  { id: 'doll', name: 'Dollhouse (1:12)', items: () => typeof DOLL_LIB !== 'undefined' ? DOLL_LIB : [], kit: s => typeof ensureDollKit === 'function' && ensureDollKit(s) }];
 const libItem = id => S.library.find(l => l.id === id) || Object.values(S.libSets || {}).reduce((a, L) => a || (L || []).find(l => l.id === id), null);
 function swapLibrary(id) {
   const cur = S.libSet || 'main', def = PRODUCT_LIBS.find(x => x.id === id); if (!def || id === cur) return;
   ui.placing = null; ui.libPeek = null;
   mutate(() => {
+    if (id === 'easy') ensureEasyJoints(S);
     S.libSets = S.libSets || {}; S.libSets[cur] = S.library;
+    if (def.kit) def.kit(S); // materials, templates and styles the set's products point at
     S.library = S.libSets[id] || clone(def.items ? def.items() : []);
     delete S.libSets[id]; S.libSet = id;
     ui.libSel = S.library[0] && S.library[0].id;
@@ -690,7 +718,8 @@ const matSets = () => { if (!Array.isArray(S.matTemplates.job)) ensureMatSets(S)
 const panelStyle = id => S.panels.find(p => p.id === id) || S.panels[0];
 const hw = id => S.hardware.find(h => h.id === id);
 const hwOf = kind => S.hardware.filter(h => h.kind === kind);
-const hwPick = (id, kind) => { const h = hw(id); return h && h.kind === kind ? h : hwOf(kind)[0]; };
+// 'none' means on purpose there is none (the dollhouse set's glued fronts: no hinge, no pull).
+const hwPick = (id, kind) => { if (id === 'none') return null; const h = hw(id); return h && h.kind === kind ? h : hwOf(kind)[0]; };
 const countertop = id => S.countertops.find(t => t.id === id) || S.countertops[0];
 const molding = id => S.moldings.find(m => m.id === id);
 const partTpl = id => S.partTemplates.find(t => t.id === id) || S.partTemplates[0];
