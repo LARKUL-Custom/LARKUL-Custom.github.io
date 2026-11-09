@@ -225,11 +225,17 @@ const JOINT_LOC = { front: 2, back: 2, maxGap: 8 };
 // 0.55.17 (Ayden 2026-11-09): sides into the bottom take 3 confirmats, front, middle and back, not 4 or 5. Spaced up to
 // 12" apart, so a 24" deep base gets 3, a 12" wall cabinet keeps 2 and only a bottom over 28" between the end holes gets 4.
 const JT_BOTTOM3 = { mode: 'gap', front: 2, back: 2, maxGap: 12, none: false };
+const JT_SCREW = { id: 'jt-screw', kind: 'joint', name: 'Screws', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true }, fastener: 'screw',
+  female: { dia: 0.1969, depth: 0 }, male: { dia: 0.125, depth: 1 }, breakDado: 0,
+  ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 }, types: { bottom: { ...JT_BOTTOM3 } } };
 function defaultJoints() {
   return [
     { id: 'jt-confirmat', kind: 'joint', name: 'Confirmat', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true },
       female: { dia: 0.1969, depth: 0 }, male: { dia: 0.1969, depth: 1.75, center: true }, breakDado: 0,
       ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 }, types: { bottom: { ...JT_BOTTOM3 } } },
+    // 0.55.21 (Ayden 2026-11-09): screws laid out like the confirmats, with the 5 mm hole through the side as the guide hole
+    // and a smaller pilot in the edge of the panel.
+    { ...clone(JT_SCREW) },
     { id: 'jt-dowel', kind: 'joint', name: 'Dowels', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false },
       female: { dia: 0.315, depth: 0.5003 }, male: { dia: 0.315, depth: 1, center: true }, breakDado: 1,
       ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 }, stretchers: { n: 2 } },
@@ -440,6 +446,17 @@ function newCab(S, lib, wallId, side, off) {
 /* ---------- State, persistence, undo ---------- */
 const KEY = 'cabinet-designer.v2';
 const inHub = () => !!(window.Hub && window.Hub.id);
+// Saves a file to the hub's Files and replaces one with the same name, so saving again never
+// leaves "name (1)" copies. The new file is uploaded first and only then swapped in, so a failed
+// save keeps the last good copy. api is Hub.files (shared Files) or Hub.myFiles.
+async function hubSaveOver(file, folder, api = Hub.files) {
+  const got = await api.upload(file, folder), up = Array.isArray(got) ? got[0] : got;
+  if (!up || !up.path || !up.name || up.name === file.name) return got;
+  const want = up.path.slice(0, up.path.length - up.name.length) + file.name;
+  await api.delete(want).catch(() => {});
+  await api.rename(up.path, want);
+  return got;
+}
 let S = null;
 let undoStack = [], redoStack = [];
 let saveTimer = null, saveNote = '';
@@ -558,6 +575,8 @@ function migrate(s) {
   if (!s.optima) { if (Array.isArray(s.hardware) && !s.hardware.some(h => h.id === 'hw-optima')) { const i = s.hardware.findIndex(h => h.id === 'hw-563h'); s.hardware.splice(i + 1, 0, { id: 'hw-optima', ...clone(WURTH_OPTIMA) }); } s.optima = 1; }
   // 0.55.17: the Confirmat template's bottom joint goes to 3 screws, unless the job already set the bottom on its own.
   if (!s.conf3) { (s.hardware || []).forEach(h => { if (h.id === 'jt-confirmat' && !(h.fastener && h.fastener !== 'holes')) { const o = (h.types || {}).bottom; if (!o || o.same) h.types = { ...(h.types || {}), bottom: { ...JT_BOTTOM3 } }; } }); s.conf3 = 1; }
+  // 0.55.21: the Screws template joins older jobs' joint templates, right after the Confirmat one (added only; nothing picked changes).
+  if (!s.screw1) { if (Array.isArray(s.hardware) && s.hardware.some(h => h.kind === 'joint') && !s.hardware.some(h => h.id === 'jt-screw')) { const i = s.hardware.findIndex(h => h.id === 'jt-confirmat'); s.hardware.splice(i < 0 ? s.hardware.length : i + 1, 0, clone(JT_SCREW)); } s.screw1 = 1; }
   if (!s.cup3) { (s.hardware || []).forEach(h => { if (h.id === 'hw-cliptop' && +h.cupEdgeMM === 5) h.cupEdgeMM = 3; }); s.cup3 = 1; }
   // 0.55.15: nailers on all cabinets (Ayden 2026-11-09). Jobs from before had 'none' only because it was the default,
   // so they switch to top and bottom, 4" wide like his Mozaik library. A room or cabinet set to None keeps it.

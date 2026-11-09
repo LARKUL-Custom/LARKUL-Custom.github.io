@@ -306,7 +306,7 @@ function saveRoomImage() {
   const bin = atob(url.split(',')[1]), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const blob = new Blob([bytes], { type: 'image/png' }), clean = t => String(t || '').replace(/[^\w -]/g, '').trim();
   const name = `${clean(S.job.name) || 'job'} ${clean((curRoom() || {}).name) || 'room'} render.png`;
-  if (inHub()) return Hub.files.upload(new File([blob], name, { type: 'image/png' }), 'Cabinet Designer').then(() => flash('Picture saved to Files › Cabinet Designer'), e => flash('Could not save: ' + e.message));
+  if (inHub()) return hubSaveOver(new File([blob], name, { type: 'image/png' }), 'Cabinet Designer').then(() => flash('Picture saved to Files › Cabinet Designer'), e => flash('Could not save: ' + e.message));
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000); flash('Picture downloaded');
 }
@@ -1341,20 +1341,19 @@ document.addEventListener('click', e => {
       const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job', name = exportFileName();
       // The parts file goes next to the CIX files CNC Cutlist writes for the job.
       const folder = ui.exportFmt === 'cnc' ? `CNC/${job}` : 'Cabinet Designer';
-      Hub.files.upload(new File([$('#exptext').value], name), folder).then(() => flash(`Saved to Files › ${folder.replace('/', ' › ')}`), err => flash('Could not save: ' + err.message));
+      hubSaveOver(new File([$('#exptext').value], name), folder).then(() => flash(`Saved to Files › ${folder.replace('/', ' › ')}`), err => flash('Could not save: ' + err.message));
       break;
     }
     case 'cnc-save': case 'cnc-download': {
       const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job', name = `${typeof cncFileName === 'function' ? cncFileName() : job + ' parts'}.json`, cf = cncPartFile(true).file, text = JSON.stringify(cf, null, 2);
       if (!cf.parts.length) { flash('Nothing to send. Pick something to cut first.'); break; }
       if (a === 'cnc-download') { const u = URL.createObjectURL(new Blob([text], { type: 'application/json' })), ln = document.createElement('a'); ln.href = u; ln.download = name; document.body.appendChild(ln); ln.click(); ln.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); break; }
-      Hub.files.upload(new File([text], name), `CNC/${job}`).then(() => flash(`Saved to Files › CNC › ${job}. Open CNC Cutlist to nest it.`), err => flash('Could not save: ' + err.message));
+      hubSaveOver(new File([text], name), `CNC/${job}`).then(() => flash(`Saved to Files › CNC › ${job}. Open CNC Cutlist to nest it.`), err => flash('Could not save: ' + err.message));
       break;
     }
     case 'send-schedule': {
-      const name = `${S.job.name.replace(/[^\w &-]/g, '').trim() || 'job'}.json`, path = `${SCHED_FOLDER}/${name}`;
-      Hub.files.delete(path).catch(() => {})
-        .then(() => Hub.files.upload(new File([JSON.stringify(scheduleSummary(), null, 1)], name, { type: 'application/json' }), SCHED_FOLDER))
+      const name = `${S.job.name.replace(/[^\w &-]/g, '').trim() || 'job'}.json`;
+      hubSaveOver(new File([JSON.stringify(scheduleSummary(), null, 1)], name, { type: 'application/json' }), SCHED_FOLDER)
         .then(() => flash('Sent to Scheduler. Open Scheduler and add it from the Jobs tab.'), err => flash('Could not send: ' + err.message));
       break;
     }

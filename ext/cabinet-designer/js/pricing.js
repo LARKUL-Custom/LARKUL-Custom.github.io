@@ -424,7 +424,7 @@ function priceAction(a, id) {
     case 'ps-pay-add': (ps.payments = ps.payments || []).push({ name: 'Payment', pct: 0 }); break;
     case 'ps-pay-del': (ps.payments || []).splice(+id, 1); break;
     case 'quote-copy': { const t = quoteCSV(ps); try { navigator.clipboard.writeText(t).then(() => flash('Quote copied'), () => flash('Could not copy')); } catch (_) { flash('Could not copy'); } return; }
-    case 'quote-save': Hub.files.upload(new File([quoteCSV(ps)], `${S.job.name.replace(/[^\w -]/g, '') || 'job'} quote.csv`), 'Cabinet Designer').then(() => flash('Saved to Files › Cabinet Designer'), e => flash('Could not save: ' + e.message)); return;
+    case 'quote-save': hubSaveOver(new File([quoteCSV(ps)], `${S.job.name.replace(/[^\w -]/g, '') || 'job'} quote.csv`), 'Cabinet Designer').then(() => flash('Saved to Files › Cabinet Designer'), e => flash('Could not save: ' + e.message)); return;
   }
   if (a !== 'price-view' && a !== 'ps-del') ui.psConfirm = false;
   savePrices(); renderPricing();
@@ -434,7 +434,7 @@ function priceAction(a, id) {
 const fileSafe = n => String(n || '').replace(/[^\w -]/g, '').trim();
 // Saves to Files in the hub, or downloads outside it.
 function saveFile(blob, name, folder) {
-  if (inHub()) return Hub.files.upload(new File([blob], name, { type: blob.type }), folder).then(() => flash(`Saved to Files › ${folder.replace('/', ' › ')}`), e => flash('Could not save: ' + e.message));
+  if (inHub()) return hubSaveOver(new File([blob], name, { type: blob.type }), folder).then(() => flash(`Saved to Files › ${folder.replace('/', ' › ')}`), e => flash('Could not save: ' + e.message));
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000); flash('Downloaded ' + name);
 }

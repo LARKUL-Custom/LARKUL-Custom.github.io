@@ -208,7 +208,7 @@ function libs2Act(a, id) {
     case 'rc-send': {
       const f = cncRecutFile(); if (!f.parts.length) { flash('None of the recut parts are in the CNC file'); return true; }
       const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job', name = `${job} recuts.json`, text = JSON.stringify(f, null, 2);
-      if (typeof inHub === 'function' && inHub() && Hub.files) Hub.files.upload(new File([text], name), `CNC/${job}`).then(() => flash(`Saved to Files › CNC › ${job}`), err => flash('Could not save: ' + err.message));
+      if (typeof inHub === 'function' && inHub() && Hub.files) hubSaveOver(new File([text], name), `CNC/${job}`).then(() => flash(`Saved to Files › CNC › ${job}`), err => flash('Could not save: ' + err.message));
       else libDownload(name, f);
       return true;
     }
