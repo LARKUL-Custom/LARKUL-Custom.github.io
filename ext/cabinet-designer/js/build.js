@@ -397,7 +397,26 @@ function drawerBoxAt(c, p, f) {
   else { openW = inW; ox0 = t; }
   const ow = openW - sl.widthDeductMM * MM, x0 = ox0 + (openW - ow) / 2;
   const dm = mat(dmt.sides) || cm, dbm = mat(dmt.bottom) || bm;
-  return { x0, x1: x0 + ow, z: z0 + sl.bottomClearMM * MM, h: bh, d: nominal, st: dm.thick, bt: dbm.thick, rec: sl.bottomRecessMM * MM, front: D, side: dm, bottom: dbm };
+  return { x0, x1: x0 + ow, z: z0 + sl.bottomClearMM * MM, h: bh, d: nominal, st: dm.thick, bt: dbm.thick, rec: sl.bottomRecessMM * MM, front: D, side: dm, bottom: dbm, full: !!drawerBoxBuild(dmt, dm.thick, dbm.thick, 0, 0, nominal, ow, bh).type };
+}
+
+// How a drawer or roll-out box is built from its drawer material template (DRAWER_BOX_TYPES in core.js): st side and bt bottom
+// thickness, bd the bottom dado, rec the runner's bottom recess, len the side length, ow the box outside width, bh its height.
+// The standard box keeps its old sizes exactly; the melamine ones have a full-height back and the bottom in all four parts.
+function drawerBoxBuild(dmt, st, bt, bd, rec, len, ow, bh) {
+  const type = DRAWER_BOX_TYPES.some(t => t.v && t.v === dmt.box) ? dmt.box : '';
+  if (!type) return { type, gd: bd, trim: 0, notchW: 0, notchH: 0, backH: bh - rec - bt, botL: len - st + bd, botW: ow - 2 * st + 2 * bd };
+  const s12 = type === 'slide12', bl = ow - 2 * st;
+  const trim = s12 ? Math.max(0, Math.min(st - 0.25, +dmt.trim >= 0 ? +dmt.trim : 0.125)) : 0, gd = bd + trim;
+  const notchW = s12 ? Math.max(0, Math.min(bl / 2 - 0.5, +dmt.notchW > 0 ? +dmt.notchW : 35 * MM)) : 0;
+  return { type, gd, trim, notchW, notchH: s12 && notchW > 0 ? rec : 0, backH: bh, botL: r3(len - 2 * st + 2 * gd - DRAWER_BOTTOM_CLEAR), botW: r3(bl + 2 * gd - DRAWER_BOTTOM_CLEAR) };
+}
+// A drawer back L long and W tall with a notch nw wide and nh tall at each bottom corner, for the runners.
+// CNC frame (origin bottom left, y up): the box bottom edge is the L1 edge at y = W, like the groove's y from L1.
+function notchedBack(L, W, nw, nh) {
+  const P = [[0, 0, 'L2'], [L, 0, 'W2'], [L, W - nh, null], [L - nw, W - nh, null], [L - nw, W, 'L1'], [nw, W, null], [nw, W - nh, null], [0, W - nh, 'W1']];
+  const r6 = v => Math.round(v * 1e6) / 1e6;
+  return { outline: P.map(([x, y]) => ({ x: r6(x), y: r6(y) })), outlineEdges: P.map(q => q[2]) };
 }
 
 /* ---------- Parts ---------- */
@@ -545,8 +564,7 @@ function buildParts(c) {
       if (f.face) { if (!warn.some(w => w.startsWith('Drawers on a corner'))) warn.push('Drawers on a corner\'s angled faces get their fronts only; build the drawer boxes by hand.'); return; }
       if (!sl) { warn.push('No drawer slide in the hardware library.'); return; }
       const dm = mat(dmt.sides) || cm, dbm = mat(dmt.bottom) || bm, st = dm.thick;
-      if (Math.abs(st - sl.sideThickMM * MM) > 0.03 && !warn.some(w => w.startsWith('Drawer box material')))
-        warn.push(`Drawer box material is ${fmtLen(st, 1)} but ${sl.name} expects ${fmtLen(sl.sideThickMM * MM, 1)} sides.`);
+
       const nominal = nominalFor(sl, inD);
       if (!nominal) { warn.push(`No ${sl.name} length fits ${fmtLen(inD, 1)} inside depth.`); return; }
       // A face frame drawer fits between the rails of its opening.
@@ -563,19 +581,29 @@ function buildParts(c) {
       const ffSp = ffOpen && f.n === 1 ? Math.max(ffr.ls, ffr.rs) - t : 0;
       if (f.n > 1 && f.idx === 0) warn.push('Side-by-side drawers need a center divider. Dividers are not generated yet.');
       const ow = openW - sl.widthDeductMM * MM, rec = sl.bottomRecessMM * MM, bdT = dbm.thick, bd = p.drawerBottomDado;
-      const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: bdT, depth: bd, face: 'inside', why: 'drawer bottom' });
-      const sideOps = [groove(nominal)], backOps = [], bottomOps = [];
+      const bx = drawerBoxBuild(dmt, st, bdT, bd, rec, nominal, ow, bh);
+      const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: bdT, depth: bx.gd, face: 'inside', why: 'drawer bottom' });
+      // For 1/2" slides: the inside of the sides is cut back below the bottom, so the runner sees a thinner side. The box front
+      // stays full thickness: the locking devices screw on there (Ayden).
+      const trimOp = len => bx.trim > 0 ? [{ type: 'groove', x1: 0, y1: rec / 2, x2: len, y2: rec / 2, width: rec, depth: bx.trim, face: 'inside', why: 'trim for the runner' }] : [];
+      const sideOps = [groove(nominal), ...trimOp(nominal)], backOps = bx.type ? [groove(ow - 2 * st)] : [], bottomOps = [];
       (sl.boxOps || []).forEach(o => {
         const op = { dia: o.dia * MM, depth: o.depth * MM, why: sl.name };
         if (o.part === 'side' && o.type === 'hbore') sideOps.push({ ...op, type: 'hbore', edge: (o.edge || 'rear') + ' end', x: o.edge === 'front' ? 0 : nominal, y: o.y * MM, inset: o.inset * MM });
         else if (o.part === 'side') sideOps.push({ ...op, type: 'bore', x: o.x * MM, y: o.y * MM, face: 'outside' });
         else if (o.part === 'back') backOps.push({ ...op, type: 'bore', x: o.x * MM, y: o.y * MM, face: 'back' });
-        else if (o.part === 'bottom') bottomOps.push({ ...op, type: 'bore', x: o.x * MM, y: o.y * MM, face: 'bottom' }, { ...op, type: 'bore', x: o.x * MM, y: ow - 2 * st + 2 * bd - o.y * MM, face: 'bottom' });
+        else if (o.part === 'bottom') bottomOps.push({ ...op, type: 'bore', x: o.x * MM, y: o.y * MM, face: 'bottom' }, { ...op, type: 'bore', x: o.x * MM, y: bx.botW - o.y * MM, face: 'bottom' });
       });
+      // The side the runner sees: the trimmed thickness below the bottom on a box for thinner-side slides.
+      const runSide = st - bx.trim;
+      if ((bx.type === 'slide12' ? runSide - sl.sideThickMM * MM > 0.03 : Math.abs(st - sl.sideThickMM * MM) > 0.03) && !warn.some(w => w.startsWith('Drawer box material')))
+        warn.push(bx.type === 'slide12' ? `Drawer box material is ${fmtLen(st, 1)}; trimmed to ${fmtLen(runSide, 1)} it is still thicker than the ${fmtLen(sl.sideThickMM * MM, 1)} sides ${sl.name} expects. Trim more in the drawer material template.`
+          : `Drawer box material is ${fmtLen(st, 1)} but ${sl.name} expects ${fmtLen(sl.sideThickMM * MM, 1)} sides.`);
       part('Drawer side', dm, nominal, bh, { qty: 2, kind: 'drawerBox', ops: sideOps });
       part('Drawer box front', dm, ow - 2 * st, bh, { kind: 'drawerBox', ops: [groove(ow - 2 * st)] });
-      part('Drawer box back', dm, ow - 2 * st, bh - rec - bdT, { kind: 'drawerBox', ops: backOps });
-      part('Drawer bottom', dbm, nominal - st + bd, ow - 2 * st + 2 * bd, { kind: 'drawerBottom', ops: bottomOps });
+      const bk = part('Drawer box back', dm, ow - 2 * st, bx.backH, { kind: 'drawerBox', ops: backOps });
+      if (bx.notchH > 0) Object.assign(bk, notchedBack(ow - 2 * st, bx.backH, bx.notchW, bx.notchH));
+      part('Drawer bottom', dbm, bx.botL, bx.botW, { kind: 'drawerBottom', ops: bottomOps });
       addB(slideBomName(sl, nominal), 1);
       addB(sl.bomExtra, 1);
       if (ffSp > 0.03) {
@@ -596,12 +624,15 @@ function buildParts(c) {
     const nominal = nominalFor(sl, inD); if (!nominal) { if (!i) warn.push(`No ${sl.name} length fits behind the doors for roll-outs.`); return; }
     const dm = mat(dmt.sides) || cm, dbm = mat(dmt.bottom) || bm, st = dm.thick, bdT = dbm.thick, bd = p.drawerBottomDado, rec = sl.bottomRecessMM * MM;
     const ow = lay.inW - 2 * lay.spacer - sl.widthDeductMM * MM, bh = ro.h;
-    const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: bdT, depth: bd, face: 'inside', why: 'roll-out bottom' });
+    const bx = drawerBoxBuild(dmt, st, bdT, bd, rec, nominal, ow, bh);
+    const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: bdT, depth: bx.gd, face: 'inside', why: 'roll-out bottom' });
+    const trimOp = len => bx.trim > 0 ? [{ type: 'groove', x1: 0, y1: rec / 2, x2: len, y2: rec / 2, width: rec, depth: bx.trim, face: 'inside', why: 'trim for the runner' }] : [];
     const tag = lay.rollouts.length > 1 ? ` ${i + 1}` : '', RO = ro.label || 'Roll-out';
-    part(RO + ' side' + tag, dm, nominal, bh, { qty: 2, kind: 'drawerBox', ops: [groove(nominal)] });
+    part(RO + ' side' + tag, dm, nominal, bh, { qty: 2, kind: 'drawerBox', ops: [groove(nominal), ...trimOp(nominal)] });
     part(RO + ' front' + tag, dm, ow - 2 * st, bh, { kind: 'drawerBox', ops: [groove(ow - 2 * st)] });
-    part(RO + ' back' + tag, dm, ow - 2 * st, Math.max(0.5, bh - rec - bdT), { kind: 'drawerBox' });
-    part(RO + ' bottom' + tag, dbm, nominal - st + bd, ow - 2 * st + 2 * bd, { kind: 'drawerBottom' });
+    const bk = part(RO + ' back' + tag, dm, ow - 2 * st, Math.max(0.5, bx.backH), { kind: 'drawerBox', ...(bx.type ? { ops: [groove(ow - 2 * st)] } : {}) });
+    if (bx.notchH > 0) Object.assign(bk, notchedBack(ow - 2 * st, bk.W, bx.notchW, bx.notchH));
+    part(RO + ' bottom' + tag, dbm, bx.botL, bx.botW, { kind: 'drawerBottom' });
     if (lay.spacer > 0) part(RO + ' spacer' + tag, cm, inD, 2.5, { qty: 2, kind: 'spacer', ops: (sl.cabHoles || []).filter(h => slideHoleY(sl, nominal, h) !== null).map(h => ({ type: 'bore', x: slideHoleY(sl, nominal, h), y: 1.25, dia: h.dia * MM, depth: h.depth * MM, face: 'inside', why: sl.name + ' runner' })) });
     addB(slideBomName(sl, nominal), 1);
     addB(sl.bomExtra, 1);

@@ -489,6 +489,38 @@ const WURTH_OPTIMA = {
   boxOps: [{ part: 'side', type: 'hbore', edge: 'rear', x: 0, y: 11, inset: 7, dia: 6, depth: 10 }],
   bomExtra: 'Würth Optima 3D locking devices WROPTIMA16F-RL (pair)',
 };
+// Drawer box builds, picked on a drawer material template (Libraries › Materials). 0.55.13, from Ayden's Mozaik box styles.
+// ''      : the original box: front, back and sides the same height, the back sits on the bottom (no notch, no trim).
+// 'full'  : 3/4 melamine box ("Melamine Drawer Box"): back as tall as the sides, the bottom in a groove in all four parts.
+// 'slide12': 3/4 melamine on undermount runners made for thinner sides ("Blum 563 (3/4) Material 1/2 Slides"): as 'full', plus the
+//   inside of the sides (not the box front: the locking devices go there) is trimmed (rabbet trim deep) below the bottom so the runner sees a thinner side, the back
+//   has a notch (notchW wide, as tall as the runner's bottom recess) at each bottom corner, and the bottom groove goes trim deeper.
+const DRAWER_BOX_TYPES = [
+  { v: '', l: 'Standard (back sits on the bottom)' },
+  { v: 'full', l: '3/4 melamine (full back, bottom in a groove all round)' },
+  { v: 'slide12', l: '3/4 melamine for 1/2" slides (notched back, trimmed sides)' },
+];
+// Bottom panel: inside size plus both groove depths, less 1 mm so it drops in (Ayden's Mozaik melamine boxes).
+const DRAWER_BOTTOM_CLEAR = 1 / 25.4;
+const MEL_BOX_MATS = [
+  { id: 'm-dbx-mel34', name: '3/4 White Melamine', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 0, color: '#f4f4f2', texture: null, procedural: null, texScale: 24 },
+  { id: 'm-dbx-mel14', name: '1/4 White Melamine (drawer bottoms)', kind: 'sheet', thick: 0.25, sheetW: 49, sheetL: 97, grain: false, cost: 0, color: '#f4f4f2', texture: null, procedural: null, texScale: 24 },
+];
+const MEL_BOX_TPLS = [
+  { id: 'dt-mel34', name: '3/4 melamine boxes', sides: 'm-dbx-mel34', bottom: 'm-dbx-mel14', box: 'full' },
+  { id: 'dt-mel34s', name: '3/4 melamine boxes for 1/2" slides', sides: 'm-dbx-mel34', bottom: 'm-dbx-mel14', box: 'slide12', trim: 0.125, notchW: 35 / 25.4 },
+];
+// Added to a job once (anything Ayden changes or deletes after is his). Nothing already picked changes.
+function ensureMelBoxes(s) {
+  if (!s || s.melBox || !Array.isArray(s.materials) || !s.matTemplates || !Array.isArray(s.matTemplates.drawer)) return s;
+  // A melamine the job already has (3/4 for the box, 1/4 for the bottom, white first) is used; else ours is added.
+  const pick = m => { const own = s.materials.filter(x => (x.kind || 'sheet') === 'sheet' && /melamine/i.test(x.name || '') && Math.abs(+x.thick - m.thick) < 0.04);
+    const hit = own.find(x => /white/i.test(x.name)) || own[0]; if (hit) return hit.id;
+    if (!s.materials.some(x => x.id === m.id)) s.materials.push(clone(s.matGrouped ? { ...m, group: matGroupGuess(m) } : m)); return m.id; };
+  const sides = pick(MEL_BOX_MATS[0]), bottom = pick(MEL_BOX_MATS[1]);
+  MEL_BOX_TPLS.forEach(t => { if (!s.matTemplates.drawer.some(x => x.id === t.id)) s.matTemplates.drawer.push({ ...clone(t), sides, bottom }); });
+  s.melBox = 1; return s;
+}
 function migrate(s) {
   if (!s || typeof s !== 'object') return null;
   if (s.v === 2 && Array.isArray(s.cabinets)) {
@@ -534,6 +566,7 @@ function migrate(s) {
   if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
   if (typeof ensureMozLib === 'function') ensureMozLib(s);
   if (s.dollKit && typeof ensureDollKit === 'function') ensureDollKit(s);
+  ensureMelBoxes(s);
   // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.
   if (!s.miniGone) { const used = s.rooms.some(r => (r.cabinets || []).some(c => c.libId === 'mini-ad')), L = !s.libSet || s.libSet === 'main' ? s.library : (s.libSets || {}).main;
     if (!used && Array.isArray(L)) { const i = L.findIndex(l => l.id === 'mini-ad'); if (i >= 0) L.splice(i, 1); } s.miniGone = 1; }

@@ -40,6 +40,9 @@ function vBuildExtras(c, parts, warn, p, x) {
   // V5 no box front: the drawer face screws to the bottom, which runs to the front.
   const kind = p.drawerBox || 'butt';
   if (kind === 'butt') return;
+  // A melamine box from the drawer material template has its own build (full back, notches), so it stays as it is cut.
+  const bt0 = typeof drawerMatT === 'function' && drawerMatT(cabSet(c, 'drawerMatT'));
+  if (bt0 && DRAWER_BOX_TYPES.some(t => t.v && t.v === bt0.box)) { if (mine('Drawer side').length && !warn.some(w => w.startsWith('Melamine drawer boxes'))) warn.push(`Melamine drawer boxes keep their own build; the "${kind === 'dovetail' ? 'Dovetail' : 'No box front'}" drawer box joint is not used for them.`); return; }
   const sides = mine('Drawer side'), fronts = mine('Drawer box front'), backs = mine('Drawer box back'), bots = mine('Drawer bottom');
   sides.forEach((sd, i) => {
     const st = sd.T, fr = fronts[i], bk = backs[i], bt = bots[i];

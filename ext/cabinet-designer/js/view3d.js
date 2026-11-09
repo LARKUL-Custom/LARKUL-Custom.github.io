@@ -210,7 +210,7 @@ function cabinetMeshes(c, opts = {}) {
     const g = into ? { add: o => { o.userData.layer = 'drawerBox'; into.add(o); } } : grp, sM = L3(bx.side, 'drawerBox'), bM = L3(bx.bottom, 'drawerBox'), zb = bx.front - bx.d, w = bx.x1 - bx.x0, cx = (bx.x0 + bx.x1) / 2;
     [bx.x0 + bx.st / 2, bx.x1 - bx.st / 2].forEach(x => g.add(box3(bx.st, bx.h, bx.d, sM, x, bx.z + bx.h / 2, zb + bx.d / 2)));
     g.add(box3(w - 2 * bx.st, bx.h, bx.st, sM, cx, bx.z + bx.h / 2, bx.front - bx.st / 2));
-    const bkH = Math.max(0.5, bx.h - bx.rec - bx.bt); g.add(box3(w - 2 * bx.st, bkH, bx.st, sM, cx, bx.z + bx.h - bkH / 2, zb + bx.st / 2));
+    const bkH = bx.full ? bx.h : Math.max(0.5, bx.h - bx.rec - bx.bt); g.add(box3(w - 2 * bx.st, bkH, bx.st, sM, cx, bx.z + bx.h - bkH / 2, zb + bx.st / 2));
     g.add(box3(w - 2 * bx.st, bx.bt, bx.d - bx.st, bM, cx, bx.z + bx.rec + bx.bt / 2, zb + (bx.d - bx.st) / 2, false));
   };
   const ix0 = t + lay.spacer, ix1 = W - t - lay.spacer, idx = (ix1 - ix0);
@@ -220,7 +220,7 @@ function cabinetMeshes(c, opts = {}) {
   lay.rollouts.forEach(ro => {
     if (ro.designed || !nom3) return trayBox(ix0 + 0.5, ix1 - 0.5, ro.z, ro.h, inD - 1.5, p.backInset + bt + 0.5);
     const ow = idx - sl3.widthDeductMM * MM, x0 = ix0 + (idx - ow) / 2;
-    cutBox({ x0, x1: x0 + ow, z: ro.z, h: ro.h, d: nom3, st: rsm.thick, bt: rbm.thick, rec: sl3.bottomRecessMM * MM, front: D, side: rsm, bottom: rbm });
+    cutBox({ x0, x1: x0 + ow, z: ro.z, h: ro.h, d: nom3, st: rsm.thick, bt: rbm.thick, rec: sl3.bottomRecessMM * MM, front: D, side: rsm, bottom: rbm, full: !!drawerBoxBuild(dmt, rsm.thick, rbm.thick, 0, 0, nom3, ow, ro.h).type });
   });
   lay.trays.forEach(tr => { for (let i = 1; i <= tr.n; i++) grp.add(box3(0.25, tr.z1 - tr.z0 - 1, inD - 1, M(bm), t + (W - 2 * t) * i / (tr.n + 1), (tr.z0 + tr.z1) / 2, p.backInset + bt + (inD - 1) / 2)); });
   lay.bins.forEach(bn => { const bh = Math.min(20, bn.z1 - bn.z0 - 2); [0.27, 0.73].forEach(k => grp.add(box3(idx * 0.42, bh, inD * 0.7, flat3('#8d949a'), ix0 + idx * k, bn.z0 + bh / 2 + 0.5, p.backInset + bt + inD * 0.45))); });
