@@ -465,6 +465,8 @@ $('#file-list').onclick = async (e) => {
   }
 };
 
+$('#open-explorer').onclick = () => api('/api/files/reveal', { method: 'POST', json: { path: state.folder } });
+
 $('#new-folder').onclick = async () => {
   const name = await promptDialog('New folder', '');
   if (!name) return;
@@ -1532,6 +1534,7 @@ async function phoneAccessDialog() {
 const info = await api('/api/info');
 // The phone app (phone/) runs this page with no PC: like a remote phone, but with no PC to reach.
 state.remote = info.remote || info.standalone;
+$('#open-explorer').hidden = Boolean(state.remote);
 document.body.classList.toggle('remote', info.remote);
 document.body.classList.toggle('standalone', Boolean(info.standalone));
 if (info.standalone) {

@@ -80,6 +80,11 @@
       mkdir: (path) => call(`${prefix}/folder`, { method: 'POST', json: { path } }),
       rename: (from, to) => call(`${prefix}/rename`, { method: 'POST', json: { from, to } }),
       delete: (path) => call(`${prefix}?path=${q(path)}`, { method: 'DELETE' }),
+      /**
+       * Opens a folder in Explorer on the hub's PC (the nearest existing folder above it if it
+       * isn't there yet). Resolves to { opened, path, reason? }; opened is false on a phone.
+       */
+      reveal: (path = '') => call(`${prefix}/reveal`, { method: 'POST', json: { path } }),
     };
   }
 
