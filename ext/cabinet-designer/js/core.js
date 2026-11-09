@@ -307,6 +307,7 @@ function seed() {
     ],
     hardware: [
       { id: 'hw-563h', ...clone(TANDEM_563H) },
+      { id: 'hw-optima', ...clone(WURTH_OPTIMA) },
       { id: 'hw-ball', kind: 'slide', name: 'Full-ext ball bearing side mount', notes: '1/2" clearance per side, for 1/2" drawer sides.', lengths: [12, 14, 16, 18, 20, 22],
         sideThickMM: 12.7, widthDeductMM: 25.4, bottomRecessMM: 6.35, bottomClearMM: 6, topClearMM: 20, rearClearMM: 10,
         cabHoles: [{ ref: 'front', y: 37, z: 22, dia: 5, depth: 12 }, { ref: 'rear32', y: 0, z: 22, dia: 5, depth: 12 }],
@@ -439,6 +440,27 @@ const TANDEM_563H = {
   boxOps: [{ part: 'side', type: 'hbore', edge: 'rear', x: 0, y: 11, inset: 7, dia: 6, depth: 10 }],
   bomExtra: 'Blum TANDEM locking devices T51.1901R + T51.1901L (pair)',
 };
+// Würth Optima synchronized undermount, soft close, full extension, 100 lb, for 1/2"-5/8" drawer sides (Würth Louis items WROPTIMA-09..21), 0.55.3.
+// Lengths, item numbers, prices and locking devices from Würth's Optima listing. Würth has no Optima install sheet, so the sizes and drilling come from
+// Würth's sheet for its PRO 560 synchronized undermount ("PRO 560 Undermount Slide Specifications", same 12.5/16 mm 3D locking devices, full-length
+// cabinet member): drawer length = nominal, inside drawer width = opening - 42 mm, min inside depth 339/416/494/568 mm for 305/381/457/533 mm,
+// screw holes 37, 69, 165, 261, 357, 453, 517 mm from the cabinet front (as far as each runner reaches), rear hook 6 mm x 10 deep, 11 mm up, 7 mm in,
+// bottom recess max 12 mm. The 9" (not on that sheet) is worked out the same way. Check against an Optima slide before cutting.
+const WURTH_OPTIMA = {
+  kind: 'slide', name: 'Würth Optima synchronized undermount',
+  notes: 'Full extension, soft close, synchronized, 100 lb, zinc. For 1/2" to 5/8" drawer sides (5/8" standard). Frameless or face frame (face frame needs rear brackets WROPTIMA-RB or WROPTIMA-NRB). Locking devices: WROPTIMA16F-RL 3D 6-way flanged set for 16 mm sides ($2.85/pair), WROPTIMA12F-RL for 12.5 mm sides. Würth has no Optima install sheet: sizes and drilling are from Würth\'s PRO 560 synchronized slide sheet. Check against an Optima slide before cutting.',
+  lengths: [9, 12, 15, 18, 21],
+  partNos: { 9: 'WROPTIMA-09', 12: 'WROPTIMA-12', 15: 'WROPTIMA-15', 18: 'WROPTIMA-18', 21: 'WROPTIMA-21' },
+  runnerMM: { 9: 229, 12: 305, 15: 381, 18: 457, 21: 533 },
+  minDepthMM: { 9: 263, 12: 339, 15: 416, 18: 494, 21: 568 },
+  // Screws in the front, middle and last hole of the full-length cabinet member (PRO 560 sheet pattern). Prices per pair from Würth Louis, 2026-11-09.
+  holeSets: { 9: [37, 165], 12: [37, 165, 261], 15: [37, 165, 357], 18: [37, 261, 453], 21: [37, 261, 517] },
+  prices: { 9: 14.29, 12: 12.42, 15: 13.30, 18: 13.41, 21: 14.62 },
+  sideThickMM: 16, widthDeductMM: 10, bottomRecessMM: 12, bottomClearMM: 14, topClearMM: 7, rearClearMM: 35,
+  cabHoles: [{ ref: 'set', i: 1, y: 0, z: 24, dia: 5, depth: 12.7 }, { ref: 'set', i: 2, y: 0, z: 24, dia: 5, depth: 12.7 }, { ref: 'set', i: 3, y: 0, z: 24, dia: 5, depth: 12.7 }],
+  boxOps: [{ part: 'side', type: 'hbore', edge: 'rear', x: 0, y: 11, inset: 7, dia: 6, depth: 10 }],
+  bomExtra: 'Würth Optima 3D locking devices WROPTIMA16F-RL (pair)',
+};
 function migrate(s) {
   if (!s || typeof s !== 'object') return null;
   if (s.v === 2 && Array.isArray(s.cabinets)) {
@@ -468,6 +490,8 @@ function migrate(s) {
     s.hwMozaik = 1;
   }
   // 0.55.1: Ayden's shop bores the hinge cup 3 mm from the door edge (cup centre 20.5 mm, like his Mozaik hinge file), not 5 mm.
+  // 0.55.3: the Würth Optima slide joins older jobs' hardware (added only; nothing already picked changes).
+  if (!s.optima) { if (Array.isArray(s.hardware) && !s.hardware.some(h => h.id === 'hw-optima')) { const i = s.hardware.findIndex(h => h.id === 'hw-563h'); s.hardware.splice(i + 1, 0, { id: 'hw-optima', ...clone(WURTH_OPTIMA) }); } s.optima = 1; }
   if (!s.cup3) { (s.hardware || []).forEach(h => { if (h.id === 'hw-cliptop' && +h.cupEdgeMM === 5) h.cupEdgeMM = 3; }); s.cup3 = 1; }
   if (s.job && s.job.params) Object.entries(SHOP_PARAMS).forEach(([k, v]) => { if (!(k in s.job.params)) s.job.params[k] = v; });
   // Formulas and job variables came later.
