@@ -94,6 +94,8 @@ function blankShapeDesign(presetId = 'round-front') {
 }
 const shapeLibItem = id => (S.shapeLib || []).find(x => x.id === id);
 const shapeById = id => (S.shapes || []).find(x => x.id === id);
+// A shape is as thick as the material it is cut from (Ayden 2026-11-09: everything goes off the material's thickness); its own thick is only a fallback.
+const shapeT = s => { const m = s && mat(s.mat); return m && +m.thick > 0 ? +m.thick : (+(s && s.thick) || 0.75); };
 const shapeToLib = (d, id) => ({ id, name: d.name, plane: d.plane, pts: clone(d.pts), thick: d.thick, mat: d.mat });
 function defaultShapeLib(S) {
   const top = (S.materials.find(m => /butcher/i.test(m.name)) || S.materials[0]).id, sheet = (S.materials.find(m => (m.kind || 'sheet') === 'sheet') || S.materials[0]).id;
@@ -116,7 +118,7 @@ function shapePlanPoly(s) {
   if (!wall(s.wall)) return null;
   const { box, out } = shapeLocal(s);
   if (s.plane === 'flat') return out.map(p => shapeWallPt(s, p.x, p.y));
-  return [shapeWallPt(s, 0, 0), shapeWallPt(s, box.w, 0), shapeWallPt(s, box.w, s.thick), shapeWallPt(s, 0, s.thick)];
+  return [shapeWallPt(s, 0, 0), shapeWallPt(s, box.w, 0), shapeWallPt(s, box.w, shapeT(s)), shapeWallPt(s, 0, shapeT(s))];
 }
 function shapesPlanSVG() {
   const px = ui.px;
@@ -135,9 +137,9 @@ function shapesElevSVG(w, side, L, mats) {
   return gh + S.shapes.filter(s => s.wall === w.id && s.side === side).map(s => {
     const { box, out } = shapeLocal(s), x0 = side === 1 ? s.off : L - s.off - box.w, m = mat(s.mat); mats.push(m && m.id);
     const sel = ui.sel && ui.sel.type === 'shape' && ui.sel.id === s.id;
-    const shape = s.plane === 'flat' ? `<rect ${fillFor(m, 'ev-top')} x="${x0}" y="${-(s.elev + s.thick)}" width="${box.w}" height="${s.thick}"/>`
+    const shape = s.plane === 'flat' ? `<rect ${fillFor(m, 'ev-top')} x="${x0}" y="${-(s.elev + shapeT(s))}" width="${box.w}" height="${shapeT(s)}"/>`
       : `<polygon ${fillFor(m, 'ev-top')} points="${out.map(p => `${r3(x0 + p.x)},${r3(-(s.elev + p.y))}`).join(' ')}"/>`;
-    const hb = s.plane === 'flat' ? [x0, -(s.elev + s.thick), box.w, s.thick] : [x0, -(s.elev + box.h), box.w, box.h];
+    const hb = s.plane === 'flat' ? [x0, -(s.elev + shapeT(s)), box.w, shapeT(s)] : [x0, -(s.elev + box.h), box.w, box.h];
     return `<g data-shape="${s.id}">${shape}<rect class="ev-hit" x="${hb[0]}" y="${hb[1] - (s.plane === 'flat' ? 1 : 0)}" width="${hb[2]}" height="${hb[3] + (s.plane === 'flat' ? 2 : 0)}"/>${sel ? `<rect class="ev-sel nss" x="${hb[0]}" y="${hb[1]}" width="${hb[2]}" height="${hb[3]}"/>` : ''}</g>`;
   }).join('');
 }
@@ -145,14 +147,14 @@ function shapesElevSVG(w, side, L, mats) {
 function shapeMesh3(s, opts = {}) {
   const w = wall(s.wall); if (!w) return null;
   const { box, out } = shapeLocal(s), sh = new THREE.Shape(out.map(p => new THREE.Vector2(p.x, p.y)));
-  const g = new THREE.ExtrudeGeometry(sh, { depth: s.thick, bevelEnabled: false, curveSegments: 1 });
+  const g = new THREE.ExtrudeGeometry(sh, { depth: shapeT(s), bevelEnabled: false, curveSegments: 1 });
   const mm = mat3(mat(s.mat), opts), k = (mm.userData && mm.userData.texScale) || 24, uv = g.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / k, uv.getY(i) / k);
   const mesh = new THREE.Mesh(g, mm);
   if (!R3) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat3()));
   const grp = wallGroup(w, s.side, s.side === 1 ? s.off : s.off + box.w, s.outset || 0);
   // Flat: shape y runs out from the wall, the thickness goes down from the top. Upright: shape y runs up, thickness out from the wall.
-  if (s.plane === 'flat') { mesh.rotation.x = Math.PI / 2; mesh.position.y = s.elev + s.thick; }
+  if (s.plane === 'flat') { mesh.rotation.x = Math.PI / 2; mesh.position.y = s.elev + shapeT(s); }
   else mesh.position.y = s.elev;
   grp.add(mesh); grp.traverse(o => { o.userData.shapeId = s.id; });
   return grp;
@@ -174,7 +176,7 @@ function placeShape(libId, p, at) {
 // where you let go, snapping onto the tops of the cabinets on that wall.
 function shapeElevSpot(libId, p) {
   const l = shapeLibItem(libId), w = wall(ui.elevWall); if (!l || !w || !p) return null;
-  const b = shapeBox(l.pts), L = wg(w).L, side = elevSide(w), a = side === 1 ? p.x : L - p.x, H = l.plane === 'flat' ? (+l.thick || 0.75) : b.h;
+  const b = shapeBox(l.pts), L = wg(w).L, side = elevSide(w), a = side === 1 ? p.x : L - p.x, H = l.plane === 'flat' ? shapeT(l) : b.h;
   const off = Math.max(0, Math.min(Math.max(0, L - b.w), Math.round((a - b.w / 2) * 4) / 4));
   let elev = Math.max(0, Math.round((-p.y - H / 2) * 4) / 4), best = Math.max(lay().snapReach, 10 * (ui.elevPx || 0));
   S.cabinets.forEach(k => { if (k.wall === w.id && k.side === side) { const v = k.elev + k.h; if (Math.abs(v - elev) < best) { best = Math.abs(v - elev); elev = v; } } });
@@ -184,7 +186,7 @@ function shapeProps(s) {
   const id = s.id, R = 'shp:' + id, b = shapeBox(s.pts), o = shapeOutline(s.pts);
   return `<div class="psec"><div class="pshead"><div class="cabtitle"><span class="chip shape">Shape</span> <b>${esc(s.name)}</b></div></div>
     <div class="row-actions"><button class="btn primary" data-act="shape-edit" data-id="${id}">${icon('ruler')}Edit shape</button><button class="btn" data-act="shape-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn" data-act="shape-flip" data-id="${id}">${icon('flip')}Flip</button><button class="btn danger" data-act="shape-del" data-id="${id}">${icon('trash')}Delete</button></div>
-    <div class="sizeline">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(s.thick, 1)}</div>
+    <div class="sizeline">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(shapeT(s), 1)}</div>
     <div class="note">${s.plane === 'flat' ? 'Lies flat' : 'Stands up'} · ${wallName(wall(s.wall))} · ${o.length} outline points</div></div>
   <div class="psec box">${secHead('magnet', 'Position', 'blue')}
     <div class="grid2">${fld('Along the wall', R, 'off', s.off, 'len')}${fld('Out from wall', R, 'outset', s.outset || 0, 'len')}${fld(s.plane === 'flat' ? 'Bottom height' : 'Height off floor', R, 'elev', s.elev, 'len')}${fld('Thickness', R, 'thick', s.thick, 'len')}</div>
@@ -194,7 +196,7 @@ function shapeProps(s) {
 }
 // Cut list rows for the shapes in the open room.
 function shapeParts() {
-  return S.shapes.map(s => { const b = shapeBox(s.pts); return { cabId: s.id, cab: 'Shape', name: s.name, kind: 'shape', qty: 1, L: r3(b.w), W: r3(b.h), T: s.thick, mat: s.mat, grain: false, edges: '', band: {}, ops: [], outline: shapeOutline(s.pts).map(p => ({ x: r3(p.x - b.x0), y: r3(p.y - b.y0) })) }; });
+  return S.shapes.map(s => { const b = shapeBox(s.pts); return { cabId: s.id, cab: 'Shape', name: s.name, kind: 'shape', qty: 1, L: r3(b.w), W: r3(b.h), T: shapeT(s), mat: s.mat, grain: false, edges: '', band: {}, ops: [], outline: shapeOutline(s.pts).map(p => ({ x: r3(p.x - b.x0), y: r3(p.y - b.y0) })) }; });
 }
 
 /* ---------- Shape editor (Designer › Custom shape) ---------- */
@@ -276,12 +278,12 @@ function renderShapeDesigner() {
     + ((S.shapeLib || []).length ? `<div class="eyebrow">Saved shapes</div>${S.shapeLib.map(l => `<button class="pe-railbtn${d.sourceLib === l.id ? ' on' : ''}" data-act="se-pre" data-id="lib:${l.id}" title="${esc(l.name)}">${seThumb(l.pts, l.plane !== 'flat')}${esc(l.name)}</button>`).join('')}` : '');
   const fields = `${inRoom ? '<div class="note">Editing a shape that is in a room.</div>' : src ? `<div class="note">Editing a copy of <b>${esc(src.name)}</b>.</div>` : '<div class="note">New shape, not saved yet.</div>'}
       ${fld('Name', 'shd', 'name', d.name, 'text', { wide: true })}
-      <div class="grid2">${fld('Lies', 'shd', 'plane', d.plane, 'select', { options: [{ v: 'flat', l: 'Flat (top, shelf)' }, { v: 'upright', l: 'Upright (panel)' }] })}${fld('Thickness', 'shd', 'thick', d.thick, 'len')}
+      <div class="grid2">${fld('Lies', 'shd', 'plane', d.plane, 'select', { options: [{ v: 'flat', l: 'Flat (top, shelf)' }, { v: 'upright', l: 'Upright (panel)' }] })}${d.forMold ? fld('Thickness', 'shd', 'thick', d.thick, 'len') : ''}
       ${fld('Overall width', 'shd', 'bw', r3(b.w), 'len')}${fld(d.plane === 'flat' ? 'Overall depth' : 'Overall height', 'shd', 'bh', r3(b.h), 'len')}</div>
       ${fld('Material', 'shd', 'mat', d.mat, 'select', { options: azOpts(S.materials), wide: true })}`;
   $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="tab" data-id="library">${icon('back')}Products</button><h2>Shape editor</h2></div>
     <div class="row-actions">${desModeSeg()}${inRoom ? `<button class="btn primary" data-act="se-apply">${icon('check')}Apply to the shape in the room</button>` : ''}${src ? `<button class="btn" data-act="se-update">Update “${esc(src.name)}”</button>` : ''}<button class="btn" data-act="se-save">Save to shape library</button><button class="btn${inRoom ? '' : ' primary'}" data-act="se-place">${icon('plus')}Save and place in room</button></div></div>
-  ${seMz(d, pal, rows, b, selBox, fields, 'Points and edges', `${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(d.thick, 1)} · ${r3(Math.abs(shapeArea2(o)) / 2 / 144)} sq ft · edge ${fmtLen(shapePerim(o), 1)} around`)}`;
+  ${seMz(d, pal, rows, b, selBox, fields, 'Points and edges', `${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(shapeT(d), 1)} · ${r3(Math.abs(shapeArea2(o)) / 2 / 144)} sq ft · edge ${fmtLen(shapePerim(o), 1)} around`)}`;
   initShapeEditor();
 }
 // A small picture of a shape for the rail.

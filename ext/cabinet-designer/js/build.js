@@ -276,12 +276,13 @@ function pullPlacement(c, f) {
   z = Math.max(Math.min(lo, hi), Math.min(Math.max(lo, hi), z));
   return { hw: p, x, z, vertical: true };
 }
-function pullHoles(pp) {
+// Pull holes go right through the front, so their depth is the front material's thickness (T).
+function pullHoles(pp, T) {
   const cc = pp.hw.ccMM * MM, out = [];
   if (!cc) out.push({ x: pp.z, y: pp.x });
   else if (pp.vertical) out.push({ x: pp.z - cc / 2, y: pp.x }, { x: pp.z + cc / 2, y: pp.x });
   else out.push({ x: pp.z, y: pp.x - cc / 2 }, { x: pp.z, y: pp.x + cc / 2 });
-  return out.map(h => ({ type: 'bore', x: h.x, y: h.y, dia: pp.hw.holeDiaMM * MM, depth: 0.75, face: 'front', through: true, why: 'pull' }));
+  return out.map(h => ({ type: 'bore', x: h.x, y: h.y, dia: pp.hw.holeDiaMM * MM, depth: T, face: 'front', through: true, why: 'pull' }));
 }
 
 /* ---------- Slide geometry ---------- */
@@ -474,7 +475,7 @@ function buildParts(c) {
       cupOps.push({ type: 'bore', x: hp, y: edgeY + sgn * cupY, dia: hg.cupDiaMM * MM, depth: hg.cupDepthMM * MM, face: 'back', why: 'hinge cup' });
       (hg.cupExtra || []).forEach(e => cupOps.push({ type: 'bore', x: hp + e.dx * MM, y: edgeY + sgn * (cupY + e.dy * MM), dia: e.dia * MM, depth: e.depth * MM, face: 'back', why: 'hinge dowel' }));
     });
-    const pp = pullPlacement(c, f), pullOps = pp ? pullHoles(pp) : [];
+    const pp = pullPlacement(c, f), pullOps = pp ? pullHoles(pp, dm.thick) : [];
     if (pp) addB(pp.hw.name, 1);
     // Buyout fronts come from the door maker: hinges and pulls stay on the list, but no parts get cut.
     if (ds.source === 'buyout') return;

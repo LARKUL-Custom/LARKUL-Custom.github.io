@@ -222,11 +222,14 @@ const HW_KINDS = [['slide', 'Drawer slides'], ['hinge', 'Hinges'], ['pull', 'Pul
 // Joint templates: how the box is fastened together. Female holes go in the face of the side (or the panel a divider lands on),
 // male holes in the end of the panel that butts into it. A depth of 0 drills through. Sizes are inches.
 const JOINT_LOC = { front: 2, back: 2, maxGap: 8 };
+// 0.55.17 (Ayden 2026-11-09): sides into the bottom take 3 confirmats, front, middle and back, not 4 or 5. Spaced up to
+// 12" apart, so a 24" deep base gets 3, a 12" wall cabinet keeps 2 and only a bottom over 28" between the end holes gets 4.
+const JT_BOTTOM3 = { mode: 'gap', front: 2, back: 2, maxGap: 12, none: false };
 function defaultJoints() {
   return [
     { id: 'jt-confirmat', kind: 'joint', name: 'Confirmat', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true },
       female: { dia: 0.1969, depth: 0 }, male: { dia: 0.1969, depth: 1.75, center: true }, breakDado: 0,
-      ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 } },
+      ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 }, types: { bottom: { ...JT_BOTTOM3 } } },
     { id: 'jt-dowel', kind: 'joint', name: 'Dowels', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false },
       female: { dia: 0.315, depth: 0.5003 }, male: { dia: 0.315, depth: 1, center: true }, breakDado: 1,
       ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 }, stretchers: { n: 2 } },
@@ -553,6 +556,8 @@ function migrate(s) {
   // 0.55.1: Ayden's shop bores the hinge cup 3 mm from the door edge (cup centre 20.5 mm, like his Mozaik hinge file), not 5 mm.
   // 0.55.3: the Würth Optima slide joins older jobs' hardware (added only; nothing already picked changes).
   if (!s.optima) { if (Array.isArray(s.hardware) && !s.hardware.some(h => h.id === 'hw-optima')) { const i = s.hardware.findIndex(h => h.id === 'hw-563h'); s.hardware.splice(i + 1, 0, { id: 'hw-optima', ...clone(WURTH_OPTIMA) }); } s.optima = 1; }
+  // 0.55.17: the Confirmat template's bottom joint goes to 3 screws, unless the job already set the bottom on its own.
+  if (!s.conf3) { (s.hardware || []).forEach(h => { if (h.id === 'jt-confirmat' && !(h.fastener && h.fastener !== 'holes')) { const o = (h.types || {}).bottom; if (!o || o.same) h.types = { ...(h.types || {}), bottom: { ...JT_BOTTOM3 } }; } }); s.conf3 = 1; }
   if (!s.cup3) { (s.hardware || []).forEach(h => { if (h.id === 'hw-cliptop' && +h.cupEdgeMM === 5) h.cupEdgeMM = 3; }); s.cup3 = 1; }
   // 0.55.15: nailers on all cabinets (Ayden 2026-11-09). Jobs from before had 'none' only because it was the default,
   // so they switch to top and bottom, 4" wide like his Mozaik library. A room or cabinet set to None keeps it.
