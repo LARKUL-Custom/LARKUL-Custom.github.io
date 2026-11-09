@@ -133,7 +133,8 @@ function sideSectionSVG(c, maxH, open) {
   const Y = z => -z, rect = (cls, x, z, w, h, x2 = '') => `<rect class="${cls} nss" x="${x}" y="${Y(z + h)}" width="${w}" height="${h}"${x2}/>`;
   const feet = onFeet(c, p);
   let s = feet ? `<path class="sec-box nss" d="M0 ${-tk}H${D}V${-H}H0Z"/>` : `<path class="sec-box nss" d="M${ts} 0H${D}V${-H}H0V${-tk}H${ts}Z"/>`;
-  if (feet && tk) [ts + t + 1.5, D - 3].forEach(x => { s += `<rect class="ev-leg nss" x="${x - 0.8}" y="${-tk}" width="1.6" height="${tk}"/>`; });
+  if (onLadder(c, p) && tk) { const yf = ts + (p.toeSkin !== 'off' ? t : 0); s += rect('sec-part', yf, 0, t, tk) + rect('sec-part', D - t, 0, t, tk); }
+  else if (feet && tk) [ts + t + 1.5, D - 3].forEach(x => { s += `<rect class="ev-leg nss" x="${x - 0.8}" y="${-tk}" width="1.6" height="${tk}"/>`; });
   s += rect('sec-part', 0, lay.zIn0 - t, D, t) + rect('sec-part', 0, H - t, D, t) + rect('sec-part', by, lay.zIn0, bt, lay.zIn1 - lay.zIn0);
   if (tk && p.toeSkin !== 'off') s += rect('sec-part', ts, 0, t, tk);
   shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => { s += rect('sec-part', p.shelfFrontSetback, z, by - p.shelfFrontSetback, t); });

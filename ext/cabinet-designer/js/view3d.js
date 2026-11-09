@@ -171,7 +171,15 @@ function cabinetMeshes(c, opts = {}) {
   if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, L3(mat(mt.toeKick) || cm, 'toe'), o => grp.add(o)); else grp.add(box3(W, tk, t, L3(mat(mt.toeKick) || cm, 'toe'), W / 2, tk / 2, D - sb - t / 2)); }
   // A blind corner's blind panel, flush with the front of the box.
   if (blindCorner(c)) { const bw = blindWidth(c), x0 = cornerSide(c) === 'L' ? t : W - bw; grp.add(box3(bw - t, H - tk - 2 * t, t, cmM, x0 + (bw - t) / 2, tk + t + (H - tk - 2 * t) / 2, D - t / 2)); }
-  if (feet) {
+  // Ladder base: the same rails and rungs as the cut list (buildParts), under the box.
+  if (onLadder(c, p) && tk && !angledCorner(c)) {
+    const lmat = mat(p.ladderMat) || cm, lt = lmat.thick, lM = L3(lmat, 'inside'), tkt = (mat(mt.toeKick) || cm).thick;
+    const yf = p.toeKickSetback + (p.toeSkin !== 'off' ? tkt : 0), dep = D - yf, gap = +p.ladderGap > 0 ? +p.ladderGap : 24, n = Math.max(2, Math.ceil((W - lt) / gap - 1e-6) + 1);
+    grp.add(box3(W, tk, lt, lM, W / 2, tk / 2, D - yf - lt / 2));
+    grp.add(box3(W, tk, lt, lM, W / 2, tk / 2, lt / 2));
+    for (let i = 0; i < n; i++) grp.add(box3(lt, tk, dep - 2 * lt, lM, lt / 2 + (W - lt) * i / (n - 1), tk / 2, dep / 2));
+  }
+  if (onLegs(c, p)) {
     const n = feetCount(c, p), per = Math.ceil(n / 2), leg = R3 ? metal3('#2b2f33') : flat3('#2b2f33');
     if (angledCorner(c)) cornerLegSpots(c, p).forEach(q => grp.add(box3(1.6, tk, 1.6, leg, q.x, tk / 2, q.y, false)));
     else {

@@ -29,7 +29,7 @@ function finishBox(d) {
   if (ids.length) flash(`${multiIds().length} cabinets selected`);
 }
 
-const bulkCons = (c, k) => k === 'toeKick' ? (hasToe(c) ? 'yes' : 'no') : ((c.construction || {}).top || 'full');
+const bulkCons = (c, k) => k === 'toeKick' ? (toeOn(c) ? 'yes' : 'no') : ((c.construction || {}).top || 'full');
 function multiProps() {
   const ids = multiIds(), cs = ids.map(cab);
   const agree = vals => vals.every(v => v === vals[0]) ? vals[0] : MIXED;

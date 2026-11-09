@@ -35,7 +35,11 @@ function parseLen(str) {
 
 /* ---------- Registries ---------- */
 const PARAM_DEFS = [
-  { k: 'baseType', g: 'base', label: 'Cabinet base', type: 'select', cats: ['Base', 'Tall'], options: [{ v: 'feet', l: 'Feet (leveler legs)' }, { v: 'notch', l: 'Toe kick notch in the sides' }] },
+  // 2026-11-09 Ayden: legs (shop default), a built-in toe like RTA cabinets, none (plain box to the floor, no leg holes),
+  // or a ladder base box built under the cabinet (the cabinet stays the same as on legs).
+  { k: 'baseType', g: 'base', label: 'Cabinet base', type: 'select', cats: ['Base', 'Tall'], options: [{ v: 'feet', l: 'Legs (cabinet feet)' }, { v: 'notch', l: 'Built-in toe kick (notched sides, RTA)' }, { v: 'ladder', l: 'Ladder base box under the cabinet' }, { v: 'none', l: 'None (plain cabinet, no legs or toe)' }] },
+  { k: 'ladderMat', g: 'base', label: 'Ladder base material', type: 'select', cats: ['Base', 'Tall'], get options() { return [{ v: '', l: 'Same as the cabinet' }, ...S.materials.filter(m => m.kind === 'sheet').map(m => ({ v: m.id, l: m.name }))]; } },
+  { k: 'ladderGap', g: 'base', label: 'Ladder base rungs, at most this apart (blank = 24")', type: 'len', cats: ['Base', 'Tall'] },
   { k: 'toeSkin', g: 'base', label: 'Toe skin', type: 'select', cats: ['Base', 'Tall'], options: [{ v: 'on', l: 'Add automatically' }, { v: 'off', l: 'Leave off' }] },
   { k: 'toeKickHeight', g: 'base', label: 'Toe kick / feet height', type: 'len', cats: ['Base', 'Tall'] },
   { k: 'toeKickSetback', g: 'base', label: 'Toe kick / toe skin setback', type: 'len', cats: ['Base', 'Tall'] },
@@ -66,7 +70,7 @@ const PARAM_DEFS = [
   { k: 'drawerBottomDado', g: 'drawers', label: 'Drawer bottom dado', type: 'len' },
 ];
 // Parameter groups, by what they are for.
-const PARAM_GROUPS = [['base', 'Feet and toe kick'], ['box', 'Cabinet construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
+const PARAM_GROUPS = [['base', 'Legs and toe kick'], ['box', 'Cabinet construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
 const SHOP_PARAMS = {
   baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'none', nailerWidth: 3.5, backInset: 0.75, dadoDepth: 0.375,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
@@ -110,6 +114,7 @@ const PART_KINDS = [
   { id: 'rearStretcher', name: 'Rear stretcher', edges: { L1: 'Front', L2: 'Back', W1: 'Left end', W2: 'Right end' } },
   { id: 'back', name: 'Back', edges: { L1: 'Left', L2: 'Right', W1: 'Bottom', W2: 'Top' } },
   { id: 'toekick', name: 'Toe kick', edges: { L1: 'Bottom', L2: 'Top', W1: 'Left end', W2: 'Right end' } },
+  { id: 'ladder', name: 'Ladder base rails and rungs', edges: { L1: 'Bottom', L2: 'Top', W1: 'End 1', W2: 'End 2' } },
   { id: 'shelf', name: 'Adjustable shelves', edges: { L1: 'Front', L2: 'Back', W1: 'Left end', W2: 'Right end' } },
   { id: 'divider', name: 'Dividers', edges: { L1: 'Front', L2: 'Back', W1: 'Bottom', W2: 'Top' } },
   { id: 'door', name: 'Doors and false fronts', edges: { L1: 'Left', L2: 'Right', W1: 'Bottom', W2: 'Top' } },
@@ -226,19 +231,22 @@ function defaultJoints() {
       ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 }, stretchers: { n: 2 } },
   ];
 }
-// Easy assembly joint templates (0.55.6) for the "Easy assembly (test)" product library: a 1/8" locating rabbet in each side
-// that the bottom, top, stretchers and fixed shelves drop into, stopped 1" from the front so nothing shows. Unfinished ends
-// add confirmats; finished ends add dowels so no screw heads show outside. Only added to a job when that library is opened.
+// Easy assembly joint templates (0.55.8) for the "Easy assembly (test)" product library. Unfinished ends: tab and slot
+// (joints2.js), only outline cuts and cuts through the sheet so cutting depth can't change the fit; the bottom with its feet
+// runs under the side and the stretchers over it. Finished ends: dowels, the side runs past the bottom so nothing shows.
 function easyJoints() {
-  const led = { fastener: 'ledge', routeDepth: 0.125, routeStop: 1, routeClear: 0.03125, routeTypes: ['bottom', 'top', 'stretcher', 'shelf'], breakDado: 0, stretchers: { n: 2 } };
   return [
-    { id: 'jt-easy-u', kind: 'joint', name: 'Easy assembly: rabbet + confirmat', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true }, ...led, routeWith: 'confirmat',
-      female: { dia: 0.1969, depth: 0 }, male: { dia: 0.1969, depth: 1.75, center: true }, ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC } },
-    { id: 'jt-easy-f', kind: 'joint', name: 'Easy assembly: rabbet + dowels (finished ends)', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false }, ...led, routeWith: 'dowel',
-      female: { dia: 0.315, depth: 0.5003 }, male: { dia: 0.315, depth: 1, center: true }, ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 } },
+    { id: 'jt-easy-u', kind: 'joint', name: 'Easy assembly: tab and slot', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true }, fastener: 'tabslot', breakDado: 0,
+      female: { dia: 0.1969, depth: 0 }, male: { dia: 0.1969, depth: 1.75, center: true }, ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 } },
+    { id: 'jt-easy-f', kind: 'joint', name: 'Easy assembly: dowels (finished ends)', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false }, breakDado: 1,
+      female: { dia: 0.315, depth: 0.5003 }, male: { dia: 0.315, depth: 1, center: true }, ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 }, stretchers: { n: 2 } },
   ];
 }
-function ensureEasyJoints(s) { if (Array.isArray(s.hardware)) easyJoints().forEach(j => { if (!s.hardware.some(h => h.id === j.id)) s.hardware.push(j); }); }
+// Jobs that opened the 0.55.7 test library have the rabbet versions; those are swapped for these.
+function ensureEasyJoints(s) {
+  if (!Array.isArray(s.hardware)) return;
+  easyJoints().forEach(j => { const i = s.hardware.findIndex(h => h.id === j.id); if (i < 0) s.hardware.push(j); else if (s.hardware[i].fastener === 'ledge') s.hardware[i] = j; });
+}
 // The test library is a copy of My library whose products use the easy assembly joints. My library is not changed.
 function easyLibItems() {
   const main = (S.libSet || 'main') === 'main' ? S.library : ((S.libSets || {}).main || []);
@@ -570,7 +578,7 @@ const mat = id => S.materials.find(m => m.id === id) || (id && SKINS[id]) || und
 // The set not in use waits in S.libSets, so its edits are kept, and cabinets placed from it still find their product.
 const PRODUCT_LIBS = [{ id: 'main', name: 'My library' }, { id: 'american', name: 'American Cabinets', items: () => typeof AMERICAN_LIB !== 'undefined' ? AMERICAN_LIB : [] },
   { id: 'easy', name: 'Easy assembly (test)', items: easyLibItems },
-  { id: 'doll', name: 'Dollhouse (1:12)', items: () => typeof DOLL_LIB !== 'undefined' ? DOLL_LIB : [], kit: s => typeof ensureDollKit === 'function' && ensureDollKit(s) }];
+  { id: 'doll', name: 'Mini cabinets (1:4)', items: () => typeof DOLL_LIB !== 'undefined' ? DOLL_LIB : [], kit: s => typeof ensureDollKit === 'function' && ensureDollKit(s) }];
 const libItem = id => S.library.find(l => l.id === id) || Object.values(S.libSets || {}).reduce((a, L) => a || (L || []).find(l => l.id === id), null);
 function swapLibrary(id) {
   const cur = S.libSet || 'main', def = PRODUCT_LIBS.find(x => x.id === id); if (!def || id === cur) return;
@@ -725,9 +733,15 @@ const molding = id => S.moldings.find(m => m.id === id);
 const partTpl = id => S.partTemplates.find(t => t.id === id) || S.partTemplates[0];
 const edgeband = id => S.edgebands.find(b => b.id === id);
 // Base and tall cabinets sit on feet with a separate toe skin, or have a toe kick notched into the sides.
-const onFeet = (c, p) => hasToe(c) && (p || effParams(c)).baseType !== 'notch';
+// onFeet: the box sits up off the floor (legs or a ladder base under it). onLegs: legs (holes in the bottom). Base 'none'
+// builds a plain box down to the floor, like a cabinet with no raised base.
+const onFeet = (c, p) => hasToe(c) && !['notch', 'none'].includes((p || effParams(c)).baseType);
+const onLegs = (c, p) => onFeet(c, p) && (p || effParams(c)).baseType !== 'ladder';
+const onLadder = (c, p) => onFeet(c, p) && (p || effParams(c)).baseType === 'ladder';
 const feetCount = (c, p) => { const n = (p || effParams(c)).feetCount | 0; return n > 0 ? n : c.w > 36 ? 6 : 4; };
-const hasToe = c => c.construction ? !!c.construction.toeKick : (c.cat === 'Base' || c.cat === 'Tall');
+// toeOn: the cabinet's raised-base switch. hasToe: it really has one (the base is not set to None).
+const toeOn = c => c.construction ? !!c.construction.toeKick : (c.cat === 'Base' || c.cat === 'Tall');
+const hasToe = c => toeOn(c) && effParams(c).baseType !== 'none';
 const effParams = c => Object.assign({}, SHOP_PARAMS, S.job.params, curRoom().params || {}, c.libParams || c.params0 || {}, c.params || {});
 /* ---------- Rooms and settings ---------- */
 const curRoom = () => S.rooms.find(r => r.id === S.roomId) || S.rooms[0];

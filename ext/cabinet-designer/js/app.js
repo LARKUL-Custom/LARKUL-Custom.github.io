@@ -615,7 +615,7 @@ function dockBody(k) {
     ${fld('Part template', R, 'partT', c.partT || '', 'select', { options: setOpts('partT', opts(S.partTemplates), 'cab') })}
     ${fld('Applied panel fit', R, 'panelStyle', c.panelStyle || '', 'select', { options: setOpts('panelStyle', opts(S.panels), 'cab') })}
     ${fld('Top molding', R, 'molding', c.molding || '', 'select', { options: [{ v: '', l: 'None' }, ...opts(S.moldings)] })}
-    <div class="checkrow"><label>${ctl('cabc:' + id, 'toeKick', hasToe(c), 'bool', { label: 'Raised base (feet or toe kick)' })} Feet / toe kick</label>${ctl('cabc:' + id, 'top', (c.construction || {}).top || 'full', 'select', { options: [{ v: 'full', l: 'Full top' }, { v: 'stretchers', l: 'Stretchers' }], label: 'Top' })}</div>
+    <div class="checkrow"><label>${ctl('cabc:' + id, 'toeKick', toeOn(c), 'bool', { label: 'Raised base (feet or toe kick)' })} Feet / toe kick</label>${ctl('cabc:' + id, 'top', (c.construction || {}).top || 'full', 'select', { options: [{ v: 'full', l: 'Full top' }, { v: 'stretchers', l: 'Stretchers' }], label: 'Top' })}</div>
     </div>${SETTING_FIELDS.some(f => c[f]) ? `<div class="row-actions"><button class="btn sm" data-act="cab-follow" data-id="${id}">Use room settings for all of these</button></div>` : ''}`;
   if (k === 'cab-int') return interiorSection(R, c, 'cabp:' + id, c);
   if (k === 'cab-par') return `<div class="note">Changes here apply to this cabinet only.</div>${paramRows('cabp:' + id, effParams(c), c.params, c.libParams, c.cat, 'This cabinet', rm.params)}`;

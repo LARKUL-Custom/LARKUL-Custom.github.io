@@ -705,7 +705,8 @@ function frontsSVG(c, ex, by, opts = {}) {
   let s = fo ? `<polygon ${fillFor(cm, 'ev-box')} points="${fo.map(q => `${r3(ex + q.x)},${r3(Y(q.y))}`).join(' ')}"/>` : `<rect ${fillFor(cm, 'ev-box')} x="${ex}" y="${Y(c.h)}" width="${c.w}" height="${c.h - tk}"/>`;
   mats.push(cm && cm.id);
   if (tk && p.toeSkin !== 'off') s += `<rect class="ev-toe" x="${ex + 0.2}" y="${Y(tk)}" width="${c.w - 0.4}" height="${tk}"/>`;
-  else if (tk && onFeet(c, p)) { const per = Math.ceil(feetCount(c, p) / 2); for (let i = 0; i < per; i++) s += `<rect class="ev-leg" x="${ex + (per > 1 ? 3 + (c.w - 6) * i / (per - 1) : c.w / 2) - 0.8}" y="${Y(tk)}" width="1.6" height="${tk}"/>`; }
+  else if (tk && onLadder(c, p)) s += `<rect class="ev-toe" x="${ex}" y="${Y(tk)}" width="${c.w}" height="${tk}"/>`;
+  else if (tk && onLegs(c, p)) { const per = Math.ceil(feetCount(c, p) / 2); for (let i = 0; i < per; i++) s += `<rect class="ev-leg" x="${ex + (per > 1 ? 3 + (c.w - 6) * i / (per - 1) : c.w / 2) - 0.8}" y="${Y(tk)}" width="1.6" height="${tk}"/>`; }
   // Interior, seen when the fronts are open or where a row has no fronts.
   const lay = interiorLayout(c, p, fr), t = lay.t, X = v => ex + v;
   s += `<rect class="ev-cavity nss" x="${X(t)}" y="${Y(lay.zIn1)}" width="${c.w - 2 * t}" height="${lay.zIn1 - lay.zIn0}"/>`;

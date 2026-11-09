@@ -521,7 +521,23 @@ function buildParts(c) {
     }
   };
 
+  // One front panel (the mini cabinets): doors and false fronts become V-grooved lines and shaker recesses on a single
+  // glued-on panel, so no small fronts get cut. Drawers with boxes and corner faces still get their own fronts.
+  const onePc = !!p.onePieceFront && fronts.some(f => f.type === 'door' || f.type === 'false') && !fronts.some(f => f.face);
+  if (onePc) {
+    const fl = fronts.filter(f => f.type === 'door' || f.type === 'false'), X0 = Math.min(...fl.map(f => f.x0)), X1 = Math.max(...fl.map(f => f.x1)), Z0 = Math.min(...fl.map(f => f.z0)), Z1 = Math.max(...fl.map(f => f.z1));
+    const { ds } = frontStyle(c, fl[0]), dm = mat(ds.mat) || cm, g = p.frontGap, ops = [], seen = new Set();
+    const line = (za, xa, zb, xb) => { const o = { type: 'groove', x1: r3(za - Z0), y1: r3(xa - X0), x2: r3(zb - Z0), y2: r3(xb - X0), width: g, depth: r3(g / 2), face: 'front', tool: '90° V-bit', why: 'front line' }, k = [o.x1, o.y1, o.x2, o.y2].join(); if (!seen.has(k)) { seen.add(k); ops.push(o); } };
+    fl.forEach(f => {
+      if (f.x1 < X1 - 1e-3) line(f.z0, f.x1 + g / 2, f.z1, f.x1 + g / 2);
+      if (f.z0 > Z0 + 1e-3) line(f.z0 - g / 2, Math.max(X0, f.x0 - g), f.z0 - g / 2, Math.min(X1, f.x1 + g));
+      const st = frontStyle(c, f);
+      if (st.framed && st.ds.type === 'routed') { const fr = st.ds.stile; ops.push({ type: 'pocket', x: r3(f.z0 - Z0 + fr), y: r3(f.x0 - X0 + fr), w: r3(f.z1 - f.z0 - 2 * fr), h: r3(f.x1 - f.x0 - 2 * fr), depth: st.ds.pocketDepth, face: 'front', why: 'panel recess' }); }
+    });
+    part('Front panel', dm, r3(Z1 - Z0), r3(X1 - X0), { kind: 'door', ops });
+  }
   fronts.forEach(f => {
+    if (onePc && (f.type === 'door' || f.type === 'false')) return;
     if (f.type === 'door') frontPart('Door', f);
     else if (f.type === 'false') frontPart('False front', f);
     else if (f.type === 'drawer') {
@@ -663,13 +679,27 @@ function buildParts(c) {
   } else part('Top', cm, inW, D, { kind: 'topbot', ops: p.dadoDepth > 0 ? [{ ...panelGroove }] : [] });
   part('Back', bm, (zIn1 - zIn0) + 2 * p.dadoDepth, inW + 2 * p.dadoDepth, { kind: 'back' });
   if (tk && p.toeSkin !== 'off') part(feet ? 'Toe skin' : 'Toe kick', tkm, W, tk, { kind: 'toekick' });
+  // Ladder base (2026-11-09; its two settings are not in SHOP_PARAMS so older jobs export byte for byte the same): a box built under the cabinet, the toe kick height tall. Front and back rails run the full
+  // width, rungs fit between them at each end and at most ladderGap apart. The front sits behind the toe skin (or at the
+  // setback when the skin is off), the back is flush with the cabinet back. Cut from the cabinet material unless one is set.
+  if (onLadder(c, p) && tk) {
+    if (angledCorner(c)) warn.push('The ladder base is not drawn for angled corner cabinets yet. Build it by hand or use legs.');
+    else {
+      const lm = mat(p.ladderMat) || cm, lt = lm.thick, yf = r3(p.toeKickSetback + (p.toeSkin !== 'off' ? tkm.thick : 0)), dep = r3(D - yf);
+      const gap = +p.ladderGap > 0 ? +p.ladderGap : 24, n = Math.max(2, Math.ceil((W - lt) / gap - 1e-6) + 1);
+      if (hasCabShape(c)) warn.push('This cabinet has a shape; the ladder base is cut square to its width and depth. Check it.');
+      part('Ladder front rail', lm, W, tk, { kind: 'ladder' });
+      part('Ladder back rail', lm, W, tk, { kind: 'ladder' });
+      part('Ladder rung', lm, r3(dep - 2 * lt), tk, { kind: 'ladder', qty: n });
+    }
+  }
   // Face frame parts stay off the cut list for now (Ayden, 2026-11-03); ffParts in faceframe.js builds them when wanted.
   // A front, side or top shape cuts the box panels to it.
   if (hasCabShape(c)) applyCabShape(c, parts, { p, t, bt, tk, sh, D, dd: p.dadoDepth, warn });
   if ((cabTopShape(c) || {}).edges && typeof edgeParts === 'function') edgeParts(c, parts, { t, bt, sh, warn }, part, cm);
   if (isCorner(c)) cornerParts(c, parts, { p, t, bt, tk, feet: onFeet(c, p), part, cm, sm, warn, addB, ptT });
   // Legs press into holes on the underside of the bottom (the flip side on the CNC), laid out from the leg's insets.
-  if (feet) {
+  if (onLegs(c, p)) {
     const leg = hw(roomSet('leg')) || S.hardware.find(h => h.feet), bot = parts.find(q => q.cabId === c.id && q.name === 'Bottom');
     let n = feetCount(c, p);
     if (leg && leg.kind === 'leg' && bot && angledCorner(c)) {
@@ -700,7 +730,7 @@ function buildParts(c) {
     return Array.from({ length: n + 1 }, (_, i) => r3(f + (e - f) * i / n));
   };
   // J1-J6: each joint type has its own spots (joints2.js), and the fastener kind decides the machining.
-  const jx = { t, addB, spread: spots, a: undefined, b: undefined };
+  const jx = { t, addB, spread: spots, a: undefined, b: undefined, warn, cat: c.cat };
   const jFor = end => { const J = hw(cabSet(c, endFinished(c, end) ? 'jointF' : 'jointU')); return J && J.kind === 'joint' ? J : null; };
   const sideP = { L: parts.find(q => q.cabId === c.id && q.name === 'Left side'), R: parts.find(q => q.cabId === c.id && q.name === 'Right side') };
   ['L', 'R'].forEach(end => {
@@ -752,7 +782,7 @@ function buildParts(c) {
   if (pinSpots.length) {
     const rods = ['L', 'R'].filter(sd => hasPanel(c, sd)).length * pinSpots.length
       + (typeof nearestAt === 'function' && c.wall && inRoomOf(c, () => { const n = nearestAt(c, 1); return n && n.kind === 'cab' && n.gap < 0.05; }) ? pinSpots.length : 0);
-    if (rods) addB(`${fmtLen(pinD, 1)} pin rod, ${fmtLen(t * 2, 1)} long`, rods);
+    if (rods) addB(`${fmtLen(pinD, 1)} dowel pin, ${fmtLen(t * 2, 1)} long`, rods);
   }
   // Fillers between the cabinet and a wall, in the front material
   fillersOf(c).forEach(fl => {
@@ -765,6 +795,7 @@ function buildParts(c) {
   // Hand edits from the part editor (shape, operations, size), worked out again for this size.
   if (typeof qBuildExtras === 'function') qBuildExtras(c, parts, warn, part, { cm, sm, inW, inD, t, fronts, addB, zIn0, zIn1 });
   if (typeof jtLate === 'function') jtLate(c, parts, jtLateCtx);
+  if (typeof jtTabSlot === 'function') jtTabSlot(c, parts, jx);
   if (typeof vBuildExtras === 'function') vBuildExtras(c, parts, warn, p, { t, inD, zIn0, zIn1, addB, pin });
   if (c.addParts && c.addParts.length && typeof addedParts === 'function') addedParts(c, parts, warn, part, cm);
   const removed = (c.partEdits && typeof applyPartEdits === 'function') ? applyPartEdits(c, parts, warn, ptT) : [];

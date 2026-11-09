@@ -9,6 +9,7 @@ const JT_KINDS = [
   { v: 'combo', l: 'Dowel and confirmat (dowels either side)' }, { v: 'pocket', l: 'Pocket screws' }, { v: 'lamello', l: 'Lamello (Clamex) connectors' },
   { v: 'route', l: 'Route (dado the panel into the side)' },
   { v: 'ledge', l: 'Locating rabbet the side rests on, plus screws or dowels' },
+  { v: 'tabslot', l: 'Tab and slot: sides drop onto the bottom, stretchers drop onto the sides' },
 ];
 // What a locating rabbet (ledge) template drills along with the rabbet.
 const JT_LEDGE_WITH = [{ v: 'confirmat', l: 'Confirmat screws' }, { v: 'dowel', l: 'Dowels (no screw heads outside)' }, { v: 'combo', l: 'Dowel and confirmat' }, { v: 'none', l: 'Nothing (glue only)' }];
@@ -53,6 +54,7 @@ function jtKind(J) { return J.fastener || 'holes'; }
 function jtFasten(J, fem, male, edgeX, edge, pairs, why, x) {
   const k = jtKind(J), t = x.t, F = J.female || {}, M = J.male || {};
   if (k === 'ledge') return jtLedge(J, fem, male, edgeX, edge, pairs, why, x);
+  if (k === 'tabslot') return jtTabJoin(J, fem, male, edgeX, edge, pairs, why, x);
   const bore = (q, dia, depth) => fem.push({ type: 'bore', x: r3(q.x), y: r3(q.y), dia, depth: +depth > 0 ? +depth : t, through: !(+depth > 0), face: 'inside', why });
   const hb = (m, dia, depth, w) => male && male.ops.push({ type: 'hbore', edge, x: edgeX, y: r3(m), dia, depth, inset: r3(t / 2), why: w || why });
   if (k === 'route') {
@@ -134,6 +136,98 @@ function jtLedgeOutline(pt) {
   pt.outline = P.map(([x, y]) => ({ x: r3(x), y: r3(y) }));
   pt.outlineEdges = P.map(q => q[2]);
 }
+/* ----- Tab and slot (0.55.8) -----
+   Only outline cuts and cuts right through the sheet, so a CNC table that is not dead level, or a depth that drifts,
+   can't change how the parts fit. On an end that uses it the bottom (with the feet on) runs under the side and the
+   stretchers or top run over it: the side has tabs on its bottom and top edges that drop into notches cut through the
+   bottom and the stretchers. The notches set the side's place front to back and side to side; the bottom's and
+   stretchers' outside edges are flush with the side's outside face. Confirmats go in from underneath and from the top
+   through holes cut right through the panel (they guide the drill for the pilot in the side's edge). */
+const JT_TAB_TYPES = ['bottom', 'top', 'stretcher'];
+function jtTabJoin(J, fem, male, edgeX, edge, pairs, why, x) {
+  const sp = x.side, zs = x.zs || [0, 0], T = (male && male.T) || x.t, fx = pairs.length ? pairs[0].x : 0;
+  const atBottom = Math.abs(fx - T / 2 - zs[0]) < 0.002, atTop = Math.abs(fx + T / 2 - zs[1]) < 0.002;
+  const ok = male && sp && pairs.length && JT_TAB_TYPES.includes(x.type) && !sp.outline && !(x.off > 0) && !male.outline
+    && (edge === 'W1' || edge === 'W2') && (x.type === 'bottom' ? atBottom && x.cat !== 'Wall' : atTop);
+  // Anything else (fixed shelves, nailers, dividers, a bottom above a toe kick notch, a wall cabinet's bottom, which is
+  // seen from below) gets the template's holes.
+  if (!ok) return jtFasten({ ...J, fastener: 'holes' }, fem, male, edgeX, edge, pairs, why, x);
+  (x.tabJobs = x.tabJobs || []).push({ sp, pt: male, edge, type: x.type, a: x.a || 0, b: x.b, J, why });
+}
+// Tab spans along a joint from a to b (inches from the cabinet front): a short joint (a stretcher) gets one tab in the
+// middle, a long one a tab 2" in from each end and one in the middle once it is over 20".
+function jtTabSpans(a, b) {
+  const L = b - a, w = 2;
+  if (L <= 6) { const h = Math.min(w, L / 2) / 2, m = (a + b) / 2; return [[r3(m - h), r3(m + h)]]; }
+  const out = [[a + 2, a + 2 + w], [b - 2 - w, b - 2]];
+  if (L > 20) out.splice(1, 0, [(a + b) / 2 - w / 2, (a + b) / 2 + w / 2]);
+  return out.map(([p, q]) => [r3(p), r3(q)]);
+}
+// Inside corners are cut round by the outline bit, so each one gets a relief the bit fits in.
+function jtCutterR() { const b = typeof cncBits === 'function' ? cncBits().find(([n]) => n === (typeof CNC_TOOLS !== 'undefined' ? CNC_TOOLS.cutter : '')) : null; return r3((b ? b[1] / 25.4 : 0.375) / 2 + 0.01); }
+// Turns designer points (x along the length, y from the front) into an outline (y up, front at the top) with edge names.
+// Points go counter-clockwise like a plain part's outline; each edge name stays with its segment.
+function jtSetOutline(pt, P) {
+  let pts = P.map(([x, y]) => ({ x: r3(x), y: r3(pt.W - y) })), tags = P.map(q => q[2] || null);
+  const area = pts.reduce((s, p, i) => { const q = pts[(i + 1) % pts.length]; return s + p.x * q.y - q.x * p.y; }, 0), n = pts.length;
+  if (area < 0) { tags = pts.map((_, k) => tags[k === n - 1 ? n - 1 : n - 2 - k]); pts = pts.reverse(); }
+  pt.outline = pts; pt.outlineEdges = tags;
+}
+// Runs after every joint is made: reshapes the sides (tabs) and the panels they drop into (notches, screw holes).
+function jtTabSlot(c, parts, x) {
+  const jobs = x.tabJobs || []; if (!jobs.length) return;
+  const g = 0.0625, cl = 0.03125, cy = 0.005, rr = jtCutterR(), warn = x.warn || [];
+  const sides = [...new Set(jobs.map(j => j.sp))];
+  sides.forEach(sp => {
+    const mine = jobs.filter(j => j.sp === sp), bot = mine.filter(j => j.type === 'bottom'), top = mine.filter(j => j.type !== 'bottom');
+    const tB = bot.length ? Math.max(...bot.map(j => j.pt.T)) : 0, tT = top.length ? Math.max(...top.map(j => j.pt.T)) : 0, L = sp.L, tS = sp.T;
+    const s0 = tB ? g : 0, Ln = r3((tT ? L - g : L) - s0), a = r3(tB ? tB - s0 : 0), b = r3(tT ? L - tT - s0 : Ln);
+    const tabsB = bot.flatMap(j => jtTabSpans(j.a, j.b)), tabsT = top.flatMap(j => jtTabSpans(j.a, j.b));
+    // The side's machining moves with its new bottom edge; anything left in the cut-away bands is dropped.
+    let lost = 0;
+    sp.ops = sp.ops.filter(o => {
+      ['x', 'x1', 'x2'].forEach(k => { if (typeof o[k] === 'number') o[k] = r3(o[k] - s0); });
+      if (o.type === 'groove' && o.x1 !== o.x2) { o.x1 = r3(Math.min(Math.max(o.x1, a), b)); o.x2 = r3(Math.min(Math.max(o.x2, a), b)); return o.x2 - o.x1 > 0.01; }
+      if (typeof o.x === 'number' && (o.x < a - 1e-6 || o.x > b + 1e-6)) { lost++; return false; }
+      return true;
+    });
+    if (lost) warn.push(`Tab and slot: ${lost} hole${lost === 1 ? '' : 's'} on the ${sp.name.toLowerCase()} fell where the bottom or stretchers now sit and ${lost === 1 ? 'was' : 'were'} left off.`);
+    // Outline: front edge, top edge with tabs up, back edge, bottom edge with tabs down.
+    const W = sp.W, P = [[a, 0, 'L1']];
+    const up = tabsT.slice().sort((p, q) => p[0] - q[0]), dn = tabsB.slice().sort((p, q) => q[0] - p[0]);
+    if (tT) { P.push([b, 0, 'W2']); up.forEach(([y0, y1]) => P.push([b, y0 - 2 * rr, null], [b - rr, y0 - 2 * rr, null], [b - rr, y0, null], [Ln, y0, null], [Ln, y1, null], [b - rr, y1, null], [b - rr, y1 + 2 * rr, null], [b, y1 + 2 * rr, 'W2'])); }
+    else P.push([b, 0, 'W2']);
+    P.push([b, W, 'L2'], [a, W, 'W1']);
+    if (tB) dn.forEach(([y0, y1]) => P.push([a, y1 + 2 * rr, null], [a + rr, y1 + 2 * rr, null], [a + rr, y1, null], [0, y1, null], [0, y0, null], [a + rr, y0, null], [a + rr, y0 - 2 * rr, null], [a, y0 - 2 * rr, 'W1']));
+    sp.L = Ln; jtSetOutline(sp, P);
+    sp.note = [sp.note, 'Length includes the tabs'].filter(Boolean).join('. ');
+  });
+  // The panels: longer by the side's thickness at that end, a notch through the panel for each tab, screw holes between.
+  const panels = [...new Set(jobs.map(j => j.pt))];
+  panels.forEach(pt => {
+    const mine = jobs.filter(j => j.pt === pt), notch = {};
+    mine.forEach(j => {
+      const tS = j.sp.T; jtLedgeGrow(pt, j.edge, tS);
+      notch[j.edge] = { X: r3(tS + cl), spans: jtTabSpans(j.a, j.b), tS };
+    });
+    mine.forEach(j => {
+      const n = notch[j.edge], xc = j.edge === 'W1' ? r3(n.tS / 2) : r3(pt.L - n.tS / 2);
+      // Screws between the tabs and 1" in from each end of the joint, through the panel.
+      const sp = n.spans, ys = (sp.length === 1 ? [sp[0][0] - 0.5, sp[0][1] + 0.5] : [j.a + 1, ...sp.slice(1).map((q, i) => (sp[i][1] + q[0]) / 2), j.b - 1])
+        .filter((y, i, all) => y > j.a + 0.25 && y < j.b - 0.25 && sp.every(([p, q]) => y < p - 0.3 || y > q + 0.3) && all.indexOf(y) === i);
+      ys.forEach(y => pt.ops.push({ type: 'bore', x: xc, y: r3(y), dia: +(j.J.female || {}).dia || 0.1969, depth: pt.T, through: true, face: 'outside', why: j.why + ' screw' }));
+      if (x.addB) x.addB(j.J.name, ys.length);
+    });
+    const L = pt.L, W = pt.W, P = [[0, 0, 'L1'], [L, 0, 'W2']];
+    // Notches on the W2 end (walking toward the back), then the W1 end (walking toward the front).
+    if (notch.W2) notch.W2.spans.slice().sort((p, q) => p[0] - q[0]).forEach(([y0, y1]) => { const X = L - notch.W2.X, Y0 = y0 - cy, Y1 = y1 + cy;
+      P.push([L, Y0, null], [X + 2 * rr, Y0, null], [X + 2 * rr, Y0 - rr, null], [X, Y0 - rr, null], [X, Y1 + rr, null], [X + 2 * rr, Y1 + rr, null], [X + 2 * rr, Y1, null], [L, Y1, 'W2']); });
+    P.push([L, W, 'L2'], [0, W, 'W1']);
+    if (notch.W1) notch.W1.spans.slice().sort((p, q) => q[0] - p[0]).forEach(([y0, y1]) => { const X = notch.W1.X, Y0 = y0 - cy, Y1 = y1 + cy;
+      P.push([0, Y1, null], [X - 2 * rr, Y1, null], [X - 2 * rr, Y1 + rr, null], [X, Y1 + rr, null], [X, Y0 - rr, null], [X - 2 * rr, Y0 - rr, null], [X - 2 * rr, Y0, null], [0, Y0, 'W1']); });
+    jtSetOutline(pt, P);
+  });
+}
 // A routed panel drops into the dado, so it gets longer by the dado depth on that end.
 function jtGrow(pt, edge, d) {
   const atStart = edge === 'W1' || edge === 'L1';
@@ -190,7 +284,7 @@ function jtFastenerBox(h, R) {
   const k = jtKind(h);
   return `<div class="autogrid"><label class="f wide"><span>Fastener</span>${ctl(R, 'fastener', k, 'select', { label: 'Fastener', options: JT_KINDS })}</label>
     ${k === 'route' ? fld('Dado depth', R, 'routeDepth', h.routeDepth ?? 0.25, 'num') : ''}${k === 'ledge' ? fld('Rabbet depth', R, 'routeDepth', h.routeDepth ?? 0.125, 'num') + fld('Stops this far from the front', R, 'routeStop', h.routeStop ?? 1, 'num') + fld('Extra room for thick sheets', R, 'routeClear', h.routeClear ?? 0.03125, 'num') + `<label class="f wide"><span>Also drill</span>${ctl(R, 'routeWith', h.routeWith || 'confirmat', 'select', { label: 'Also drill', options: JT_LEDGE_WITH })}</label>` : ''}${k === 'lamello' ? fld('Connector length', R, 'lamLen', h.lamLen ?? 2.2, 'num') : ''}${k === 'combo' ? fld('Dowels this far either side', R, 'comboOff', h.comboOff ?? 1.26, 'num') : ''}</div>
-    ${k === 'pocket' ? '<div class="note">Pocket holes are marked on the panel and counted, but angled holes are drilled by hand.</div>' : ''}${k === 'lamello' ? '<div class="note">The face slots are cut on the CNC; the edge slots are marked for the Lamello tool.</div>' : ''}${k === 'route' ? '<div class="note">Panels that drop into a dado get longer by the dado depth.</div>' : ''}${k === 'ledge' ? '<div class="note">Bottom, top, stretchers and fixed shelves drop into a shallow rabbet in the side that lines them up and keeps the box square. The rabbet is 1/32" roomier than the panel so a thicker sheet or a bit a little off size still fits; the outside faces are set flush on a flat table. The rabbet stops short of the front (nothing shows) and runs out the back; panels get longer by the depth and lose a small ear at each front corner. Other joints just get the screws or dowels.</div>' : ''}`;
+    ${k === 'pocket' ? '<div class="note">Pocket holes are marked on the panel and counted, but angled holes are drilled by hand.</div>' : ''}${k === 'lamello' ? '<div class="note">The face slots are cut on the CNC; the edge slots are marked for the Lamello tool.</div>' : ''}${k === 'route' ? '<div class="note">Panels that drop into a dado get longer by the dado depth.</div>' : ''}${k === 'tabslot' ? '<div class="note">Only outline cuts and cuts through the sheet, so cutting depth can\'t change the fit. The bottom (feet on) runs under the side and the stretchers or top run over it; tabs on the side drop into notches through them. Screw holes go through the bottom and stretchers. Bottoms above a built-in toe kick, shelves, nailers and dividers get the holes below.</div>' : ''}${k === 'ledge' ? '<div class="note">Bottom, top, stretchers and fixed shelves drop into a shallow rabbet in the side that lines them up and keeps the box square. The rabbet is 1/32" roomier than the panel so a thicker sheet or a bit a little off size still fits; the outside faces are set flush on a flat table. The rabbet stops short of the front (nothing shows) and runs out the back; panels get longer by the depth and lose a small ear at each front corner. Other joints just get the screws or dowels.</div>' : ''}`;
 }
 function jtResolve(kind, id) {
   const [hid, type, i] = id.split(':'), h = hw(hid); if (!h) return null;
