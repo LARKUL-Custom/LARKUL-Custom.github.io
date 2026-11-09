@@ -226,7 +226,7 @@ const JOINT_LOC = { front: 2, back: 2, maxGap: 8 };
 // 12" apart, so a 24" deep base gets 3, a 12" wall cabinet keeps 2 and only a bottom over 28" between the end holes gets 4.
 const JT_BOTTOM3 = { mode: 'gap', front: 2, back: 2, maxGap: 12, none: false };
 const JT_SCREW = { id: 'jt-screw', kind: 'joint', name: 'Screws', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true }, fastener: 'screw',
-  female: { dia: 0.1969, depth: 0 }, male: { dia: 0.125, depth: 1 }, breakDado: 0,
+  female: { dia: 0.1969, depth: 0 }, male: { dia: 0, depth: 0 }, breakDado: 0,
   ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 }, types: { bottom: { ...JT_BOTTOM3 } } };
 function defaultJoints() {
   return [
@@ -234,7 +234,7 @@ function defaultJoints() {
       female: { dia: 0.1969, depth: 0 }, male: { dia: 0.1969, depth: 1.75, center: true }, breakDado: 0,
       ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 }, types: { bottom: { ...JT_BOTTOM3 } } },
     // 0.55.21 (Ayden 2026-11-09): screws laid out like the confirmats, with the 5 mm hole through the side as the guide hole
-    // and a smaller pilot in the edge of the panel.
+    // and no edge hole (his CNC has no edge drilling); a pilot can be set on the template.
     { ...clone(JT_SCREW) },
     { id: 'jt-dowel', kind: 'joint', name: 'Dowels', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false },
       female: { dia: 0.315, depth: 0.5003 }, male: { dia: 0.315, depth: 1, center: true }, breakDado: 1,
@@ -577,6 +577,8 @@ function migrate(s) {
   if (!s.conf3) { (s.hardware || []).forEach(h => { if (h.id === 'jt-confirmat' && !(h.fastener && h.fastener !== 'holes')) { const o = (h.types || {}).bottom; if (!o || o.same) h.types = { ...(h.types || {}), bottom: { ...JT_BOTTOM3 } }; } }); s.conf3 = 1; }
   // 0.55.21: the Screws template joins older jobs' joint templates, right after the Confirmat one (added only; nothing picked changes).
   if (!s.screw1) { if (Array.isArray(s.hardware) && s.hardware.some(h => h.kind === 'joint') && !s.hardware.some(h => h.id === 'jt-screw')) { const i = s.hardware.findIndex(h => h.id === 'jt-confirmat'); s.hardware.splice(i < 0 ? s.hardware.length : i + 1, 0, clone(JT_SCREW)); } s.screw1 = 1; }
+  // 0.55.22: no edge pilot (Ayden's CNC has no edge drilling); a Screws template still on the 0.55.21 1/8" x 1" pilot loses it.
+  if (!s.screw2) { (s.hardware || []).forEach(h => { if (h.id === 'jt-screw' && h.male && +h.male.dia === 0.125 && +h.male.depth === 1) h.male = { dia: 0, depth: 0 }; }); s.screw2 = 1; }
   if (!s.cup3) { (s.hardware || []).forEach(h => { if (h.id === 'hw-cliptop' && +h.cupEdgeMM === 5) h.cupEdgeMM = 3; }); s.cup3 = 1; }
   // 0.55.15: nailers on all cabinets (Ayden 2026-11-09). Jobs from before had 'none' only because it was the default,
   // so they switch to top and bottom, 4" wide like his Mozaik library. A room or cabinet set to None keeps it.
