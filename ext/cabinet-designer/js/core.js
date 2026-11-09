@@ -615,7 +615,7 @@ const mat = id => S.materials.find(m => m.id === id) || (id && SKINS[id]) || und
 // The set not in use waits in S.libSets, so its edits are kept, and cabinets placed from it still find their product.
 const PRODUCT_LIBS = [{ id: 'main', name: 'My library' }, { id: 'american', name: 'American Cabinets', items: () => typeof AMERICAN_LIB !== 'undefined' ? AMERICAN_LIB : [] },
   { id: 'easy', name: 'Easy assembly (test)', items: easyLibItems },
-  { id: 'doll', name: 'Mini cabinets (1:3)', items: () => typeof DOLL_LIB !== 'undefined' ? DOLL_LIB : [], kit: s => typeof ensureDollKit === 'function' && ensureDollKit(s) }];
+  { id: 'doll', name: 'Mini cabinets', items: () => typeof DOLL_LIB !== 'undefined' ? DOLL_LIB : [], kit: s => typeof ensureDollKit === 'function' && ensureDollKit(s) }];
 const libItem = id => S.library.find(l => l.id === id) || Object.values(S.libSets || {}).reduce((a, L) => a || (L || []).find(l => l.id === id), null);
 function swapLibrary(id) {
   const cur = S.libSet || 'main', def = PRODUCT_LIBS.find(x => x.id === id); if (!def || id === cur) return;
