@@ -705,7 +705,7 @@ function hingePlaceSVG(h) {
   const jp = { ...SHOP_PARAMS, ...S.job.params }, top = +jp.hingeInset || 0, bot = +(jp.hingeInsetB ?? jp.hingeInset) || 0;
   const doors = [[30], [Math.min(60, (+h.max3 || 80) - 4)], [Math.max(84, (+h.max3 || 80) + 4)]];
   const Hmax = Math.max(...doors.map(d => d[0])), W = 15, D = 12, gap = 4, col = W + gap + D + 14, fs = 3.2;
-  const cupX = ((+h.cupEdgeMM || 5) + (+h.cupDiaMM || 35) / 2) / 25.4, cupR = (+h.cupDiaMM || 35) / 50.8, plX = 37 / 25.4;
+  const cupX = ((+(h.cupEdgeMM ?? 3)) + (+h.cupDiaMM || 35) / 2) / 25.4, cupR = (+h.cupDiaMM || 35) / 50.8, plX = 37 / 25.4;
   let s = '', x0 = 0;
   doors.forEach(([H]) => {
     const n = H <= h.max2 ? 2 : H <= h.max3 ? 3 : 4, a = bot, b = H - top, z = [...Array(n)].map((_, i) => a + (b - a) * i / (n - 1));
@@ -763,9 +763,9 @@ function renderHardware() {
       const c = sampleCab({ hinge: h.id, rows: [{ type: 'door', h: '*', count: 1 }], cat: 'Wall', h: 30, d: 12, construction: { toeKick: false, top: 'full' }, libParams: { shelfCount: 0 } });
       const b = buildParts(c), door = b.parts.find(p => p.name === 'Door' || p.name.startsWith('Door stile')), side = b.parts.find(p => p.name === 'Left side');
       const jp = { ...SHOP_PARAMS, ...S.job.params };
-      inner = `<div class="hwx-sub">${icon('door')}Where the hinges go</div><div class="autogrid">${fld('From top of door', 'jobp', 'hingeInset', jp.hingeInset, 'len')}${fld('From bottom of door', 'jobp', 'hingeInsetB', jp.hingeInsetB ?? jp.hingeInset, 'len')}${num(R, 'max2', '2 hinges on doors up to', 'in', h.max2)}${num(R, 'max3', '3 hinges on doors up to', 'in', h.max3)}</div>
+      inner = `<div class="hwx-sub">${icon('door')}Where the hinges go</div><div class="autogrid">${fld('From top of door', 'jobp', 'hingeInset', jp.hingeInset, 'len')}${fld('From bottom of door', 'jobp', 'hingeInsetB', jp.hingeInsetB ?? jp.hingeInset, 'len')}${num(R, 'max2', '2 hinges on doors up to', 'in', h.max2)}${num(R, 'max3', '3 hinges on doors up to', 'in', h.max3)}${num(R, 'cupEdgeMM', 'Cup hole from door edge', 'mm', h.cupEdgeMM)}</div>
         <div class="hwx-ok">${icon('check')}<span>Taller doors get more hinges, spaced evenly between these two. Every door in this job uses these distances, and the mounting plates on the cabinet side are drilled to match.</span></div>
-        <div class="hwx-sub">${icon('sliders')}The hinge</div><div class="autogrid">${num(R, 'cupDiaMM', 'Cup Ø', 'mm', h.cupDiaMM)}${num(R, 'cupDepthMM', 'Cup depth', 'mm', h.cupDepthMM)}${num(R, 'cupEdgeMM', 'Cup boring distance', 'mm', h.cupEdgeMM)}</div>
+        <div class="hwx-sub">${icon('sliders')}The hinge</div><div class="autogrid">${num(R, 'cupDiaMM', 'Cup Ø', 'mm', h.cupDiaMM)}${num(R, 'cupDepthMM', 'Cup depth', 'mm', h.cupDepthMM)}</div>
         <div class="eyebrow">Extra holes on the door, per hinge</div><div class="note">dx along the door from the cup center, dy from the cup center toward the middle of the door.</div>
         ${listEditor(R, 'cupExtra', [{ k: 'dx', label: 'dx mm' }, { k: 'dy', label: 'dy mm' }, { k: 'dia', label: 'Ø mm' }, { k: 'depth', label: 'Depth' }], h.cupExtra)}
         <div class="eyebrow">Mounting plate holes on the cabinet side, per hinge</div><div class="note">dz up or down from the hinge centerline, y back from the cabinet front.</div>

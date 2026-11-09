@@ -380,6 +380,8 @@ function mozBuildParts(c) {
     if (!(q.qty > 0)) return;
     if (q.group === 'metal') { const k = `${q.name} (metal, ${fmtLen(I(q.L))} × ${fmtLen(I(q.W))})`; bom[k] = (bom[k] || 0) + q.qty; return; }
     const m = r.mats[i] || S.materials[0], kind = mozKind(q.type), L = I(q.L), W = I(q.W), T = m.thick;
+    // A part whose size works out to nothing (a 0 wide trim band) is not cut in Mozaik either.
+    if (!(L > 0.001 && W > 0.001)) return;
     const outline = q.outline.map(p => ({ x: I(p.x), y: I(p.y) }));
     const rect = outline.length === 4 && outline.every(p => (Math.abs(p.x) < 0.01 || Math.abs(p.x - L) < 0.01) && (Math.abs(p.y) < 0.01 || Math.abs(p.y - W) < 0.01));
     // Edge banding from Mozaik's banded edges: first edge along the bottom (L2), then the right end, top, left end.

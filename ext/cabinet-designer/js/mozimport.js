@@ -251,6 +251,8 @@ function mozRooms(data) {
       if (isFiller(p) || isEndPanel(p)) { extras.push({ p, at }); return; }
       const cat = mozCat(p), lib = mozLib(p, cat), c = newCab(S, lib, at.wall, at.side, at.off);
       Object.assign(c, { name: p.name || lib.name, w: p.w, h: p.h, d: p.d, elev: p.elev, fromMozaik: true });
+      // A base or tall cabinet hung off the floor (a floating vanity drawer) has no toe kick, legs or toe skin.
+      if (p.elev > 0.5 && c.cat !== 'Wall' && c.construction && c.construction.toeKick) c.construction.toeKick = false;
       // Corner products keep their own fronts; Mozaik's name says which end goes in the corner.
       if (c.corner) { if (/right|\(r\)/i.test(p.name)) c.corner.side = 'R'; else if (/left|\(l\)/i.test(p.name)) c.corner.side = 'L'; }
       const rows = angledCorner(c) ? null : mozRows(p, sz); if (rows) c.rows = rows;

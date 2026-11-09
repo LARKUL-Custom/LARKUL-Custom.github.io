@@ -314,7 +314,7 @@ function interiorLayout(c, p, fronts) {
   const zones = doorZones.length ? doorZones : (fronts.length ? [] : [[zIn0, zIn1]]);
   const low = zones.length ? zones[zones.length - 1] : null, ins = c.inserts || [];
   const hasDoors = fronts.some(f => f.type === 'door');
-  const out = { t, zIn0, zIn1, inW, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? 1 : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], pulls: [], bom: [] };
+  const out = { t, zIn0, zIn1, inW, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? t : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], pulls: [], bom: [] };
   // An insert goes in the door opening it names (it.row), or else the bottom one.
   const used = new Set();
   ins.forEach(it => {
@@ -587,6 +587,7 @@ function buildParts(c) {
     part(RO + ' bottom' + tag, dbm, nominal - st + bd, ow - 2 * st + 2 * bd, { kind: 'drawerBottom' });
     if (lay.spacer > 0) part(RO + ' spacer' + tag, cm, inD, 2.5, { qty: 2, kind: 'spacer', ops: (sl.cabHoles || []).filter(h => slideHoleY(sl, nominal, h) !== null).map(h => ({ type: 'bore', x: slideHoleY(sl, nominal, h), y: 1.25, dia: h.dia * MM, depth: h.depth * MM, face: 'inside', why: sl.name + ' runner' })) });
     addB(slideBomName(sl, nominal), 1);
+    addB(sl.bomExtra, 1);
   });
   if (lay.divX !== null) part('Vertical divider', cm, lay.zIn1 - lay.zIn0, inD - 0.0625, { kind: 'divider' });
   lay.trays.forEach(tr => { if (!tr.designed) part('Tray divider', bm, tr.z1 - tr.z0 - 1, inD - 1, { qty: tr.n, kind: 'divider' }); });
@@ -787,12 +788,14 @@ function runsBy(filter, keyOf, bridges) {
         else { cur = { wall: w.id, side, start: c.off, end: c.off + c.w, top: null, bottom: 0, d: c.d, cabs: [], k: null }; runs.push(cur); }
         return;
       }
+      // A 45° or 90° corner is only its leg deep along its own wall; its return leg is covered from the other wall (cornerBridges).
+      const cd = angledCorner(c) ? cornerLeg(c) : c.d;
       const top = c.elev + c.h, k = keyOf(c), fl = fillersOf(c), s0 = Math.min(c.off, ...fl.map(x => x.a0)), s1 = Math.max(c.off + c.w, ...fl.map(x => x.a1));
       if (cur && s0 <= cur.end + 0.25 && (cur.top === null || (Math.abs(top - cur.top) < 0.01 && cur.k === k))) {
         if (cur.top === null) { cur.top = top; cur.k = k; cur.bottom = c.elev; }
-        cur.end = Math.max(cur.end, s1); cur.d = Math.max(cur.d, c.d + (c.outset || 0)); cur.bottom = Math.min(cur.bottom, c.elev); cur.cabs.push(c.id);
+        cur.end = Math.max(cur.end, s1); cur.d = Math.max(cur.d, cd + (c.outset || 0)); cur.bottom = Math.min(cur.bottom, c.elev); cur.cabs.push(c.id);
       }
-      else { cur = { wall: w.id, side, start: s0, end: s1, top, bottom: c.elev, d: c.d + (c.outset || 0), cabs: [c.id], k }; runs.push(cur); }
+      else { cur = { wall: w.id, side, start: s0, end: s1, top, bottom: c.elev, d: cd + (c.outset || 0), cabs: [c.id], k }; runs.push(cur); }
     });
   }));
   return runs.filter(r => r.cabs.length);
@@ -806,9 +809,30 @@ function endBlocked(r, at, dir) {
   return S.cabinets.some(k => k.wall === r.wall && k.side === r.side && !r.cabs.includes(k.id) &&
     k.elev < r.top - 0.01 && k.elev + k.h > r.bottom + 0.01 && Math.abs((dir < 0 ? k.off + k.w : k.off) - at) < 0.5);
 }
+// The return leg of each 45° or 90° base corner, as a span on the wall it comes out along, so the top on that wall
+// carries on over it to the corner (and the corner joint between the two tops is found like any other).
+function cornerBridges() {
+  const out = [];
+  S.cabinets.forEach(c => {
+    if (c.cat !== 'Base' || !angledCorner(c)) return;
+    const poly = cabPoly(c); if (!poly) return;
+    S.walls.forEach(w2 => {
+      if (w2.id === c.wall) return;
+      const g = wg(w2), f = w2.thick / 2;
+      [1, -1].forEach(side => {
+        const along = poly.map(q => (q.x - w2.x1) * g.u.x + (q.y - w2.y1) * g.u.y), out2 = poly.map(q => ((q.x - w2.x1) * g.n.x + (q.y - w2.y1) * g.n.y) * side);
+        const o0 = Math.min(...out2); if (o0 > f + 0.6 || o0 < -0.6 || Math.max(...out2) - f < cornerLeg(c) - 0.01) return;
+        const a0 = Math.min(...along), a1 = Math.max(...along);
+        if (a0 < -0.5 || a1 > g.L + 0.5) return;
+        out.push({ bridge: true, corner: c.id, wall: w2.id, side, off: a0, w: a1 - a0, d: cornerLeg(c) + (c.outset || 0) });
+      });
+    });
+  });
+  return out;
+}
 function countertopRuns() {
   // Automatic runs on base cabinets (unless the room turned them off), then any tops placed by hand.
-  const runs = curRoom().autoTops === false ? [] : runsBy(c => c.cat === 'Base', () => 'top', typeof fixtUnderList === 'function' ? fixtUnderList() : []);
+  const runs = curRoom().autoTops === false ? [] : runsBy(c => c.cat === 'Base', () => 'top', (typeof fixtUnderList === 'function' ? fixtUnderList() : []).concat(cornerBridges()));
   runs.forEach(r => {
     r.key = r.wall + ':' + r.side + ':' + r.cabs[0];
     const o = S.ctRuns[r.key] || {}; r.o = o;

@@ -230,7 +230,7 @@ function defaultJoints() {
 const LEG_DEF = { inToe: 3.9685, inFin: 2.1969, inUnfin: 1.4094, inBack: 3.9685, maxSep: 0, noBack: false, holeDia: 0.3937, holeDepth: 0.4724, width: 2.2441, depth: 2.5827 };
 // Ayden's shop hardware, copied from his Mozaik exports (2026-11-02): Blum CLIP top BLUMOTION with the old plate, 71B35xx
 // full overlay, drilling two 8 mm dowels beside the cup; hinges 4" from the door ends, at most 36" apart.
-const CLIPTOP_MOZAIK = { kind: 'hinge', name: 'Blum CLIP top BLUMOTION 110° full overlay', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 5,
+const CLIPTOP_MOZAIK = { kind: 'hinge', name: 'Blum CLIP top BLUMOTION 110° full overlay', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 3,
   cupExtra: [{ dx: -22.5, dy: 9.5, dia: 8, depth: 13 }, { dx: 22.5, dy: 9.5, dia: 8, depth: 13 }],
   plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12.7 }, { dz: 16, y: 37, dia: 5, depth: 12.7 }], max2: 42, max3: 80, cost: 5, plateCost: 0 };
 // Hafele Axilo 78 square screw-in leg: centre 39.5 mm in from the toe skin, ends and back; four 5 mm marks per leg on
@@ -467,6 +467,8 @@ function migrate(s) {
     if (s.job && s.job.params && s.job.params.hingeInset === 3.5) s.job.params.hingeInset = 4;
     s.hwMozaik = 1;
   }
+  // 0.55.1: Ayden's shop bores the hinge cup 3 mm from the door edge (cup centre 20.5 mm, like his Mozaik hinge file), not 5 mm.
+  if (!s.cup3) { (s.hardware || []).forEach(h => { if (h.id === 'hw-cliptop' && +h.cupEdgeMM === 5) h.cupEdgeMM = 3; }); s.cup3 = 1; }
   if (s.job && s.job.params) Object.entries(SHOP_PARAMS).forEach(([k, v]) => { if (!(k in s.job.params)) s.job.params[k] = v; });
   // Formulas and job variables came later.
   s.formulas = s.formulas || {}; if (s.job) s.job.vars = s.job.vars || [];

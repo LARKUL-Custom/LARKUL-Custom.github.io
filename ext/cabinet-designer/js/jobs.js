@@ -336,7 +336,7 @@ async function jobAction(a, id, id2) {
         if (jobs.sel !== id) { jobs.sel = id; jobs.edit = null; jobs.confirm = null; renderJobs(); }
         break;
       }
-      case 'jobs-edit': jobs.edit = id || null; renderJobs(); requestAnimationFrame(() => { const i = $('#jm-name') || $('#mv-folder'); if (i) { i.focus(); i.select(); } }); break;
+      case 'jobs-edit': jobs.edit = id || null; renderJobs(); requestAnimationFrame(() => { const i = $('#jm-name') || $('#mv-folder'); if (i) { i.focus(); if (i.select) i.select(); } }); break;
       case 'jobs-rename': {
         const n = safeName($('#jm-name').value), j = jobs.list.find(x => x.path === id);
         if (!n || n === j.name) { jobs.edit = null; renderJobs(); break; }

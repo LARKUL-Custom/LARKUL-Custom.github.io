@@ -172,7 +172,8 @@ function applyDockH() {
 // narrower one makes it smaller, so it never needs a scroll bar. The item bar also tries wrapping
 // onto two rows when that lets it grow bigger. Only very long room-wide lists (past half size) scroll.
 function fitDock(el = document.getElementById('dock')) {
-  if (!el || !deskUI() || ui.tab !== 'room') return;
+  // The page can finish loading its fonts before app.js has run; there is nothing to fit yet.
+  if (typeof ui === 'undefined' || !el || !deskUI() || ui.tab !== 'room') return;
   const real = el.isConnected;
   const body = el.querySelector('.dockbody'), inner = body && body.firstElementChild;
   if (body && inner) {
@@ -281,7 +282,9 @@ function ceilGap(rm) { const g = ((rm || curRoom()).ceiling || {}).gap; return g
 // The lowest the ceiling gets over a cabinet's footprint, following a sloped ceiling.
 function ceilOver(c) {
   const w = wall(c.wall); if (!w) return Infinity;
-  const cl = roomCeiling(), H = +cl.h > 0 ? +cl.h : (w.height || 96), slope = cl.slope && cl.slope !== 'none' ? cl.slope : null;
+  // With no ceiling height set, the ceiling is the tallest wall in the room (as the Ceiling box says), never the wall
+  // the cabinet stands on: an island's back or a half wall is short, and its cabinets must not be cut down to it.
+  const cl = roomCeiling(), H = +cl.h > 0 ? +cl.h : (Math.max(0, ...S.walls.map(x => +x.height || 0)) || w.height || 96), slope = cl.slope && cl.slope !== 'none' ? cl.slope : null;
   const poly = cabPoly(c); if (!slope || !poly) return H;
   const pts = []; S.walls.forEach(x => pts.push([x.x1, x.y1], [x.x2, x.y2]));
   const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);

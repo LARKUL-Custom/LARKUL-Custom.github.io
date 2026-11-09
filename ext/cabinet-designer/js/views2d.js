@@ -832,7 +832,7 @@ function renderElev(pr) {
   body += shapesElevSVG(w, side, L, mats);
   body += fixtElevSVG(w, side, L, fs, false);
   // The room standard gap under the ceiling: a dashed line that uppers and talls stay below.
-  if (typeof ceilGap === 'function' && ceilGap() > 0 && !(roomCeiling().slope && roomCeiling().slope !== 'none')) { const cy = (+roomCeiling().h > 0 ? +roomCeiling().h : (w.height || 96)) - ceilGap(); body += `<line class="ev-ceilgap nss" x1="0" x2="${L}" y1="${-cy}" y2="${-cy}"><title>Cabinets stay ${fmtLen(ceilGap())} off the ceiling (Room tab below)</title></line>`; }
+  if (typeof ceilGap === 'function' && ceilGap() > 0 && !(roomCeiling().slope && roomCeiling().slope !== 'none')) { const cy = (+roomCeiling().h > 0 ? +roomCeiling().h : (Math.max(0, ...S.walls.map(x => +x.height || 0)) || w.height || 96)) - ceilGap(); if (cy < w.height) body += `<line class="ev-ceilgap nss" x1="0" x2="${L}" y1="${-cy}" y2="${-cy}"><title>Cabinets stay ${fmtLen(ceilGap())} off the ceiling (Room tab below)</title></line>`; }
   // end caps that stick out toward the viewer
   capsOf(w).filter(cp => cp.side === side).forEach(cp => {
     const a = side === 1 ? cp.a0 : L - cp.a1;
