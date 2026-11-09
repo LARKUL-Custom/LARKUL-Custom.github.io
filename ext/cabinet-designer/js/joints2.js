@@ -228,14 +228,21 @@ function jtGrow(pt, edge, d) {
     pt.W = r3(pt.W + d);
   }
 }
-// J6: nailer parts, from the cabinet's construction settings.
-function jtNailers(c, p, part, x) {
-  const kind = p.nailers || 'none', nw = +p.nailerWidth > 0 ? +p.nailerWidth : 3.5, out = [];
-  if (kind === 'none') return out;
-  const add = (name, z0, z1) => { const q = part(name, x.cm, x.inW, nw, { kind: 'nailer' }); q.jz = [z0, z1]; out.push(q); };
-  if (kind === 'top' || kind === 'both') add('Top wall nailer', x.zIn1 - nw, x.zIn1);
-  if (kind === 'bottom' || kind === 'both') add('Bottom wall nailer', x.zIn0, x.zIn0 + nw);
+// J6: nailer parts, from the cabinet's construction settings. x: { t, bt, D, backY, zIn0, zIn1, inW }.
+// A nailer sits behind the back, flush with the rear edge, when the back is set in far enough for it (the shop's 3/4"
+// back inset); otherwise it goes in front of the back. None when the back itself is 3/4" or thicker (a full back hangs
+// the cabinet), on angled corners (no single flat back) or when the settings say None (the mini/dollhouse set).
+function nailerSpots(c, p, x) {
+  const kind = p.nailers || 'none', nw = +p.nailerWidth > 0 ? +p.nailerWidth : 4, out = [];
+  if (kind === 'none' || x.bt >= 0.7 || (typeof angledCorner === 'function' && angledCorner(c))) return out;
+  const behind = +p.backInset >= x.t - 0.001, y1 = behind ? x.D : x.backY, y0 = r3(y1 - x.t);
+  const add = (name, z0, z1) => out.push({ name, z0: r3(z0), z1: r3(z1), y0, y1: r3(y1), w: nw });
+  if (kind === 'top' || kind === 'both') add('Top nailer', x.zIn1 - nw, x.zIn1);
+  if (kind === 'bottom' || kind === 'both') add('Bottom nailer', x.zIn0, x.zIn0 + nw);
   return out;
+}
+function jtNailers(c, p, part, x) {
+  return nailerSpots(c, p, x).map(n => { const q = part(n.name, x.cm, x.inW, n.w, { kind: 'nailer' }); q.jz = [n.z0, n.z1]; q.jy = r3((n.y0 + n.y1) / 2); return q; });
 }
 // Joins the parts that are made after the main box (fixed shelves) at both ends; nailers are joined with the box.
 function jtLate(c, parts, x) {

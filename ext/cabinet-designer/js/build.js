@@ -778,7 +778,7 @@ function buildParts(c) {
     const off = sp.outline ? 0 : Math.max(0, r3(D - sp.W));
     const fem = [], label = `${J.name} (${pt.name.toLowerCase()})`;
     let pairs;
-    if (zr) pairs = jtSpots(J, type, zr[0], zr[1], spots, t).map(z => ({ x: z, y: r3(backY - off - t / 2), m: r3(zr[1] - z) }));
+    if (zr) pairs = jtSpots(J, type, zr[0], zr[1], spots, t).map(z => ({ x: z, y: r3((pt.jy ?? backY - t / 2) - off), m: r3(zr[1] - z) }));
     else pairs = jtSpots(J, type, Math.max(a, off), b, spots, t).map(y => ({ x: fx, y: r3(y - off), m: y }));
     jx.a = zr ? undefined : a; jx.b = zr ? undefined : b; jx.type = type; jx.side = sp; jx.off = off; jx.zs = [sh, H];
     jtFasten(J, fem, pt, end === 'L' ? 0 : r3(pt.L), end === 'L' ? 'W1' : 'W2', pairs, label, jx);
@@ -786,7 +786,7 @@ function buildParts(c) {
   });
   [['Bottom', 'bottom', zIn0 - t / 2, 0, backY], ['Top', 'top', zIn1 + t / 2, 0, backY], ['Front stretcher', 'stretcher', zIn1 + t / 2, 0, p.stretcherWidth], ['Rear stretcher', 'stretcher', zIn1 + t / 2, backY - p.stretcherWidth, backY]]
     .forEach(([name, type, fx, a, b]) => { const pt = parts.find(q => q.cabId === c.id && q.name === name); if (pt) joinSides(type, pt, fx, null, a, b); });
-  jtNailers(c, p, part, { cm, inW, zIn0, zIn1 }).forEach(q => joinSides('nailer', q, null, q.jz));
+  jtNailers(c, p, part, { cm, inW, zIn0, zIn1, t, bt, D, backY }).forEach(q => joinSides('nailer', q, null, q.jz));
   if (lay.divX !== null) {
     const J = hw(cabSet(c, 'jointU')), dv = parts.find(q => q.cabId === c.id && q.name === 'Vertical divider');
     if (J && J.kind === 'joint' && dv) ['Bottom', 'Top'].forEach((name, i) => {

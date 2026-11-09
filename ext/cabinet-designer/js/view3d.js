@@ -168,6 +168,9 @@ function cabinetMeshes(c, opts = {}) {
     } else grp.add(box3(W - 2 * t, t, D, cmM, W / 2, H - t / 2, D / 2));
     grp.add(box3(W - 2 * t, H - tk - 2 * t, bt, L3(bm, 'inside'), W / 2, tk + H / 2 - tk / 2, p.backInset + bt / 2, false));
   }
+  // Nailers (same spots as the cut list); 3D z runs from the back (0) to the front (D).
+  if (!hasCabShape(c) && !(cabTopShape(c) || {}).edges) nailerSpots(c, p, { t, bt, D, backY: D - p.backInset - bt, zIn0: tk + t, zIn1: H - t })
+    .forEach(n => grp.add(box3(W - 2 * t, n.z1 - n.z0, n.y1 - n.y0, cmM, W / 2, (n.z0 + n.z1) / 2, D - (n.y0 + n.y1) / 2)));
   if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, L3(mat(mt.toeKick) || cm, 'toe'), o => grp.add(o)); else grp.add(box3(W, tk, t, L3(mat(mt.toeKick) || cm, 'toe'), W / 2, tk / 2, D - sb - t / 2)); }
   // A blind corner's blind panel, flush with the front of the box.
   if (blindCorner(c)) { const bw = blindWidth(c), x0 = cornerSide(c) === 'L' ? t : W - bw; grp.add(box3(bw - t, H - tk - 2 * t, t, cmM, x0 + (bw - t) / 2, tk + t + (H - tk - 2 * t) / 2, D - t / 2)); }

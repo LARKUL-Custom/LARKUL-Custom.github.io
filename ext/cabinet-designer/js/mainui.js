@@ -163,9 +163,19 @@ const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh2';
 // The panel can be dragged as short or tall as you like (down to a thin strip); its contents
 // always scale to fit. Heights saved back when the panel scrolled instead of scaling are dropped (key .dockh2).
 function dockMinH() { return 40; }
+// The height you dragged it to is kept; when the window is too short for it the panel only borrows
+// a smaller height (at most 70% of the room) and goes back to yours as soon as the window has room again.
+// (It used to overwrite your height, so a minimized or briefly small hub window left the panel tiny for good.)
 function applyDockH() {
   let h = 0; try { h = +localStorage.getItem(DOCK_KEY()) || 0; } catch (_) {}
   const room = document.getElementById('tab-room'); if (!room) return;
+  const rh = room.getBoundingClientRect().height, max = rh * 0.7;
+  // A minimized or hidden window has no room to measure: keep the height you chose.
+  if (rh > 100 && deskUI()) {
+    const u = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 1;
+    const want = h > 0 ? h : 184 * u;
+    if (want > max) { room.style.setProperty('--dockh', Math.round(Math.max(dockMinH(), max)) + 'px'); return; }
+  }
   if (h > 0) room.style.setProperty('--dockh', h + 'px'); else room.style.removeProperty('--dockh');
 }
 // The panel's contents zoom to fill it: a taller panel makes everything bigger, a shorter or
@@ -262,11 +272,7 @@ addEventListener('load', () => requestAnimationFrame(() => fitDock()));
 // After the panel changes height the drawing gets a new size, so fit the room in it again.
 function dockRefit() { requestAnimationFrame(() => { fitDock(); if (ui.viewMode === 'plan' && typeof fitView === 'function') fitView(); if (typeof redrawView === 'function') redrawView(); }); }
 // A saved panel height never takes more than 70% of the room, even after the window gets smaller.
-addEventListener('resize', () => requestAnimationFrame(() => {
-  const room = document.getElementById('tab-room'), dock = document.getElementById('dock');
-  if (room && dock && deskUI()) { const max = room.getBoundingClientRect().height * 0.7; if (dock.getBoundingClientRect().height > max + 1) room.style.setProperty('--dockh', Math.round(max) + 'px'); }
-  fitDock();
-}));
+addEventListener('resize', () => requestAnimationFrame(() => { applyDockH(); fitDock(); }));
 
 // How solid the countertops look in the plan: 0 hides them, 100 covers the cabinets (remembered on this computer).
 function topOp() { if (ui.topOp === undefined) { let v = 30; try { const s = localStorage.getItem((typeof KEY === 'string' ? KEY : 'cd') + '.topop'); if (s !== null) v = +s; } catch (_) {} ui.topOp = v; } return ui.topOp / 100; }

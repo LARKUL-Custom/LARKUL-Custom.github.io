@@ -46,7 +46,8 @@ const PARAM_DEFS = [
   { k: 'toeSkinMaxL', g: 'base', label: 'Toe skin stock length (longer ones split)', type: 'len', cats: ['Base', 'Tall'] },
   { k: 'feetCount', g: 'base', label: 'Feet per cabinet (0 = automatic)', type: 'int', cats: ['Base', 'Tall'] },
   { k: 'stretcherWidth', g: 'box', label: 'Top stretcher width', type: 'len', cats: ['Base'] },
-  { k: 'nailers', g: 'box', label: 'Wall nailers', type: 'select', options: [{ v: 'none', l: 'None' }, { v: 'top', l: 'Top, at the back' }, { v: 'bottom', l: 'Bottom, at the back' }, { v: 'both', l: 'Top and bottom' }] },
+  // 0.55.15 (Ayden 2026-11-09): every cabinet gets top and bottom nailers unless its back or construction says otherwise.
+  { k: 'nailers', g: 'box', label: 'Nailers (hanging strips at the back)', type: 'select', options: [{ v: 'both', l: 'Top and bottom' }, { v: 'top', l: 'Top only' }, { v: 'bottom', l: 'Bottom only' }, { v: 'none', l: 'None' }] },
   { k: 'nailerWidth', g: 'box', label: 'Nailer width', type: 'len' },
   { k: 'backInset', g: 'box', label: 'Back inset from rear', type: 'len' },
   { k: 'dadoDepth', g: 'box', label: 'Back dado depth', type: 'len' },
@@ -72,7 +73,7 @@ const PARAM_DEFS = [
 // Parameter groups, by what they are for.
 const PARAM_GROUPS = [['base', 'Legs and toe kick'], ['box', 'Cabinet construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
 const SHOP_PARAMS = {
-  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'none', nailerWidth: 3.5, backInset: 0.75, dadoDepth: 0.375,
+  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.75, dadoDepth: 0.375,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
   frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'butt', dovetailPin: 0.5,
 };
@@ -553,6 +554,9 @@ function migrate(s) {
   // 0.55.3: the Würth Optima slide joins older jobs' hardware (added only; nothing already picked changes).
   if (!s.optima) { if (Array.isArray(s.hardware) && !s.hardware.some(h => h.id === 'hw-optima')) { const i = s.hardware.findIndex(h => h.id === 'hw-563h'); s.hardware.splice(i + 1, 0, { id: 'hw-optima', ...clone(WURTH_OPTIMA) }); } s.optima = 1; }
   if (!s.cup3) { (s.hardware || []).forEach(h => { if (h.id === 'hw-cliptop' && +h.cupEdgeMM === 5) h.cupEdgeMM = 3; }); s.cup3 = 1; }
+  // 0.55.15: nailers on all cabinets (Ayden 2026-11-09). Jobs from before had 'none' only because it was the default,
+  // so they switch to top and bottom, 4" wide like his Mozaik library. A room or cabinet set to None keeps it.
+  if (!s.nailers2) { if (s.job && s.job.params && (s.job.params.nailers || 'none') === 'none') { s.job.params.nailers = 'both'; if (+s.job.params.nailerWidth === 3.5 || !(+s.job.params.nailerWidth > 0)) s.job.params.nailerWidth = 4; } s.nailers2 = 1; }
   if (s.job && s.job.params) Object.entries(SHOP_PARAMS).forEach(([k, v]) => { if (!(k in s.job.params)) s.job.params[k] = v; });
   // Formulas and job variables came later.
   s.formulas = s.formulas || {}; if (s.job) s.job.vars = s.job.vars || [];
