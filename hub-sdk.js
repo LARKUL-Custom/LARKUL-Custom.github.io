@@ -135,6 +135,17 @@
         return () => groupListeners.delete(fn);
       },
     },
+    /**
+     * Prints with no print window, on the hub PC's printers (hub 0.10.2+, desktop app only).
+     *   await Hub.print.printers()  -> { available, reason?, printers: [{ name, displayName, isDefault }] }
+     *   await Hub.print.html({ html: '<!doctype html>…', printer: 'DYMO LabelWriter 450', width: 3.5, height: 1.125, landscape: true })
+     * width and height are the page size in inches. landscape: the printer feeds the short side first
+     * (label printers do). The page is shown with scripts turned off, so put the CSS in the html.
+     */
+    print: {
+      printers: () => call('/api/print/printers'),
+      html: (job) => call('/api/print', { method: 'POST', json: job }),
+    },
     /** Switches the hub to another tab, e.g. '#/files' or '#/ext/scheduler'. */
     navigate: (to) => toHub('navigate', { to }),
   };
