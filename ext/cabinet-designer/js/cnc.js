@@ -49,8 +49,12 @@ function cncPartFile(scoped) {
 
     const cuttable = p.ops.filter(o => o.type === 'bore' || o.type === 'groove' || o.type === 'path');
     const count = {};
-    cuttable.forEach(o => { if (o.face) count[o.face] = (count[o.face] || 0) + 1; });
-    const top = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+    // Leg holes don't vote: they always go on the flip side, so a bottom stays inside face up and its
+    // feet are only cut when a flip side sheet is made. Without this, a bottom's 16 leg screw marks
+    // outvoted its dado and the whole bottom came out flipped.
+    cuttable.forEach(o => { if (o.face && !o.leg) count[o.face] = (count[o.face] || 0) + 1; });
+    const legFace = (cuttable.find(o => o.leg && o.face) || {}).face;
+    const top = Object.keys(count).filter(f => f !== legFace).sort((a, b) => count[b] - count[a])[0] || (legFace && CNC_OPPOSITE[legFace]);
     const faceOf = o => !o.face || o.face === top ? 'top' : o.face === CNC_OPPOSITE[top] ? 'back' : null;
 
     // A made door's recess and edges are cut by its style's panel tool group in CNC Cutlist.

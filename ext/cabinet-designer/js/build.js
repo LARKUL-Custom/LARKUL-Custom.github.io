@@ -738,7 +738,7 @@ function buildParts(c) {
       // A corner gets a leg in from each corner of its footprint (ops measured from the bottom's front edge).
       const spots = cornerLegSpots(c, p), pat = (leg.holesMM || []).length ? leg.holesMM : [{ x: 0, y: 0 }];
       spots.forEach(q => pat.forEach(o => { const dx = (+o.x || 0) * MM * (q.x > W / 2 ? -1 : 1), dy = (+o.y || 0) * MM;
-        bot.ops.push({ type: 'bore', x: r3(q.x + dx - t), y: r3(D - q.y + dy), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name }); }));
+        bot.ops.push({ type: 'bore', x: r3(q.x + dx - t), y: r3(D - q.y + dy), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name, leg: true }); }));
       n = spots.length;
     } else if (leg && leg.kind === 'leg' && bot) {
       const { xs, ys } = legLayout(c, p, leg, D);
@@ -746,7 +746,7 @@ function buildParts(c) {
       // points toward the middle of the cabinet, so legs on the right half mirror it.
       const pat = (leg.holesMM || []).length ? leg.holesMM : [{ x: 0, y: 0 }];
       xs.forEach(x => ys.forEach(y => pat.forEach(o => { const dx = (+o.x || 0) * MM * (x > W / 2 ? -1 : 1), dy = (+o.y || 0) * MM;
-        bot.ops.push({ type: 'bore', x: r3(x + dx - t), y: r3(y + dy), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name }); })));
+        bot.ops.push({ type: 'bore', x: r3(x + dx - t), y: r3(y + dy), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name, leg: true }); })));
       n = xs.length * ys.length;
     }
     addB(leg ? leg.name : `Cabinet leveler leg ${fmtLen(tk, 1)}`, n); if (p.toeSkin !== 'off') addB('Toe skin clip', Math.ceil(n / 2));
