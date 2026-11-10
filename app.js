@@ -169,7 +169,7 @@ function renderExtFrame(ext, frame) {
   } else if (ext.canRun && ext.process.status !== 'running') {
     frame.innerHTML = `${bar}<div class="ext-offline"><div>${esc(ext.name)} isn't running.</div><button class="btn primary" data-act="start">Start ${esc(ext.name)}</button></div>`;
   } else {
-    frame.innerHTML = `${bar}<iframe src="${esc(ext.src)}" title="${esc(ext.name)}" allow="clipboard-read; clipboard-write; fullscreen"></iframe>`;
+    frame.innerHTML = `${bar}<iframe src="${esc(ext.src)}" title="${esc(ext.name)}" allow="clipboard-read; clipboard-write; fullscreen; microphone"></iframe>`;
   }
 
   frame.onclick = async (e) => {
