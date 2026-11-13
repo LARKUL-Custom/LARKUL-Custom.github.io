@@ -620,7 +620,7 @@ function doorDesigner() {
         <div class="note">A door or drawer front smaller or bigger than these limits is built with the style you pick here instead, like Mozaik's minimum and maximum sizes.</div>${typeof sizeRuleUse === 'function' && d.swap ? sizeRuleUse(d) : ''}</div>
       <div class="dsec">${secHead('tag', 'Price', 'teal')}
         <div class="grid2">${fld('Price ($/sq ft)', R, 'rate', d.rate, 'num')}${fld('Minimum per front', R, 'min', d.min, 'num')}${fld('Material ($/sq ft)', R, 'matCost', d.matCost, 'num', { blank: true, ph: doorMatRate({ ...d, matCost: '' }, priceSheet()).toFixed(2) })}</div>
-        <div class="note">Every door, drawer front, false front and applied end panel in this style costs its size times the price, never under the minimum, plus material. Blank material uses the material's sheet price. A job can use its own price under Pricing › Edit prices.</div></div>
+        <div class="note">Every door, drawer front, false front and applied end panel in this style costs its size times the price plus material, and never less than the minimum per front. Blank material uses the material's sheet price. A job can use its own price under Pricing › Edit prices.</div></div>
       ${!framedT || d.panelType === 'flat' || d.panelType === 'raised' ? `<div class="dsec">${secHead('palette', 'Panel design', 'rose')}
         ${fld('Design', R, 'design', d.design, 'select', { options: PANEL_DESIGNS, wide: true })}<div class="grid2">
         ${d.design !== 'none' && d.design !== 'xbrace' ? fld('Spacing', R, 'grooveSpacing', d.grooveSpacing, 'len') : ''}

@@ -51,6 +51,7 @@ const PARAM_DEFS = [
   { k: 'nailerWidth', g: 'box', label: 'Nailer width', type: 'len' },
   { k: 'backInset', g: 'box', label: 'Back inset from rear', type: 'len' },
   { k: 'dadoDepth', g: 'box', label: 'Back dado depth', type: 'len' },
+  { k: 'grooveClear', g: 'box', label: 'Groove and dado room (wider than the panel, and the panel stops this short of the bottom)', type: 'len' },
   { k: 'shelfCount', g: 'shelves', label: 'Adjustable shelves', type: 'int' },
   { k: 'shelfMinSep', g: 'shelves', label: 'Fill with shelves, at least this apart (0 = use the count)', type: 'len' },
   { k: 'backLBMinW', g: 'shelves', label: 'Rear line bore on cabinets wider than (0 = off)', type: 'len' },
@@ -73,7 +74,7 @@ const PARAM_DEFS = [
 // Parameter groups, by what they are for.
 const PARAM_GROUPS = [['base', 'Legs and toe kick'], ['box', 'Cabinet construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
 const SHOP_PARAMS = {
-  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.75, dadoDepth: 0.375,
+  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.75, dadoDepth: 0.375, grooveClear: 0.03125,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
   frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'butt', dovetailPin: 0.5,
 };
@@ -248,14 +249,18 @@ function easyJoints() {
   return [
     { id: 'jt-easy-u', kind: 'joint', name: 'Easy assembly: tab and slot', cost: 0.03, applies: { Base: true, Wall: true, Tall: true, fin: false, unfin: true }, fastener: 'tabslot', breakDado: 0,
       female: { dia: 0.1969, depth: 0 }, male: { dia: 0.1969, depth: 1.75, center: true }, ends: { ...JOINT_LOC }, dividers: { ...JOINT_LOC }, stretchers: { n: 2 } },
-    { id: 'jt-easy-f', kind: 'joint', name: 'Easy assembly: dowels (finished ends)', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false }, breakDado: 1,
+    // Finished ends get the same tabs and notches (0.55.23, Ayden: one side came out with no cuts), but blind dowel holes
+    // instead of confirmats, so nothing shows on the finished face. A wall cabinet's bottom still only gets dowels.
+    { id: 'jt-easy-f', kind: 'joint', name: 'Easy assembly: tab and slot (finished ends)', cost: 0, applies: { Base: true, Wall: true, Tall: true, fin: true, unfin: false }, fastener: 'tabslot', breakDado: 1,
       female: { dia: 0.315, depth: 0.5003 }, male: { dia: 0.315, depth: 1, center: true }, ends: { front: 2, back: 2, maxGap: 6 }, dividers: { front: 2, back: 2, maxGap: 6 }, stretchers: { n: 2 } },
   ];
 }
 // Jobs that opened the 0.55.7 test library have the rabbet versions; those are swapped for these.
 function ensureEasyJoints(s) {
   if (!Array.isArray(s.hardware)) return;
-  easyJoints().forEach(j => { const i = s.hardware.findIndex(h => h.id === j.id); if (i < 0) s.hardware.push(j); else if (s.hardware[i].fastener === 'ledge') s.hardware[i] = j; });
+  easyJoints().forEach(j => { const i = s.hardware.findIndex(h => h.id === j.id), o = s.hardware[i];
+    // Older versions: the 0.55.7 rabbet ones, and the dowels-only finished end template from before 0.55.23.
+    if (i < 0) s.hardware.push(j); else if (o.fastener === 'ledge' || (j.id === 'jt-easy-f' && !o.fastener && o.name === 'Easy assembly: dowels (finished ends)')) s.hardware[i] = j; });
 }
 // The test library is a copy of My library whose products use the easy assembly joints. My library is not changed.
 function easyLibItems() {
@@ -289,6 +294,17 @@ function ensureJoinery(s) {
 }
 
 /* ---------- Sample job ---------- */
+// A straight cut from (x1, y1) to (x2, y2) cut back to the part's rectangle 0..L by 0..W (Liang-Barsky), or null when none
+// of it is on the part. A groove can't run past the end of its part: the bit would go on into the part next to it on the sheet.
+function clipSegRect(x1, y1, x2, y2, L, W) {
+  let a = 0, b = 1; const dx = x2 - x1, dy = y2 - y1;
+  for (const [p, q] of [[-dx, x1], [dx, L - x1], [-dy, y1], [dy, W - y1]]) {
+    if (Math.abs(p) < 1e-12) { if (q < -1e-9) return null; continue; }
+    const r = q / p; if (p < 0) { if (r > b) return null; if (r > a) a = r; } else { if (r < a) return null; if (r < b) b = r; }
+  }
+  if (b - a < 1e-9) return null;
+  return [x1 + dx * a, y1 + dy * a, x1 + dx * b, y1 + dy * b];
+}
 function seed() {
   const lib = (id, name, cat, w, h, d, elev, rows, params, construction) => ({ id, name, cat, w, h, d, elev, rows, params, construction: construction || defaultConstruction(cat) });
   const S = {
@@ -597,6 +613,8 @@ function migrate(s) {
   if (typeof ensureMozLib === 'function') ensureMozLib(s);
   if (s.dollKit && typeof ensureDollKit === 'function') ensureDollKit(s);
   ensureMelBoxes(s);
+  // Jobs that already use the easy assembly test library get its current joint templates.
+  if (Array.isArray(s.hardware) && s.hardware.some(h => h.id === 'jt-easy-u' || h.id === 'jt-easy-f')) ensureEasyJoints(s);
   // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.
   if (!s.miniGone) { const used = s.rooms.some(r => (r.cabinets || []).some(c => c.libId === 'mini-ad')), L = !s.libSet || s.libSet === 'main' ? s.library : (s.libSets || {}).main;
     if (!used && Array.isArray(L)) { const i = L.findIndex(l => l.id === 'mini-ad'); if (i >= 0) L.splice(i, 1); } s.miniGone = 1; }

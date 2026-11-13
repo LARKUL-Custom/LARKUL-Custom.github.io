@@ -149,10 +149,12 @@ function priceCab(c, ps) {
   return { box, doors, extras, ends, hardware, materials, sq, paint, custom, upcharge, total: base + upcharge };
 }
 const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
-// One door or front: the style's price per sq ft from the door library (or this job's own), never under its minimum, plus material.
+// One door or front: its size times the style's price per sq ft (from the door library, or this job's own) plus material.
+// 0.55.34 (Ayden 2026-11-11): the style's Minimum per front ($20 by default) is a floor under that whole price, so a tiny
+// front that would cost next to nothing costs the minimum. Before, the minimum replaced the labor and material went on top.
 function priceFront(ds, sq, ps) {
-  const labor = Math.max(doorMin(ds), sq * doorRate(ds)), material = sq * doorMatRate(ds, ps);
-  return { labor, material, total: labor + material };
+  const material = sq * doorMatRate(ds, ps), total = Math.max(doorMin(ds), sq * doorRate(ds) + material);
+  return { labor: total - material, material, total };
 }
 // Material cost per square foot of door: the style's own number (what a buyout door costs you, say),
 // or else its material's sheet price spread over the sheet, plus waste.

@@ -54,7 +54,10 @@ function cncPartFile(scoped) {
     // outvoted its dado and the whole bottom came out flipped.
     cuttable.forEach(o => { if (o.face && !o.leg) count[o.face] = (count[o.face] || 0) + 1; });
     const legFace = (cuttable.find(o => o.leg && o.face) || {}).face;
-    const top = Object.keys(count).filter(f => f !== legFace).sort((a, b) => count[b] - count[a])[0] || (legFace && CNC_OPPOSITE[legFace]);
+    // Cabinet parts always go inside face up (Ayden 2026-11-09), so the side facing into the cabinet gets the cuts and
+    // anything on the outside (leg holes, ...) is a flip side op. Other parts (doors, drawer fronts) still go busiest face up.
+    const inOut = cuttable.some(o => o.face === 'inside' || o.face === 'outside');
+    const top = inOut ? 'inside' : Object.keys(count).filter(f => f !== legFace).sort((a, b) => count[b] - count[a])[0] || (legFace && CNC_OPPOSITE[legFace]);
     const faceOf = o => !o.face || o.face === top ? 'top' : o.face === CNC_OPPOSITE[top] ? 'back' : null;
 
     // A made door's recess and edges are cut by its style's panel tool group in CNC Cutlist.
@@ -106,6 +109,19 @@ function cncPartFile(scoped) {
       paths.forEach(path => cncRoutes(ops, { type: 'route', face, tool: bit[0], path: path.map(([x, y]) => P(x, y)) }, o.depth));
     }
 
+    // The CNC cuts the face it sees from above, so each part's drawing must be seen from the face that is cut. Both
+    // sides are drawn as seen from the cabinet's right, so a right side came out as a second left, and the bottom is
+    // drawn as seen from below, so its back dado and tabs came out mirrored (Ayden 2026-11-09). Those two are flipped
+    // front to back, which keeps their holes, dados and notches on the inside face. A top and stretchers are drawn
+    // from below already, which is their inside.
+    // Fronts are drawn as seen from the front, so a door cut with its back (hinge cups) up came out mirrored too: on a
+    // left hinged door the cups landed on the right edge, opposite the hinge plates, with the pull beside them (found by
+    // the 2026-11-09 build check). The rest of the faces each part's drawing shows are in cncFlip.
+    if (cncFlip(p, top)) {
+      const fy = q => [q[0], r3(W - q[1])], n = outline.length;
+      outline = outline.map(fy).reverse(); edgeKeys = edgeKeys.map((_, k) => edgeKeys[k === n - 1 ? n - 1 : n - 2 - k]);
+      ops.forEach(o => { if (o.points) o.points = o.points.map(fy); if (o.path) o.path = o.path.map(fy); if (o.point) o.point = fy(o.point); if (o.direction) o.direction = [o.direction[0], -o.direction[1] || 0]; });
+    }
     const kind = partKind(p.kind), frontKey = Object.keys(kind.edges).find(k => /^front$/i.test(kind.edges[k]));
     const frontEdge = frontKey ? edgeKeys.indexOf(frontKey) : -1;
     used.add(m.id);
@@ -141,10 +157,29 @@ function cncPartFile(scoped) {
   return { file: { format: 'cabinet-cnc-parts', version: 1, units: 'mm', job: { name: d.job.name }, ...lib, materials, parts }, skipped };
 }
 
+// Whether a part's drawing is seen from the face opposite the one that goes up on the CNC, so its file has to be flipped
+// front to back (CNC y) to cut it the right way round. Each kind of part is drawn from one face (x along its length,
+// y down from its L1 edge): a left side from inside, a right side from outside, a bottom from below, a top and
+// stretchers from below (their inside), fronts from the front (a right stile, measured from its outer edge, from the
+// back), a left applied end panel from its show face and a right one from its hidden face, a divider from its right.
+function cncFlip(p, top) {
+  if (!top) return false;
+  const n = p.name || '', k = p.kind;
+  if (k === 'side' && /^Right side/.test(n)) return true;
+  if (k === 'topbot' && /^Bottom/.test(n)) return true;
+  if (k === 'door' || k === 'drawerFront' || k === 'frame') return top === (/stile \(right\)$/.test(n) ? 'front' : 'back');
+  if (k === 'applied') return top === (/\(L\)$/.test(n) ? 'hidden' : 'show');
+  if (k === 'divider' && /^Vertical divider/.test(n)) return top === 'left';
+  return false;
+}
+
 // Centre paths for a straight groove cut with a bit of diameter `dia`: enough
 // side by side passes to clear its width, each stopped a bit radius short of an
 // end that lies inside the part so the slot stays the drawn length.
 function cncGroovePaths(o, L, W, dia) {
+  // Never past the part's edges (the bit would cut into the next part on the sheet).
+  const g = clipSegRect(o.x1, o.y1, o.x2, o.y2, L, W); if (!g) return null;
+  o = { ...o, x1: g[0], y1: g[1], x2: g[2], y2: g[3] };
   const rad = dia / 2, dx = o.x2 - o.x1, dy = o.y2 - o.y1, len = Math.hypot(dx, dy);
   if (!len) return null;
   const ux = dx / len, uy = dy / len, nx = -uy, ny = ux;

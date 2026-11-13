@@ -97,6 +97,16 @@ const SETTINGS = [
   { k: 'countertop', label: 'Countertop', list: () => opts(S.countertops), tab: 'countertops' },
   { k: 'molding', label: 'Quick molding', list: () => opts(S.moldings), tab: 'moldings' },
 ];
+// Clears the picks under a Settings page pick so it reaches every cabinet: room ones too when it is the whole job's.
+// Mini cabinets keep the mini picks their library gives them (3/4 melamine kit, no hinges or joints).
+function setFollowDown(k, room) {
+  let n = 0;
+  (room ? [room] : S.rooms).forEach(r => {
+    if (!room && r.settings && r.settings[k]) { delete r.settings[k]; n++; }
+    if (SETTING_FIELDS.includes(k)) (r.cabinets || []).forEach(c => { if (c[k] && !/^mini-/.test(c.libId || '')) { c[k] = ''; n++; } });
+  });
+  return n;
+}
 function settingPreview(k, id) {
   if (k === 'doorT') { const t = doorTpl(id); return swatch(mat(doorStyle(t.door).mat), 16); }
   if (k === 'cabMatT') return swatch(mat(cabMatT(id).carcass), 16);

@@ -63,9 +63,9 @@ function jtFasten(J, fem, male, edgeX, edge, pairs, why, x) {
     const d = +J.routeDepth > 0 ? +J.routeDepth : 0.25, xs = pairs.map(q => q.x), ys = pairs.map(q => q.y), mn = r3(Math.min(...ys)), mx = r3(Math.max(...ys));
     const along = Math.abs(Math.max(...xs) - Math.min(...xs)) > Math.abs(mx - mn);
     // A dado the full length of the joint, as wide as the panel that drops in.
-    fem.push(along ? { type: 'groove', x1: r3(Math.min(...xs)), y1: r3(pairs[0].y), x2: r3(Math.max(...xs)), y2: r3(pairs[0].y), width: t, depth: d, face: 'inside', why }
-      : { type: 'groove', x1: r3(pairs[0].x), y1: x.a ?? mn, x2: r3(pairs[0].x), y2: x.b ?? mx, width: t, depth: d, face: 'inside', why });
-    if (male) jtGrow(male, edge, d);
+    fem.push(along ? { type: 'groove', x1: r3(Math.min(...xs)), y1: r3(pairs[0].y), x2: r3(Math.max(...xs)), y2: r3(pairs[0].y), width: r3(t + (x.gc || 0)), depth: d, face: 'inside', why }
+      : { type: 'groove', x1: r3(pairs[0].x), y1: x.a ?? mn, x2: r3(pairs[0].x), y2: x.b ?? mx, width: r3(t + (x.gc || 0)), depth: d, face: 'inside', why });
+    if (male) jtGrow(male, edge, Math.max(0, d - (x.gc || 0)));
     return;
   }
   pairs.forEach((q, i) => {
@@ -159,7 +159,7 @@ function jtTabJoin(J, fem, male, edgeX, edge, pairs, why, x) {
   // seen from below) gets the template's holes.
   if (!ok) return jtFasten(holes, fem, male, edgeX, edge, pairs, why, x);
   const a = x.a || 0, b = x.b, spans = jtTabSpans(a, b);
-  (x.tabJobs = x.tabJobs || []).push({ sp, pt: male, edge, type: x.type, spans, a, bottom: x.type === 'bottom', why });
+  (x.tabJobs = x.tabJobs || []).push({ sp, pt: male, edge, type: x.type, spans, a, bottom: x.type === 'bottom', why, clr: +J.tabClear >= 0 && J.tabClear !== '' && J.tabClear != null ? +J.tabClear : JT_TAB_CLEAR });
   // Confirmats between the tabs (one each side of a lone tab), through the side.
   const ys = (spans.length === 1 ? [spans[0][0] - 0.5, spans[0][1] + 0.5] : [a + 1, ...spans.slice(1).map((q, i) => (spans[i][1] + q[0]) / 2), b - 1])
     .filter((y, i, all) => y > a + 0.25 && y < b - 0.25 && spans.every(([p, q]) => y < p - 0.3 || y > q + 0.3) && all.indexOf(y) === i).map(r3);
@@ -168,6 +168,9 @@ function jtTabJoin(J, fem, male, edgeX, edge, pairs, why, x) {
 }
 // Tab spans along a joint from a to b (inches from the cabinet front): a short joint (a stretcher) gets one tab in the
 // middle, a long one a tab 2" in from each end and one in the middle once it is over 20".
+// Room on each side of a tab in its notch, front to back: 1/64" (0.005" was too tight on Ayden's test cabinet,
+// 2026-11-09). A joint template can set its own as tabClear (inches).
+const JT_TAB_CLEAR = 0.0156;
 function jtTabSpans(a, b) {
   const L = b - a, w = 2;
   if (L <= 6) { const h = Math.min(w, L / 2) / 2, m = (a + b) / 2; return [[r3(m - h), r3(m + h)]]; }
@@ -188,18 +191,18 @@ function jtSetOutline(pt, P) {
 // Runs after every joint is made: notches in the sides, tabs on the panels.
 function jtTabSlot(c, parts, x) {
   const jobs = x.tabJobs || []; if (!jobs.length) return;
-  const g = 0.0625, cy = 0.005, rr = jtCutterR();
+  const g = 0.0625, rr = jtCutterR();
   // Sides: notches open at the bottom edge (bottom tabs) and top edge (stretcher tabs). A notch's closed end is exact
   // (it bears on the tab); its inside corners get reliefs sideways so the bit's round corners clear the square tab.
   [...new Set(jobs.map(j => j.sp))].forEach(sp => {
     const mine = jobs.filter(j => j.sp === sp), L = sp.L, W = sp.W;
-    const dn = mine.filter(j => j.bottom).flatMap(j => j.spans.map(s => [s, j.pt.T])).sort((p, q) => q[0][0] - p[0][0]);
-    const up = mine.filter(j => !j.bottom).flatMap(j => j.spans.map(s => [s, j.pt.T])).sort((p, q) => p[0][0] - q[0][0]);
+    const dn = mine.filter(j => j.bottom).flatMap(j => j.spans.map(s => [s, j.pt.T, j.clr])).sort((p, q) => q[0][0] - p[0][0]);
+    const up = mine.filter(j => !j.bottom).flatMap(j => j.spans.map(s => [s, j.pt.T, j.clr])).sort((p, q) => p[0][0] - q[0][0]);
     const P = [[0, 0, 'L1'], [L, 0, 'W2']];
-    up.forEach(([[y0, y1], h]) => { const Y0 = y0 - cy, Y1 = y1 + cy, X = L - h, R = X + 2 * rr;
+    up.forEach(([[y0, y1], h, cy]) => { const Y0 = y0 - cy, Y1 = y1 + cy, X = L - h, R = X + 2 * rr;
       P.push([L, Y0, null], [R, Y0, null], [R, Y0 - rr, null], [X, Y0 - rr, null], [X, Y1 + rr, null], [R, Y1 + rr, null], [R, Y1, null], [L, Y1, 'W2']); });
     P.push([L, W, 'L2'], [0, W, 'W1']);
-    dn.forEach(([[y0, y1], h]) => { const Y0 = y0 - cy, Y1 = y1 + cy, R = h - 2 * rr;
+    dn.forEach(([[y0, y1], h, cy]) => { const Y0 = y0 - cy, Y1 = y1 + cy, R = h - 2 * rr;
       P.push([0, Y1, null], [R, Y1, null], [R, Y1 + rr, null], [h, Y1 + rr, null], [h, Y0 - rr, null], [R, Y0 - rr, null], [R, Y0, null], [0, Y0, 'W1']); });
     jtSetOutline(sp, P);
   });
@@ -208,7 +211,13 @@ function jtTabSlot(c, parts, x) {
   [...new Set(jobs.map(j => j.pt))].forEach(pt => {
     const mine = jobs.filter(j => j.pt === pt), e1 = mine.find(j => j.edge === 'W1'), e2 = mine.find(j => j.edge === 'W2');
     const t1 = e1 ? r3(e1.sp.T - g) : 0, t2 = e2 ? r3(e2.sp.T - g) : 0, body = pt.L, L = r3(body + t1 + t2), W = pt.W;
+    // A groove that ran out an end of the panel (the back dado) keeps running out, past the tabs, where it only crosses
+    // air. Stopped at the panel's end the CNC stops it a bit radius short and round, and the back's bottom corners did
+    // not go in (found by the 2026-11-09 build check; the same thing the sides' back dado had before 0.55.24).
+    const clear = (e, o) => { const w = (+o.width || 0) / 2 + rr; return e.spans.every(([p, q]) => o.y1 + w <= p - e.a - 2 * rr || o.y1 - w >= q - e.a + 2 * rr); };
+    const runOut = pt.ops.filter(o => o.type === 'groove' && Math.abs(o.y1 - o.y2) < 1e-6).map(o => ({ o, s: Math.min(o.x1, o.x2) <= 1e-6 && e1 && clear(e1, o), e: Math.max(o.x1, o.x2) >= body - 1e-6 && e2 && clear(e2, o) }));
     if (t1) pt.ops.forEach(o => ['x', 'x1', 'x2'].forEach(k => { if (typeof o[k] === 'number') o[k] = r3(o[k] + t1); }));
+    runOut.forEach(({ o, s, e }) => { const lo = o.x1 <= o.x2 ? 'x1' : 'x2', hi = lo === 'x1' ? 'x2' : 'x1'; if (s) o[lo] = 0; if (e) o[hi] = r3(body + t1 + t2); });
     const a = t1, b = r3(t1 + body), P = [[a, 0, 'L1'], [b, 0, 'W2']];
     // Tab spans are measured from the cabinet front; the panel's own y starts at its front edge.
     if (e2) e2.spans.map(([p, q]) => [p - e2.a, q - e2.a]).sort((p, q) => p[0] - q[0]).forEach(([y0, y1]) =>

@@ -53,6 +53,7 @@
             <details class="layers3d" id="layers3d"><summary class="btn sm">Layers</summary><div class="layerpop" id="layerpop"></div></details>
             <button class="btn sm" data-act="render3d" id="render3d" title="Realistic look: wood grain, soft shadows and reflections"></button>
             <button class="btn sm" data-act="snap3d" title="Save a picture of this view for a presentation"></button>
+            <button class="btn sm" data-act="co-open" title="Cutout card: print this view with the cabinets cut out, to hold over door samples"></button>
             <button class="btn sm" data-act="full3d" id="full3d" title="Room viewer: the 3D view on the whole screen, with a list of views (F)"></button>
           </div>
           <div class="row-actions ctlelev">
@@ -99,6 +100,7 @@
     <section id="tab-faceframes" class="page" hidden></section>
     <section id="tab-parts" class="page" hidden></section>
     <section id="tab-cnctools" class="page" hidden></section>
+    <section id="tab-vcshapes" class="page" hidden></section>
     <section id="tab-rules" class="page" hidden></section>
     <section id="tab-shop" class="page" hidden></section>
     <section id="tab-cutlist" class="page" hidden></section>
@@ -114,6 +116,7 @@
 <div class="qe-back" id="quickedit" hidden></div>
 <div class="qe-back" id="texpick" hidden></div>
 <div class="qe-back" id="askclaude" hidden></div>
+<div class="qe-back" id="cutoutdlg" hidden></div>
 <div class="calcpop" id="calcpop" role="dialog" aria-label="Calculator" hidden></div>
 <div class="jobsheet" id="jobsheet" hidden></div>
 <script src="vendor/three.min.js"></script>
@@ -141,6 +144,7 @@
 <script src="js/models.js"></script>
 <script src="js/libpick.js"></script>
 <script src="js/askclaude.js"></script>
+<script src="js/cutout.js"></script>
 <script src="js/tabs.js"></script>
 <script src="js/cnc.js"></script>
 <script src="js/cutpick.js"></script>
@@ -165,7 +169,9 @@
 <script src="js/print.js"></script>
 <script src="js/printlayout.js"></script>
 <script src="js/vmore.js"></script>
+<script src="vendor/clipper.js"></script>
 <script src="js/vcarve.js"></script>
+<script src="js/vclib.js"></script>
 <script src="js/mainui.js"></script>
 <script src="js/mozinserts.js"></script>
 <script src="js/intlib.js"></script>

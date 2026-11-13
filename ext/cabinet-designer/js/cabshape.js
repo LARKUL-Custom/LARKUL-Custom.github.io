@@ -64,6 +64,9 @@ const isRect = (o, b) => o.length === 4 && o.every(p => (Math.abs(p.x - b.x0) < 
 function cabShapedBox(c, p, t, bt, tk, sideBottom, dd = 0) {
   const bottomY = tk;
   const W = c.w, H = c.h, D = c.d, fo = cabOutline(c, 'front'), so = cabOutline(c, 'side'), to = cabOutline(c, 'top'), sw = p.stretcherWidth, warn = [];
+  // The bottom, top and stretchers stop at the inside of any panel standing on a typed edge (a corner's end panel),
+  // so they don't run into it (found by the 2026-11-09 build check: they ran under it by its thickness).
+  const toIn = cabTopInside(c, t, bt);
   const out = { sides: [], bottom: [], top: [], stretchers: [], back: null, warn };
   // Sides: the side outline, cut to how deep the top shape is at that end and how tall the front shape is there.
   [['L', 0], ['R', W - t]].forEach(([k, x0]) => {
@@ -76,7 +79,7 @@ function cabShapedBox(c, p, t, bt, tk, sideBottom, dd = 0) {
   const flat = (y, list, zLim, full) => {
     const xs = full ? [[t, W - t]] : spansIn(polySpans(fo, 'y', y), t, W - t), zs = longest(polySpans(so, 'y', y)); if (!zs) return;
     const z0 = Math.max(zs[0], zLim ? zLim[0] : -1e9), z1 = Math.min(zs[1], zLim ? zLim[1] : 1e9); if (z1 - z0 < 0.5) return;
-    xs.forEach(([a, b]) => { if (b - a < 3) return; const poly = clipPoly(to, a, b, z0, z1); if (poly.length >= 3) list.push({ y0: y - t / 2, poly }); });
+    xs.forEach(([a, b]) => { if (b - a < 3) return; const poly = clipPoly(toIn, a, b, z0, z1); if (poly.length >= 3) list.push({ y0: y - t / 2, poly }); });
   };
   flat(bottomY + t / 2, out.bottom);
   if ((c.construction || {}).top === 'stretchers') {
@@ -95,6 +98,87 @@ function cabShapedBox(c, p, t, bt, tk, sideBottom, dd = 0) {
   // Back: the front shape inside the box.
   const back = clipPoly(fo, t - dd, W - t + dd, bottomY + t - dd, H - t + dd); if (back.length >= 3) out.back = back;
   return out;
+}
+
+// How thick the panel on a typed edge is, and whether it stands inside the edge (a door is applied outside it).
+function edgePanelThick(c, type, t, bt) {
+  if (type === 'back') return bt;
+  if (type === 'fin') return (mat(panelFor(c).mat) || { thick: t }).thick;
+  return type === 'unfin' ? t : 0;
+}
+// The top shape with each typed edge moved in by its panel's thickness: what is left for the flat panels inside it.
+function cabTopInside(c, t, bt) {
+  const to = cabOutline(c, 'top'), E = cabTopEdges(c);
+  if (!E.length || !E.some(e => e.type && edgePanelThick(c, e.type, t, bt) > 0) || E.some(e => e.curved)) return to;
+  const n = E.length, line = E.map(e => { const d = e.type ? edgePanelThick(c, e.type, t, bt) : 0; return { n: e.n, c: e.a.x * e.n.x + e.a.y * e.n.y - d, a: e.a }; });
+  // Each corner is where its two edges' lines cross; straight-on edges (no turn) keep the point moved in along the normal.
+  return E.map((e, i) => {
+    const A = line[(i + n - 1) % n], B = line[i], det = A.n.x * B.n.y - A.n.y * B.n.x;
+    if (Math.abs(det) < 1e-9) return { x: e.a.x - B.n.x * (B.a.x * B.n.x + B.a.y * B.n.y - B.c), y: e.a.y - B.n.y * (B.a.x * B.n.x + B.a.y * B.n.y - B.c) };
+    return { x: (A.c * B.n.y - B.c * A.n.y) / det, y: (A.n.x * B.c - B.n.x * A.c) / det };
+  });
+}
+// Where a typed edge's panel runs: it stops at the inside of a box side it meets (the left or right side of the cabinet),
+// so it butts against the side instead of running through it. a, b and L along the edge, as cut.
+function edgePanelSpan(c, e, t) {
+  const E = cabTopEdges(c), n = E.length, W = c.w, eq = (u, v) => Math.abs(u - v) < 0.05;
+  const boxSide = q => !q.type && eq(q.a.x, q.b.x) && (eq(q.a.x, 0) || eq(q.a.x, W));
+  const ux = (e.b.x - e.a.x) / (e.L || 1), uy = (e.b.y - e.a.y) / (e.L || 1);
+  const cut = q => { if (!boxSide(q)) return 0; const s = Math.abs(ux); return s > 0.05 ? t / s : 0; };
+  const da = cut(E[(e.i + n - 1) % n]), db = cut(E[(e.i + 1) % n]);
+  return { a: { x: e.a.x + ux * da, y: e.a.y + uy * da }, b: { x: e.b.x - ux * db, y: e.b.y - uy * db }, L: r3(e.L - da - db) };
+}
+// Holes for an end panel on a typed edge (fin / unfin): the bottom and top join into its face like they join a side,
+// with the template for that kind of end, and the box side it butts against is drilled into its edge.
+function edgeJoin(c, parts, k) {
+  const E = cabTopEdges(c).filter(e => (e.type === 'fin' || e.type === 'unfin') && !e.curved); if (!E.length) return;
+  const { t, sh, zIn0, zIn1, H, spots, jx, jFor, W } = k, mine = q => q.cabId === c.id;
+  E.forEach(e => {
+    const pt = parts.find(q => mine(q) && q.edgeType === e.type && q.edgeI === e.i); if (!pt) return;
+    const J = hw(cabSet(c, e.type === 'fin' ? 'jointF' : 'jointU')); if (!J || J.kind !== 'joint') return;
+    const plain = { ...J, fastener: ['tabslot', 'ledge', 'route'].includes(J.fastener) ? 'holes' : J.fastener }, fem = [], sp = edgePanelSpan(c, e, t);
+    const keep = { a: jx.a, b: jx.b, type: jx.type, side: jx.side, off: jx.off };
+    [['Bottom', 'bottom', zIn0 - t / 2], ['Top', 'top', zIn1 + t / 2]].forEach(([name, type, z]) => {
+      if (!parts.some(q => mine(q) && (q.name === name || q.name.startsWith(name + ' ')))) return;
+      jx.a = 0; jx.b = sp.L; jx.type = type; jx.side = null; jx.off = 0;
+      jtFasten(plain, fem, null, 0, 'W1', jtSpots(plain, type, 0, sp.L, spots, t).map(y => ({ x: r3(z - sh), y: r3(y), m: y })), `${J.name} (${name.toLowerCase()})`, jx);
+    });
+    pt.ops.push(...fem);
+    // The box side the panel butts against: holes through it into the panel's end, up its height.
+    const ends = [[sp.a, e.a], [sp.b, e.b]].filter(([s, o]) => Math.hypot(s.x - o.x, s.y - o.y) > 0.01);
+    ends.forEach(([s]) => {
+      const name = s.x < W / 2 ? 'Left side' : 'Right side', side = parts.find(q => mine(q) && q.name === name), Js = jFor(name === 'Left side' ? 'L' : 'R'); if (!side || !Js) return;
+      const Jp = { ...Js, fastener: ['tabslot', 'ledge', 'route'].includes(Js.fastener) ? 'holes' : Js.fastener }, f2 = [];
+      // The side's y runs from its own front edge; the panel's middle is half its thickness in from the edge line.
+      const inY = r3((c.d - (e.a.y + e.b.y) / 2) + t / 2 - (c.d - side.W));
+      jx.a = undefined; jx.b = undefined; jx.type = 'divider'; jx.side = null; jx.off = 0;
+      jtFasten(Jp, f2, null, 0, 'W1', jtSpots(Jp, 'divider', zIn0, zIn1, spots, t).map(z => ({ x: r3(z - sh), y: inY, m: z })), `${Js.name} (${pt.name.toLowerCase()})`, jx);
+      side.ops.push(...f2);
+    });
+    Object.assign(jx, keep);
+  });
+}
+
+// Hinge mounting plates for a corner door that hinges on an end panel: each plate is measured back from the panel's end
+// at the door. The panel is drawn seen from its inside face like a left side (y runs from front to back as you look at
+// it), so y counts from whichever end that view puts first.
+function edgePlates(c, parts, list, hg0, t, sh, warn) {
+  const E = cabTopEdges(c).filter(e => (e.type === 'fin' || e.type === 'unfin') && !e.curved), mine = q => q.cabId === c.id;
+  list.forEach(({ p, z, hg: h1 }) => { const hg = h1 || hg0;
+    let best = null;
+    E.forEach(e => {
+      const sp = edgePanelSpan(c, e, t);
+      [[sp.a, 0], [sp.b, sp.L]].forEach(([q, s0]) => { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < 1 && (!best || d < best.d)) best = { d, e, sp, s0 }; });
+    });
+    const pt = best && parts.find(q => mine(q) && q.edgeType === best.e.type && q.edgeI === best.e.i);
+    if (!pt) { warn.push('A corner door hinges where there is no panel to take its mounting plates. Drill them by hand.'); return; }
+    const { e, sp, s0 } = best, dx = (e.b.x - e.a.x) / (e.L || 1), dy = (e.b.y - e.a.y) / (e.L || 1);
+    const rev = dy * -e.n.x - dx * -e.n.y > 0;
+    hg.plateHoles.forEach(ph => {
+      const s = s0 === 0 ? ph.y * MM : sp.L - ph.y * MM;
+      pt.ops.push({ type: 'bore', x: r3(z - sh + ph.dz * MM), y: r3(rev ? sp.L - s : s), dia: ph.dia * MM, depth: ph.depth * MM, face: 'inside', why: 'hinge plate' });
+    });
+  });
 }
 
 /* ---------- Editing a cabinet shape ---------- */
@@ -237,18 +321,19 @@ function edgeParts(c, parts, k, part, cm) {
   const fin = mat(panelFor(c).mat) || cm, door = parts.find(q => q.cabId === c.id && /^Door/.test(q.name)), dm = door ? mat(door.mat) || cm : fin;
   E.forEach(e => {
     if (e.curved) warn.push(`Edge ${e.i + 1} is curved; its ${edgeTypeName(e.type).toLowerCase()} is listed flat at the straight length.`);
-    const L = r3(e.L), nm = `Edge ${e.i + 1} `;
+    const L = (e.type === 'fin' || e.type === 'unfin') ? edgePanelSpan(c, e, t).L : r3(e.L), nm = `Edge ${e.i + 1} `;
     if (e.type === 'door') { const q = part(nm + 'door', dm, r3(Hs - 0.125), r3(L - 0.125), { kind: 'door' }); q.edgeType = 'door'; }
     else if (e.type === 'back') { const q = part(nm + 'back', bm, Hs, L, { kind: 'back' }); q.edgeType = 'back'; }
-    else { const q = part(nm + (e.type === 'fin' ? 'finished panel' : 'panel'), e.type === 'fin' ? fin : cm, Hs, L, { kind: 'side' }); q.edgeType = e.type; }
+    else { const q = part(nm + (e.type === 'fin' ? 'finished panel' : 'panel'), e.type === 'fin' ? fin : cm, Hs, L, { kind: 'side' }); q.edgeType = e.type; q.edgeI = e.i; }
   });
 }
 // The same panels in 3D: each stands just inside its edge.
 function edgeParts3d(c, add, t, sh, mats) {
   cabTopEdges(c).filter(e => e.type && e.type !== 'open').forEach(e => {
     const th = e.type === 'door' ? 0.75 : e.type === 'back' ? 0.25 : t, h = c.h - sh, m = e.type === 'door' ? mats.door : e.type === 'back' ? mats.back : mats.box;
-    const inset = e.type === 'door' ? -th / 2 : th / 2, mx = (e.a.x + e.b.x) / 2 - e.n.x * inset, mz = (e.a.y + e.b.y) / 2 - e.n.y * inset;
-    const me = box3(e.L, h, th, m, mx, sh + h / 2, mz); me.rotation.y = -Math.atan2(e.b.y - e.a.y, e.b.x - e.a.x); if (e.type === 'door') me.userData.layer = 'fronts'; add(me);
+    const sp = e.type === 'fin' || e.type === 'unfin' ? edgePanelSpan(c, e, t) : e;
+    const inset = e.type === 'door' ? -th / 2 : th / 2, mx = (sp.a.x + sp.b.x) / 2 - e.n.x * inset, mz = (sp.a.y + sp.b.y) / 2 - e.n.y * inset;
+    const me = box3(sp.L, h, th, m, mx, sh + h / 2, mz); me.rotation.y = -Math.atan2(e.b.y - e.a.y, e.b.x - e.a.x); if (e.type === 'door') me.userData.layer = 'fronts'; add(me);
   });
 }
 

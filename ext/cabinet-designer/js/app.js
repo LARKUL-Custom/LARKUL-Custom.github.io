@@ -10,7 +10,7 @@ const ui = {
 // Main toolbar, in Mozaik's order, then the libraries that sit behind the Libraries menu.
 // Shop order, left to right: set up the job, draw it, dress it, then order, price and cut it.
 const MAIN_TABS = [['job', 'Job'], ['settings', 'Settings'], ['room', 'Room'], ['countertops', 'Tops'], ['moldings', 'Molding'], ['pricing', 'Pricing'], ['cutlist', 'Cutlist'], ['carve', 'Carve']];
-const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['inserts', 'Inserts'], ['panels', 'Applied panels'], ['faceframes', 'Face frames'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['rules', 'Rules']];
+const LIB_TABS = [['library', 'Products'], ['materials', 'Materials'], ['doors', 'Doors'], ['hardware', 'Hardware'], ['inserts', 'Inserts'], ['panels', 'Applied panels'], ['faceframes', 'Face frames'], ['parts', 'Part templates'], ['cnctools', 'CNC tools'], ['vcshapes', 'V-carve shapes'], ['rules', 'Rules']];
 // The Designer opens from Products (and from a cabinet); it has no button of its own.
 const HIDDEN_TABS = [['designer', 'Designer'], ['shop', 'Shop view'], ['export', 'Order']];
 const TABS = [...MAIN_TABS, ...LIB_TABS, ...HIDDEN_TABS];
@@ -30,7 +30,7 @@ const TAB_ICONS = {
 };
 const TAB_TONES = { job: 'indigo', settings: 'slate', room: 'teal', library: 'amber', designer: 'violet', countertops: 'stone', moldings: 'rose', cutlist: 'green', carve: 'rose', pricing: 'teal', export: 'blue', libs: 'amber', materials: 'amber', doors: 'violet', hardware: 'slate', panels: 'stone', parts: 'green' };
 const tabIcon = k => `<span class="tabic tone-${TAB_TONES[k] || 'slate'}"><svg viewBox="0 0 20 20" aria-hidden="true">${TAB_ICONS[k]}</svg></span>`;
-const RENDER = () => ({ job: renderJob, settings: renderSettings, room: renderRoom, designer: renderDesigner, library: renderLibrary, materials: renderMaterials, doors: renderDoors, hardware: renderHardware, countertops: renderCountertops, moldings: renderMoldings, panels: renderPanels, faceframes: renderFaceFrames, inserts: renderInserts, parts: renderPartTemplates, cnctools: renderCncTools, rules: renderRules, shop: renderShop, cutlist: renderCutlist, carve: renderCarve, pricing: renderPricing, export: renderExport });
+const RENDER = () => ({ job: renderJob, settings: renderSettings, room: renderRoom, designer: renderDesigner, library: renderLibrary, materials: renderMaterials, doors: renderDoors, hardware: renderHardware, countertops: renderCountertops, moldings: renderMoldings, panels: renderPanels, faceframes: renderFaceFrames, inserts: renderInserts, parts: renderPartTemplates, cnctools: renderCncTools, vcshapes: renderVcShapes, rules: renderRules, shop: renderShop, cutlist: renderCutlist, carve: renderCarve, pricing: renderPricing, export: renderExport });
 function fixSel() {
   if (ui.sel && ui.sel.type === 'cab' && !cab(ui.sel.id)) ui.sel = null;
   if (ui.sel && ui.sel.type === 'wall' && !wall(ui.sel.id)) ui.sel = null;
@@ -65,11 +65,11 @@ function render() {
 const LIB_NAV = [
   ['Cabinets', [['library', 'stack', 'amber'], ['doors', 'door', 'violet'], ['faceframes', 'face', 'teal'], ['panels', 'ends', 'stone'], ['inserts', 'shelf', 'green']]],
   ['Materials and hardware', [['materials', 'palette', 'blue'], ['hardware', 'sliders', 'slate'], ['parts', 'list', 'teal']]],
-  ['Shop', [['cnctools', 'cube', 'indigo'], ['rules', 'ruler', 'amber']]],
+  ['Shop', [['cnctools', 'cube', 'indigo'], ['vcshapes', 'edit', 'rose'], ['rules', 'ruler', 'amber']]],
 ];
 function libCount(k) {
   try {
-    return { library: S.library.filter(x => x.cat !== 'Shape').length + (S.shapeLib || []).length, materials: S.materials.length, doors: S.doorStyles.length, hardware: S.hardware.length, inserts: INSERT_TYPES.length, panels: S.panels.length, faceframes: S.faceFrames.length, parts: S.partTemplates.length, cnctools: CNC_LIB.tools.length, rules: RULES.length }[k];
+    return { library: S.library.filter(x => x.cat !== 'Shape').length + (S.shapeLib || []).length, materials: S.materials.length, doors: S.doorStyles.length, hardware: S.hardware.length, inserts: INSERT_TYPES.length, panels: S.panels.length, faceframes: S.faceFrames.length, parts: S.partTemplates.length, cnctools: CNC_LIB.tools.length, vcshapes: VC_LIB.items.length, rules: RULES.length }[k];
   } catch (_) { return undefined; }
 }
 function renderLibNav(on) {
@@ -283,6 +283,7 @@ function renderRoom() {
   renderViews3d();
   $('#render3d').innerHTML = `${icon('sun')}Realistic`; $('#render3d').setAttribute('aria-pressed', String(!!ui.render3d));
   $('[data-act=snap3d]').innerHTML = `${icon('camera')}Save image`;
+  $('[data-act=co-open]').innerHTML = `${icon('print')}Cutout card`;
   renderFull3d();
   const sel = $('#elevwall');
   setHTML(sel, S.walls.map(w => `<option value="${w.id}"${w.id === ui.elevWall ? ' selected' : ''}>${wallName(w)} · ${fmtLen(wg(w).L, 1)}</option>`).join('') || '<option>No walls yet</option>');
@@ -632,7 +633,7 @@ function dockBody(k) {
 /* ---------- Placing and applying ---------- */
 function placeCabinet(libId, g) {
   const l = libItem(libId); if (!l || !g) return;
-  let nc; mutate(() => { nc = newCab(S, l, g.wall, g.side, g.off); if (g.w) nc.w = g.w; S.cabinets.push(nc); if (l.lights && l.lights.length) addCabStrips(nc.id, l.lights); });
+  let nc; mutate(() => { nc = newCab(S, l, g.wall, g.side, g.off); if (g.w) nc.w = g.w; S.cabinets.push(nc); { const fo = fillerFlushOutset(nc); if (fo !== null) nc.outset = fo; } if (l.lights && l.lights.length) addCabStrips(nc.id, l.lights); });
   ui.sel = { type: 'cab', id: nc.id }; ui.elevWall = g.wall; renderRoom();
 }
 function applyPayload(cabId, kind, val) {

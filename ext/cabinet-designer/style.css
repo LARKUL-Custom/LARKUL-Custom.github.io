@@ -3168,3 +3168,60 @@ main:has(#tab-carve:not([hidden])){padding:0;background:var(--sunk)}
 .ai-dlg .f>span{font-weight:600;font-size:13.5px}
 .ai-dlg .f input{padding:7px 10px;font-size:14px}
 .ai-dlg .qe-foot{justify-content:flex-end}
+
+/* Cutout card (cutout.js) */
+.co-dlg{width:min(1100px,100%)}
+.co-dlg .qe-head b{display:flex;align-items:center;gap:6px}
+.co-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line)}
+.co-body{flex:1;min-height:0;overflow:auto;padding:14px 16px;display:grid;place-items:center;background:var(--bg-2,#eef0f3)}
+.co-prev{display:block;max-width:100%;max-height:min(560px,62vh);background:#fff;border:1px solid var(--line-strong);box-shadow:0 6px 20px rgba(0,0,0,.12)}
+.co-wait{padding:60px 0;font-size:15px}
+#cutoutsheet{display:none}
+@media print{
+  body.printing-cutout>*:not(#cutoutsheet){display:none!important}
+  body.printing-cutout{background:#fff;margin:0}
+  body.printing-cutout #cutoutsheet{display:block}
+}
+/* ----- Carve: VCarve-style drawing tools, shape library picker, trace page, V-carve shapes library ----- */
+.vcx-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.vcx-tool{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer;text-align:left}
+.vcx-tool:hover{border-color:#e11d48}
+.vcx-tool.on{border-color:#e11d48;box-shadow:0 0 0 2px color-mix(in srgb,#e11d48 30%,transparent)}
+.vcx-tool .vcx-ic{width:28px;height:28px;margin-bottom:3px}
+.vcx-tool b{font-size:14px}
+.vcx-tool small{font-size:11.5px;color:var(--muted)}
+.vcx-mode{margin-left:auto;font-style:normal;font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px;align-self:center;background:color-mix(in srgb,#0d9488 14%,var(--panel));color:#0d9488}
+.vcx-mode.line{background:color-mix(in srgb,#7c3aed 14%,var(--panel));color:#7c3aed}
+.vcx-hint{padding:10px 12px;border:1px dashed var(--line-strong);border-radius:8px}
+.vcx-modes{display:flex;flex-direction:column;gap:4px}
+.vcx-modes .seg{display:flex}
+.vcx-modes .seg button{flex:1}
+.vc-lbl{font-size:12.5px;color:var(--muted)}
+.vc-sub{padding:8px 0 4px;font-size:13.5px;color:var(--muted)}
+.vcs-pick{flex:none;border:1px solid var(--line-strong);border-radius:10px;background:var(--panel);padding:8px;margin-bottom:10px;max-height:52vh;overflow:auto}
+.vcs-pickh{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.vcs-pick input[type=search]{width:100%;margin-bottom:6px}
+.vcs-gh{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:8px 2px 4px}
+.vcs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.vcs-tile{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;font-size:11.5px;line-height:1.15;text-align:center}
+.vcs-tile:hover{border-color:#e11d48;background:color-mix(in srgb,#e11d48 6%,var(--panel))}
+.vcs-tile svg{width:44px;height:44px}
+.vcs-th{display:block}
+.vcs-fill{fill:#be185d}
+.vcs-line{stroke:#7c3aed;stroke-linecap:round;stroke-linejoin:round}
+.vcs-pic svg{width:30px;height:30px}
+.vcs-pv{display:flex;justify-content:center;align-items:center;padding:14px;background:var(--sunk);border-radius:8px}
+.vcs-pv canvas{max-width:100%;max-height:420px;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+.vcs-acts{padding:0 14px 14px}
+.vct-wrap canvas{position:absolute;inset:0;width:100%;height:100%}
+.vct-set{grid-template-columns:1fr;padding:0 2px}
+.vct-set .f{display:flex;flex-direction:column;gap:3px}
+.vct-set input[type=range]{width:100%}
+.vct-v{float:right;color:var(--text)}
+.vct-acts .btn.primary{flex:1;justify-content:center}
+.vcx-right .vc-grid > .btn{grid-column:1/-1;justify-content:center}
+.vct-set .f{text-align:left;align-items:stretch}
+.vct-set .f > span{display:flex;justify-content:space-between;font-weight:600}
+.vct-set .f.chk{flex-direction:row;align-items:center;gap:8px}
+.vct-set .f.chk > span{font-weight:500}
+.vct-set label.f.chk{display:flex !important;flex-direction:row;justify-content:flex-start}

@@ -392,7 +392,12 @@ function mozBuildParts(c) {
     q.ops.forEach(o => {
       const face = o.face, depth = I(o.depth), through = !(depth > 0 && depth < T - 0.001);
       if (o.type === 'bore') ops.push({ type: 'bore', x: I(o.x), y: Y(o.y), dia: I(o.dia), depth: through ? T : depth, through, face, why: why + ' hole' });
-      else if (o.type === 'groove') ops.push({ type: 'groove', x1: I(o.x1), y1: Y(o.y1), x2: I(o.x2), y2: Y(o.y2), width: I(o.width), depth: through ? r3(T / 2) : depth, tool: 'flat bit', face, why: why + ' groove' });
+      else if (o.type === 'groove') {
+        // Mozaik saves some grooves running past the end of the part (Corner Filler's finished end: 0.145" past the top);
+        // its own CNC output stops them at the edge, so they are cut back to the part here (Ayden 2026-11-10: it skimmed the next part).
+        const g = clipSegRect(I(o.x1), Y(o.y1), I(o.x2), Y(o.y2), L, W); if (!g) return;
+        ops.push({ type: 'groove', x1: r3(g[0]), y1: r3(g[1]), x2: r3(g[2]), y2: r3(g[3]), width: I(o.width), depth: through ? r3(T / 2) : depth, tool: 'flat bit', face, why: why + ' groove' });
+      }
       else if (o.type === 'path') {
         const tool = mozToolFor(o, tools);
         ops.push({ type: 'path', pts: o.pts.map(p => ({ x: I(p.x), y: Y(p.y) })), closed: o.closed, pocket: o.pocket, side: 'center', depth: through ? T : depth, through, tool, dia: r3(typeof peToolDia === 'function' ? peToolDia(tool) : 0.375), face, why: why + (o.pocket ? ' pocket' : ' tool path') + ` (Mozaik tool ${o.tool})`, passes: typeof pePassCount === 'function' ? pePassCount(tool, through ? T : depth) : 1, mozTool: o.tool,

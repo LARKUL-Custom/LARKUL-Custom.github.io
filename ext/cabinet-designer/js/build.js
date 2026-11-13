@@ -406,7 +406,7 @@ function drawerBoxAt(c, p, f) {
 // The standard box keeps its old sizes exactly; the melamine ones have a full-height back and the bottom in all four parts.
 function drawerBoxBuild(dmt, st, bt, bd, rec, len, ow, bh) {
   const type = DRAWER_BOX_TYPES.some(t => t.v && t.v === dmt.box) ? dmt.box : '';
-  if (!type) return { type, gd: bd, trim: 0, notchW: 0, notchH: 0, backH: bh - rec - bt, botL: len - st + bd, botW: ow - 2 * st + 2 * bd };
+  if (!type) return { type, gd: bd, trim: 0, notchW: 0, notchH: 0, backH: bh - rec - bt, botL: r3(len - st + bd - DRAWER_BOTTOM_CLEAR / 2), botW: r3(ow - 2 * st + 2 * bd - DRAWER_BOTTOM_CLEAR) };
   const s12 = type === 'slide12', bl = ow - 2 * st;
   const trim = s12 ? Math.max(0, Math.min(st - 0.25, +dmt.trim >= 0 ? +dmt.trim : 0.125)) : 0, gd = bd + trim;
   const notchW = s12 ? Math.max(0, Math.min(bl / 2 - 0.5, +dmt.notchW > 0 ? +dmt.notchW : 35 * MM)) : 0;
@@ -429,6 +429,9 @@ function buildParts(c) {
   const cm = mat(mt.carcass) || S.materials[0], t = cm.thick;
   const bm = mat(mt.back) || cm, bt = bm.thick, sm = mat(mt.shelf) || cm, tkm = mat(mt.toeKick) || cm;
   const pin = hwPick(roomSet('shelfpin'), 'shelfpin'), hg = hwPick(cabSet(c, 'hinge'), 'hinge'), sl = hwPick(cabSet(c, 'slide'), 'slide');
+  const hgAll = hg;
+  // Room in every groove and dado (Ayden 2026-11-10: a little slop, or a slightly thick sheet won't go in).
+  const gcB = Math.max(0, +(p.grooveClear ?? 0.03125) || 0);
   // A face frame is part of the cabinet's depth, so the box behind it is that much shallower.
   const ffr = faceFrame(c), W = c.w, H = c.h, D = c.d - (ffr ? ffr.thick : 0), tk = hasToe(c) ? p.toeKickHeight : 0;
   const parts = [], bom = {}, warn = [], ptT = partTpl(cabSet(c, 'partT'));
@@ -443,11 +446,12 @@ function buildParts(c) {
   const backY = D - p.backInset - bt, inD = backY;
   const leftOps = [], rightOps = [];
   // Where each hinge's mounting plate sits on a side, so shelf pin holes stay out from under it.
-  const plateZones = [];
+  const plateZones = [], edgePlateAt = [];
   const fronts = computeFronts(c, p);
   if (fronts.overfull) warn.push('Front rows are taller than the cabinet. Reduce a fixed row height.');
 
   const frontPart = (label, f) => {
+    const hg = (f.face && cornerHingeHw(c, f)) || hgAll; // a corner door can take its own hinge
     const fh = f.z1 - f.z0, fw = f.x1 - f.x0, isDoor = f.type === 'door';
     const { ds, framed } = frontStyle(c, f), dm = mat(ds.mat) || cm;
     const cupY = hg ? (hg.cupEdgeMM + hg.cupDiaMM / 2) * MM : 0; // no hinge: the front is glued on
@@ -460,9 +464,12 @@ function buildParts(c) {
       const hk = cornerHinge(c, f, hg);
       // On a face frame the plates screw to the frame's stile, so the box sides get no plate holes.
       addB(hk.name, n); if (hk.plate) addB(hk.name + (ffr ? ' face frame mounting plate' : ' mounting plate'), n);
-      // Plates on a corner's faces go on the box beside the door, not on its sides; that drilling is not made yet.
-      if (!f.face && !ffr) hinges.forEach(hp => {
-        const z = f.z0 + hp, ops = f.hinge === 'L' ? leftOps : rightOps;
+      // A corner door's plates go on whatever its hinge end meets: a box side, or the end panel on the return leg
+      // (drilled once that panel is made, in edgePlates). A bi-fold's second door hangs on the first, so no plates.
+      const he = f.face && hk.plate ? cornerHingeEnd(f) : null, atSide = he && (Math.abs(he.x) < 0.05 ? 'L' : Math.abs(he.x - W) < 0.05 ? 'R' : '');
+      if (he && !atSide && !ffr) hinges.forEach(hp => edgePlateAt.push({ p: { x: he.x, y: he.z }, z: f.z0 + hp, hg }));
+      if ((!f.face || atSide) && !ffr && hk.plate) hinges.forEach(hp => {
+        const z = f.z0 + hp, ops = (atSide || f.hinge) === 'L' ? leftOps : rightOps;
         hg.plateHoles.forEach(ph => ops.push({ type: 'bore', x: z + ph.dz * MM, y: ph.y * MM, dia: ph.dia * MM, depth: ph.depth * MM, face: 'inside', why: 'hinge plate' }));
         if (hg.plateHoles.length) { const ys = hg.plateHoles.map(ph => ph.y * MM), half = Math.max(25, ...hg.plateHoles.map(ph => Math.abs(ph.dz) + 10)) * MM;
           plateZones.push({ ops, z0: z - half, z1: z + half, y0: Math.min(...ys) - 12 * MM, y1: Math.max(...ys) + 12 * MM }); }
@@ -583,7 +590,7 @@ function buildParts(c) {
       if (f.n > 1 && f.idx === 0) warn.push('Side-by-side drawers need a center divider. Dividers are not generated yet.');
       const ow = openW - sl.widthDeductMM * MM, rec = sl.bottomRecessMM * MM, bdT = dbm.thick, bd = p.drawerBottomDado;
       const bx = drawerBoxBuild(dmt, st, bdT, bd, rec, nominal, ow, bh);
-      const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: bdT, depth: bx.gd, face: 'inside', why: 'drawer bottom' });
+      const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: r3(bdT + gcB), depth: bx.gd, face: 'inside', why: 'drawer bottom' });
       // For 1/2" slides: the inside of the sides is cut back below the bottom, so the runner sees a thinner side. The box front
       // stays full thickness: the locking devices screw on there (Ayden).
       const trimOp = len => bx.trim > 0 ? [{ type: 'groove', x1: 0, y1: rec / 2, x2: len, y2: rec / 2, width: rec, depth: bx.trim, face: 'inside', why: 'trim for the runner' }] : [];
@@ -626,7 +633,7 @@ function buildParts(c) {
     const dm = mat(dmt.sides) || cm, dbm = mat(dmt.bottom) || bm, st = dm.thick, bdT = dbm.thick, bd = p.drawerBottomDado, rec = sl.bottomRecessMM * MM;
     const ow = lay.inW - 2 * lay.spacer - sl.widthDeductMM * MM, bh = ro.h;
     const bx = drawerBoxBuild(dmt, st, bdT, bd, rec, nominal, ow, bh);
-    const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: bdT, depth: bx.gd, face: 'inside', why: 'roll-out bottom' });
+    const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: r3(bdT + gcB), depth: bx.gd, face: 'inside', why: 'roll-out bottom' });
     const trimOp = len => bx.trim > 0 ? [{ type: 'groove', x1: 0, y1: rec / 2, x2: len, y2: rec / 2, width: rec, depth: bx.trim, face: 'inside', why: 'trim for the runner' }] : [];
     const tag = lay.rollouts.length > 1 ? ` ${i + 1}` : '', RO = ro.label || 'Roll-out';
     part(RO + ' side' + tag, dm, nominal, bh, { qty: 2, kind: 'drawerBox', ops: [groove(nominal), ...trimOp(nominal)] });
@@ -688,9 +695,14 @@ function buildParts(c) {
   }
 
   // Carcass
-  const backGroove = { type: 'groove', x1: zIn0 - p.dadoDepth, y1: backY + bt / 2, x2: zIn1 + p.dadoDepth, y2: backY + bt / 2, width: bt, depth: p.dadoDepth, face: 'inside', why: 'back dado' };
   // On feet the sides start at the top of the legs, so their machining moves down by the leg height.
   const feet = onFeet(c, p), sh = feet ? tk : 0, down = o => { const q = { ...o }; ['x', 'x1', 'x2'].forEach(k => { if (typeof q[k] === 'number') q[k] = r3(q[k] - sh); }); return q; };
+  // The back dado runs the full length of each side, out both ends (Ayden 2026-11-09: a stopped groove ended short, as
+  // the CNC stops a bit radius before an end inside the part and leaves it round, so the back's corners did not go in).
+  // Room in every groove and dado (Ayden 2026-11-10: a little slop, or a slightly thick sheet won't go in): the groove is
+  // gc wider than the panel, and the panel stops gc short of the groove's bottom.
+  const gc = gcB, gReach = Math.max(0, p.dadoDepth - gc);
+  const backGroove = { type: 'groove', x1: sh, y1: backY + bt / 2, x2: H, y2: backY + bt / 2, width: r3(bt + gc), depth: p.dadoDepth, face: 'inside', why: 'back dado' };
   const toe = tk && !feet ? [{ type: 'notch', x: 0, y: 0, w: tk, h: p.toeKickSetback, why: 'toe kick' }] : [];
   // No dado (depth 0, the dollhouse set): the back is glued in between the sides, top and bottom.
   const grooves = p.dadoDepth > 0 ? [backGroove] : [];
@@ -700,16 +712,16 @@ function buildParts(c) {
   const pinD = +p.pinHoles || 0, pinSpots = [];
   if (pinD > 0) (Array.isArray(p.pinZ) && p.pinZ.length ? p.pinZ : [tk + (H - tk) * 0.25, tk + (H - tk) * 0.75]).filter(z => z > tk + t && z < H - t)
     .forEach(z => [0.25, 0.75].forEach(fy => pinSpots.push({ z: r3(z), y: r3(Math.min(D * fy, backY - pinD)) })));
-  const pinOps = pinSpots.map(q => ({ type: 'bore', x: q.z, y: q.y, dia: pinD, depth: t, face: 'inside', why: 'pin hole' }));
+  const pinOps = pinSpots.map(q => ({ type: 'bore', x: q.z, y: q.y, dia: pinD, depth: t, through: true, face: 'inside', why: 'pin hole' }));
   part('Left side', cm, H - sh, D, { kind: 'side', ops: [...grooves, ...toe, ...leftOps, ...pinOps].map(down) });
   part('Right side', cm, H - sh, D, { kind: 'side', ops: [...grooves, ...toe, ...rightOps, ...pinOps.map(o => ({ ...o }))].map(down) });
-  const panelGroove = { type: 'groove', x1: 0, y1: backY + bt / 2, x2: inW, y2: backY + bt / 2, width: bt, depth: p.dadoDepth, face: 'inside', why: 'back dado' };
+  const panelGroove = { type: 'groove', x1: 0, y1: backY + bt / 2, x2: inW, y2: backY + bt / 2, width: r3(bt + gc), depth: p.dadoDepth, face: 'inside', why: 'back dado' };
   part('Bottom', cm, inW, D, { kind: 'topbot', ops: p.dadoDepth > 0 ? [panelGroove] : [] });
   if ((c.construction || {}).top === 'stretchers') {
     part('Front stretcher', cm, inW, p.stretcherWidth, { kind: 'stretcher' });
     part('Rear stretcher', cm, inW, p.stretcherWidth, { kind: 'rearStretcher' });
   } else part('Top', cm, inW, D, { kind: 'topbot', ops: p.dadoDepth > 0 ? [{ ...panelGroove }] : [] });
-  part('Back', bm, (zIn1 - zIn0) + 2 * p.dadoDepth, inW + 2 * p.dadoDepth, { kind: 'back' });
+  part('Back', bm, r3((zIn1 - zIn0) + 2 * gReach), r3(inW + 2 * gReach), { kind: 'back' });
   if (tk && p.toeSkin !== 'off') part(feet ? 'Toe skin' : 'Toe kick', tkm, W, tk, { kind: 'toekick' });
   // Ladder base (2026-11-09; its two settings are not in SHOP_PARAMS so older jobs export byte for byte the same): a box built under the cabinet, the toe kick height tall. Front and back rails run the full
   // width, rungs fit between them at each end and at most ladderGap apart. The front sits behind the toe skin (or at the
@@ -727,7 +739,7 @@ function buildParts(c) {
   }
   // Face frame parts stay off the cut list for now (Ayden, 2026-11-03); ffParts in faceframe.js builds them when wanted.
   // A front, side or top shape cuts the box panels to it.
-  if (hasCabShape(c)) applyCabShape(c, parts, { p, t, bt, tk, sh, D, dd: p.dadoDepth, warn });
+  if (hasCabShape(c)) applyCabShape(c, parts, { p, t, bt, tk, sh, D, dd: Math.max(0, p.dadoDepth - Math.max(0, +(p.grooveClear ?? 0.03125) || 0)), warn });
   if ((cabTopShape(c) || {}).edges && typeof edgeParts === 'function') edgeParts(c, parts, { t, bt, sh, warn }, part, cm);
   if (isCorner(c)) cornerParts(c, parts, { p, t, bt, tk, feet: onFeet(c, p), part, cm, sm, warn, addB, ptT });
   // Legs press into holes on the underside of the bottom (the flip side on the CNC), laid out from the leg's insets.
@@ -762,7 +774,7 @@ function buildParts(c) {
     return Array.from({ length: n + 1 }, (_, i) => r3(f + (e - f) * i / n));
   };
   // J1-J6: each joint type has its own spots (joints2.js), and the fastener kind decides the machining.
-  const jx = { t, addB, spread: spots, a: undefined, b: undefined, warn, cat: c.cat };
+  const jx = { t, addB, spread: spots, a: undefined, b: undefined, warn, cat: c.cat, gc: gcB };
   const jFor = end => { const J = hw(cabSet(c, endFinished(c, end) ? 'jointF' : 'jointU')); return J && J.kind === 'joint' ? J : null; };
   const sideP = { L: parts.find(q => q.cabId === c.id && q.name === 'Left side'), R: parts.find(q => q.cabId === c.id && q.name === 'Right side') };
   ['L', 'R'].forEach(end => {
@@ -780,7 +792,8 @@ function buildParts(c) {
     const fem = [], label = `${J.name} (${pt.name.toLowerCase()})`;
     let pairs;
     if (zr) pairs = jtSpots(J, type, zr[0], zr[1], spots, t).map(z => ({ x: z, y: r3((pt.jy ?? backY - t / 2) - off), m: r3(zr[1] - z) }));
-    else pairs = jtSpots(J, type, Math.max(a, off), b, spots, t).map(y => ({ x: fx, y: r3(y - off), m: y }));
+    // m runs along the panel's own edge, from its front (a rear stretcher starts well back of the cabinet front).
+    else pairs = jtSpots(J, type, Math.max(a, off), b, spots, t).map(y => ({ x: fx, y: r3(y - off), m: r3(y - a) }));
     jx.a = zr ? undefined : a; jx.b = zr ? undefined : b; jx.type = type; jx.side = sp; jx.off = off; jx.zs = [sh, H];
     jtFasten(J, fem, pt, end === 'L' ? 0 : r3(pt.L), end === 'L' ? 'W1' : 'W2', pairs, label, jx);
     sp.ops.push(...fem.map(down));
@@ -788,6 +801,9 @@ function buildParts(c) {
   [['Bottom', 'bottom', zIn0 - t / 2, 0, backY], ['Top', 'top', zIn1 + t / 2, 0, backY], ['Front stretcher', 'stretcher', zIn1 + t / 2, 0, p.stretcherWidth], ['Rear stretcher', 'stretcher', zIn1 + t / 2, backY - p.stretcherWidth, backY]]
     .forEach(([name, type, fx, a, b]) => { const pt = parts.find(q => q.cabId === c.id && q.name === name); if (pt) joinSides(type, pt, fx, null, a, b); });
   jtNailers(c, p, part, { cm, inW, zIn0, zIn1, t, bt, D, backY }).forEach(q => joinSides('nailer', q, null, q.jz));
+  // A shaped cabinet's end panels (the open end of a corner's return) join to the bottom, top and the side they butt against.
+  if (hasCabShape(c) && typeof edgeJoin === 'function') edgeJoin(c, parts, { t, sh, zIn0, zIn1, H, W, spots, jx, jFor });
+  if (edgePlateAt.length && typeof edgePlates === 'function') edgePlates(c, parts, edgePlateAt, hg, t, sh, warn);
   if (lay.divX !== null) {
     const J = hw(cabSet(c, 'jointU')), dv = parts.find(q => q.cabId === c.id && q.name === 'Vertical divider');
     if (J && J.kind === 'joint' && dv) ['Bottom', 'Top'].forEach((name, i) => {

@@ -1010,7 +1010,8 @@ function parseDXF(text) {
     if (k === 0) {
       if (v === 'VERTEX' && poly) { cur = { type: 'VERTEX', parent: poly }; continue; }
       if (cur && cur.type !== 'VERTEX') ents.push(cur);
-      if (v === 'SEQEND') { poly = null; cur = null; continue; }
+      // An old-style POLYLINE is kept once its vertices end (it used to be dropped).
+      if (v === 'SEQEND') { if (poly && !ents.includes(poly)) ents.push(poly); poly = null; cur = null; continue; }
       cur = { type: v, layer: '', pts: [], flags: 0 }; if (v === 'POLYLINE') poly = cur;
       continue;
     }

@@ -231,7 +231,7 @@ function cabinetMeshes(c, opts = {}) {
   const lzAt = angledCorner(c) ? cornerSusan(c, p, t, bt) : null;
   (lay.pulls || []).forEach(pl => grp.add(box3(idx * 0.4, pl.z1 - pl.z0 - 2, inD * 0.85, flat3('#9aa1a7'), ix0 + idx / 2, (pl.z0 + pl.z1) / 2, p.backInset + bt + inD * 0.45)));
   lay.lazy.forEach(lz => { const r = lzAt ? lzAt.r : Math.min(W - 2 * t, inD) / 2 - 0.75; [0.3, 0.72].forEach(k => { const m = new THREE.Mesh(lzAt && lzAt.pie !== null ? new THREE.CylinderGeometry(r, r, 0.6, 40, 1, false, lzAt.pie, Math.PI * 1.5) : new THREE.CylinderGeometry(r, r, 0.6, 40), flat3('#d9cfbf')); m.position.set(lzAt ? lzAt.cx : W / 2, lz.z0 + (lz.z1 - lz.z0) * k, lzAt ? lzAt.cz : p.backInset + bt + inD / 2); grp.add(m); }); });
-  fronts.forEach(f => {
+  fronts.forEach((f, fi) => {
     if (f.type === 'open') return;
     // A corner's fronts are built on their own face (x along it, z out of it), so here D is that face.
     const host = f.face ? cornerFaceGroup(f) : grp, D = f.face ? 0 : c.d;
@@ -240,6 +240,7 @@ function cabinetMeshes(c, opts = {}) {
     const fw = f.x1 - f.x0, fh = f.z1 - f.z0, cx = f.x0 + fw / 2, cy = f.z0 + fh / 2;
     // Each front lives in its own group so it can swing on its hinge or slide out.
     const fg = new THREE.Group(), add = (o, ly = 'fronts') => { o.userData.layer = ly; fg.add(o); };
+    fg.userData.coFront = c.id + ':' + fi;  // the cutout card cuts each front on its own
     doorMeshes(ds, framed, f, ft, fmM, L3(mat(ds.panelMat) || fm, fk), D, add);
     const pp = pullPlacement(c, f);
     if (pp) {

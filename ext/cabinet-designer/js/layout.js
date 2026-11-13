@@ -143,6 +143,28 @@ function nearestAt(c, dir) {
   });
   return best;
 }
+// A Mozaik filler placed beside a cabinet starts at the same outset as that cabinet's doors:
+// its face (the product's front) lines up with the door faces. Corner fillers and ceiling trim keep their own spot.
+// Returns the outset to use, or null when there is no cabinet touching either end.
+function fillerFlushOutset(c) {
+  const d = c && c.moz && typeof mozDef === 'function' && mozDef(c.moz);
+  if (!d || d.group !== 'filler' || /corner|ceiling/.test(c.moz) || !c.wall) return null;
+  return inRoomOf(c, () => {
+    if (!wall(c.wall)) return null;
+    let best = null;
+    obstacles(c.wall, c.side, { ...c, outset: 0, d: 999 }, c.id).forEach(o => {
+      if (o.kind !== 'cab') return;
+      const nb = cab(o.id); if (!nb || nb.moz) return;
+      const gap = Math.min(Math.abs(o.a0 - (c.off + c.w)), Math.abs(c.off - o.a1));
+      if (gap > 1 + 0.01 || (best && gap >= best.gap)) return;
+      best = { gap, nb };
+    });
+    if (!best) return null;
+    const nb = best.nb, fr = computeFronts(nb).find(f => f.type !== 'open');
+    const ft = fr ? ((mat(frontStyle(nb, fr).ds.mat) || {}).thick || 0.75) : 0;
+    return Math.round(((nb.outset || 0) + nb.d + ft - c.d) * 1000) / 1000;
+  });
+}
 // Fillers between a cabinet and a wall, by the viewer's end: [{ end, gap, a0, a1 }].
 function fillersOf(c) {
   if (c.moz) return []; // a Mozaik product is its own filler or trim

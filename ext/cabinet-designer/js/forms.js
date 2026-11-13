@@ -161,6 +161,14 @@ document.addEventListener('change', e => {
     }
     // The job's construction swaps every cabinet in the job between frameless and face frame.
     if (ref === 'jobd' && field === 'faceFrame') { o[field] = v || 'none'; ffSwapAll(); note = `Every cabinet in the job is now ${ffJobName().replace(/^Face/, 'face')}`; return; }
+    // 0.55.28 (Ayden 2026-11-10): a pick on the Settings page changes everything under it. Whole job: every room and cabinet
+    // follows it; a room: every cabinet in that room. Picks rooms or cabinets had of their own (from the product library,
+    // pasted or set in the cabinet editor) are cleared; Undo puts them back.
+    if ((ref === 'jobd' || ref.startsWith('rset:')) && SETTINGS.some(x => x.k === field)) {
+      o[field] = v; const r = ref === 'jobd' ? null : roomById(ref.slice(5)), n = setFollowDown(field, r);
+      if (n) note = `${(SETTINGS.find(x => x.k === field) || {}).label}: ${n} ${r ? 'cabinet' : 'room or cabinet'} pick${n === 1 ? '' : 's'} of ${n === 1 ? 'its' : 'their'} own now follow${n === 1 ? "s" : ""} ${r ? r.name : "the job"}. Undo puts ${n === 1 ? 'it' : 'them'} back.`;
+      return;
+    }
     // A slab turned into a framed door gets stiles and rails; a two-piece door gets the 3/8 HDF panel.
     if (ref.startsWith('door:') && field === 'type') {
       o.type = v;
