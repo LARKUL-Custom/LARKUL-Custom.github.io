@@ -297,17 +297,22 @@ function mozRooms(data) {
   });
 }
 // Builds a new job from the Mozaik files and saves it next to the other jobs.
-async function importMozaik(files) {
+// opts.folder: the Jobs folder to save it in; opts.from: where it came from, for the job notes. Resolves to the
+// new job's path, or null when nothing was imported.
+async function importMozaik(files, opts = {}) {
   const data = readMozaik(await mozTexts(files));
-  if (!data.rooms.length) { flash('No rooms, walls or cabinets found in that Mozaik file. Send it to Claude so the import can learn it.'); return; }
+  // A job sent from Bid Reader carries its takeoff (bid-reader-takeoff.json) for what a Mozaik job can't hold.
+  const tk = typeof bidTakeoffOf === 'function' ? await bidTakeoffOf(files) : null;
+  if (!data.rooms.length && !(tk && bidTakeoffItems(tk).length)) { flash('No rooms, walls or cabinets found in that Mozaik file. Send it to Claude so the import can learn it.'); return null; }
   await flushJob();
-  const first = files[0].name.replace(/\.[^.]+$/, '');
-  const s = blankJob(safeName(data.jobName || first) || 'Mozaik job', '');
+  const first = files[0].name.replace(/\.[^.]+$/, '').replace(/ - Cabinet Designer$/, '');
+  const s = blankJob(safeName(data.jobName || (tk && tk.job) || first) || 'Mozaik job', '');
   const prev = S; S = s; attachRoom(S);
-  let rooms;
-  try { rooms = mozRooms(data); } finally { S = prev; }
-  s.rooms = rooms; s.roomId = rooms[0].id; s.job.notes = 'Imported from Mozaik ' + new Date().toLocaleDateString();
-  const folder = jobs.view || 'My jobs', p = freePath(folder, s.job.name);
+  let rooms, added = null;
+  try { rooms = mozRooms(data); if (tk) added = bidTakeoffAdd(rooms, tk); } finally { S = prev; }
+  if (!rooms.length) { flash('Nothing in that job to bring in.'); return null; }
+  s.rooms = rooms; s.roomId = rooms[0].id; s.job.notes = `Imported from ${opts.from || 'Mozaik'} ${new Date().toLocaleDateString()}`;
+  const folder = opts.folder || jobs.view || 'My jobs', p = freePath(folder, s.job.name);
   s.job.name = jobNameOf(p);
   ['status', 'stageAt', 'was', 'tag'].forEach(k => delete s.job[k]);
   await jobStore().mkdir(folder).catch(() => {}); await jobStore().write(p, JSON.stringify(s));
@@ -316,7 +321,8 @@ async function importMozaik(files) {
   const nc = rooms.reduce((t, r) => t + r.cabinets.length, 0), nw = rooms.reduce((t, r) => t + r.walls.filter(w => !w.island && !w.hidden).length, 0);
   const sk = {}; (data.skipped || []).forEach(n => { sk[n] = (sk[n] || 0) + 1; });
   const left = Object.entries(sk).map(([n, k]) => k > 1 ? `${k} ${n}` : n).join(', ');
-  flash(`Imported ${s.job.name} from Mozaik: ${rooms.length} room${rooms.length > 1 ? 's' : ''}, ${nw} walls, ${nc} cabinets.${left ? ' Not brought in: ' + left + '.' : ''}`);
+  flash(`Imported ${s.job.name} from ${opts.from || 'Mozaik'}: ${rooms.length} room${rooms.length > 1 ? 's' : ''}, ${nw} walls, ${nc} cabinets.${left ? ' Not brought in: ' + left + '.' : ''}${typeof bidTakeoffNote === 'function' ? bidTakeoffNote(added) : ''}`);
+  return p;
 }
 // Anything that is not a Cabinet Designer job file is read as Mozaik.
 const isMozaikPick = files => files.length > 1 || !/\.json$/i.test(files[0].name);

@@ -240,7 +240,7 @@ function priceJob(ps) {
     // A job can leave installation out (the customer installs, or it's a pickup).
     const inst = S.job.noInstall ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((ps.install || {})[cat]) || 0;
       return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r } : null; }).filter(Boolean);
-    const lines = [...own, ...tops, ...molds, ...priceShapes(ps), ...inst, ...xs];
+    const lines = [...own, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : []), ...inst, ...xs];
     return { r, cabs, lines, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
   }));
   const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 }));
@@ -314,7 +314,7 @@ function priceQuote(ps, q = priceJob(ps)) {
     <thead><tr><th>Cabinet</th><th>Size</th><th class="r">Cabinet</th>${ps.doors.on ? '<th class="r">Doors and fronts</th>' : ''}<th class="r">Drawers, shelves, inserts</th><th class="r">Panels, fillers</th>${ps.hardware.on ? '<th class="r">Hardware</th>' : ''}${ps.materials.on ? '<th class="r">Materials</th>' : ''}<th class="r">Paint sq ft</th><th class="r">Total</th></tr></thead>
     <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || (R.lines.some(l => l.own) ? '' : '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>')}
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`;
-  return `<div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${q.rooms.map(room).join('')}${paintCard(ps, q)}`;
+  return `<div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${paintCard(ps, q)}`;
 }
 // Paint total for the job, with switches for which surfaces count.
 function paintCard(ps, q) {

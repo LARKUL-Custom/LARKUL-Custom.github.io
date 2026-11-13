@@ -51,6 +51,8 @@ function resolve(ref) {
     case 'cab': case 'cabpos': case 'cabgap': return cab(id); case 'cabk': { const c = cab(id); return c && c.corner; } case 'cabp': { const c = cab(id); return c && c.params; }
     case 'cabc': { const c = cab(id); return c && (c.construction = c.construction || defaultConstruction(c.cat)); }
     case 'wall': return wall(id);
+    // A line from the bid on Pricing › Quote: bidi:<room id>:<line id>
+    case 'bidi': return bidItemRef(id);
     case 'wcapx': { const [wid, cid] = id.split(':'), w = wall(wid); return w && (w.caps || []).find(x => x.id === cid) || null; }
     case 'wcap': { const [wid, end] = id.split(':'), w = wall(wid); if (!w) return null; const k = 'cap' + end; return (w[k] = w[k] || { ...capDefaults(w), side: elevSide(w) }); }
     case 'lib': return libItem(id); case 'libp': { const l = libItem(id); return l && (l.params = l.params || {}); }
