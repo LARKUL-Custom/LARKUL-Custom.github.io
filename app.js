@@ -1091,12 +1091,14 @@ function groupPresence(force = false) {
   const key = JSON.stringify(p);
   if (!force && key === lastPresence) return;
   lastPresence = key;
+  if (state.noGroup) return;
   api('/api/group/presence', { method: 'PUT', json: p || {} }).catch(() => {});
 }
 document.addEventListener('visibilitychange', () => groupPresence());
 
 let lastChange = null;
 async function pollGroup() {
+  if (state.noGroup) return;
   let s;
   try {
     s = await api('/api/group/status');
@@ -1539,6 +1541,10 @@ document.body.classList.toggle('remote', info.remote);
 document.body.classList.toggle('standalone', Boolean(info.standalone));
 if (info.standalone) {
   // phone-boot.js adds the phone's own menu items.
+  // Work groups sync through a folder on the PC, so the phone app leaves them out.
+  state.noGroup = true;
+  $('.nav-item[data-tab="group"]').hidden = true;
+  if (location.hash.startsWith('#/group')) location.hash = '#/home';
 } else if (info.remote) {
   $('#sign-out').hidden = false;
   $('#sign-out').onclick = async (e) => {
