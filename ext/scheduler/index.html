@@ -297,6 +297,67 @@ details summary .note,details summary .small{font-weight:400}
   .calhead h2{font-size:17px;letter-spacing:.08em}
   .panel{padding:14px}
 }
+/* plan: paint slots (Nov 2026) */
+.phero{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);align-items:center;gap:16px 28px}
+.phero .padd{grid-column:1/-1}
+.pnext{display:grid;gap:6px}
+.pnext .big{font-family:var(--f-display);font-size:34px;letter-spacing:.06em;line-height:1.1}
+.pstats{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:stretch}
+.pstats>div{background:var(--sunk);border-radius:4px;padding:10px 12px;display:grid;gap:2px}
+.pstats b{font-size:26px;line-height:1}
+.pstats span{font-size:13px;color:var(--muted)}
+.pstats .btn{grid-column:1/-1;padding:12px 16px}
+.padd{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;border-top:1px solid var(--line);padding-top:14px}
+.padd .wide{grid-column:1/-1}
+.board{display:grid;gap:8px}
+.mhead{font-family:var(--f-display);font-size:18px;letter-spacing:.1em;text-transform:uppercase;margin-top:10px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.wrow{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;align-items:start;padding:6px 0}
+.wrow.past{opacity:.7}
+.wrow.now .wlab b{color:var(--brass)}
+.wlab{display:grid;gap:2px;padding-top:6px}
+.wlab b{font-size:17px}
+.wcap{display:flex;align-items:center;gap:6px;margin-top:4px}
+.wcap .ibtn{width:24px;height:24px;padding:0}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.slot{display:grid;gap:4px;align-content:start;text-align:left;border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--surface);min-width:0;min-height:76px;color:inherit;font:inherit}
+.slot.booked{cursor:pointer;border-left:4px solid var(--s-paint)}
+.slot.booked:hover{border-color:var(--muted);border-left-color:var(--s-paint)}
+.slot.booked.sel{box-shadow:0 0 0 2px var(--brass)}
+.slot .sname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:15px}
+.slot.open{border-style:dashed;background:transparent}
+.slot.open b{color:var(--ok)}
+.slot.spare{border:1px dashed var(--brass);background:var(--accent-soft)}
+.slot.spare b{color:var(--brass)}
+.slot.closed{border-style:dashed;background:var(--sunk);min-height:0}
+.strip{display:flex;gap:3px;margin:2px 0}
+.strip i{flex:1;height:7px;border-radius:3px;background:var(--line);box-shadow:inset 0 0 0 1px var(--c)}
+.strip i.on{background:var(--c)}
+.pdetail{grid-column:1/-1;display:grid;gap:12px;border:1px solid var(--brass);border-radius:6px;padding:14px;background:var(--surface)}
+.pchecks{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}
+.pchecks label.f{display:flex;align-items:center;gap:8px}
+.pchecks input[type=date]{width:auto}
+ol.steps{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+ol.steps li{display:grid;grid-template-columns:14px 130px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 10px;background:var(--sunk);border-radius:4px;font-size:15px}
+ol.steps li.done span:not(.pill){color:var(--muted)}
+.moves{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.wlist{display:grid;gap:8px}
+.wjob{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--surface)}
+.wjob .wt{display:grid;flex:1 1 200px;min-width:0}
+.wjob .wt b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wlist .pdetail{margin-top:-4px}
+@media (max-width:760px){
+  .phero{grid-template-columns:minmax(0,1fr)}
+  .pnext .big{font-size:26px}
+  .wrow{grid-template-columns:minmax(0,1fr);gap:6px}
+  .wlab{display:flex;align-items:center;gap:10px;padding-top:0}
+  .wcap{margin:0 0 0 auto}
+  .slots{grid-template-columns:minmax(0,1fr)}
+  .slot.open,.slot.spare{min-height:0;padding:8px 12px;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:10px}
+  .slot.open .small{display:none}
+  ol.steps li{grid-template-columns:14px minmax(0,1fr) auto;row-gap:2px}
+  ol.steps li span:not(.pill){grid-column:2/-1}
+  ol.steps li .pill{grid-row:1;grid-column:3}
+}
 </style>
 </head>
 <body>
@@ -305,6 +366,7 @@ details summary .note,details summary .small{font-weight:400}
 <header><div class="wrap bar">
   <div class="brand"><span class="word">LARKUL</span><span class="tag">Custom Cabinets · Scheduler</span></div>
   <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="plan">Plan</button>
     <button role="tab" data-tab="calendar">Calendar</button>
     <button role="tab" data-tab="shop">Manufacturing</button>
     <button role="tab" data-tab="jobs">Jobs</button>
@@ -414,7 +476,7 @@ const APP=typeof window.Neutralino!=='undefined'&&typeof window.NL_PORT!=='undef
 /* inside the Extension Hub (http://localhost:4321): data in Hub.storage, documents in the Files library under Schedules/, dates as hub reminders */
 const HUB=!APP&&typeof window.Hub!=='undefined';
 const LIB='Schedules';
-let calSlim=false,state=freshState(),tab='calendar',selJob=null,focusJob=null,armed=null,weekOff=0,monthOff=null,calShow='jobs',selBill=null,q='',jf='active',selType='kitchen',draft=null;
+let calSlim=false,state=freshState(),tab='plan',selJob=null,focusJob=null,armed=null,weekOff=0,monthOff=null,calShow='jobs',selBill=null,q='',jf='active',selType='kitchen',draft=null;
 let undoStack=[],lastJSON='',dataDir=null,saveTimer=null,savePending=false,backupDay=null;
 const WEEKS=4;
 
@@ -1653,7 +1715,7 @@ function renderNow(){
   document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab||(tab==='new'&&b.dataset.tab==='calendar')));
   const app=document.getElementById('app');
   const sy=window.scrollY;
-  app.innerHTML=tab==='jobs'?viewJobs(sch):tab==='materials'?viewMaterials(mats):tab==='settings'?viewSettings():tab==='claude'&&HUB?viewClaude():tab==='new'?viewNew():tab==='shop'?viewCalendar(sch,mats,'shop'):viewCalendar(sch,mats,'site');
+  app.innerHTML=tab==='plan'?viewPlan():tab==='jobs'?viewJobs(sch):tab==='materials'?viewMaterials(mats):tab==='settings'?viewSettings():tab==='claude'&&HUB?viewClaude():tab==='new'?viewNew():tab==='shop'?viewCalendar(sch,mats,'shop'):viewCalendar(sch,mats,'site');
   window.scrollTo(0,sy);
   if(aid){const el=findKey(aid);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(sel)el.setSelectionRange(sel[0],sel[1]);else if(el.select&&/^(number|text|search|date)$/.test(el.type))el.select()}catch(_){}}}
 }
@@ -2098,6 +2160,349 @@ document.addEventListener('keydown',e=>{
 });
 document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;e.stopPropagation();setTab(b.dataset.tab);render(true)});
 
+/* ---------- Plan: paint slots (Ayden, Nov 18 2026) ----------
+   The shop runs on paint slots: about 1 kitchen painted a week, plus a second every other week (adjustable).
+   - A job gets a slot only once the deposit is paid and the design is signed. Then it's booked on its own,
+     into the next open slot that leaves time for the doors (Bywater, 2-3 weeks) and the shop work.
+   - Doors are ordered the day the deposit lands. CNC and assembly run in the weeks before the paint week,
+     and install is the week after. Every step gets a whole week, so each has spare days for mistakes.
+   - One slot a month is kept empty as a spare. A slot never holds two jobs.
+   - A design change after the doors are ordered moves the job to the next open slot.
+   - Customers get an install week; the exact day is confirmed 2 weeks ahead.
+   Install dates from here go into the job's "Install starts", so the Calendar and Manufacturing tabs follow it. */
+const PLAN_DEF={promiseWeeks:8,slotsPer2Weeks:3,spareSlotsPerMonth:1,doorWeeksMin:2,doorWeeksMax:3,spareDays:2,shopWeeks:2,installAfterWeeks:1,confirmWeeks:2,auto:true,weekSlots:{}};
+const PLAN_ANCHOR='2026-11-16'; /* this week gets the second slot; then every other week */
+const SLOT_TYPES=['kitchen','house','room','bath','laundry','builtin','custom','hood','mantel'];
+const PS=()=>state.settings.plan;
+const monOf=s=>addDays(s,-((parse(s).getDay()+6)%7));
+const monOnOrAfter=s=>{const m=monOf(s);return m===s?s:addDays(m,7)};
+const wk=s=>`week of ${fmtS(s)}`;
+const weekNo=w=>Math.round((parse(monOf(w))-parse(PLAN_ANCHOR))/(7*864e5));
+function slotCap(w){
+  const o=PS().weekSlots||{};if(o[w]!=null&&o[w]!=='')return Math.max(0,Math.round(num(o[w])));
+  const n=Math.max(0,Math.round(num(PS().slotsPer2Weeks,3)));
+  return ((weekNo(w)%2)+2)%2===0?Math.ceil(n/2):Math.floor(n/2);
+}
+/* the spare slots of a month are its last ones (weeks are counted in the month their Monday falls in) */
+function spareSet(month){
+  const k=Math.max(0,Math.round(num(PS().spareSlotsPerMonth)));if(!k)return new Set();
+  let w=monOnOrAfter(month+'-01');const all=[];
+  while(w.slice(0,7)===month){for(let n=1;n<=slotCap(w);n++)all.push(w+'#'+n);w=addDays(w,7)}
+  return new Set(all.slice(-k));
+}
+let spareCache={};
+const isSpare=key=>{const m=key.slice(0,7);if(!spareCache[m])spareCache[m]=spareSet(m);return spareCache[m].has(key)};
+const planOf=j=>j.plan||(j.plan={});
+const paid=j=>isDate(planOf(j).deposit)||planOf(j).deposit==='yes';
+const isReady=j=>paid(j)&&!!planOf(j).signed;
+const doorsOrdered=j=>isDate(planOf(j).doorsOrdered)||planOf(j).doorsOrdered==='yes';
+function needsSlot(j){
+  const p=planOf(j);if(p.slot)return true;
+  if(j.example||j.done.paint||j.done.install)return false;
+  if(p.noSlot!=null)return !p.noSlot;
+  return !!coatOf(j)||(!!j.install&&parts(j).some(x=>SLOT_TYPES.includes(x.type)));
+}
+const needsDoors=j=>planOf(j).doors!==false;
+const finished=j=>STEPS.every(s=>!applies(j,s)||j.done[s]);
+function slotMap(){const m={};for(const j of state.jobs){const k=j.plan&&j.plan.slot;if(k&&!finished(j))(m[k]=m[k]||[]).push(j)}return m}
+const depositDay=j=>isDate(planOf(j).deposit)?planOf(j).deposit:null;
+const promisedBy=j=>{const d=depositDay(j);return d?addDays(d,7*num(PS().promiseWeeks,8)):(isDate(j.due)?j.due:null)};
+/* when the doors land: ordered (or to be ordered today), plus the longest Bywater wait, plus spare days */
+function doorsIn(j,orderDay){
+  const p=planOf(j),o=orderDay||(isDate(p.doorsOrdered)?p.doorsOrdered:(depositDay(j)&&depositDay(j)>TODAY?depositDay(j):TODAY));
+  return addWork(addDays(o,7*num(PS().doorWeeksMax,3)),num(PS().spareDays,2));
+}
+/* the earliest week a job can be painted, counting from a day (the deposit, or a design change) */
+function earliestPaint(j,from){
+  const P=PS(),thisWk=monOf(TODAY);
+  if(planOf(j).legacy&&!isDate(planOf(j).deposit))return j.done.assembly||j.done.cnc?thisWk:addDays(thisWk,7);
+  from=from<TODAY?TODAY:from;
+  let w=addDays(monOnOrAfter(addDays(from,1)),7*Math.max(1,num(P.shopWeeks,2)));
+  if(needsDoors(j)){const d=monOnOrAfter(doorsIn(j,from));if(d>w)w=d}
+  return w<thisWk?thisWk:w;
+}
+/* the next open slot from a week on: spares are skipped unless asked for */
+function openSlots(fromWeek,count,withSpare,skipKey){
+  const used=slotMap(),out=[];let w=monOf(fromWeek);
+  for(let g=0;g<156&&out.length<count;g++,w=addDays(w,7))
+    for(let n=1;n<=slotCap(w)&&out.length<count;n++){const k=w+'#'+n;if(k===skipKey)continue;if(used[k]&&used[k].length)continue;const sp=isSpare(k);if(sp&&!withSpare)continue;out.push({key:k,w,n,spare:sp})}
+  return out;
+}
+const slotWeek=k=>k.slice(0,10);
+function setSlot(j,key){
+  const p=planOf(j);p.slot=key;p.paintWeek=slotWeek(key);
+  p.installWeek=addDays(p.paintWeek,7*Math.max(0,num(PS().installAfterWeeks,1)));
+  if(!(isDate(p.installDay)&&monOf(p.installDay)===p.installWeek))delete p.installDay;
+  syncInstall(j);
+}
+/* the Calendar shows the install on the confirmed day, or the Monday of the install week until it's confirmed */
+function syncInstall(j){
+  const p=planOf(j);if(!p.installWeek||j.done.install)return;
+  delete j.hold;delete j.installDates;j.installStart=isDate(p.installDay)?p.installDay:p.installWeek;
+  if(j.fixed){delete j.fixed.install;if(!Object.keys(j.fixed).length)delete j.fixed}
+  const pr=promisedBy(j);if(pr&&depositDay(j))j.due=pr;
+}
+function bookNext(j,from){const s=openSlots(earliestPaint(j,from),1,false)[0];if(!s)return null;setSlot(j,s.key);return s}
+const shownInstall=j=>isDate(j.installStart)?j.installStart:planOf(j).installWeek||null;
+/* books every job that's ready and waiting; runs with every change, so ticking "Design signed" books it right away */
+function autoPlan(){
+  const out=[];if(!PS()||PS().auto===false)return out;
+  spareCache={};
+  const ready=state.jobs.filter(j=>!j.example&&!j.hold&&isReady(j)&&!finished(j));
+  const wait=ready.filter(j=>needsSlot(j)&&!planOf(j).slot&&!j.done.paint)
+    .sort((a,b)=>(depositDay(a)||'0')<(depositDay(b)||'0')?-1:(depositDay(a)||'0')>(depositDay(b)||'0')?1:state.jobs.indexOf(a)-state.jobs.indexOf(b));
+  for(const j of wait){const s=bookNext(j,depositDay(j)||TODAY);
+    if(s)out.push(`${esc(j.name)} booked: paint ${wk(s.w)}, install ${wk(planOf(j).installWeek)}.${needsDoors(j)&&!doorsOrdered(j)?' Order the doors today.':''}`)}
+  /* jobs with no paint: the install week after the shop can have them ready, with spare days */
+  const rest=ready.filter(j=>!needsSlot(j)&&j.install&&!j.done.install&&!installSet(j)&&!planOf(j).installWeek);
+  if(rest.length){const sch=schedule();
+    for(const j of rest){const r=sch[j.id];const from=r&&r.finish?r.finish:TODAY;const p=planOf(j);
+      p.installWeek=monOnOrAfter(addWork(from,num(PS().spareDays,2)+1));syncInstall(j);out.push(`${esc(j.name)}: install ${wk(p.installWeek)}.`)}}
+  return out;
+}
+/* Ayden's jobs from before paint slots: already sold, so they count as paid and signed. A job with an install date
+   keeps it and takes a slot the week before; if that week is full it's marked over the limit instead of being moved. */
+function planMigrate(){
+  if(num(state.settings.planRev)>=1)return [];
+  state.settings.planRev=1;const out=[];
+  for(const j of state.jobs){
+    if(j.example||finished(j)||(j.plan&&('deposit' in j.plan||'signed' in j.plan)))continue;
+    j.plan={deposit:'yes',signed:true,legacy:true,doorsOrdered:'yes'};out.push(j.name);
+    const inst=installSet(j);
+    if(inst&&needsSlot(j)){const p=j.plan;p.installWeek=monOf(inst);p.paintWeek=addDays(p.installWeek,-7*num(PS().installAfterWeeks,1));
+      const s=openSlots(p.paintWeek,1,true).find(x=>x.w===p.paintWeek);p.slot=s?s.key:p.paintWeek+'#x'+j.id.slice(-4);if(isDate(j.installStart)&&j.installStart!==p.installWeek)p.installDay=j.installStart}
+  }
+  return out;
+}
+const overLimit=k=>/#x/.test(k)||(()=>{const n=+k.split('#')[1];return n>slotCap(slotWeek(k))})();
+/* a design change once the doors are ordered: the doors are ordered again and the job goes to the next open slot */
+function designChanged(j){
+  const p=planOf(j),old=p.slot;
+  (p.changes=p.changes||[]).push({d:TODAY,from:old||''});
+  if(needsDoors(j))p.doorsOrdered='';
+  delete p.slot;spareCache={};
+  const s=openSlots(earliestPaint(j,TODAY),1,false,old)[0]||null;
+  if(s)setSlot(j,s.key);
+  return {old,s};
+}
+
+/* ---------- Plan page ---------- */
+let pSel=null,pArmed=null,pAdd=false,pWeeks=12,pDraft=null,pMove=null;
+const pNewDraft=()=>({name:'',customer:'',type:'kitchen',coat:'paint',deposit:'',signed:false});
+function stagesOf(j){
+  const p=planOf(j),P=PS();if(!p.paintWeek)return [];
+  const sw=Math.max(1,num(P.shopWeeks,2)),o=isDate(p.doorsOrdered)?p.doorsOrdered:depositDay(j)||null;
+  const rows=[];
+  if(needsDoors(j))rows.push({s:'doors',name:'Doors (Bywater)',when:p.doorsOrdered==='yes'?'ordered before paint slots':o?`ordered ${fmtS(o)}, due ${fmtS(addDays(o,7*num(P.doorWeeksMin,2)))}–${fmtS(addDays(o,7*num(P.doorWeeksMax,3)))}`:'order the day the deposit lands',done:doorsOrdered(j)});
+  /* a step that isn't done yet never shows a week that's already gone: it's this week */
+  const cw=(w,done)=>done||w>=monOf(TODAY)?w:monOf(TODAY);
+  rows.push({s:'cnc',name:'CNC',when:wk(cw(addDays(p.paintWeek,-7*sw),j.done.cnc)),done:!!j.done.cnc});
+  rows.push({s:'assembly',name:'Assembly',when:wk(cw(addDays(p.paintWeek,-7*(sw>1?1:sw)),j.done.assembly)),done:!!j.done.assembly});
+  rows.push({s:'paint',name:coatOf(j)==='stain'?'Stain':'Paint',when:wk(p.paintWeek),done:!!j.done.paint});
+  const iw=shownInstall(j);
+  if(j.install)rows.push({s:'install',name:'Install',when:iw?(isDate(p.installDay)?fmt(p.installDay):wk(monOf(iw))):'—',done:!!j.done.install});
+  return rows;
+}
+function planStatus(j){
+  const p=planOf(j);
+  if(p.slot&&overLimit(p.slot))return ['bad','Over the limit'];
+  const pr=promisedBy(j),iw=shownInstall(j);
+  if(pr&&iw&&monOf(iw)>monOf(pr))return ['warn','Past promise'];
+  if(p.slot&&isSpare(p.slot))return ['warn','In spare slot'];
+  return ['ok','On track'];
+}
+function slotCard(j,key){
+  const p=planOf(j),[c,t]=planStatus(j),st=stagesOf(j),iw=shownInstall(j);
+  return `<button class="slot booked${pSel===j.id?' sel':''}" data-act="p-sel" data-id="${j.id}" aria-expanded="${pSel===j.id}">
+    <span class="row spread" style="flex-wrap:nowrap;gap:6px"><b class="sname">${esc(j.name)}</b><span class="pill ${c}">${t}</span></span>
+    <span class="small muted">${[j.customer,typeOf(j).name].filter(Boolean).map(esc).join(' · ')}</span>
+    <span class="strip">${st.map(x=>`<i class="${x.done?'on':''}" style="--c:${x.s==='doors'?'var(--brass)':sv(x.s)}" title="${esc(x.name)}: ${esc(x.when)}${x.done?' (done)':''}"></i>`).join('')}</span>
+    <span class="small">${iw?`Install <b>${isDate(p.installDay)?fmt(p.installDay):wk(monOf(iw))}</b>`:''}${iw&&!isDate(p.installDay)&&!j.done.install?' <span class="muted">· day not set</span>':''}</span></button>`;
+}
+function jobPlanHTML(j){
+  const p=planOf(j),P=PS(),st=stagesOf(j),iw=shownInstall(j),pr=promisedBy(j),id=j.id;
+  const conf=p.installWeek?addDays(monOf(iw||p.installWeek),-7*num(P.confirmWeeks,2)):null;
+  const moves=pMove===id?openSlots(monOf(TODAY),10,true,p.slot):[];
+  return `<div class="pdetail" id="pd-${id}">
+    <div class="row spread"><h3 style="margin:0">${esc(j.name)}${j.customer?` <span class="muted" style="letter-spacing:0;text-transform:none;font-weight:600">· ${esc(j.customer)}</span>`:''}</h3>
+      <button class="btn sm" data-act="p-sel" data-id="${id}">Close</button></div>
+    <div class="pchecks">
+      <label class="chk"><input type="checkbox" id="p-paid-${id}" data-p="paid" data-id="${id}" ${paid(j)?'checked':''}>Deposit paid</label>
+      ${paid(j)&&p.deposit!=='yes'?`<label class="f">on<input type="date" id="p-dep-${id}" data-p="deposit" data-id="${id}" value="${esc(isDate(p.deposit)?p.deposit:'')}"></label>`:''}
+      <label class="chk"><input type="checkbox" id="p-sig-${id}" data-p="signed" data-id="${id}" ${p.signed?'checked':''}>Design signed</label>
+      <label class="chk"><input type="checkbox" id="p-doors-${id}" data-p="doors" data-id="${id}" ${needsDoors(j)?'checked':''}>Doors from Bywater</label>
+      <label class="chk"><input type="checkbox" id="p-slot-${id}" data-p="noSlot" data-id="${id}" ${needsSlot(j)?'checked':''}>Needs a paint slot</label></div>
+    ${st.length?`<ol class="steps">${st.map(x=>`<li class="${x.done?'done':''}"><i class="dot" style="background:${x.s==='doors'?'var(--brass)':sv(x.s)}"></i><b>${esc(x.name)}</b><span>${esc(x.when)}</span>${x.done?'<span class="pill ok">Done</span>':''}</li>`).join('')}</ol>`:
+      `<p class="note">${isReady(j)?'No paint slot needed.':'Gets a paint slot as soon as the deposit is paid and the design is signed.'}${iw?` Install ${wk(monOf(iw))}.`:''}</p>`}
+    ${pr?`<p class="note">Promised: install by the ${wk(monOf(pr))} (${num(P.promiseWeeks,8)} weeks from the deposit).</p>`:''}
+    ${j.install&&iw&&!j.done.install?`<div class="inl"><label class="f">Install day<input type="date" id="p-day-${id}" data-p="installDay" data-id="${id}" min="${monOf(iw)}" max="${addDays(monOf(iw),5)}" value="${esc(isDate(p.installDay)?p.installDay:'')}"></label>
+      <span class="small muted">${isDate(p.installDay)?'Confirmed with the customer.':`Confirm the day with the customer${conf?` by ${fmt(conf)}`:''}.`}</span></div>`:''}
+    <div class="row">
+      ${needsDoors(j)&&p.slot&&!doorsOrdered(j)?`<button class="btn primary sm" data-act="p-doors" data-id="${id}">Doors ordered today</button>`:''}
+      ${p.slot?`<button class="btn sm${pArmed==='chg'+id?' danger armed':''}" data-act="p-change" data-id="${id}" title="The doors are ordered again and the job goes to the next open slot">${pArmed==='chg'+id?'Click again: re-order doors and move it':'Design changed'}</button>
+        <button class="btn sm" data-act="p-move" data-id="${id}" aria-pressed="${pMove===id}">Move to another slot</button>
+        <button class="btn sm" data-act="p-unslot" data-id="${id}">Take out of its slot</button>`:''}
+      <button class="btn sm" data-act="open" data-id="${id}">Open full job</button></div>
+    ${pMove===id?`<div class="moves"><span class="small muted">Open slots (a slot never holds two jobs):</span>${moves.map(s=>`<button class="btn sm" data-act="p-moveto" data-id="${id}" data-n="${s.key}">${fmtS(s.w)}${s.spare?' (spare)':''}</button>`).join('')||'<span class="small muted">None in the next 3 years.</span>'}</div>`:''}
+    ${(p.changes||[]).length?`<p class="note">Design changed ${p.changes.map(c=>fmtS(c.d)).join(', ')}.</p>`:''}
+  </div>`;
+}
+function planTodo(){
+  const items=[],P=PS();
+  for(const j of state.jobs){if(j.example||j.hold||finished(j))continue;const p=planOf(j);
+    if(p.slot&&needsDoors(j)&&!doorsOrdered(j)&&!j.done.paint)items.push({c:depositDay(j)&&depositDay(j)<TODAY?'bad':'warn',p:'Order doors',t:`Order the doors for <b>${esc(j.name)}</b> from Bywater${depositDay(j)?` (deposit came in ${fmt(depositDay(j))})`:''}.`,b:`<button class="btn sm primary" data-act="p-doors" data-id="${j.id}">Ordered</button>`});
+    if(p.slot&&overLimit(p.slot))items.push({c:'bad',p:'Over the limit',t:`<b>${esc(j.name)}</b> is in a week with more jobs than paint slots (${wk(slotWeek(p.slot))}).`,b:`<button class="btn sm" data-act="p-sel" data-id="${j.id}">Open</button>`});
+    if(p.slot&&needsDoors(j)&&p.doorsOrdered!=='yes'&&!j.done.paint&&p.paintWeek&&doorsIn(j)>p.paintWeek)items.push({c:'warn',p:'Doors',t:`The doors for <b>${esc(j.name)}</b> may not be in before its paint week (${wk(p.paintWeek)}).`,b:`<button class="btn sm" data-act="p-sel" data-id="${j.id}">Open</button>`});
+    const iw=shownInstall(j);
+    if(j.install&&!j.done.install&&p.installWeek&&!isDate(p.installDay)&&iw&&addDays(monOf(iw),-7*num(P.confirmWeeks,2))<=TODAY)
+      items.push({c:'warn',p:'Confirm day',t:`Confirm the install day for <b>${esc(j.name)}</b>${j.customer?` (${esc(j.customer)})`:''}, install ${wk(monOf(iw))}.`,b:`<button class="btn sm" data-act="p-sel" data-id="${j.id}">Pick the day</button>`});
+    const pr=promisedBy(j);if(pr&&iw&&!j.done.install&&monOf(iw)>monOf(pr))items.push({c:'warn',p:'Past promise',t:`<b>${esc(j.name)}</b> installs ${wk(monOf(iw))}, after the ${num(P.promiseWeeks,8)}-week promise (${wk(monOf(pr))}).`,b:`<button class="btn sm" data-act="p-sel" data-id="${j.id}">Open</button>`});
+  }
+  const waiting=state.jobs.filter(j=>!j.example&&!j.hold&&!finished(j)&&!isReady(j)).length;
+  if(!items.length)items.push({c:'ok',p:'All good',t:'Nothing to do right now. Every booked job is on track.'});
+  return `<ul class="alerts">${items.map(i=>`<li class="${i.c}"><span class="pill ${i.c}">${i.p}</span><span>${i.t}</span>${i.b||''}</li>`).join('')}</ul>${waiting?`<p class="note">${plural(waiting,'job')} waiting on a deposit or a signed design (below).</p>`:''}`;
+}
+function viewPlan(){
+  spareCache={};
+  const P=PS(),used=slotMap(),thisWk=monOf(TODAY);
+  const next=openSlots(thisWk,1,false)[0];
+  const ifToday=(()=>{const j={...pNewDraft(),id:'_',done:{},plan:{deposit:TODAY,signed:true},install:true,extra:[],count:1};return openSlots(earliestPaint(j,TODAY),1,false)[0]})();
+  /* the board starts at the oldest booked job that's not finished (up to 4 weeks back) */
+  let start=thisWk;for(const k in used){const w=slotWeek(k);if(w<start&&w>=addDays(thisWk,-28))start=w}
+  let rows='',month='',w=start;const end=addDays(thisWk,7*pWeeks);
+  let booked8=0,cap8=0;
+  for(let x=thisWk;x<addDays(thisWk,56);x=addDays(x,7))for(let n=1;n<=slotCap(x);n++){if(!isSpare(x+'#'+n))cap8++;if(used[x+'#'+n])booked8++}
+  for(;w<end;w=addDays(w,7)){
+    const m=w.slice(0,7);
+    if(m!==month){month=m;const sp=num(P.spareSlotsPerMonth);rows+=`<div class="mhead">${parse(w).toLocaleDateString(undefined,{month:'long',year:'numeric'})}${sp?`<span class="small muted"> · ${plural(sp,'spare slot')} kept open</span>`:''}</div>`}
+    const cap=slotCap(w),extra=Object.keys(used).filter(k=>slotWeek(k)===w&&overLimit(k));
+    let cells='';
+    for(let n=1;n<=cap;n++){const k=w+'#'+n,js=used[k]||[];
+      if(js.length)cells+=js.map(j=>slotCard(j,k)).join('');
+      else cells+=isSpare(k)?`<div class="slot spare"><b>Spare slot</b><span class="small muted">Kept open for mistakes and rush jobs.</span></div>`:`<div class="slot open"><b>Open</b><span class="small muted">${w<thisWk?'Not used':'Next job that’s ready goes here.'}</span></div>`}
+    for(const k of extra)cells+=used[k].map(j=>slotCard(j,k)).join('');
+    if(!cap&&!extra.length)cells+=`<div class="slot closed"><span class="small muted">No paint slots this week.</span></div>`;
+    const selJ=[...Array.from({length:cap},(_,n)=>used[w+'#'+(n+1)]||[]).flat(),...extra.flatMap(k=>used[k])].find(j=>j.id===pSel);
+    rows+=`<div class="wrow${w<thisWk?' past':''}${w===thisWk?' now':''}"><div class="wlab"><b>${fmtS(w)}</b><span class="small muted">${w===thisWk?'This week':w<thisWk?'Past':'Paint week'}</span>
+      <span class="wcap"><button class="ibtn" data-act="p-cap" data-id="${w}" data-n="-1" aria-label="One less paint slot the week of ${fmtS(w)}" ${cap<=0?'disabled':''}>−</button><span class="small">${plural(cap,'slot')}</span><button class="ibtn" data-act="p-cap" data-id="${w}" data-n="1" aria-label="One more paint slot the week of ${fmtS(w)}">+</button></span></div>
+      <div class="slots">${cells}</div>${selJ?jobPlanHTML(selJ):''}</div>`;
+  }
+  const waiting=state.jobs.filter(j=>!j.example&&!j.hold&&!finished(j)&&!isReady(j));
+  const noslot=state.jobs.filter(j=>!j.example&&!j.hold&&!finished(j)&&isReady(j)&&!needsSlot(j));
+  const unbooked=state.jobs.filter(j=>!j.example&&!j.hold&&!finished(j)&&isReady(j)&&needsSlot(j)&&!planOf(j).slot);
+  const wRow=j=>`<div class="wjob"><div class="wt"><b>${esc(j.name)}</b><span class="small muted">${[j.customer,typeOf(j).name].filter(Boolean).map(esc).join(' · ')}</span></div>
+    <label class="chk"><input type="checkbox" id="pw-paid-${j.id}" data-p="paid" data-id="${j.id}" ${paid(j)?'checked':''}>Deposit paid</label>
+    <label class="chk"><input type="checkbox" id="pw-sig-${j.id}" data-p="signed" data-id="${j.id}" ${planOf(j).signed?'checked':''}>Design signed</label>
+    <button class="btn sm" data-act="p-sel" data-id="${j.id}">${pSel===j.id?'Close':'More'}</button></div>${pSel===j.id?jobPlanHTML(j):''}`;
+  const nRow=j=>{const iw=shownInstall(j);return `<div class="wjob"><div class="wt"><b>${esc(j.name)}</b><span class="small muted">${[j.customer,typeOf(j).name].filter(Boolean).map(esc).join(' · ')}</span></div>
+    <span class="small">${j.done.paint?'Paint done. ':''}${j.install?(iw?`Install <b>${isDate(planOf(j).installDay)?fmt(planOf(j).installDay):wk(monOf(iw))}</b>`:'Install week comes once the shop days are planned'):'Not installed'}</span>
+    <button class="btn sm" data-act="p-sel" data-id="${j.id}">${pSel===j.id?'Close':'More'}</button></div>${pSel===j.id?jobPlanHTML(j):''}`};
+  const d=pDraft||(pDraft=pNewDraft());
+  const addForm=pAdd?`<div class="padd">
+      <label class="f">Job name<input type="text" id="pa-name" data-pa="name" value="${esc(d.name)}" placeholder="e.g. Smith kitchen"></label>
+      <label class="f">Customer<input type="text" id="pa-customer" data-pa="customer" value="${esc(d.customer)}"></label>
+      <label class="f">Type<select id="pa-type" data-pa="type">${state.types.map(t=>`<option value="${esc(t.id)}" ${t.id===d.type?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
+      <label class="f">Finish<select id="pa-coat" data-pa="coat">${COATS.map(([v,n])=>`<option value="${v}" ${d.coat===v?'selected':''}>${n}</option>`).join('')}</select></label>
+      <label class="f">Deposit paid on<input type="date" id="pa-deposit" data-pa="deposit" value="${esc(d.deposit)}"><span class="hint">Blank = not paid yet</span></label>
+      <label class="chk" style="align-self:center"><input type="checkbox" id="pa-signed" data-pa="signed" ${d.signed?'checked':''}>Design signed</label>
+      <div class="row wide"><button class="btn primary" data-act="p-addjob">Add job</button><button class="btn" data-act="p-add">Cancel</button>
+        <span class="small muted" id="pa-hint">${d.deposit&&d.signed?'It gets booked into the next open paint slot right away.':'It waits below until the deposit is paid and the design is signed.'}</span></div></div>`:'';
+  const ruleNum=(k,label,min,max,hint)=>`<label class="f">${label}<input type="number" class="n" id="pr-${k}" data-pr="${k}" min="${min}" max="${max}" step="1" value="${num(P[k])}">${hint?`<span class="hint">${hint}</span>`:''}</label>`;
+  return `<section class="panel phero">
+      <div class="pnext"><h3>A customer who signs today</h3>
+        <div class="big">${ifToday?'Installs week of '+fmtS(addDays(ifToday.w,7*num(P.installAfterWeeks,1))):'No open slot'}</div>
+        <p class="note">${ifToday?`Paint ${wk(ifToday.w)}. `:''}Promise them the ${wk(monOf(addDays(TODAY,7*num(P.promiseWeeks,8))))} (${num(P.promiseWeeks,8)} weeks), so there's time to spare.${next&&next.w===monOf(TODAY)?` ${plural(openSlots(monOf(TODAY),9,false).filter(x=>x.w===monOf(TODAY)).length,'slot')} open this week for jobs already in the shop.`:''}</p></div>
+      <div class="pstats"><div><b>${booked8}</b><span>of ${cap8} slots booked, next 8 weeks</span></div><div><b>${waiting.length}</b><span>waiting on deposit or design</span></div>
+        <button class="btn primary" data-act="p-add" aria-expanded="${pAdd}">+ Add a job</button></div>
+      ${addForm}
+    </section>
+    <section class="panel"><h2>To do</h2>${planTodo()}</section>
+    <section class="panel"><div class="row spread"><h2>Paint slots</h2><span class="small muted">${num(P.slotsPer2Weeks)} every 2 weeks (about ${Math.round(num(P.slotsPer2Weeks)*52/24)} a month)</span></div>
+      <p class="note">Each job gets one paint slot. CNC runs ${num(P.shopWeeks,2)>1?`${num(P.shopWeeks,2)} weeks before and assembly the week before`:'and assembly run the week before'}; install is the week after. Tap a job to see its steps.</p>
+      ${unbooked.length?`<div class="alerts"><li class="bad"><span class="pill bad">No slot</span><span>${unbooked.map(j=>`<b>${esc(j.name)}</b>`).join(', ')} ${unbooked.length>1?'are':'is'} ready but not booked.</span><button class="btn sm" data-act="p-bookall">Book now</button></li></div>`:''}
+      <div class="board">${rows}</div>
+      <button class="more" data-act="p-weeks">${pWeeks>12?'Show fewer weeks':'Show 12 more weeks'}</button></section>
+    <section class="panel"><h2>Waiting to book</h2><p class="note">A job gets a paint slot when both boxes are ticked. Doors get ordered that day.</p>
+      <div class="wlist">${waiting.map(wRow).join('')||'<p class="note">Nobody waiting.</p>'}</div></section>
+    ${noslot.length?`<section class="panel"><h2>No paint slot needed</h2><p class="note">Finish work, parts and jobs already painted.</p><div class="wlist">${noslot.map(nRow).join('')}</div></section>`:''}
+    ${foldStart('prules','Shop rules','Change the numbers the plan uses. Jobs already booked stay in their slots.')}
+      <div class="form">
+        ${ruleNum('slotsPer2Weeks','Paint slots every 2 weeks',0,20,'3 = one a week, plus a second every other week')}
+        ${ruleNum('spareSlotsPerMonth','Spare slots kept open each month',0,8)}
+        ${ruleNum('promiseWeeks','Weeks promised, deposit to install',1,52)}
+        ${ruleNum('doorWeeksMin','Bywater doors: fastest (weeks)',0,12)}
+        ${ruleNum('doorWeeksMax','Bywater doors: slowest (weeks)',0,12,'The plan counts on the slowest')}
+        ${ruleNum('spareDays','Spare work days after the doors are due',0,15)}
+        ${ruleNum('shopWeeks','Weeks of CNC and assembly before paint',1,6)}
+        ${ruleNum('installAfterWeeks','Weeks from paint to install',0,6)}
+        ${ruleNum('confirmWeeks','Confirm the install day (weeks ahead)',0,8)}
+      </div>
+      <label class="chk"><input type="checkbox" id="pr-auto" data-pr="auto" ${P.auto!==false?'checked':''}>Book jobs on their own as soon as the deposit is paid and the design is signed</label>
+      <p class="note">The − and + beside each week change that week only (holidays, a short week). Days the shop is closed are in Settings.</p>
+    ${FOLD_END}`;
+}
+/* ---------- Plan: actions ---------- */
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act^="p-"]');if(!el)return;
+  const act=el.dataset.act,id=el.dataset.id,j=state.jobs.find(x=>x.id===id);
+  if(act!=='p-change')pArmed=null;
+  switch(act){
+    case 'p-sel':pSel=pSel===id?null:id;pMove=null;break;
+    case 'p-add':pAdd=!pAdd;if(pAdd)setTimeout(()=>{const n=document.getElementById('pa-name');if(n)n.focus()},0);break;
+    case 'p-addjob':{const d=pDraft||pNewDraft(),t=state.types.find(x=>x.id===d.type)||state.types[0];
+      const nj=newDraft(t.id);nj.name=d.name.trim()||`${d.customer.trim()||'New'} ${t.name.toLowerCase()}`;nj.customer=d.customer.trim();nj.coat=d.coat;
+      if(d.coat)nj.painted=nj.count;
+      nj.plan={deposit:isDate(d.deposit)?d.deposit:'',signed:!!d.signed};delete nj.rush;
+      if(needsSlot(nj)&&!nj.install)nj.install=true;
+      state.jobs.push(nj);pDraft=null;pAdd=false;pSel=nj.id;commit(`Added ${esc(nj.name)}.`);break}
+    case 'p-doors':if(j){planOf(j).doorsOrdered=TODAY;commit(`Doors for ${esc(j.name)} marked ordered today.`)}break;
+    case 'p-change':if(!j)break;if(pArmed!=='chg'+id){pArmed='chg'+id;break}pArmed=null;
+      {const r=designChanged(j);commit(r.s?`${esc(j.name)} moved from ${r.old?wk(slotWeek(r.old)):'no slot'} to paint ${wk(r.s.w)}, install ${wk(planOf(j).installWeek)}. Re-order the doors today.`:`${esc(j.name)} is out of its slot; no open slot found.`)}break;
+    case 'p-move':pMove=pMove===id?null:id;break;
+    case 'p-moveto':if(j){const k=el.dataset.n,u=slotMap()[k];if(u&&u.some(x=>x!==j)){toast('That slot is taken.');break}setSlot(j,k);pMove=null;commit(`${esc(j.name)} moved to paint ${wk(slotWeek(k))}, install ${wk(planOf(j).installWeek)}.`)}break;
+    case 'p-unslot':if(j){const p=planOf(j);delete p.slot;delete p.paintWeek;delete p.installWeek;delete p.installDay;p.signed=false;j.installStart='';
+      commit(`${esc(j.name)} is out of its slot and waiting again. Tick "Design signed" to book it.`)}break;
+    case 'p-cap':{const w=id,ws=PS().weekSlots=PS().weekSlots||{},n=Math.max(0,slotCap(w)+num(el.dataset.n));
+      ws[w]=n;const def=(()=>{const s=ws[w];delete ws[w];const c=slotCap(w);ws[w]=s;return c})();if(n===def)delete ws[w];
+      commit(`Week of ${fmtS(w)}: ${plural(n,'paint slot')}.`);break}
+    case 'p-bookall':{const was=PS().auto;PS().auto=true;const out=autoPlan();PS().auto=was;commit(out.join(' ')||'Nothing to book.');break}
+    case 'p-weeks':pWeeks=pWeeks>12?12:24;break;
+    default:return;
+  }
+  render(true);
+});
+document.addEventListener('input',e=>{const el=e.target;if(el.dataset.pa&&el.type!=='checkbox'){(pDraft=pDraft||pNewDraft())[el.dataset.pa]=el.value}});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.dataset.pa){const d=pDraft=pDraft||pNewDraft();d[el.dataset.pa]=el.type==='checkbox'?el.checked:el.value;
+    const h=document.getElementById('pa-hint');if(h)h.textContent=d.deposit&&d.signed?'It gets booked into the next open paint slot right away.':'It waits below until the deposit is paid and the design is signed.';return}
+  if(el.dataset.pr){const k=el.dataset.pr;if(k==='auto')PS().auto=el.checked;else{const v=Math.max(0,Math.round(num(el.value,PLAN_DEF[k])));PS()[k]=v;
+      if(k==='doorWeeksMin'&&v>num(PS().doorWeeksMax))PS().doorWeeksMax=v;if(k==='doorWeeksMax'&&v<num(PS().doorWeeksMin))PS().doorWeeksMin=v}
+    spareCache={};commit('Shop rules updated.');render(true);return}
+  if(!el.dataset.p)return;
+  const j=state.jobs.find(x=>x.id===el.dataset.id);if(!j)return;const p=planOf(j),k=el.dataset.p;
+  if(k==='paid'){p.deposit=el.checked?(isDate(p.deposit)?p.deposit:TODAY):'';if(!el.checked&&p.legacy)p.legacy=false}
+  else if(k==='deposit'){if(isDate(el.value))p.deposit=el.value}
+  else if(k==='signed')p.signed=el.checked;
+  else if(k==='doors')p.doors=el.checked;
+  else if(k==='noSlot'){p.noSlot=!el.checked;if(p.noSlot){delete p.slot;delete p.paintWeek}}
+  else if(k==='installDay'){if(isDate(el.value)){p.installDay=el.value;p.installWeek=monOf(el.value)}else delete p.installDay;syncInstall(j)}
+  const msg=k==='installDay'&&isDate(p.installDay)?`Install for ${esc(j.name)} set for ${fmt(p.installDay)}.`:'';
+  commit(msg);render(true);
+});
+/* every change books what's ready; the reminders on the hub's home page get the door orders and install days to confirm */
+{const base=commit;commit=function(msg){let b=[];try{b=autoPlan()}catch(e){console.error(e)}return base([msg,...b].filter(Boolean).join(' '))}}
+{const base=normalize;normalize=function(st){st=base(st);st.settings.plan={...PLAN_DEF,...(st.settings.plan&&typeof st.settings.plan==='object'?st.settings.plan:{})};
+  if(!st.settings.plan.weekSlots||typeof st.settings.plan.weekSlots!=='object')st.settings.plan.weekSlots={};
+  for(const j of st.jobs)if(j.plan!=null&&typeof j.plan!=='object')delete j.plan;return st}}
+{const base=freshState;freshState=function(){const s=base();s.settings.plan={...PLAN_DEF,weekSlots:{}};return s}}
+{const base=wantedReminders;wantedReminders=function(){const out=base();if(!state.settings.hubReminders)return out;
+  for(const j of state.jobs){if(j.example||finished(j))continue;const p=planOf(j),who=j.customer?` for ${j.customer}`:'';
+    if(p.slot&&needsDoors(j)&&!doorsOrdered(j)&&depositDay(j))out['doors:'+j.id]={title:`Order Bywater doors: ${j.name}`,due:at(depositDay(j)<TODAY?TODAY:depositDay(j),8),notes:`Deposit is in${who}. Paint ${wk(p.paintWeek)}. From the shop schedule.`};
+    const iw=shownInstall(j);
+    if(j.install&&!j.done.install&&p.installWeek&&!isDate(p.installDay)&&iw)out['confirm:'+j.id]={title:`Confirm install day: ${j.name}`,due:at(addDays(monOf(iw),-7*num(PS().confirmWeeks,2)),8),notes:`Install ${wk(monOf(iw))}${who}. From the shop schedule.`};
+  }return out}}
+
 /* ---------- start ---------- */
 async function appLoad(){
   Neutralino.init();
@@ -2127,13 +2532,16 @@ async function boot(){
   refreshOff();lastJSON=JSON.stringify(state);
   try{calSlim=localStorage.getItem(KEY+'-slim')==='1'}catch(e){}
   try{const v=localStorage.getItem(KEY+'-show');if(['jobs','bills','both'].includes(v))calShow=v}catch(e){}
-  try{const t=localStorage.getItem(KEY+'-tab');if(['calendar','shop','jobs','materials','settings','claude'].includes(t))tab=t}catch(e){}
-  if(['calendar','shop','jobs','materials','settings','claude'].includes(location.hash.slice(1)))tab=location.hash.slice(1);
+  try{const t=localStorage.getItem(KEY+'-tab');if(['plan','calendar','shop','jobs','materials','settings','claude'].includes(t))tab=t}catch(e){}
+  if(['plan','calendar','shop','jobs','materials','settings','claude'].includes(location.hash.slice(1)))tab=location.hash.slice(1);
   if(tab==='claude'&&!HUB)tab='calendar';
   const added=addStarterJobs();
   const before=JSON.stringify(state),oct30=applyOct30(),freed=handInstalls(),ticked=autoAdvance();
+  /* 0.16.0: paint slots. The first time, current jobs count as sold and the Plan tab opens */
+  const firstPlan=num(state.settings.planRev)<1,migrated=planMigrate();let booked=[];try{booked=autoPlan()}catch(e){console.error(e)}
+  if(firstPlan&&!location.hash.slice(1))tab='plan';
   /* on a first run, Undo already takes the starter jobs back out in one step */
-  if((ticked.length||oct30.length||freed.length)&&!added){undoStack.push(before);document.getElementById('undoBtn').hidden=false}
+  if((ticked.length||oct30.length||freed.length||migrated.length||booked.length)&&!added){undoStack.push(before);document.getElementById('undoBtn').hidden=false}
   save();render(true);loadInbox();
   if(freed.length)setTimeout(()=>toast(`The shop days for ${plural(freed.length,'job')} are planned by the schedule again, around your install dates. Undo puts them back.`,true),added?9000:5600);
   if(oct30.length)setTimeout(()=>toast(`${esc(oct30.join(', '))}: shop work marked done, finishing ${TODAY>OCT30?'done':'today'} (Oct 30). Undo puts them back.`,true),added?4500:300);
@@ -2141,6 +2549,7 @@ async function boot(){
   /* left open overnight: start the new day fresh, once nothing is waiting to save */
   setInterval(()=>{if(iso(new Date())!==TODAY&&!savePending&&!pointerDown&&!document.querySelector('input:focus,textarea:focus,select:focus'))location.reload()},10*60000);
   if(added)setTimeout(()=>toast(`Added your ${plural(added,'job')} from Oct 30. Undo takes them back out.`,true),300);
+  if(migrated.length)setTimeout(()=>toast(`New: jobs now go into paint slots on their own. Your ${plural(migrated.length,'current job')} ${migrated.length>1?'are':'is'} on the Plan tab. Undo puts things back.`,true),added?13500:firstPlan?600:300);
 }
 boot();
 </script>
