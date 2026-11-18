@@ -310,12 +310,21 @@ function toggleBtn(act, on, label, id) { return `<button class="btn toggle${on ?
 function priceQuote(ps, q = priceJob(ps)) {
   // Paint is inside each cabinet's price, so every room's total is what to quote for that room.
   const paintNote = R => R.sq.total ? `<span class="note">Includes ${sqft(R.sq.total)} sq ft paint${+paintOf(ps).rate ? `, ${money(R.cabs.reduce((a, k) => a + k.paint, 0))}` : ''}</span>` : '';
-  const room = (R, i) => `<div class="psec box prx-room" id="prx-room-${i}">${secHead('home', esc(R.r.name), 'teal')}<div class="prx-roomh">${paintNote(R)}<b class="money">${money(R.total)}</b></div><div class="tscroll"><table class="t quote">
+  // A room can fold to one line (name and total) so every room's price shows at a glance. Folding only hides the table.
+  const room = (R, i) => { const shut = roomShut(R.r); return `<div class="psec box prx-room${shut ? ' shut' : ''}" id="prx-room-${i}"><button class="sechead teal prx-fold" data-act="prx-fold" data-id="${esc(R.r.id)}" aria-expanded="${!shut}" title="${shut ? 'Show' : 'Hide'} this room's cabinets">${icon('chevr', shut ? '' : 'rot90')}<span>${esc(R.r.name)}</span>${shut ? `<span class="prx-n">${R.cabs.length} ${R.cabs.length === 1 ? 'cabinet' : 'cabinets'}</span>` : ''}</button><div class="prx-roomh">${shut ? '' : paintNote(R)}<b class="money">${money(R.total)}</b></div>${shut ? '</div>' : `<div class="tscroll"><table class="t quote">
     <thead><tr><th>Cabinet</th><th>Size</th><th class="r">Cabinet</th>${ps.doors.on ? '<th class="r">Doors and fronts</th>' : ''}<th class="r">Drawers, shelves, inserts</th><th class="r">Panels, fillers</th>${ps.hardware.on ? '<th class="r">Hardware</th>' : ''}${ps.materials.on ? '<th class="r">Materials</th>' : ''}<th class="r">Paint sq ft</th><th class="r">Total</th></tr></thead>
     <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || (R.lines.some(l => l.own) ? '' : '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>')}
-    ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`;
-  return `<div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${paintCard(ps, q)}`;
+    ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
+  const anyOpen = q.rooms.some(R => !roomShut(R.r));
+  const fold = q.rooms.length > 1 ? `<button class="btn" data-act="prx-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${icon('chevr', anyOpen ? '' : 'rot90')}${anyOpen ? 'Collapse all rooms' : 'Expand all rooms'}</button>` : '';
+  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${paintCard(ps, q)}`;
 }
+// Which rooms are folded on Pricing › Quote, per job, kept on this computer. Only the view; prices are untouched.
+const PRX_FOLD_KEY = () => KEY + '.prxfold';
+function prxFold() { if (!ui.prxFold) { try { ui.prxFold = JSON.parse(localStorage.getItem(PRX_FOLD_KEY()) || '{}'); } catch (_) { ui.prxFold = {}; } } return ui.prxFold; }
+const roomFoldKey = r => (S.job.id || S.job.name || '') + '/' + r.id;
+function roomShut(r) { return !!prxFold()[roomFoldKey(r)]; }
+function setRoomShut(r, on) { const f = prxFold(), k = roomFoldKey(r); if (on) f[k] = 1; else delete f[k]; try { localStorage.setItem(PRX_FOLD_KEY(), JSON.stringify(f)); } catch (_) {} }
 // Paint total for the job, with switches for which surfaces count.
 function paintCard(ps, q) {
   const po = paintOf(ps);
@@ -403,7 +412,9 @@ function priceAction(a, id) {
   const ps = priceSheet();
   switch (a) {
     case 'price-view': ui.priceView = id; break;
-    case 'prx-jump': { const el = document.getElementById((id.startsWith('room-') ? 'prx-' : 'ps-') + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    case 'prx-fold': { const r = S.rooms.find(x => x.id === id); if (r) setRoomShut(r, !roomShut(r)); renderPricing(); return; }
+    case 'prx-fold-all': S.rooms.forEach(r => setRoomShut(r, id === 'shut')); renderPricing(); return;
+    case 'prx-jump': { if (id.startsWith('room-') && id !== 'room-paint') { const R = S.rooms[+id.slice(5)]; if (R && roomShut(R)) { setRoomShut(R, false); renderPricing(); } } const el = document.getElementById((id.startsWith('room-') ? 'prx-' : 'ps-') + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     case 'ps-new': { const n = defaultPriceSheet('New price sheet'); PRICES.push(n); S.job.priceSheet = n.id; save(); ui.priceView = 'edit'; break; }
     case 'ps-dup': { const n = { ...clone(ps), id: uid('ps'), name: ps.name + ' copy' }; PRICES.push(n); S.job.priceSheet = n.id; save(); break; }
     case 'ps-del': if (!ui.psConfirm) { ui.psConfirm = true; renderPricing(); return; } ui.psConfirm = false; PRICES = PRICES.filter(p => p !== ps); S.job.priceSheet = PRICES[0].id; save(); break;
@@ -544,7 +555,7 @@ document.addEventListener('click', e => {
   document.querySelectorAll('.psmenu[open]').forEach(d => { if (!d.contains(e.target) || (e.target.closest('.menu button') && !e.target.closest('[data-act="ps-del"]'))) d.open = false; });
   const el = e.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act;
-  if (a === 'price-view' || a === 'prx-jump' || a === 'pov-clear' || a.startsWith('ps-') || a.startsWith('quote-') || a.startsWith('qs-')) { e.stopPropagation(); if (a === 'prx-jump') e.preventDefault(); priceAction(a, el.dataset.id); }
+  if (a === 'price-view' || a === 'prx-jump' || a === 'prx-fold' || a === 'prx-fold-all' || a === 'pov-clear' || a.startsWith('ps-') || a.startsWith('quote-') || a.startsWith('qs-')) { e.stopPropagation(); if (a === 'prx-jump') e.preventDefault(); priceAction(a, el.dataset.id); }
 }, true);
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-act-change="ps-pick"]'); if (!el) return;

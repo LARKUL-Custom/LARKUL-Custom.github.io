@@ -3294,3 +3294,41 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
   .ib-hint{font:400 15px/1.45 var(--f-ui);color:var(--muted)}
   .ib-hint b{color:var(--ink);font-weight:600}
 }
+/* Pricing › Quote: rooms fold to one line (name, cabinet count, total) so every room's price shows at a glance. 0.56.3 */
+.prx-qh{display:flex;align-items:center;gap:12px;margin-bottom:-6px}
+.prx-qh .note{flex:1;margin:0}
+.prx-qh .btn{flex:none}
+.prx-qh .btn .ic,.prx-fold .ic.rot90,.prx-fold .ic{transition:transform .12s}
+.prx .psec.box > .sechead.prx-fold{border:0;cursor:pointer;color:var(--ink);text-align:left}
+.prx .psec.box > .sechead.prx-fold .ic{width:20px;height:20px;padding:2px;background:none;color:var(--accent)}
+.prx .psec.box > .sechead.prx-fold:hover span:first-of-type{text-decoration:underline}
+.prx .psec.box > .sechead.prx-fold:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.prx .psec.box.prx-room.shut{flex-direction:row;align-items:center;padding:8px 14px;gap:12px}
+.prx .psec.box.prx-room.shut > .sechead{position:static;padding:0;background:none;flex:1;min-width:0}
+.prx .psec.box.prx-room.shut > .prx-roomh{position:static;padding:0;background:none}
+.prx-n{font:500 13px var(--f-ui);color:var(--muted);margin-left:6px}
+.prx-body.quote:has(.prx-room.shut){gap:22px}
+.prx-body.quote .prx-room.shut + .prx-room.shut{margin-top:-14px}
+/* Room bottom panel at one set size (0.56.2): the design pixel is a real pixel inside it, so it no longer
+   shrinks with the window or the panel height. It scrolls if the panel is made shorter than its contents.
+   The tab list on its right is bigger and easier to hit. */
+@media (min-width: 961px){
+  .room .dock{--u:1px}
+  .room .dock .dockbody, .room .dock .dockbody.scroll{overflow:auto}
+  .room .dock .dockbody.scroll .dockfit{width:auto}
+  .room .dock .dockhead{overflow-y:auto}
+  .room .dock .docktabs{gap:3px;padding:6px 6px 6px 0}
+  .room .dock .docktabs button{font:500 16px/1.2 var(--f-ui);padding:7px 14px;min-height:36px;gap:9px}
+  .room .dock .docktabs button .ic{width:19px;height:19px}
+}
+@media (min-width: 961px){
+  .room .dock .docktabs{display:grid;grid-template-columns:repeat(2,auto);align-content:start}
+  .room .dock .docktabs button{padding:7px 12px}
+  .room .dock .itembar:not(.ib-empty){flex-wrap:wrap;row-gap:10px;min-width:0}
+}
+@media (min-width: 961px){ .room .dock .dockhead{width:auto} }
+@media (min-width: 961px){
+  .room .dock .docktabs button{padding:7px 9px;gap:7px}
+  .room .dock .dockhead{padding:8px 6px 0}
+  .room .dock .dockbody.dock-item{padding:6px 12px 0}
+}
