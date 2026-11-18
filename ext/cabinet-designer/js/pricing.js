@@ -8,29 +8,40 @@ const PRICE_ADDERS = [['perDrawer', 'Each drawer (box and slides labor)'], ['per
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
 const PAINT_PARTS = [['fronts', 'Doors and drawer fronts'], ['panels', 'Applied end panels'], ['fillers', 'Fillers and face frames'], ['toe', 'Toe skins'], ['interior', 'Finished interiors']];
-const paintOf = ps => (ps.paint = { rate: 0, bothSides: true, fronts: true, panels: true, fillers: true, toe: true, interior: true, ...(ps.paint || {}) });
+const paintOf = ps => (ps.paint = { rate: 0, ebRate: EB_RATE, bothSides: true, fronts: true, panels: true, fillers: true, toe: true, interior: true, ...(ps.paint || {}) });
+// 0.56.7 (Ayden 2026-11-18): a material is painted/stained or prefinished (Libraries › Materials › Finishing). Surfaces cut from a
+// prefinished material (melamine, prefinished ply) are not painted: they count as edgebanding at the sheet's much lower
+// Edgebanding rate. A material with no pick is guessed from its name, the same way every time.
+const EB_RATE = 1;
+const PREFIN_RX = /melamine|\btfl\b|\blpl\b|\bhpl\b|thermofused|thermofoil|laminate|formica|pre-?finished|\bpf\b|uv[- ]?coated/i;
+const matFinGuess = m => !m || m.kind === 'top' ? 'paint' : PREFIN_RX.test(m.name || '') ? 'pre' : 'paint';
+const matFin = m => m && (m.fin === 'pre' || m.fin === 'paint') ? m.fin : matFinGuess(m);
+const prefin = id => { const m = mat(id); return !!m && matFin(m) === 'pre'; };
 const sqft = v => (Math.round(v * 10) / 10).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 function paintCab(c, ps, b, fr) {
-  const po = paintOf(ps), sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0 }, area = pt => pt.L * pt.W * pt.qty / 144;
-  fr.forEach(f => { if (f.type !== 'open') sq.fronts += (f.x1 - f.x0) * (f.z1 - f.z0) / 144 * (po.bothSides ? 2 : 1); });
+  const po = paintOf(ps), sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0 }, eb = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0 }, area = pt => pt.L * pt.W * pt.qty / 144;
+  // Each surface goes to paint, or to edgebanding when its material is prefinished.
+  const add = (k, v, matId) => { (prefin(matId) ? eb : sq)[k] += v; };
+  fr.forEach(f => { if (f.type !== 'open') add('fronts', (f.x1 - f.x0) * (f.z1 - f.z0) / 144 * (po.bothSides ? 2 : 1), frontStyle(c, f).ds.mat); });
   b.parts.forEach(pt => {
     if (pt.cabId !== c.id) return;
-    if (pt.kind === 'applied') sq.panels += area(pt);
-    else if (pt.kind === 'filler' || pt.kind === 'faceFrame') sq.fillers += area(pt);
-    else if (pt.kind === 'toekick') sq.toe += area(pt);
+    if (pt.kind === 'applied') add('panels', area(pt), pt.mat);
+    else if (pt.kind === 'filler' || pt.kind === 'faceFrame') add('fillers', area(pt), pt.mat);
+    else if (pt.kind === 'toekick') add('toe', area(pt), pt.mat);
     // A Finished product's box is finished like an applied panel.
-    else if (c.finished && ['side', 'topbot'].includes(pt.kind)) sq.panels += area(pt);
+    else if (c.finished && ['side', 'topbot'].includes(pt.kind)) add('panels', area(pt), pt.mat);
     // A finished interior paints the inside face of the box, and both faces of shelves and dividers.
-    else if (c.finInt && ['side', 'topbot', 'back'].includes(pt.kind)) sq.interior += area(pt);
-    else if (c.finInt && ['shelf', 'divider'].includes(pt.kind)) sq.interior += 2 * area(pt);
+    else if (c.finInt && ['side', 'topbot', 'back'].includes(pt.kind)) add('interior', area(pt), pt.mat);
+    else if (c.finInt && ['shelf', 'divider'].includes(pt.kind)) add('interior', 2 * area(pt), pt.mat);
   });
-  PAINT_PARTS.forEach(([k]) => { if (!po[k]) sq[k] = 0; });
+  PAINT_PARTS.forEach(([k]) => { if (!po[k]) sq[k] = eb[k] = 0; });
   sq.total = PAINT_PARTS.reduce((a, [k]) => a + sq[k], 0);
+  sq.eb = PAINT_PARTS.reduce((a, [k]) => a + eb[k], 0);
   return sq;
 }
 const CAT_FT = [['Base', 'Base cabinets'], ['Wall', 'Wall cabinets'], ['Tall', 'Tall and pantry']];
 const ftLen = v => (Math.round(v * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
-const addSq = list => PAINT_PARTS.concat([['total']]).reduce((o, [k]) => (o[k] = list.reduce((a, x) => a + x[k], 0), o), {});
+const addSq = list => PAINT_PARTS.concat([['total'], ['eb']]).reduce((o, [k]) => (o[k] = list.reduce((a, x) => a + x[k], 0), o), {});
 // Set values copied from Ayden's Mozaik pricing sheet (Detailed Pricing.mzkprice), turned from metric to feet:
 // finishing $53.82/sq m = $5/sq ft, install $131.23/m = $40/ft (base, wall) and $328.08/m = $100/ft (tall).
 const MZK = {
@@ -112,8 +123,8 @@ function priceCab(c, ps) {
   const own = ownRule(c, ps);
   if (own) {
     const each = (+own.base || 0) + (+own.perFt || 0) * c.w / 12, custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, upcharge = (each + custom) * (+c.pxUp || 0) / 100;
-    const sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0, total: 0 };
-    return { own: true, each, box: 0, doors: 0, extras: 0, ends: 0, hardware: 0, materials: 0, sq, paint: 0, custom, upcharge, total: each + custom + upcharge };
+    const sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0, total: 0, eb: 0 };
+    return { own: true, each, box: 0, doors: 0, extras: 0, ends: 0, hardware: 0, materials: 0, sq, paint: 0, banding: 0, custom, upcharge, total: each + custom + upcharge };
   }
   const b = buildParts(c), fr = computeFronts(c), rule = { ...ps.cab[c.cat], ...(ps.products[c.libId] || {}) };
   const box = (+rule.base || 0) + (+rule.perFt || 0) * c.w / 12;
@@ -143,10 +154,10 @@ function priceCab(c, ps) {
     materials += pt.L * pt.W * pt.qty * matSqIn(m, ps) + bandCost(pt) * pt.qty;
   });
   materials *= gMark(ps, 'materials');
-  const sq = paintCab(c, ps, b, fr), paint = sq.total * (+paintOf(ps).rate || 0);
+  const sq = paintCab(c, ps, b, fr), paint = sq.total * (+paintOf(ps).rate || 0), banding = sq.eb * (+paintOf(ps).ebRate || 0);
   // Per-cabinet extras from its Price tab: price per foot and per square foot of face, then an upcharge on the lot.
-  const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = box + doors + extras + ends + hardware + materials + paint + custom, upcharge = base * (+c.pxUp || 0) / 100;
-  return { box, doors, extras, ends, hardware, materials, sq, paint, custom, upcharge, total: base + upcharge };
+  const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = box + doors + extras + ends + hardware + materials + paint + banding + custom, upcharge = base * (+c.pxUp || 0) / 100;
+  return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge };
 }
 const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
 // One door or front: its size times the style's price per sq ft (from the door library, or this job's own) plus material.
@@ -256,13 +267,13 @@ function priceJob(ps) {
   return { rooms, jobLines, sub, markup, tax, total, payments, sq: addSq(rooms.map(R => R.sq)), perFt };
 }
 function quoteCSV(ps) {
-  const q = priceJob(ps), rows = [['Room', 'Cabinet', 'Name', 'Size', 'Cabinet', 'Doors and fronts', 'Drawers, shelves, inserts', 'Panels and fillers', 'Hardware', 'Materials', 'Paint', 'Paint sq ft', 'Total']], m = v => (Math.round(v * 100) / 100).toFixed(2);
+  const q = priceJob(ps), rows = [['Room', 'Cabinet', 'Name', 'Size', 'Cabinet', 'Doors and fronts', 'Drawers, shelves, inserts', 'Panels and fillers', 'Hardware', 'Materials', 'Paint', 'Paint sq ft', 'Edgebanding', 'Edgebanding sq ft', 'Total']], m = v => (Math.round(v * 100) / 100).toFixed(2);
   q.rooms.forEach(R => {
-    R.cabs.forEach(k => rows.push([R.r.name, k.label, k.c.name, `${fmtLen(k.c.w)} x ${fmtLen(k.c.h)} x ${fmtLen(k.c.d)}`, m(k.box), m(k.doors), m(k.extras), m(k.ends), m(k.hardware), m(k.materials), m(k.paint), k.sq.total.toFixed(1), m(k.total)]));
-    R.lines.forEach(l => rows.push([R.r.name, '', l.name, '', '', '', '', '', '', '', '', '', m(l.amount)]));
+    R.cabs.forEach(k => rows.push([R.r.name, k.label, k.c.name, `${fmtLen(k.c.w)} x ${fmtLen(k.c.h)} x ${fmtLen(k.c.d)}`, m(k.box), m(k.doors), m(k.extras), m(k.ends), m(k.hardware), m(k.materials), m(k.paint), k.sq.total.toFixed(1), m(k.banding || 0), (k.sq.eb || 0).toFixed(1), m(k.total)]));
+    R.lines.forEach(l => rows.push([R.r.name, '', l.name, '', '', '', '', '', '', '', '', '', '', '', m(l.amount)]));
   });
-  const end = (name, v, sq = '') => rows.push(['', '', name, '', '', '', '', '', '', '', '', sq, v]);
-  q.jobLines.forEach(l => rows.push(['Job', '', l.name, '', '', '', '', '', '', '', '', '', m(l.amount)]));
+  const end = (name, v, sq = '') => rows.push(['', '', name, '', '', '', '', '', '', '', '', sq, '', '', v]);
+  q.jobLines.forEach(l => rows.push(['Job', '', l.name, '', '', '', '', '', '', '', '', '', '', '', m(l.amount)]));
   end('Subtotal', m(q.sub), q.sq.total.toFixed(1));
   if (q.markup) end(`Markup ${ps.markup}%`, m(q.markup));
   if (q.tax) end(`Tax ${ps.tax}%`, m(q.tax));
@@ -333,8 +344,9 @@ function paintCard(ps, q) {
     <div class="tscroll"><table class="t"><thead><tr><th>Surface</th>${q.rooms.length > 1 ? q.rooms.map(R => `<th class="r">${esc(R.r.name)}</th>`).join('') : ''}<th class="r">Sq ft</th></tr></thead><tbody>
     ${PAINT_PARTS.filter(([k]) => po[k]).map(([k, l]) => `<tr><td>${l}</td>${q.rooms.length > 1 ? q.rooms.map(R => `<td class="n">${sqft(R.sq[k])}</td>`).join('') : ''}<td class="n">${sqft(q.sq[k])}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No surfaces counted</td></tr>'}
     <tr class="grand"><td>Total</td>${q.rooms.length > 1 ? q.rooms.map(R => `<td class="n">${sqft(R.sq.total)}</td>`).join('') : ''}<td class="n">${sqft(q.sq.total)}</td></tr>
-    ${+po.rate ? `<tr><td>Paint price, in the room totals</td>${q.rooms.length > 1 ? q.rooms.map(R => `<td class="n">${money(R.cabs.reduce((a, k) => a + k.paint, 0))}</td>`).join('') : ''}<td class="n">${money(q.rooms.reduce((a, R) => a + R.cabs.reduce((b, k) => b + k.paint, 0), 0))}</td></tr>` : ''}</tbody></table></div>
-    <div class="note">Doors and fronts count their full size${po.bothSides ? ' on both faces' : ', one face'}. Panels, fillers and toe skins count their outside face. Finished interiors count the inside of the box and both faces of shelves.${+po.rate ? ` Priced at ${money(+po.rate)} per sq ft, already inside each cabinet's and each room's price.` : ' Set a price per sq ft on the price sheet to put paint into each room\'s price.'}</div></div></div>`;
+    ${+po.rate ? `<tr><td>Paint price, in the room totals</td>${q.rooms.length > 1 ? q.rooms.map(R => `<td class="n">${money(R.cabs.reduce((a, k) => a + k.paint, 0))}</td>`).join('') : ''}<td class="n">${money(q.rooms.reduce((a, R) => a + R.cabs.reduce((b, k) => b + k.paint, 0), 0))}</td></tr>` : ''}
+    ${q.sq.eb ? `<tr><td>Prefinished, edgebanding only</td>${q.rooms.length > 1 ? q.rooms.map(R => `<td class="n">${sqft(R.sq.eb)}</td>`).join('') : ''}<td class="n">${sqft(q.sq.eb)}</td></tr>${+po.ebRate ? `<tr><td>Edgebanding price, in the room totals</td>${q.rooms.length > 1 ? q.rooms.map(R => `<td class="n">${money(R.cabs.reduce((a, k) => a + (k.banding || 0), 0))}</td>`).join('') : ''}<td class="n">${money(q.rooms.reduce((a, R) => a + R.cabs.reduce((b, k) => b + (k.banding || 0), 0), 0))}</td></tr>` : ''}` : ''}</tbody></table></div>
+    <div class="note">Doors and fronts count their full size${po.bothSides ? ' on both faces' : ', one face'}. Panels, fillers and toe skins count their outside face. Finished interiors count the inside of the box and both faces of shelves. Surfaces cut from a prefinished material (set in Libraries › Materials) are not painted; they count as edgebanding at ${money(+po.ebRate || 0)} per sq ft.${+po.rate ? ` Priced at ${money(+po.rate)} per sq ft, already inside each cabinet's and each room's price.` : ' Set a price per sq ft on the price sheet to put paint into each room\'s price.'}</div></div></div>`;
 }
 function priceEditor(ps) {
   const R = 'psh:' + ps.id, P = path => 'pshp:' + ps.id + ':' + path, num = (ref, k, v, x = {}) => ctl(ref, k, v ?? '', 'num', { label: k, ...x });
@@ -364,7 +376,8 @@ function priceEditor(ps) {
   <div class="psec box prx-sec" id="ps-hw">${secHead('sliders', 'Hardware', 'amber')}<div class="prx-h">${toggleBtn('ps-hw', ps.hardware.on, ps.hardware.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
     <div class="note">Price each, for every hardware line on the cabinets' lists.</div>${hwNames.map(n => fld(esc(n), P('hardware.items'), n, ps.hardware.items[n] ?? 0, 'num')).join('')}</div></div>
   <div class="psec box prx-sec" id="ps-paint">${secHead('palette', 'Paint', 'blue')}<div class="prx-h"></div><div class="cardbody">
-    <div class="note">Price per square foot of painted surface. Leave it at 0 to only show the square footage. Pick which surfaces count on the quote.</div>${fld('Paint ($/sq ft)', P('paint'), 'rate', paintOf(ps).rate, 'num')}</div></div>
+    <div class="note">Price per square foot of painted surface. Leave it at 0 to only show the square footage. Pick which surfaces count on the quote.</div>${fld('Paint ($/sq ft)', P('paint'), 'rate', paintOf(ps).rate, 'num')}
+    <div class="note">Parts cut from a prefinished material (melamine, prefinished plywood) are not painted. They are charged this lower rate instead. Each material says which it is in Libraries › Materials.</div>${fld('Edgebanding, prefinished ($/sq ft)', P('paint'), 'ebRate', paintOf(ps).ebRate, 'num')}</div></div>
   <div class="psec box prx-sec" id="ps-tops">${secHead('ruler', 'Tops and molding', 'violet')}<div class="prx-h"></div><div class="cardbody">
     ${S.countertops.map(t => fld(esc(t.name) + ' ($/sq ft)', P('tops'), t.id, ps.tops[t.id] ?? 0, 'num')).join('')}${S.moldings.map(m => fld(esc(m.name) + ' ($/ft)', P('molds'), m.id, ps.molds[m.id] ?? 0, 'num')).join('')}</div></div>
   <div class="psec box prx-sec wide" id="ps-extra">${secHead('plus', 'Extra charges', 'teal')}<div class="prx-h"><button class="btn sm" data-act="ps-x-add">${icon('plus')}Add charge</button></div><div class="cardbody">
