@@ -84,7 +84,7 @@ function defaultPriceSheet(name = 'Standard pricing') {
   return {
     id: uid('ps'), name, markup: 0, tax: 0, mzk: 1,
     // Set values from Ayden's Mozaik "Detailed Pricing" sheet.
-    groupMarkup: { ...MZK.groupMarkup }, install: { ...MZK.install }, payments: MZK.payments.map(x => ({ ...x })),
+    groupMarkup: { ...MZK.groupMarkup }, payments: MZK.payments.map(x => ({ ...x })),
     cab: { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } },
     products: {},
     adders: { perDrawer: 35, perShelf: 12, perFiller: 25 },
@@ -98,19 +98,47 @@ function defaultPriceSheet(name = 'Standard pricing') {
   };
 }
 const priceSheet = () => PRICES.find(p => p.id === S.job.priceSheet) || PRICES[0];
+
+/* ---------- Installers ---------- */
+// 0.58.4 (Ayden 2026-11-18): installation is no longer on the price sheet. The shop keeps a list of installers, each with
+// their own price per foot by cabinet type, and each job picks one (or No installer) on its Quote. The install prices the
+// sheets had became the installer "Richard", the default, so every saved job prices exactly as before.
+// A job with no pick uses the installer its sheet's install prices moved to (ps.instBy), then the default.
+let INSTALLERS = [];
+const blankInstaller = (name, rates = { Base: 0, Wall: 0, Tall: 0 }) => ({ id: uid('inst'), name, rates: { ...rates } });
+const sameRates = (a, b) => CAT_FT.every(([k]) => (+(a || {})[k] || 0) === (+(b || {})[k] || 0));
+const defInstaller = () => INSTALLERS.find(i => i.def) || INSTALLERS[0] || null;
+function jobInstaller(ps, job = S.job) {
+  if (job.noInstall || job.installer === 'none') return null;
+  return INSTALLERS.find(i => i.id === job.installer) || INSTALLERS.find(i => i.id === (ps && ps.instBy)) || defInstaller();
+}
+// Moves a sheet's old install prices to an installer with the same prices, or a new one, and takes them off the sheet.
+function takeInstall(ps) {
+  if (!ps.install) return false;
+  let ins = INSTALLERS.find(i => sameRates(i.rates, ps.install));
+  if (!ins) { ins = blankInstaller(INSTALLERS.length ? `Richard (${ps.name})` : 'Richard', ps.install); if (!INSTALLERS.length) ins.def = true; INSTALLERS.push(ins); }
+  ps.instBy = ins.id; delete ps.install; return true;
+}
 async function loadPrices() {
   try { PRICES = inHub() ? ((await Hub.storage.get('priceSheets')) || []) : JSON.parse(localStorage.getItem(KEY + '.prices') || '[]'); } catch (_) { PRICES = []; }
   if (PRICES.value) PRICES = PRICES.value;
   if (!Array.isArray(PRICES)) PRICES = [];
-  if (!PRICES.length) { PRICES.push(defaultPriceSheet()); savePrices(); }
-  else if (PRICES.map(ensureMzk).some(Boolean)) savePrices();
+  try { INSTALLERS = inHub() ? ((await Hub.storage.get('installers')) || []) : JSON.parse(localStorage.getItem(KEY + '.installers') || '[]'); } catch (_) { INSTALLERS = []; }
+  if (INSTALLERS && INSTALLERS.value) INSTALLERS = INSTALLERS.value;
+  if (!Array.isArray(INSTALLERS)) INSTALLERS = [];
+  let changed = false;
+  if (!PRICES.length) { PRICES.push(defaultPriceSheet()); changed = true; }
+  else if (PRICES.map(ensureMzk).some(Boolean)) changed = true;
+  if (PRICES.map(takeInstall).some(Boolean)) changed = true;
+  if (!INSTALLERS.length) { const r = blankInstaller('Richard', MZK.install); r.def = true; INSTALLERS.push(r); changed = true; }
+  if (changed) savePrices();
 }
 let priceTimer = null;
 function savePrices() {
   clearTimeout(priceTimer);
   priceTimer = setTimeout(() => {
-    try { localStorage.setItem(KEY + '.prices', JSON.stringify(PRICES)); } catch (_) {}
-    if (inHub()) Hub.storage.set('priceSheets', PRICES).catch(() => flash('Could not save the price sheets.'));
+    try { localStorage.setItem(KEY + '.prices', JSON.stringify(PRICES)); localStorage.setItem(KEY + '.installers', JSON.stringify(INSTALLERS)); } catch (_) {}
+    if (inHub()) { Hub.storage.set('priceSheets', PRICES).catch(() => flash('Could not save the price sheets.')); Hub.storage.set('installers', INSTALLERS).catch(() => flash('Could not save the installers.')); }
   }, 300);
 }
 
@@ -253,9 +281,9 @@ function priceJob(ps) {
     const molds = oneLine('Molding', moldingRuns(), m => m.m.name, m => m.len / 12 * (+ps.molds[m.m.id] || 0));
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));
-    // Installation by the foot of each type, like Mozaik's per-length install rows.
-    // A job can leave installation out (the customer installs, or it's a pickup).
-    const inst = S.job.noInstall ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((ps.install || {})[cat]) || 0;
+    // Installation by the foot of each type, at the job's installer's prices, like Mozaik's per-length install rows.
+    // A job can have No installer (the customer installs, or it's a pickup).
+    const who = jobInstaller(ps), inst = !who ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((who.rates || {})[cat]) || 0;
       return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r } : null; }).filter(Boolean);
     const lines = [...own, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : []), ...inst, ...xs];
     return { r, cabs, lines, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
@@ -300,7 +328,7 @@ function renderPricing() {
   const b = (act, ic, l, x = '') => `<button class="btn${x}" data-act="${act}">${icon(ic)}${l}</button>`;
   const acts = `<div class="prx-acts">
     ${b('quote-print', 'print', 'Print or save quote', ' primary')}
-    ${toggleBtn('quote-install', !S.job.noInstall, S.job.noInstall ? 'No installation' : 'Installation added')}
+    ${installerPick(ps)}
     ${b('quote-copy', 'copy', 'Copy quote CSV')}${inHub() ? b('quote-save', 'folder', 'Save quote to Files') : ''}
     <span class="edx-sep"></span><div class="prx-acth">Price sheet</div>
     ${b('ps-new', 'plus', 'New sheet')}${b('ps-dup', 'copy', 'Copy this sheet')}${b('ps-export', 'download', 'Save sheet as file')}
@@ -322,7 +350,23 @@ function priceSide(ps, q, view) {
   return `<div class="prx-grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${nCab} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>
     <div class="prx-fts">${tiles}</div>${tot}${jump}`;
 }
-const PRICE_SECS = [['lib', 'Library prices', 'tag'], ['sheet', 'Markup and tax', 'tag'], ['install', 'Installation', 'home'], ['cab', 'Cabinets by type', 'box'], ['prod', 'Products', 'stack'], ['add', 'Adders', 'shelf'], ['panel', 'Panels', 'box'], ['doors', 'Doors and fronts', 'door'], ['mats', 'Materials', 'palette'], ['hw', 'Hardware', 'sliders'], ['paint', 'Paint', 'palette'], ['tops', 'Tops and molding', 'ruler'], ['extra', 'Extra charges', 'plus'], ['pay', 'Payment schedule', 'list']];
+const PRICE_SECS = [['lib', 'Library prices', 'tag'], ['sheet', 'Markup and tax', 'tag'], ['install', 'Installers', 'home'], ['cab', 'Cabinets by type', 'box'], ['prod', 'Products', 'stack'], ['add', 'Adders', 'shelf'], ['panel', 'Panels', 'box'], ['doors', 'Doors and fronts', 'door'], ['mats', 'Materials', 'palette'], ['hw', 'Hardware', 'sliders'], ['paint', 'Paint', 'palette'], ['tops', 'Tops and molding', 'ruler'], ['extra', 'Extra charges', 'plus'], ['pay', 'Payment schedule', 'list']];
+// Quote's installer pick, down the right with the quote buttons.
+function installerPick(ps) {
+  const cur = jobInstaller(ps), opt = (v, l) => `<option value="${esc(v)}"${(cur ? cur.id : 'none') === v ? ' selected' : ''}>${esc(l)}</option>`;
+  return `<label class="prx-inst"><span>Installer</span><select data-act-change="quote-inst" aria-label="Installer for this job">${INSTALLERS.map(i => opt(i.id, i.name)).join('')}${opt('none', 'No installer')}</select></label>`;
+}
+// Edit prices › Installers: every installer with their price per foot. Shared by all price sheets.
+function installersCard(ps) {
+  const cur = jobInstaller(ps), one = INSTALLERS.length < 2;
+  const rows = INSTALLERS.map(i => { const R = 'inst:' + i.id, P = 'instp:' + i.id + ':rates';
+    return `<tr><td>${ctl(R, 'name', i.name, 'text', { label: 'Installer name' })}</td>${CAT_FT.map(([k, l]) => `<td style="width:96px">${ctl(P, k, (i.rates || {})[k] ?? 0, 'num', { label: `${i.name} ${l} $/ft` })}</td>`).join('')}
+      <td>${i === defInstaller() ? '<span class="chip">Default</span>' : `<button class="btn sm" data-act="ps-inst-def" data-id="${esc(i.id)}">Make default</button>`}</td>
+      <td>${one ? '' : `<button class="btn sm${ui.instConfirm === i.id ? ' danger' : ''}" data-act="ps-inst-del" data-id="${esc(i.id)}" aria-label="Delete ${esc(i.name)}">${ui.instConfirm === i.id ? 'Click again' : '×'}</button>`}</td></tr>`; }).join('');
+  return `<div class="psec box prx-sec wide" id="ps-install">${secHead('home', 'Installers', 'blue')}<div class="prx-h"><span class="note">Each installer's price per foot of cabinet width. Shared by every price sheet. ${esc(S.job.name)} uses ${cur ? esc(cur.name) : 'no installer'}; pick on its Quote.</span><button class="btn sm" data-act="ps-inst-add">${icon('plus')}Add installer</button></div>
+    <div class="tscroll"><table class="t"><thead><tr><th>Installer</th>${CAT_FT.map(([, l]) => `<th class="r">${l} $/ft</th>`).join('')}<th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="note">A job that never picked an installer uses the default.</div></div>`;
+}
 function toggleBtn(act, on, label, id) { return `<button class="btn toggle${on ? ' on' : ''}" data-act="${act}"${id ? ` data-id="${id}"` : ''} aria-pressed="${!!on}">${icon(on ? 'check' : 'plus')}${label}</button>`; }
 function priceQuote(ps, q = priceJob(ps)) {
   // Paint is inside each cabinet's price, so every room's total is what to quote for that room.
@@ -365,7 +409,7 @@ function priceEditor(ps) {
   <div class="psec box prx-sec" id="ps-sheet">${secHead('tag', 'Markup and tax', 'teal')}<div class="prx-h"></div><div class="cardbody">
     ${fld('Name', R, 'name', ps.name, 'text', { wide: true })}${fld('Markup %', R, 'markup', ps.markup, 'num')}${fld('Tax %', R, 'tax', ps.tax, 'num')}
     <div class="note">Markup on top of each group's cost, inside the cabinet prices:</div>${GROUP_MARKUPS.map(([k, l]) => fld(l + ' markup %', P('groupMarkup'), k, (ps.groupMarkup || {})[k] ?? 0, 'num')).join('')}</div></div>
-  <div class="psec box prx-sec" id="ps-install">${secHead('home', 'Installation', 'blue')}<div class="prx-h"><span class="note">Per foot of cabinet width. Turn it off for a job on its Quote.</span></div><div class="cardbody">${CAT_FT.map(([k, l]) => fld(l + ' ($/ft)', P('install'), k, (ps.install || {})[k] ?? 0, 'num')).join('')}</div></div>
+  ${installersCard(ps)}
   <div class="psec box prx-sec" id="ps-cab">${secHead('box', 'Cabinets by type', 'amber')}<div class="prx-h"><span class="note">Base price plus a price per foot of width</span></div><div class="tscroll"><table class="t"><thead><tr><th>Type</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${['Base', 'Wall', 'Tall'].map(cat => `<tr><td><span class="catpill cat-${cat}">${cat}</span></td><td style="width:110px">${num(P('cab.' + cat), 'base', ps.cab[cat].base)}</td><td style="width:110px">${num(P('cab.' + cat), 'perFt', ps.cab[cat].perFt)}</td></tr>`).join('')}</tbody></table></div></div>
   <div class="psec box prx-sec wide" id="ps-prod">${secHead('stack', 'Products', 'violet')}<div class="prx-h"><span class="note">Give any library product its own price. Blank uses its type. Tick Own price for items like floating shelves.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Show priced only' : `Show all ${S.library.filter(l => l.cat !== 'Shape').length}`}</button></div>${prods.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th title="Priced only by this row: not a cabinet, not in the cabinet count, no installation, doors, materials or hardware">Own price</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
@@ -423,7 +467,10 @@ function jobPriceCard(ps) {
 }
 // Resolves a price sheet ref: psh:<id> is the sheet, pshp:<id>:<a.b.c> an object inside it (made if missing).
 function priceRef(ref) {
-  const [k, id, path] = ref.split(':'), ps = PRICES.find(p => p.id === id); if (!ps) return null;
+  const [k, id, path] = ref.split(':');
+  // inst:<id> is an installer, instp:<id>:rates its prices.
+  if (k === 'inst' || k === 'instp') { const i = INSTALLERS.find(x => x.id === id); if (!i) return null; return k === 'inst' ? i : path.split('.').reduce((o, key) => o && (o[key] = o[key] || {}), i); }
+  const ps = PRICES.find(p => p.id === id); if (!ps) return null;
   if (k === 'psh') return ps;
   return path.split('.').reduce((o, key) => o && (o[key] = o[key] || {}), ps);
 }
@@ -444,7 +491,18 @@ function priceAction(a, id) {
     case 'ps-paint': { const po = paintOf(ps); po[id] = !po[id]; break; }
     case 'ps-export': saveFile(new Blob([JSON.stringify({ cabinetDesignerPriceSheet: 1, sheet: ps }, null, 2)], { type: 'application/json' }), `${fileSafe(ps.name)} price sheet.json`, 'Cabinet Designer/Price sheets'); return;
     case 'quote-print': showQuoteSheet(); return;
-    case 'quote-install': mutate(() => { if (S.job.noInstall) delete S.job.noInstall; else S.job.noInstall = true; }); flash(S.job.noInstall ? 'Installation left out of this job' : 'Installation added to this job'); return;
+    case 'ps-inst-add': { const n = blankInstaller('New installer'); INSTALLERS.push(n); ui.instConfirm = null; break; }
+    // The default is what every job with no pick uses, so sheets stop pointing at the installer their old prices went to.
+    case 'ps-inst-def': INSTALLERS.forEach(i => { if (i.id === id) i.def = true; else delete i.def; }); PRICES.forEach(p => { delete p.instBy; }); ui.instConfirm = null; break;
+    case 'ps-inst-del': {
+      if (INSTALLERS.length < 2) return;
+      if (ui.instConfirm !== id) { ui.instConfirm = id; renderPricing(); return; }
+      ui.instConfirm = null; const was = INSTALLERS.find(i => i.id === id); INSTALLERS = INSTALLERS.filter(i => i.id !== id);
+      if (was && was.def) INSTALLERS[0].def = true;
+      PRICES.forEach(p => { if (p.instBy === id) delete p.instBy; });
+      if (S.job.installer === id) mutate(() => { delete S.job.installer; });
+      flash(`Deleted ${was ? was.name : 'installer'}`); break;
+    }
     case 'qs-print': window.print(); return;
     case 'qs-save': saveFile(new Blob([quoteFile(ps)], { type: 'text/html' }), `${fileSafe(S.job.name) || 'job'} quote.html`, 'Cabinet Designer'); return;
     case 'qs-close': closeQuoteSheet(); return;
@@ -478,6 +536,9 @@ function importPriceSheet(file) {
     const base = defaultPriceSheet(), n = { ...base, ...sh, id: uid('ps'), name: String(sh.name || 'Price sheet') + (PRICES.some(p => p.name === sh.name) ? ' (opened)' : '') };
     ['cab', 'adders', 'doors', 'materials', 'hardware', 'paint'].forEach(k => { n[k] = { ...base[k], ...(sh[k] || {}) }; });
     if (!sh.mzk) { delete n.mzk; ['groupMarkup', 'install', 'payments'].forEach(k => { if (!(k in sh)) delete n[k]; }); n.extras = sh.extras || []; ensureMzk(n); }
+    // A sheet file from before installers: its install prices go to the installer that has them (or a new one).
+    if (n.instBy && !INSTALLERS.some(i => i.id === n.instBy)) delete n.instBy;
+    takeInstall(n);
     PRICES.push(n); S.job.priceSheet = n.id; save(); savePrices(); renderPricing(); flash(`Opened ${n.name}`);
   }).catch(e => flash('Could not open that file: ' + e.message));
 }
@@ -579,6 +640,12 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-act-change="ps-pick"]'); if (!el) return;
   S.job.priceSheet = el.value; ui.psConfirm = false; save(); renderPricing();
+});
+// The job's installer: one pick, No installer included. Saved on the job, so it is in undo.
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-act-change="quote-inst"]'); if (!el) return;
+  const v = el.value; mutate(() => { delete S.job.noInstall; S.job.installer = v; });
+  const w = INSTALLERS.find(i => i.id === v); flash(w ? `${w.name} installs this job` : 'No installer on this job');
 });
 
 // L1: type to narrow the price sheet list.

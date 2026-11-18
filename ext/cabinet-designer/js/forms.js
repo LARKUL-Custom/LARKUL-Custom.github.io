@@ -23,8 +23,8 @@ function ctl(o, f, val, type, x = {}) {
 }
 const NUM_TYPES = ['len', 'int', 'num'];
 // A field control without its label, for rows that print their own.
-const fctl = (o, f, val, type, x = {}) => NUM_TYPES.includes(type) && !/^psh/.test(o) ? calcWrap(ctl(o, f, val, type, x), o, f) : ctl(o, f, val, type, x);
-const fld = (label, o, f, val, type, x = {}) => `<label class="f${x.wide ? ' wide' : ''}"><span>${label}</span>${NUM_TYPES.includes(type) && !/^psh/.test(o) ? calcWrap(ctl(o, f, val, type, { label, ...x }), o, f) : ctl(o, f, val, type, { label, ...x })}</label>`;
+const fctl = (o, f, val, type, x = {}) => NUM_TYPES.includes(type) && !/^(psh|inst)/.test(o) ? calcWrap(ctl(o, f, val, type, x), o, f) : ctl(o, f, val, type, x);
+const fld = (label, o, f, val, type, x = {}) => `<label class="f${x.wide ? ' wide' : ''}"><span>${label}</span>${NUM_TYPES.includes(type) && !/^(psh|inst)/.test(o) ? calcWrap(ctl(o, f, val, type, { label, ...x }), o, f) : ctl(o, f, val, type, { label, ...x })}</label>`;
 const opts = (arr, filter) => arr.filter(filter || (() => true)).map(m => ({ v: m.id, l: m.name }));
 // Options for a pick that can follow the level above: cabinet follows its room, a room follows the job.
 function setOpts(k, list, level = 'room') {
@@ -140,9 +140,9 @@ document.addEventListener('change', e => {
   if (v === undefined) { if (!el.classList.contains('fxbad')) render(); return; }
   el.classList.remove('fxbad'); el.removeAttribute('title');
   // Price sheets belong to the shop, not the job, so they save on their own and stay out of undo.
-  if (/^pshp?:/.test(ref)) {
+  if (/^(pshp?|instp?):/.test(ref)) {
     const o = priceRef(ref); if (!o) return;
-    if (v === '' && ref.startsWith('pshp:')) delete o[field]; else o[field] = v;
+    if (v === '' && /^(pshp|instp):/.test(ref)) delete o[field]; else o[field] = v;
     savePrices(); renderPricing(); if (ui.quick && typeof renderQuick === 'function') renderQuick(); return;
   }
   let note = '';
