@@ -46,6 +46,8 @@ const PARAM_DEFS = [
   { k: 'toeSkinMaxL', g: 'base', label: 'Toe skin stock length (longer ones split)', type: 'len', cats: ['Base', 'Tall'] },
   { k: 'feetCount', g: 'base', label: 'Feet per cabinet (0 = automatic)', type: 'int', cats: ['Base', 'Tall'] },
   { k: 'stretcherWidth', g: 'box', label: 'Top stretcher width', type: 'len', cats: ['Base'] },
+  // 0.55.44, from Ayden's Mozaik library: a stretcher under the top drawer of a stack, a fixed shelf over a stack with a door above.
+  { k: 'drawerRails', g: 'box', label: 'Drawer stretchers and fixed shelves at drawer stacks', type: 'select', options: [{ v: 'on', l: 'Add automatically (like Mozaik)' }, { v: 'off', l: 'Leave off' }] },
   // 0.55.15 (Ayden 2026-11-09): every cabinet gets top and bottom nailers unless its back or construction says otherwise.
   { k: 'nailers', g: 'box', label: 'Nailers (hanging strips at the back)', type: 'select', options: [{ v: 'both', l: 'Top and bottom' }, { v: 'top', l: 'Top only' }, { v: 'bottom', l: 'Bottom only' }, { v: 'none', l: 'None' }] },
   { k: 'nailerWidth', g: 'box', label: 'Nailer width', type: 'len' },
@@ -76,7 +78,7 @@ const PARAM_GROUPS = [['base', 'Legs and toe kick'], ['box', 'Cabinet constructi
 const SHOP_PARAMS = {
   baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.75, dadoDepth: 0.375, grooveClear: 0.03125,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
-  frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'butt', dovetailPin: 0.5,
+  frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'butt', dovetailPin: 0.5, drawerRails: 'on',
 };
 const R = (type, h, count = 1) => ({ type, h, count });
 const FACE_PRESETS = [
@@ -363,7 +365,7 @@ function seed() {
       { id: 'hw-ball', kind: 'slide', name: 'Full-ext ball bearing side mount', notes: '1/2" clearance per side, for 1/2" drawer sides.', lengths: [12, 14, 16, 18, 20, 22],
         sideThickMM: 12.7, widthDeductMM: 25.4, bottomRecessMM: 6.35, bottomClearMM: 6, topClearMM: 20, rearClearMM: 10,
         cabHoles: [{ ref: 'front', y: 37, z: 22, dia: 5, depth: 12 }, { ref: 'rear32', y: 0, z: 22, dia: 5, depth: 12 }],
-        boxOps: [{ part: 'side', type: 'bore', edge: '', x: 37, y: 22, inset: 0, dia: 3, depth: 8 }], bomExtra: '' },
+        boxOps: [{ part: 'side', type: 'bore', edge: '', x: 37, y: 22, inset: 0, dia: 5, depth: 8 }], bomExtra: '' },
       { id: 'hw-cliptop', ...clone(CLIPTOP_MOZAIK) },
       { id: 'hw-inserta', kind: 'hinge', name: 'Blum Clip Top Inserta 110° (press-in dowels)', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 5,
         cupExtra: [{ dx: -22.5, dy: 9.5, dia: 8, depth: 11.5 }, { dx: 22.5, dy: 9.5, dia: 8, depth: 11.5 }], plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12 }, { dz: 16, y: 37, dia: 5, depth: 12 }], max2: 40, max3: 60 },
@@ -589,6 +591,8 @@ function migrate(s) {
   // 0.55.1: Ayden's shop bores the hinge cup 3 mm from the door edge (cup centre 20.5 mm, like his Mozaik hinge file), not 5 mm.
   // 0.55.3: the Würth Optima slide joins older jobs' hardware (added only; nothing already picked changes).
   if (!s.optima) { if (Array.isArray(s.hardware) && !s.hardware.some(h => h.id === 'hw-optima')) { const i = s.hardware.findIndex(h => h.id === 'hw-563h'); s.hardware.splice(i + 1, 0, { id: 'hw-optima', ...clone(WURTH_OPTIMA) }); } s.optima = 1; }
+  // 0.55.50: ball bearing slide drawer-side holes 3 mm -> 5 mm; the shop CNC has no 3 mm drill (Ayden 2026-11-18).
+  if (!s.ball5) { (s.hardware || []).forEach(h => { if (h.id === 'hw-ball') (h.boxOps || []).forEach(o => { if (o.type === 'bore' && +o.dia === 3) o.dia = 5; }); }); s.ball5 = 1; }
   // 0.55.17: the Confirmat template's bottom joint goes to 3 screws, unless the job already set the bottom on its own.
   if (!s.conf3) { (s.hardware || []).forEach(h => { if (h.id === 'jt-confirmat' && !(h.fastener && h.fastener !== 'holes')) { const o = (h.types || {}).bottom; if (!o || o.same) h.types = { ...(h.types || {}), bottom: { ...JT_BOTTOM3 } }; } }); s.conf3 = 1; }
   // 0.55.21: the Screws template joins older jobs' joint templates, right after the Confirmat one (added only; nothing picked changes).

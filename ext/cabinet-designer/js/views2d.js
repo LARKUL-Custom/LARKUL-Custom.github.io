@@ -722,8 +722,8 @@ function frontsSVG(c, ex, by, opts = {}) {
   // (A plain wood rectangle goes under it, in case the material's texture isn't in this drawing.)
   const solid = (x, y, w, h) => `<rect class="ev-box nss" x="${x}" y="${y}" width="${w}" height="${h}"/><rect ${fillFor(cm, 'ev-box')} x="${x}" y="${y}" width="${w}" height="${h}"/>`;
   if (angledCorner(c)) { const a = cornerLeg(c); s += solid(X(cornerSide(c) === 'L' ? 0 : c.w - a), Y(c.h), a, c.h - tk); }
-  // A blind corner's blind panel, in the box material.
-  if (blindCorner(c) && !faceFrame(c)) { const bw = blindWidth(c); s += solid(X(cornerSide(c) === 'L' ? t : c.w - bw), Y(lay.zIn1 + t), bw - t, lay.zIn1 - lay.zIn0 + 2 * t); }
+  // A blind corner's blind panel on the front, beside the doors.
+  if (blindCorner(c) && !faceFrame(c)) { const q = blindPanelAt(c); s += solid(X(q.x0), Y(q.z1), q.x1 - q.x0, q.z1 - q.z0); }
   // Face frame members, in front of the box and behind the doors.
   s += ffSVG(c, ex, Y, mats);
   fr.forEach(f => {

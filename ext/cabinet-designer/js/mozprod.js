@@ -399,6 +399,9 @@ function mozBuildParts(c) {
         ops.push({ type: 'groove', x1: r3(g[0]), y1: r3(g[1]), x2: r3(g[2]), y2: r3(g[3]), width: I(o.width), depth: through ? r3(T / 2) : depth, tool: 'flat bit', face, why: why + ' groove' });
       }
       else if (o.type === 'path') {
+        // Mozaik tool -1 with no tool group is not machined: door frame profile outlines (drawn around the panel, off the part)
+        // and depth-0 edge lines. Cutting them ran the bit up to 25" off the square hood's door parts or along part edges.
+        if (+o.tool < 0 && !o.tg) return;
         const tool = mozToolFor(o, tools);
         ops.push({ type: 'path', pts: o.pts.map(p => ({ x: I(p.x), y: Y(p.y) })), closed: o.closed, pocket: o.pocket, side: 'center', depth: through ? T : depth, through, tool, dia: r3(typeof peToolDia === 'function' ? peToolDia(tool) : 0.375), face, why: why + (o.pocket ? ' pocket' : ' tool path') + ` (Mozaik tool ${o.tool})`, passes: typeof pePassCount === 'function' ? pePassCount(tool, through ? T : depth) : 1, mozTool: o.tool,
           ...(o.pocket ? { pocketOpts: { style: 'raster', order: 'out-in', dir: '', stepover: 80 } } : {}) });

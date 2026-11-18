@@ -8,17 +8,19 @@
 // Sizes in mm, rates in mm a minute. Pass depth 0 = cut the full depth in one pass.
 const CNC_TOOL_TYPES = [['cutout', 'Cut out / route'], ['pocket', 'Pocket'], ['drill', 'Drill'], ['vbit', 'V-bit'], ['engrave', 'Engrave']];
 const defaultCncTools = () => [
-  { id: '1_2COMP', number: 1, dia: 12.7, type: 'cutout', passDepth: 19, stepover: 70, plunge: 4000, feed: 12000, thruExtra: 0.3 },
-  { id: '3_8COMP', number: 2, dia: 9.525, type: 'pocket', passDepth: 12, stepover: 70, plunge: 4000, feed: 10000, thruExtra: 0.3 },
-  { id: '1_4SPDN', number: 3, dia: 6.11, type: 'pocket', passDepth: 8, stepover: 60, plunge: 3000, feed: 8000, thruExtra: 0.3 },
-  { id: '1_8DOWN', number: 4, dia: 3.175, type: 'engrave', passDepth: 4, stepover: 50, plunge: 2000, feed: 5000, thruExtra: 0.3 },
+  { id: '1_2COMP', number: 1, dia: 12.7, type: 'cutout', passDepth: 19, stepover: 70, plunge: 4000, feed: 12000, thruExtra: 0.03 },
+  { id: '3_8COMP', number: 2, dia: 9.525, type: 'pocket', passDepth: 12, stepover: 70, plunge: 4000, feed: 10000, thruExtra: 0.03 },
+  { id: '1_4SPDN', number: 3, dia: 6.11, type: 'pocket', passDepth: 8, stepover: 60, plunge: 3000, feed: 8000, thruExtra: 0.03 },
+  { id: '1_8DOWN', number: 4, dia: 3.175, type: 'engrave', passDepth: 4, stepover: 50, plunge: 2000, feed: 5000, thruExtra: 0.03 },
   { id: '90SHARP', number: 5, dia: 12.7, type: 'vbit', angle: 90, passDepth: 0, stepover: 0, plunge: 2000, feed: 6000, thruExtra: 0 },
 ];
 const defaultMachine = () => ({ edgeDrill: false, tabs: false, tabLen: 10, tabH: 3, tabsUnder: 0.25, onion: 0, ramp: true, rampLen: 50, climb: true,
   bradTip: 0, forstnerTip: 0, fileName: '{JOB} parts', cixName: '{JOB} {MATERIAL} {SHEET}', pass2: false, pass2Climb: false, returnSkin: false, stayDown: false, remnantMin: 0 });
 let CNC_LIB = { tools: defaultCncTools(), machine: defaultMachine() };
 async function loadCncLib() {
-  try { let v = typeof inHub === 'function' && inHub() ? await Hub.storage.get('cncTools') : JSON.parse(localStorage.getItem(KEY + '.cncTools') || 'null'); if (v && v.value) v = v.value; if (v && Array.isArray(v.tools) && v.tools.length) CNC_LIB = { tools: v.tools, machine: { ...defaultMachine(), ...(v.machine || {}) } }; } catch (_) {}
+  try { let v = typeof inHub === 'function' && inHub() ? await Hub.storage.get('cncTools') : JSON.parse(localStorage.getItem(KEY + '.cncTools') || 'null'); if (v && v.value) v = v.value; if (v && Array.isArray(v.tools) && v.tools.length) CNC_LIB = { tools: v.tools, machine: { ...defaultMachine(), ...(v.machine || {}) }, thru003: v.thru003 }; } catch (_) {}
+  // 0.55.50: through cuts go 0.03 mm past the board (Ayden), not the old 0.3 mm default, which CNC Cutlist refused. Once per saved library.
+  if (!CNC_LIB.thru003) { CNC_LIB.tools.forEach(t => { if (+t.thruExtra === 0.3) t.thruExtra = 0.03; }); CNC_LIB.thru003 = true; saveCncLib(); }
 }
 let cncLibTimer = null;
 function saveCncLib() {
@@ -97,7 +99,7 @@ document.addEventListener('change', ev => {
 });
 function cncToolsAct(a, id) {
   if (a === 'ct-view') { ui.ctView = id; renderCncTools(); return true; }
-  if (a === 'ct-add') { const n = Math.max(0, ...CNC_LIB.tools.map(t => t.number || 0)) + 1; CNC_LIB.tools.push({ id: 'TOOL' + n, number: n, dia: 6, type: 'pocket', passDepth: 6, stepover: 60, plunge: 2000, feed: 6000, thruExtra: 0.3 }); }
+  if (a === 'ct-add') { const n = Math.max(0, ...CNC_LIB.tools.map(t => t.number || 0)) + 1; CNC_LIB.tools.push({ id: 'TOOL' + n, number: n, dia: 6, type: 'pocket', passDepth: 6, stepover: 60, plunge: 2000, feed: 6000, thruExtra: 0.03 }); }
   else if (a === 'ct-del') CNC_LIB.tools.splice(+id, 1);
   else if (a === 'ct-reset') CNC_LIB.tools = defaultCncTools();
   else return false;

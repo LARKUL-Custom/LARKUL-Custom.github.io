@@ -78,8 +78,33 @@ function ctjApply(runs) {
     const as = r.poly.map(fr.along);
     r.x0 = Math.min(...as); r.x1 = Math.max(...as); r.len = r.x1 - r.x0;
   });
+  corners.forEach(ctjDiagFill);
   corners.forEach(k => { const m = k.type === 'm'; [[k.A.r, k.eA, 'A'], [k.B.r, k.eB, 'B']].forEach(([r, e, me]) => { (r.joints = r.joints || {})[e] = m ? 'mitered' : k.type === me ? 'runs through' : 'butts into the other top'; }); });
   return corners;
+}
+// A 45° corner cabinet's angled front sticks out past the inside corner of the two tops (each top is only its leg
+// deep), so the top that runs through (or the first one at a miter) gets the triangle out to the angled front plus
+// the front overhang. Without it the corner cabinet's box top showed in the inside corner.
+function ctjDiagFill(k) {
+  const T = k.type === 'B' ? k.B : k.A, O = T === k.A ? k.B : k.A, eT = T === k.A ? k.eA : k.eB, r = T.r;
+  if (!r.poly || r.poly.length !== 4) return;
+  const c = S.cabinets.find(x => (k.A.r.cabs.includes(x.id) || k.B.r.cabs.includes(x.id)) && x.cat === 'Base' &&
+    typeof angledCorner === 'function' && angledCorner(x) && x.corner.type === 'diag' &&
+    (cabPoly(x) || []).some(q => Math.hypot(q.x - k.P0.x, q.y - k.P0.y) < 3));
+  if (!c) return;
+  const w = wall(c.wall), g = wg(w), f = w.thick / 2 + (c.outset || 0), fc = cornerFaces(c)[0];
+  const pt = (x, z) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, f + z);
+  const ov = r.tpl.frontOverhang || 0, p0 = facePt(fc, 0, ov), p1 = facePt(fc, fc.len, ov);
+  const D0 = pt(p0.x, p0.z), D1 = pt(p1.x, p1.z), du = { x: D1.x - D0.x, y: D1.y - D0.y };
+  // Only when the inside corner of the two tops is behind the angled front (on the wall side of it).
+  const side = q => ctjCross(du, { x: q.x - D0.x, y: q.y - D0.y });
+  if (side(k.P1) * side(k.P0) <= 0 || Math.abs(side(k.P1)) < 1e-6) return;
+  const qT = ctjMeet(T.front, T.u, D0, du), qO = ctjMeet(O.front, O.u, D0, du); if (!qT || !qO) return;
+  const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 0.01;
+  const p = r.poly, ins = eT === 'E' ? [k.P1, qO, qT] : [qT, qO, k.P1];
+  const at = eT === 'E' ? 2 : 3, pts = ins.filter(q => !near(q, p[at]));
+  r.poly = [p[0], p[1], p[2], ...pts, p[3]];
+  r.diagFill = c.id;
 }
 // Cut list words for a top's corners, like " · mitered at the start".
 function ctjNote(r) {

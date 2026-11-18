@@ -147,14 +147,22 @@ function cornerSusan(c, p, t, bt) {
 // Where the legs go on a corner: a leg in from each corner of the footprint.
 const cornerLegSpots = (c, p) => insetPoly(cornerTop(c).pts, cornerTop(c).pts.map((_, i) => i === 0 ? 3 : cornerFaceEdges(c).includes(i) ? (p.toeKickSetback || 3) + 2.5 : 2.5));
 
+// Where a blind corner's blind panel sits on the front: x0..x1 across, z0..z1 up (the fronts' reveals and gap).
+function blindPanelAt(c, p) {
+  p = p || effParams(c); const bw = blindWidth(c), sr = p.frontSideReveal, tk = hasToe(c) ? p.toeKickHeight : 0;
+  const z0 = tk + p.frontBottomReveal, z1 = c.h - p.frontTopReveal;
+  return cornerSide(c) === 'L' ? { x0: sr, x1: bw, z0, z1 } : { x0: c.w - bw, x1: c.w - sr, z0, z1 };
+}
 // Cut list for corners, after the box and its shaped panels are made.
 function cornerParts(c, parts, k) {
   const { p, t, bt, tk, feet, part, cm, sm, warn, addB, ptT } = k, mine = q => q.cabId === c.id;
   if (blindCorner(c)) {
     // The blind panel closes the box front over the part with no doors, set between the sides.
     const bw = blindWidth(c), zIn0 = tk + t, zIn1 = c.h - t;
-    // A face frame's wide stile covers the blind side instead.
-    if (!faceFrame(c)) part('Blind panel', cm, r3(zIn1 - zIn0 + 2 * t), r3(bw - t), { kind: 'divider' });
+    // A face frame's wide stile covers the blind side instead. Otherwise (Mozaik's FinExterior panel, 0.55.45) it goes on
+    // the front like a door, from the cabinet's edge to the doors' gap, as tall as the fronts, in the door material.
+    if (!faceFrame(c)) { const bpz = blindPanelAt(c, p), fr = computeFronts(c, p), dm = fr.length ? (mat(frontStyle(c, fr[0]).ds.mat) || cm) : cm;
+      part('Blind panel', dm, r3(bpz.z1 - bpz.z0), r3(bpz.x1 - bpz.x0), { kind: 'applied' }); }
     return;
   }
   // The end of the return leg is its end panel.

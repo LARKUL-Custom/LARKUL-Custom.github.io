@@ -1876,6 +1876,18 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
   .dockgrip{height:20px}
   .dockgrip::after{top:6px;width:64px;height:6px;margin-left:-32px;opacity:.8}
   .ib-ctr{width:max(calc(32 * var(--u)),30px);height:max(calc(32 * var(--u)),30px)}
+  /* The design is drawn bigger on tablets (see setDesignScale); the section buttons sit closer so they all still fit */
+  .tabs{gap:0;justify-content:flex-start;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{padding:0 calc(7 * var(--u));gap:calc(4 * var(--u));font-size:calc(15.5 * var(--u))}
+  .tabs .tabic,.tabs button[aria-selected="true"] .tabic{width:calc(22 * var(--u));height:calc(22 * var(--u))}
+  /* Item bar: the switches and the Edit/Copy/Delete buttons stack in one column, so the bar is narrower and zooms bigger */
+  .room .dock .itembar:not(.ib-wrap):not(.ib-empty){display:grid;grid-template-columns:repeat(3,auto);justify-content:start;align-items:start}
+  .room .dock .itembar:not(.ib-wrap):not(.ib-empty) > .ib-pos{grid-column:1;grid-row:1 / span 2}
+  .room .dock .itembar:not(.ib-wrap):not(.ib-empty) > .ib-size{grid-column:2;grid-row:1 / span 2}
+  .room .dock .itembar:not(.ib-wrap):not(.ib-empty) > .ib-togs{grid-column:3;grid-row:1}
+  .room .dock .itembar:not(.ib-wrap):not(.ib-empty) > .ib-acts{grid-column:3;grid-row:2}
+  .room .rail #libset{height:auto;min-height:34px;line-height:1.25}
 }
 @media (pointer: coarse){
   .hint .btn,.hint input{pointer-events:auto}
@@ -1888,6 +1900,8 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 /* ---------- Touch bar (phones and tablets): what is picked or being drawn, with Done, Edit and Delete ---------- */
 .hint.touchbar{position:absolute;left:50%!important;right:auto;bottom:calc(10px * var(--fk,1));transform:translateX(-50%);z-index:8;display:flex;flex-wrap:nowrap;align-items:center;justify-content:center;gap:calc(6px * var(--fk,1));width:max-content;max-width:calc(100% - 20px);padding:calc(6px * var(--fk,1)) calc(8px * var(--fk,1));border:2px solid var(--line-strong);border-radius:calc(12px * var(--fk,1));background:var(--panel);box-shadow:0 6px 20px rgba(15,23,42,.18);font-size:calc(14px * var(--fk,1));pointer-events:auto;user-select:none;-webkit-user-select:none}
 .hint.touchbar[hidden]{display:none}
+/* In 3D the drawing's own layers fill the card (inset:0); the touch bar must stay a bar at the bottom, not cover the view */
+.view3d-wrap > .hint.touchbar{top:auto;height:auto}
 .hint.touchbar .tb-msg{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 calc(4px * var(--fk,1));max-width:calc(320px * var(--fk,1))}
 .hint.touchbar .tb-msg b{font-family:inherit}
 .hint.touchbar .btn{min-height:calc(40px * var(--fk,1));min-width:calc(44px * var(--fk,1));padding:0 calc(12px * var(--fk,1));font-size:calc(15px * var(--fk,1));border-radius:calc(9px * var(--fk,1));pointer-events:auto;justify-content:center}
@@ -3225,3 +3239,6 @@ main:has(#tab-carve:not([hidden])){padding:0;background:var(--sunk)}
 .vct-set .f.chk{flex-direction:row;align-items:center;gap:8px}
 .vct-set .f.chk > span{font-weight:500}
 .vct-set label.f.chk{display:flex !important;flex-direction:row;justify-content:flex-start}
+.vcx-mode.cut{background:color-mix(in srgb,#16a34a 14%,var(--panel));color:#16a34a}
+.vcx-copies{display:flex;flex-direction:column;gap:4px}
+.vcx-copies .btn{align-self:flex-start}

@@ -138,6 +138,8 @@ function cncPartFile(scoped) {
     used.add(m.id);
     parts.push({ id: `${ri + 1}-S${si + 1}`, name: s.name, cabinet: 'Shapes', material: m.id, quantity: 1, outline: s.outline, grain: m.grain ? 'x' : 'none', ops: [] });
   }));
+  // Carve tab signs set to "Cut it with the job": their cut-out shapes (or the whole board) as parts (js/vclib.js).
+  if (typeof vcJobParts === 'function' && (!scoped || ui.cutRoom === 'all' || !roomById(ui.cutRoom))) { const v = vcJobParts(); v.parts.forEach(p => { used.add(p.material); parts.push(p); }); skipped.push(...v.skipped); }
   // Color and texture go along so the CNC program shows what each part is cut from.
   const look = id => {
     const sm = S.materials.find(x => x.id === id);

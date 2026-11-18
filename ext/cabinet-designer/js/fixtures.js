@@ -105,7 +105,21 @@ const fixtSel = id => !!(ui.sel && ui.sel.type === 'fixt' && ui.sel.id === id);
 function fixtCounter(f) {
   const mid = f.off + f.w / 2;
   const r = countertopRuns().find(x => x.on && x.wall === f.wall && x.side === f.side && mid >= x.start - x.ovS && mid <= x.end + x.ovE);
-  return r ? { top: r.top + r.thick, depth: r.depth } : { top: 36, depth: 25 };
+  return r ? { top: r.top + r.thick, depth: r.depth, thick: r.thick } : { top: 36, depth: 25, thick: 1.5 };
+}
+// The cabinet an apron (farm house) sink sits on, if any.
+function apronSinkOn(c) {
+  if (c.cat !== 'Base') return null;
+  return fixtList().find(f => fixtSink(f) && (f.apron || fixtDef(f).apron) && f.wall === c.wall && f.side === c.side && f.off + f.w / 2 > c.off && f.off + f.w / 2 < c.off + c.w) || null;
+}
+// A short sink base under an apron sink (Mozaik's Full Height Doors Sink is 24 1/4" tall): the sink fills the space
+// above it, so its countertop stays at the height of the cabinets beside it instead of dropping onto the short cabinet.
+function apronTop(c) {
+  const f = apronSinkOn(c); if (!f) return null;
+  const own = c.elev + c.h;
+  const by = S.cabinets.filter(k => k !== c && k.cat === 'Base' && k.wall === c.wall && k.side === c.side && (Math.abs(k.off + k.w - c.off) < 0.5 || Math.abs(k.off - c.off - c.w) < 0.5))
+    .map(k => k.elev + k.h).filter(t => t > own + 0.01 && t <= own + f.h + 3);
+  return by.length ? Math.max(...by) : null;
 }
 // Footprint in plan. Doors and windows take the wall's thickness; a sink is its bowl.
 function fixtPoly(f, o) {
@@ -335,7 +349,14 @@ function fixt3d(v, selCol) {
       // An imported sink model hangs from the countertop by its rim.
       const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
       if (mm) { mm.position.set(0, c.top - f.h + 0.2, m - f.d / 2); grp.add(mm); v.root.add(tag(grp)); return; }
-      grp.add(box3(f.w, 0.2, f.d, hot || metal, f.w / 2, c.top + 0.1, m));
+      const ap = (f.apron || fixtDef(f).apron) && S.cabinets.find(k => apronSinkOn(k) === f);
+      if (ap) {
+        // Apron sink: the front shows from the cabinet below up to the countertop, out at the countertop's front edge,
+        // and the rim reaches the apron (no strip of countertop in front of the bowl).
+        const z0 = m - f.d / 2, z1 = c.depth + 0.1, low = ap.elev + ap.h, ah = c.top - low;
+        grp.add(box3(f.w, 0.2, z1 - z0, hot || metal, f.w / 2, c.top + 0.1, (z0 + z1) / 2));
+        if (ah > 0.5) grp.add(box3(f.w, ah, 0.6, hot || metal, f.w / 2, low + ah / 2, z1 - 0.3));
+      } else grp.add(box3(f.w, 0.2, f.d, hot || metal, f.w / 2, c.top + 0.1, m));
       const n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5, bw = (f.w - 1.5 - gap * (n - 1)) / n;
       for (let i = 0; i < n; i++) grp.add(box3(bw, 0.1, f.d - 2.25, dark, 0.75 + i * (bw + gap) + bw / 2, c.top + 0.22, m + 0.4, false));
       grp.add(box3(1.2, 13, 1.2, hot || metal, f.w / 2, c.top + 6.5, m - f.d / 2 - 1.25));

@@ -3,7 +3,7 @@
 const ui = {
   tab: 'room', sel: null, placing: null, drawWalls: false, dock: '', dockOpen: false, railShut: false, ptab: { cab: 'size', wall: 'size' }, view: { x: -30, y: -40, w: 240, h: 160 },
   drawing: null, typed: '', mouse: null, ghost: null, ghostLib: null, drag: null, edrag: null, elevWall: 'w2', libSel: 'b-2d1dr',
-  partSel: null, cutPick: null, cutPickOpen: false, exportFmt: 'cnc', exportUnits: 'in', px: 1, src: 'cabinets', viewMode: 'plan', render3d: false, wallOp: 1, cutaway: false, layers: {},
+  partSel: null, cutPick: null, cutPickOpen: false, exportFmt: 'cnc', exportUnits: 'in', px: 1, src: 'cabinets', viewMode: 'plan', render3d: false, hidden3d: false, wallOp: 1, cutaway: false, layers: {},
   hwKind: 'slide', dropCab: null, cutRoom: 'all', setRoom: null, dims: { cab: true, fronts: false },
   open: {}, des3d: false,
 };
@@ -281,7 +281,8 @@ function renderRoom() {
   [[-1, '#elevprev'], [1, '#elevnext']].forEach(([d, sel]) => { const b = $(sel), w = nb(d); b.hidden = !w; if (w) { b.title = (d < 0 ? 'Previous: ' : 'Next: ') + wallName(w); b.querySelector('span').textContent = wallName(w); } });
   renderLayers3d();
   renderViews3d();
-  $('#render3d').innerHTML = `${icon('sun')}Realistic`; $('#render3d').setAttribute('aria-pressed', String(!!ui.render3d));
+  $('#render3d').innerHTML = `${icon('sun')}Realistic`; $('#render3d').setAttribute('aria-pressed', String(!!ui.render3d && !ui.hidden3d));
+  $('#hidden3d').innerHTML = `${icon('cube')}Hidden line`; $('#hidden3d').setAttribute('aria-pressed', String(!!ui.hidden3d));
   $('[data-act=snap3d]').innerHTML = `${icon('camera')}Save image`;
   $('[data-act=co-open]').innerHTML = `${icon('print')}Cutout card`;
   renderFull3d();
@@ -946,7 +947,9 @@ document.addEventListener('click', e => {
     case 'view3d-cancel': ui.viewNaming = false; renderViews3d(); break;
     case 'view3d-ok': saveView3d(); break;
     case 'view3d-del': { const r = curRoom(), vw = (r.views || []).find(x => x.id === ui.view3d); if (!vw) break; ui.view3d = ''; mutate(() => { r.views = r.views.filter(x => x !== vw); }); flash(`View "${vw.name}" deleted. Undo brings it back.`); break; }
-    case 'render3d': ui.render3d = !ui.render3d; try { localStorage.setItem(KEY + '.render', ui.render3d ? '1' : '0'); } catch (_) {} renderRoom(); break;
+    case 'render3d': ui.render3d = ui.hidden3d ? true : !ui.render3d; ui.hidden3d = false; try { localStorage.setItem(KEY + '.render', ui.render3d ? '1' : '0'); localStorage.setItem(KEY + '.hidden', '0'); } catch (_) {} renderRoom(); break;
+    // Hidden line and Realistic are two looks of the same view: turning one on turns the other off.
+    case 'hidden3d': ui.hidden3d = !ui.hidden3d; if (ui.hidden3d) ui.render3d = false; try { localStorage.setItem(KEY + '.hidden', ui.hidden3d ? '1' : '0'); localStorage.setItem(KEY + '.render', ui.render3d ? '1' : '0'); } catch (_) {} renderRoom(); break;
     case 'snap3d': saveRoomImage(); break;
     case 'full3d': toggleFull3d(); break;
     case 'layers-all': ui.layers = {}; ui.wallOp = 1; saveLayers3d(); break;
@@ -1542,8 +1545,8 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if
   try { ui.dockOpen = localStorage.getItem(KEY + '.dock') === '1'; } catch (_) {}
   // The Products tree opens with every group closed; folders inside keep how they were left.
   ui.libFold = Object.fromEntries([...LIB_GROUPS, FIXT_GROUP].map(([g]) => [g, true]).concat(FIXT_FOLDERS.map(f => ['fixt/' + f, true])));
-  try { ui.railShut = localStorage.getItem(KEY + '.rail') === '1'; ui.libFold = JSON.parse(localStorage.getItem(KEY + '.fold') || '{}'); [...LIB_GROUPS, FIXT_GROUP].forEach(([g]) => ui.libFold[g] = true); FIXT_FOLDERS.forEach(f => { if (!(('fixt/' + f) in ui.libFold)) ui.libFold['fixt/' + f] = true; }); ui.propsShut = localStorage.getItem(KEY + '.side') !== '0'; const ly = JSON.parse(localStorage.getItem(KEY + '.layers') || 'null'); if (ly) { ui.layers = ly.layers || {}; ui.wallOp = ly.wallOp ?? 1; ui.cutaway = !!ly.cutaway; } } catch (_) {}
-  try { ui.render3d = localStorage.getItem(KEY + '.render') === '1'; } catch (_) {}
+  try { const rs = localStorage.getItem(KEY + '.rail'); ui.railShut = rs === null ? matchMedia('(pointer: coarse) and (max-width: 960px)').matches : rs === '1'; ui.libFold = JSON.parse(localStorage.getItem(KEY + '.fold') || '{}'); [...LIB_GROUPS, FIXT_GROUP].forEach(([g]) => ui.libFold[g] = true); FIXT_FOLDERS.forEach(f => { if (!(('fixt/' + f) in ui.libFold)) ui.libFold['fixt/' + f] = true; }); ui.propsShut = localStorage.getItem(KEY + '.side') !== '0'; const ly = JSON.parse(localStorage.getItem(KEY + '.layers') || 'null'); if (ly) { ui.layers = ly.layers || {}; ui.wallOp = ly.wallOp ?? 1; ui.cutaway = !!ly.cutaway; } } catch (_) {}
+  try { ui.render3d = localStorage.getItem(KEY + '.render') === '1'; ui.hidden3d = localStorage.getItem(KEY + '.hidden') === '1'; } catch (_) {}
   initPlan(); initElev();
   $('#quickedit').addEventListener('pointerdown', e => { if (e.target.id === 'quickedit') closeQuick(); });
   $('#roomsel').addEventListener('change', e => {

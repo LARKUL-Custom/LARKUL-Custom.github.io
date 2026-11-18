@@ -147,9 +147,13 @@ function screenH() {
   if (!matchMedia('(pointer: coarse)').matches) return innerHeight;
   return (tallAt[innerWidth] = Math.max(innerHeight, tallAt[innerWidth] || 0));
 }
+// Tablets: the same design drawn bigger (as if the screen were 1500 x 1000), so buttons, fields and
+// text are big enough for a finger. Only on touch screens; a computer with a mouse is unchanged.
+const touchScreen = () => matchMedia('(pointer: coarse)').matches;
 function setDesignScale() {
   const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
-  const u = Math.max(0.62, Math.min(innerWidth / 1920, screenH() / 1080)) / z;
+  const [dw, dh] = touchScreen() ? [1500, 1000] : [1920, 1080];
+  const u = Math.max(0.62, Math.min(innerWidth / dw, screenH() / dh)) / z;
   document.documentElement.style.setProperty('--u', u.toFixed(4) + 'px');
   document.body && document.body.classList.toggle('desk', deskUI());
 }
@@ -173,10 +177,13 @@ function applyDockH() {
   // A minimized or hidden window has no room to measure: keep the height you chose.
   if (rh > 100 && deskUI()) {
     const u = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 1;
-    const want = h > 0 ? h : 184 * u;
+    const want = h > 0 ? h : (touchScreen() ? 230 : 184) * u;
     if (want > max) { room.style.setProperty('--dockh', Math.round(Math.max(dockMinH(), max)) + 'px'); return; }
   }
-  if (h > 0) room.style.setProperty('--dockh', h + 'px'); else room.style.removeProperty('--dockh');
+  if (h > 0) room.style.setProperty('--dockh', h + 'px');
+  // Touch screens start with a taller panel, so the fields in it come out big enough to tap.
+  else if (touchScreen() && deskUI()) room.style.setProperty('--dockh', Math.round(230 * (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 1)) + 'px');
+  else room.style.removeProperty('--dockh');
 }
 // The panel's contents zoom to fill it: a taller panel makes everything bigger, a shorter or
 // narrower one makes it smaller, so it never needs a scroll bar. The item bar also tries wrapping

@@ -304,7 +304,7 @@ function renderVcShapes() {
     <div class="card plx-pic">${cardHead(esc(e.name), `<button class="btn sm" data-act="vc-lib-copy">${icon('copy')}Copy</button><button class="btn sm" data-act="vc-lib-exp">${icon('download')}Export</button><button class="btn sm danger" data-act="vc-lib-del">${icon('trash')}Delete</button>`)}
       <div class="plx-pv vcs-pv"><canvas id="vcs-canvas" aria-label="Carved preview"></canvas></div>
       <div class="edx-stats plx-stats mlx-stats">${libTile('rose', 'ruler', fmtLen(+e.h || 0, 1), 'High to start')}${libTile('violet', 'edit', vcModeName(e.mode), 'Carve it')}${libTile('teal', 'folder', e.group || 'My designs', 'Group')}${libTile('amber', 'list', used, 'On signs in this job')}</div>
-      ${ui.tab === 'vcshapes' && vcBoard() ? `<div class="row-actions vcs-acts"><button class="btn primary" data-act="vc-lib-place">${icon('plus')}Add to ${esc(vcBoard().name)}</button></div>` : ''}</div>
+      <div class="row-actions vcs-acts">${vcBoard() ? `<button class="btn primary" data-act="vc-lib-place">${icon('plus')}Add to ${esc(vcBoard().name)}</button>` : ''}<button class="btn" data-act="vc-lib-job" title="Makes a Carve sign with this shape set to Cut out, sent to CNC Cutlist with the job's parts">${icon('cube')}Cut it out in this job</button></div></div>
     <div class="card plx-props mlx-props">${props}</div></div></div>`;
   requestAnimationFrame(() => vcLibPreview(e));
 }
@@ -320,7 +320,7 @@ function vcLibPreview(e) {
   if (it.mode === 'raise') b.items.unshift({ id: 'vcs-bg', kind: 'shape', shape: 'rect', w: L - 0.5, h: W - 0.5, x: L / 2, y: W / 2, mode: 'carve' });
   try { const r = vcBoardOps(b); vcDrawPreview(cv, b, r, false); } catch (err) { cv.width = 10; cv.height = 10; }
 }
-const VC_MODES = [['carve', 'Carve it in'], ['raise', 'Leave it raised'], ['line', 'Outline only (on the line)']];
+const VC_MODES = [['carve', 'Carve it in'], ['raise', 'Leave it raised'], ['line', 'Outline only (on the line)'], ['cut', 'Cut it out (through)']];
 const vcModeName = m => (VC_MODES.find(x => x[0] === (m || 'carve')) || VC_MODES[0])[1];
 
 async function vcLibImport(files) {
@@ -345,6 +345,16 @@ function vcLibAct(a, id) {
     case 'vc-lib-del': if (e && confirmDel(e.name)) { VC_LIB.items = VC_LIB.items.filter(x => x !== e); if (e.builtin && !VC_LIB.gone.includes(e.id)) VC_LIB.gone.push(e.id); ui.vcLibSel = ''; vcLibSave(); renderVcShapes(); } return true;
     case 'vc-lib-reset': VC_LIB.gone = []; VC_LIB = vcLibFix(VC_LIB); vcLibSave(); renderVcShapes(); flash('The built-in shapes are back'); return true;
     case 'vc-lib-exp': if (e) libDownload(`${String(e.name || 'shape').replace(/[^\w -]/g, '')}.json`, { format: 'cabinet-designer-library', kind: 'vcShapes', items: [e] }); return true;
+    case 'vc-lib-job': if (e) {
+      // A sign that only cuts this shape out, nested with the job's parts in CNC Cutlist.
+      const m = vcSheetMats()[0], nb = vcNewBoard(), it = vcFromLib(e, { L: 1000, W: 1000 }), cutT = cncTool(nb.cutTool || vcCutTool()), pad = ((cutT && cutT.dia) || 12.7) / 25.4 + 0.5;
+      if (it.kind === 'shape' && +e.frame > 0) { it.w = +e.w || 10; it.h = +e.h || 6; }
+      it.mode = 'cut'; const s0 = vcItemSize(it);
+      Object.assign(nb, { name: e.name, items: [it], L: r3(s0.w + 2 * pad), W: r3(s0.h + 2 * pad), inJob: true, qty: 1, ...(m ? { mat: m.id, T: r3(+m.thick || 0.75) } : {}) });
+      it.x = r3(nb.L / 2); it.y = r3(nb.W / 2);
+      mutate(() => { (S.job.carves = S.job.carves || []).push(nb); ui.vcBoard = nb.id; ui.vcSel = it.id; }); goTab('carve');
+      flash(`${e.name} will be cut out with the job. Pick its material and size on the right.`);
+    } return true;
     case 'vc-lib-place': if (e && vcBoard()) { vcAddItem(vcFromLib(e, vcSize(vcBoard()))); goTab('carve'); } return true;
     case 'vc-lib-add': { const x = vcLibItem(id), b = vcBoard(); if (x && b) { ui.vcPick = false; vcAddItem(vcFromLib(x, vcSize(b))); } return true; }
   }
@@ -455,3 +465,89 @@ document.addEventListener('change', ev => {
   renderCarve();
 });
 document.addEventListener('input', ev => { const t = ev.target; if (t.classList && t.classList.contains('vct-in') && t.type === 'range') { const b = t.closest('label') && t.closest('label').querySelector('.vct-v'); if (b) b.textContent = t.value; } });
+
+/* ----- Signs cut with the job: parts for the CNC Cutlist file ----- */
+// A sign set to "Cut it with the job" goes into the CNC parts file (mm, origin bottom left, y up): each Cut out shape is
+// its own part (its holes cut through inside it), or the whole board when it has none. Outline designs on a part go
+// along as engraving at their depth with the V-bit. V-carving (its depth changes along the path) and clearing aren't
+// in that file, so they are listed as skipped and run from the sign's own G-code.
+// The cutout bit can't reach into a notch narrower than itself (the top of a heart), and CNC Cutlist's mitered
+// offset would shoot a path far out of such a notch. So the outline sent is the shape the bit really cuts: grown by
+// the bit radius and shrunk back, which rounds every inside corner to the bit and fills notches it can't enter.
+function vcBitClose(o, r) {
+  if (typeof ClipperLib === 'undefined' || !(r > 0)) return o;
+  const c = vcOffset(vcOffset([o], r, true), -r, true).filter(l => vcArea(l) > 0).sort((a, b) => vcArea(b) - vcArea(a))[0];
+  if (!c || c.length < 3) return o;
+  // Clipper leaves crumbs (points a few ten-thousandths apart) that would turn the offset jagged: keep points at
+  // least 0.004" apart and drop ones that sit on the line between their neighbours.
+  const far = []; c.forEach(q => { const z = far[far.length - 1]; if (!z || Math.hypot(q.x - z.x, q.y - z.y) >= 0.004) far.push(q); });
+  while (far.length > 3 && Math.hypot(far[0].x - far[far.length - 1].x, far[0].y - far[far.length - 1].y) < 0.004) far.pop();
+  const dp = (A, a, b, keep) => { let m = 0, k = -1; const L = Math.hypot(A[b].x - A[a].x, A[b].y - A[a].y) || 1e-12;
+    for (let i = a + 1; i < b; i++) { const d = Math.abs((A[b].x - A[a].x) * (A[i].y - A[a].y) - (A[b].y - A[a].y) * (A[i].x - A[a].x)) / L; if (d > m) { m = d; k = i; } }
+    if (m > 0.0003) { dp(A, a, k, keep); keep[k] = 1; dp(A, k, b, keep); } };
+  let fi = 0; far.forEach((q, i) => { if (Math.hypot(q.x - far[0].x, q.y - far[0].y) > Math.hypot(far[fi].x - far[0].x, far[fi].y - far[0].y)) fi = i; });
+  const A = far.concat([far[0]]), keep = { 0: 1, [fi]: 1 }; dp(A, 0, fi, keep); dp(A, fi, far.length, keep);
+  const out = far.filter((q, i) => keep[i]);
+  return out.length >= 3 ? out : o;
+}
+// CNC Cutlist offsets a part's outline by the bit radius with plain mitered corners, so a sharp point (a star tip, the
+// bottom of a heart) would send its cutout path far past the point, off the sheet or into the part beside it. Each
+// sharp outside corner becomes a tiny round (0.005", far below what the wood shows) so the path wraps round the point
+// the way the bit really does. Rectangles and gentle corners are left alone.
+function vcSoftTips(o, r = 0.005) {
+  const n = o.length, out = []; if (n < 3) return o;
+  const ccw = vcArea(o) > 0 ? 1 : -1;
+  for (let i = 0; i < n; i++) {
+    const a = o[(i - 1 + n) % n], p = o[i], c = o[(i + 1) % n];
+    const ux = a.x - p.x, uy = a.y - p.y, vx = c.x - p.x, vy = c.y - p.y, lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+    const cross = (p.x - a.x) * (c.y - p.y) - (p.y - a.y) * (c.x - p.x);
+    const th = lu && lv ? Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (lu * lv)))) : Math.PI;
+    if (cross * ccw <= 0 || th > Math.PI * 0.75) { out.push(p); continue; }
+    const t = Math.min(r / Math.tan(th / 2), lu / 3, lv / 3), rr = t * Math.tan(th / 2);
+    const s = { x: p.x + ux / lu * t, y: p.y + uy / lu * t }, e = { x: p.x + vx / lv * t, y: p.y + vy / lv * t };
+    const bx = ux / lu + vx / lv, by = uy / lu + vy / lv, bl = Math.hypot(bx, by), d = rr / Math.sin(th / 2);
+    const cx = p.x + bx / bl * d, cy = p.y + by / bl * d, a0 = Math.atan2(s.y - cy, s.x - cx);
+    let sw = Math.atan2(e.y - cy, e.x - cx) - a0; while (sw > Math.PI) sw -= 2 * Math.PI; while (sw < -Math.PI) sw += 2 * Math.PI;
+    const k = Math.max(2, Math.ceil(Math.abs(sw) / (Math.PI / 12)));
+    for (let j = 0; j <= k; j++) { const g = a0 + sw * j / k; out.push({ x: cx + rr * Math.cos(g), y: cy + rr * Math.sin(g) }); }
+  }
+  return out;
+}
+function vcJobParts() {
+  const parts = [], skipped = [], mm = v => Math.round(v * 25.4 * 1000) / 1000;
+  vcBoards().forEach((b, bi) => {
+    if (!b.inJob || b.part) return;
+    const name = b.name || 'Sign', m = (S.materials || []).find(x => x.id === b.mat);
+    if (!m || (m.kind || 'sheet') !== 'sheet') { skipped.push(`Carve · ${name}: pick a sheet material to cut it with the job`); return; }
+    const T = +m.thick || +b.T || 0.75, qty = Math.max(1, Math.round(+b.qty || 1)), vt = cncTool(b.vbit) || vcVbits()[0];
+    const live = (b.items || []).filter(it => !it.off), lines = vcBoardLines(b), shapes = vcCutShapes(b);
+    // V-carving and clearing (their depth changes along the path) ride along on the part as `carve`, in passes, ready to
+    // cut: [{ tool, label, paths: [[[x, y, depth], ...]] }], mm in the part's frame, depth down from the top. CNC Cutlist
+    // reads only the fields it knows, so older versions still open the file and leave it off.
+    const plan = live.some(it => !it.mode || it.mode === 'carve' || it.mode === 'raise') ? vcBoardPlan(b) : null, ct = plan && b.clear && cncTool(b.clear);
+    const carveOps = !plan ? [] : [
+      ...(plan.clear.length && ct ? [{ tool: ct, label: 'Clear the flat areas', paths: vcLevels(ct, plan.flatDepth).flatMap(d => plan.clear.map(l => l.map(p => ({ x: p.x, y: p.y, z: -d })))) }] : []),
+      ...(plan.v.length && vt ? [{ tool: vt, label: 'V-carve', paths: (() => { const lv = vcLevels(vt, plan.deep), out = []; lv.forEach((d, i) => { const prev = i ? lv[i - 1] : 0; plan.v.forEach(l => { if (i && !l.some(p => -p.z > prev + 1e-4)) return; out.push(l.map(p => ({ x: p.x, y: p.y, z: Math.max(p.z, -d) }))); }); }); return out; })() }] : []),
+    ];
+    if (plan && (plan.v.length || plan.clear.length)) skipped.push(`Carve · ${name}: the V-carving goes in the parts file for CNC Cutlist to cut; if your CNC Cutlist doesn't cut it yet, run it from the sign's G-code (Carve › Save G-code)`);
+    const outers = shapes.length ? shapes.filter(l => vcArea(l) > 0) : [[{ x: 0, y: 0 }, { x: +b.L || 24, y: 0 }, { x: +b.L || 24, y: +b.W || 12 }, { x: 0, y: +b.W || 12 }]];
+    const holes = shapes.filter(l => vcArea(l) < 0);
+    const bitR = Math.max(((cncTool(b.cutTool || vcCutTool()) || {}).dia || 0) / 25.4, 0.375) / 2 * 1.02;
+    outers.forEach((o, oi) => {
+      const bx = vcBox([o]), P = q => [mm(q.x - bx.x0), mm(q.y - bx.y0)], inO = q => vcInside(q, o), ops = [];
+      holes.filter(h => inO(h[0])).forEach(h => {
+        // The biggest straight bit that fits the hole cuts it through, its center a bit radius inside the hole's edge.
+        const hb = vcBox([h]), bit = cncBits().find(([, d]) => d / 25.4 * 1.6 < Math.min(hb.w, hb.h)), lib = bit && cncTool(bit[0]);
+        if (!bit) { skipped.push(`Carve · ${name}: a hole is smaller than the smallest bit, left off`); return; }
+        const ring = typeof ClipperLib === 'undefined' ? h : (vcOffset([h.slice().reverse()], -bit[1] / 25.4 / 2, true)[0] || []);
+        if (ring.length < 3) return;
+        cncRoutes(ops, { type: 'route', face: 'top', tool: bit[0], path: [...ring, ring[0]].map(P) }, mm(T) + (lib && +lib.thruExtra || 0.03));
+      });
+      lines.filter(l => l.every(q => !shapes.length || inO(q))).forEach(l => { if (vt) cncRoutes(ops, { type: 'route', face: 'top', tool: vt.id, path: l.map(P), engrave: true }, mm(-l[0].z)); });
+      const label = shapes.length ? `${name}${outers.length > 1 ? ' ' + (oi + 1) : ''}` : name;
+      const carve = carveOps.map(c => ({ tool: c.tool.id, label: c.label, paths: c.paths.filter(l => !shapes.length || inO(l[0])).map(l => l.map(q => [...P(q), mm(-q.z)])) })).filter(c => c.paths.length);
+      parts.push({ id: `C${bi + 1}-${oi + 1}`, name: label, cabinet: 'Carve', material: m.id, quantity: qty, outline: vcSoftTips(vcBitClose(o, bitR)).map(P).filter((q, i, A) => { const z = A[i ? i - 1 : A.length - 1]; return q[0] !== z[0] || q[1] !== z[1]; }), grain: m.grain ? 'x' : 'none', ops, ...(carve.length ? { carve } : {}) });
+    });
+  });
+  return { parts, skipped };
+}

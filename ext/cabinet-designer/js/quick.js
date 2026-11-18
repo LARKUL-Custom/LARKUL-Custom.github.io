@@ -178,11 +178,13 @@ function qBuildExtras(c, parts, warn, part, x) {
   if (c.splitEnds > 0) ['Left side', 'Right side'].forEach(n => { const q = mine(n); if (q) qSplitPart(parts, q, c.splitEnds, warn); });
   if (c.splitBack > 0) { const q = mine('Back'); if (q) qSplitPart(parts, q, c.splitBack, warn); }
   const rows = c.rows || [], fr = x.fronts || computeFronts(c);
+  // Fixed shelves under rows set to have one, and over drawer stacks with a door above (caseRails in build.js).
+  const rails = x.rails || caseRails(c, null, fr, x.t);
   rows.forEach((r, i) => {
-    if (!(r.fixShelf && i < rows.length - 1)) return;
-    const q = part(`Fixed shelf ${i + 1}`, x.sm || x.cm, x.inW, Math.max(1, x.inD - 0.0625), { kind: 'shelf' }), f = fr.find(z => z.row === i);
+    const fs = rails.shelves.find(q => q.row === i); if (!fs) return;
+    const q = part(`Fixed shelf ${i + 1}`, x.sm || x.cm, x.shW || x.inW, Math.max(1, x.inD - 0.0625), { kind: 'shelf' }), f = fr.find(z => z.row === i);
     // Where it sits, so the joint templates can fasten it into the sides.
-    if (q && f && x.zIn0 !== undefined) q.jx = r3(Math.min(x.zIn1 - x.t, Math.max(x.zIn0 + x.t, f.z0 - x.t / 2)));
+    if (q && f && x.zIn0 !== undefined) q.jx = fs.z;
   });
   (c.inserts || []).forEach(it => {
     const row = it.row !== undefined && it.row !== '' ? +it.row : rows.length - 1, f = fr.find(z => z.row === row) || fr[fr.length - 1];

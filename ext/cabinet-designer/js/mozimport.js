@@ -51,6 +51,17 @@ const MOZ_LIB_CATS = {"Base": ["(J) Left Base End", "(J) Right Base End", "(R)Ar
 
 /* ---------- Reading Mozaik room files ---------- */
 // A room file is a version line, then <Room Name=...> with <Walls><Wall PosX PosY Ang Len Thickness Height/>
+// Which end of a 45° or 90° corner sits in the room's corner: the end whose back is nearest another wall
+// (L = its left end as you face it). Null when neither end is near one.
+function mozCornerSide(c, walls = S.walls) {
+  const w = walls.find(o => o.id === c.wall); if (!w) return null;
+  const g = wg(w), f = w.thick / 2;
+  const gap = a => { const P = wallPt(w, g, c.side, a, f); return Math.min(Infinity, ...walls.filter(o => o.id !== w.id).map(o => segDist(P, o).d - o.thick / 2)); };
+  const lo = gap(c.off), hi = gap(c.off + c.w), near = Math.min(lo, hi);
+  if (near > 3 || Math.abs(lo - hi) < 1) return null;
+  // On the front side of a wall the cabinet's left is its low end along the wall; on the back side it is the high end.
+  return (lo < hi) === (c.side === 1) ? 'L' : 'R';
+}
 // and <Products><Product ProdName Width Height Depth X Elev Outset Wall="2_1"/>. Everything is in millimetres,
 // Y points up, X on a product runs along its wall from the wall's start, and cabinets sit to the right of the
 // wall's direction.
@@ -126,6 +137,7 @@ function mozCat(p) {
 }
 // Closest library product: same type, then most words and door/drawer counts in common, then nearest width.
 function mozLib(p, cat) {
+  const same = mozSameName(p); if (same && (same.cat === cat || /shelf/i.test(p.name))) return same;
   // Corner products only match Mozaik corners (not BF/WF corner fillers).
   const cornerOk = /blind|susan|corner/i.test(p.name || '') && !/^(bf|wf)\d*\b/i.test(p.name || '');
   const libs = S.library.filter(l => l.cat === cat && (cornerOk || !l.corner)); if (!libs.length) return S.library[0];
@@ -195,8 +207,11 @@ function mozInsert(name) {
   if (/roll ?out|rollout|pull ?out shel/.test(n)) return def('rollout');
   return { ...def('other'), name };
 }
-// Not cabinets: floating shelves, crown and ceiling trim. They're listed after the import instead.
-const mozSkip = p => /shelf|trim|molding|crown/i.test(p.name) && !p.fronts.length;
+// The library product with the same name as the Mozaik one (e.g. the Sheppard Bracket shelf), if there is one.
+const mozSameName = p => S.library.find(l => l.cat !== 'Shape' && (l.name || '').trim().toLowerCase() === (p.name || '').trim().toLowerCase());
+// Not cabinets: floating shelves, crown and ceiling trim. They're listed after the import instead,
+// unless the library has a product of that name (floating shelves from Mozaik's library come in as that product).
+const mozSkip = p => /shelf|trim|molding|crown/i.test(p.name) && !p.fronts.length && !mozSameName(p);
 // Mozaik's panel backs (the finished back of an island) become an upright panel in the room.
 const isPanelBack = p => /panel back|back panel/i.test(p.name);
 // The Cabinet Designer appliance or opening for a Mozaik one. Outlets, faucets and other pictures (Type 20) are left out
@@ -255,6 +270,8 @@ function mozRooms(data) {
       if (p.elev > 0.5 && c.cat !== 'Wall' && c.construction && c.construction.toeKick) c.construction.toeKick = false;
       // Corner products keep their own fronts; Mozaik's name says which end goes in the corner.
       if (c.corner) { if (/right|\(r\)/i.test(p.name)) c.corner.side = 'R'; else if (/left|\(l\)/i.test(p.name)) c.corner.side = 'L'; }
+      // A 45° or 90° corner ("45 Susan Cabinet") has no side in its name: its full-depth end goes against the other wall.
+      if (angledCorner(c)) { const s = mozCornerSide(c, rm.walls); if (s) c.corner.side = s; }
       const rows = angledCorner(c) ? null : mozRows(p, sz); if (rows) c.rows = rows;
       if (p.outset) c.outset = p.outset;
       if (p.num) c.num = p.num;

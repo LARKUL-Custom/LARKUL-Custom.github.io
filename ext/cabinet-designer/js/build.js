@@ -109,7 +109,8 @@ function computeFronts(c, p) {
     for (let i = 0; i < n; i++) {
       const x0 = xl + i * (fw + gap);
       let hinge = null;
-      if (r.type === 'door') hinge = n === 1 ? (r.hinge === 'L' || r.hinge === 'R' ? r.hinge : p.hingeSide) : n === 2 ? (i === 0 ? 'L' : 'R') : (i % 2 ? 'R' : 'L');
+      // A blind corner's single door hinges at the blind edge unless the row says otherwise (Mozaik, Ayden 2026-11-13).
+      if (r.type === 'door') hinge = n === 1 ? (r.hinge === 'L' || r.hinge === 'R' ? r.hinge : bw && !faceFrame(c) ? cornerSide(c) : p.hingeSide) : n === 2 ? (i === 0 ? 'L' : 'R') : (i % 2 ? 'R' : 'L');
       out.push({ type: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', ...(r.pull ? { pull: true } : {}) });
     }
     z = z0 - gap;
@@ -382,17 +383,85 @@ function legLayout(c, p, leg, D) {
 const cabLeg = () => { const l = hw(roomSet('leg')) || S.hardware.find(h => h.feet); return l && l.kind === 'leg' ? l : null; };
 // The drawer box behind a drawer front, as it is cut: x0/x1 across the cabinet outside, z up from the cabinet bottom,
 // d long (the runner length), st side and bt bottom thickness, rec the bottom's recess. Null when no runner fits.
+// Case parts between front rows, as Ayden's Mozaik library (2026 Larkul) builds them (0.55.44):
+// - a drawer stretcher under the top drawer of a drawer stack when more fronts sit below it, centred on the gap between
+//   the two fronts (Mozaik "Drawer Stretcher Alignment"), the top stretcher's width deep, at the front;
+// - a fixed shelf over a drawer stack when a door or opening sits above it (Mozaik's F.Shelf), and under any row set to
+//   "Fixed shelf under it". z is each part's centre height. The automatic ones can be turned off (drawerRails).
+// Face frame cabinets (the frame's rails do this), angled and blind corners (the blind panel is in the way) and shaped
+// cabinets get only the fixed shelves asked for by hand.
+function caseRails(c, p, fronts, t) {
+  p = p || effParams(c); fronts = fronts || computeFronts(c, p);
+  if (t === undefined) t = (mat(cabMatT(cabSet(c, 'cabMatT')).carcass) || S.materials[0]).thick;
+  const out = { stretchers: [], shelves: [] }, rows = c.rows || [];
+  if (c.moz && typeof isMoz === 'function' && isMoz(c)) return out;
+  const tk = hasToe(c) ? p.toeKickHeight : 0, zIn0 = tk + t, zIn1 = c.h - t, first = i => fronts.find(f => f.row === i && !f.face);
+  const auto = p.drawerRails !== 'off' && !faceFrame(c) && !angledCorner(c) && !hasCabShape(c) && !(cabTopShape(c) || {}).edges;
+  rows.forEach((r, i) => {
+    const f = first(i), nx = rows[i + 1]; if (!f) return;
+    if (nx && (r.fixShelf || (auto && r.type !== 'drawer' && nx.type === 'drawer'))) out.shelves.push({ row: i, auto: !r.fixShelf, z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, f.z0 - t / 2))) });
+    if (auto && r.type === 'drawer' && !(i > 0 && rows[i - 1].type === 'drawer') && nx) {
+      const b = first(i + 1); if (b) out.stretchers.push({ row: i, z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, (f.z0 + b.z1) / 2))) });
+    }
+  });
+  return out;
+}
+// A blind corner (no face frame), as Ayden's Mozaik library builds it (0.55.47, Ayden 2026-11-13): an inside panel stands
+// at the blind edge, just behind the edge of the doors like a cabinet side, so a door hinged on that edge gets its plates
+// on it (hinged the other way they go on the cabinet side). The blind panel goes on the front, beside the doors.
+// x0/x1 are the inside panel's faces, o0/o1 the opening beside it.
+function blindPart(c, p, t) {
+  if (!blindCorner(c) || faceFrame(c)) return null;
+  p = p || effParams(c); const bw = blindWidth(c), g = p.frontGap, sr = p.frontSideReveal, W = c.w;
+  if (cornerSide(c) === 'L') { const x0 = r3(bw + g - sr); return { side: 'L', x0, x1: r3(x0 + t), o0: r3(x0 + t), o1: r3(W - t) }; }
+  const x1 = r3(W - bw - g + sr); return { side: 'R', x0: r3(x1 - t), x1, o0: t, o1: r3(x1 - t) };
+}
+// The inside panel's pieces: one between each pair of the bottom, drawer stretchers and the top (x = its left face).
+function blindPieces(c, p, t, rails) {
+  const bp = blindPart(c, p, t); if (!bp) return [];
+  const tk = hasToe(c) ? p.toeKickHeight : 0, out = [];
+  const cuts = [tk + t, ...rails.stretchers.flatMap(q => [r3(q.z - t / 2), r3(q.z + t / 2)]), c.h - t].sort((a, b) => a - b);
+  for (let i = 0; i + 1 < cuts.length; i += 2) if (cuts[i + 1] - cuts[i] > 0.5) out.push({ x: bp.x0, z0: r3(cuts[i]), z1: r3(cuts[i + 1]) });
+  return out;
+}
+// The height a drawer's box can use: its front, inside the cabinet, between the stretchers and fixed shelves around it.
+function drawerSpan(c, p, f, z0, z1, t, rails) {
+  [...rails.stretchers, ...rails.shelves].forEach(q => {
+    if (q.z < f.z0 - t || q.z > f.z1 + t) return;
+    if (q.z < (f.z0 + f.z1) / 2) z0 = Math.max(z0, q.z + t / 2); else z1 = Math.min(z1, q.z - t / 2);
+  });
+  return [z0, z1];
+}
+// Partitions between side-by-side drawers (Mozaik's Partition): one between each pair, the carcass thickness, as deep as the
+// inside, from the rail or bottom under the row to the top or rail over it. The drawer boxes already fit openings this
+// thick apart (drawerBoxAt). Only where caseRails runs, and only rows with something solid above and below.
+function drawerPartitions(c, p, fronts, t, rails) {
+  const out = []; if (p.drawerRails === 'off' || faceFrame(c) || angledCorner(c) || hasCabShape(c) || (cabTopShape(c) || {}).edges) return out;
+  // A blind corner's drawers share the opening beside its inside panel (blindPart).
+  const bp = blindPart(c, p, t), tk = hasToe(c) ? p.toeKickHeight : 0, zIn0 = tk + t, zIn1 = c.h - t, x0 = bp ? bp.o0 : t, inW = bp ? bp.o1 - bp.o0 : c.w - 2 * t;
+  (c.rows || []).forEach((r, i) => {
+    const fs = fronts.filter(f => f.row === i && f.type === 'drawer' && !f.face); if (r.type !== 'drawer' || fs.length < 2) return;
+    const f = fs[0], [z0, z1] = drawerSpan(c, p, f, Math.max(f.z0, zIn0), Math.min(f.z1, zIn1), t, rails);
+    const lo = z0 > f.z0 + 1e-6 || f.z0 - zIn0 < 1, hi = z1 < f.z1 - 1e-6 || zIn1 - f.z1 < 1;
+    if (!lo || !hi) return;
+    const n = fs.length, openW = (inW - (n - 1) * t) / n;
+    for (let k = 1; k < n; k++) out.push({ row: i, k, x: r3(x0 + k * openW + (k - 1) * t), z0: r3(lo && z0 > f.z0 + 1e-6 ? z0 : zIn0), z1: r3(hi && z1 < f.z1 - 1e-6 ? z1 : zIn1) });
+  });
+  return out;
+}
 function drawerBoxAt(c, p, f) {
   const sl = hwPick(cabSet(c, 'slide'), 'slide'); if (!sl || f.face) return null;
   const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = drawerMatT(cabSet(c, 'drawerMatT'));
   const cm = mat(mt.carcass) || S.materials[0], t = cm.thick, bm = mat(mt.back) || cm, bt = bm.thick;
   const ffr = faceFrame(c), W = c.w, D = c.d - (ffr ? ffr.thick : 0), tk = hasToe(c) ? p.toeKickHeight : 0, inD = D - p.backInset - bt, inW = W - 2 * t;
   const nominal = nominalFor(sl, inD); if (!nominal) return null;
-  const ffOpen = !!(ffr && f.open && !blindCorner(c)), z0 = Math.max(ffOpen ? f.open.z0 : f.z0, tk + t), z1 = Math.min(ffOpen ? f.open.z1 : f.z1, c.h - t);
-  const bh = Math.floor(((z1 - z0) - (sl.bottomClearMM + sl.topClearMM) * MM) * 4) / 4; if (bh < 2.5) return null;
-  const bwD = blindCorner(c) ? blindWidth(c) : 0;
+  const ffOpen = !!(ffr && f.open && !blindCorner(c));
+  const [z0, z1] = drawerSpan(c, p, f, Math.max(ffOpen ? f.open.z0 : f.z0, tk + t), Math.min(ffOpen ? f.open.z1 : f.z1, c.h - t), t, caseRails(c, p, null, t));
+  const bh =Math.floor(((z1 - z0) - (sl.bottomClearMM + sl.topClearMM) * MM) * 4) / 4; if (bh < 2.5) return null;
+  const bwD = blindCorner(c) ? blindWidth(c) : 0, bp = blindPart(c, p, t);
   let ox0, openW;
   if (ffOpen) { ox0 = f.open.x0; openW = f.open.x1 - f.open.x0; }
+  else if (bp) { const n = f.n > 1 ? f.n : 1; openW = (bp.o1 - bp.o0 - (n - 1) * t) / n; ox0 = bp.o0 + (n > 1 ? f.idx : 0) * (openW + t); }
   else if (bwD) { openW = W - t - bwD; ox0 = cornerSide(c) === 'L' ? bwD : t; }
   else if (f.n > 1) { openW = (inW - (f.n - 1) * t) / f.n; ox0 = t + f.idx * (openW + t); }
   else { openW = inW; ox0 = t; }
@@ -447,7 +516,8 @@ function buildParts(c) {
   const leftOps = [], rightOps = [];
   // Where each hinge's mounting plate sits on a side, so shelf pin holes stay out from under it.
   const plateZones = [], edgePlateAt = [];
-  const fronts = computeFronts(c, p);
+  const fronts = computeFronts(c, p), rails = caseRails(c, p, fronts, t);
+  const dParts = drawerPartitions(c, p, fronts, t, rails).map(q => ({ ...q, ops: [] })), bpC = blindPart(c, p, t);
   if (fronts.overfull) warn.push('Front rows are taller than the cabinet. Reduce a fixed row height.');
 
   const frontPart = (label, f) => {
@@ -577,17 +647,18 @@ function buildParts(c) {
       if (!nominal) { warn.push(`No ${sl.name} length fits ${fmtLen(inD, 1)} inside depth.`); return; }
       // A face frame drawer fits between the rails of its opening.
       const ffOpen = !!(ffr && f.open && !blindCorner(c));
-      const z0 = Math.max(ffOpen ? f.open.z0 : f.z0, zIn0), z1 = Math.min(ffOpen ? f.open.z1 : f.z1, zIn1);
+      const [z0, z1] = drawerSpan(c, p, f, Math.max(ffOpen ? f.open.z0 : f.z0, zIn0), Math.min(ffOpen ? f.open.z1 : f.z1, zIn1), t, rails);
       const boxBot = z0 + sl.bottomClearMM * MM;
       const bh = Math.floor(((z1 - z0) - (sl.bottomClearMM + sl.topClearMM) * MM) * 4) / 4;
       if (bh < 2.5) { warn.push(`Drawer opening at ${fmtLen(f.z0, 1)} is too short for a drawer box.`); return; }
       // A blind corner's drawer runs beside the blind side, on a partition the height of its opening.
       const bwD = blindCorner(c) ? blindWidth(c) : 0;
-      if (bwD) part('Drawer partition', cm, r3(z1 - z0), r3(inD), { kind: 'divider' });
+      if (bwD && !bpC) part('Drawer partition', cm, r3(z1 - z0), r3(inD), { kind: 'divider' });
       // Behind a face frame the drawer fits the frame's opening; spacers on the sides bring the runners out to it.
-      const openW = ffOpen ? f.open.x1 - f.open.x0 : bwD ? W - t - bwD : f.n > 1 ? (inW - (f.n - 1) * t) / f.n : inW;
+      const openW = ffOpen ? f.open.x1 - f.open.x0 : bpC ? (bpC.o1 - bpC.o0 - (f.n > 1 ? f.n - 1 : 0) * t) / (f.n > 1 ? f.n : 1) : bwD ? W - t - bwD : f.n > 1 ? (inW - (f.n - 1) * t) / f.n : inW;
       const ffSp = ffOpen && f.n === 1 ? Math.max(ffr.ls, ffr.rs) - t : 0;
-      if (f.n > 1 && f.idx === 0) warn.push('Side-by-side drawers need a center divider. Dividers are not generated yet.');
+      const pL = dParts.find(q => q.row === f.row && q.k === f.idx), pR = dParts.find(q => q.row === f.row && q.k === f.idx + 1);
+      if (f.n > 1 && f.idx === 0 && !dParts.some(q => q.row === f.row)) warn.push('Side-by-side drawers need a center divider. One is only made where a stretcher, shelf, top or bottom holds it.');
       const ow = openW - sl.widthDeductMM * MM, rec = sl.bottomRecessMM * MM, bdT = dbm.thick, bd = p.drawerBottomDado;
       const bx = drawerBoxBuild(dmt, st, bdT, bd, rec, nominal, ow, bh);
       const groove = len => ({ type: 'groove', x1: 0, y1: rec + bdT / 2, x2: len, y2: rec + bdT / 2, width: r3(bdT + gcB), depth: bx.gd, face: 'inside', why: 'drawer bottom' });
@@ -620,7 +691,12 @@ function buildParts(c) {
       } else (sl.cabHoles || []).forEach(h => {
         if (slideHoleY(sl, nominal, h) === null) return;
         const op = { type: 'bore', x: boxBot + h.z * MM, y: slideHoleY(sl, nominal, h), dia: h.dia * MM, depth: h.depth * MM, face: 'inside', why: sl.name + ' runner' };
-        leftOps.push(op); rightOps.push({ ...op });
+        // Side by side: a runner on a partition goes on that partition's face, the cabinet side only gets the end drawers'.
+        // A partition has runners on both faces at the same spots: keep each hole short enough that the two leave 1/8" between them.
+        const pDep = Math.min(op.depth, Math.floor((t - 0.13) / 2 * 100) / 100);
+        if ((pL || pR) && pDep < op.depth - 1e-6 && !warn.some(w => w.startsWith('Drawer partition'))) warn.push(`Drawer partition: runner holes are ${fmtLen(pDep, 1)} deep from each face so they don't meet. Use runner screws no longer than ${fmtLen(pDep, 1)} there.`);
+        if (pL) pL.ops.push({ ...op, depth: pDep, x: r3(op.x - pL.z0), face: 'right' }); else leftOps.push(op);
+        if (pR) pR.ops.push({ ...op, depth: pDep, x: r3(op.x - pR.z0), face: 'left' }); else rightOps.push({ ...op });
       });
     }
   });
@@ -689,7 +765,7 @@ function buildParts(c) {
       part('Adjustable shelf (right)', sm, wr, inD - p.shelfFrontSetback, { qty: shelves, kind: 'shelf' });
       addB(pin.name, 8 * shelves);
     } else {
-      part('Adjustable shelf', sm, inW - 0.0625, inD - p.shelfFrontSetback, { qty: shelves, kind: 'shelf' });
+      part('Adjustable shelf', sm, (bpC ? bpC.o1 - bpC.o0 : inW) - 0.0625, inD - p.shelfFrontSetback, { qty: shelves, kind: 'shelf' });
       addB(pin.name, 4 * shelves);
     }
   }
@@ -713,14 +789,28 @@ function buildParts(c) {
   if (pinD > 0) (Array.isArray(p.pinZ) && p.pinZ.length ? p.pinZ : [tk + (H - tk) * 0.25, tk + (H - tk) * 0.75]).filter(z => z > tk + t && z < H - t)
     .forEach(z => [0.25, 0.75].forEach(fy => pinSpots.push({ z: r3(z), y: r3(Math.min(D * fy, backY - pinD)) })));
   const pinOps = pinSpots.map(q => ({ type: 'bore', x: q.z, y: q.y, dia: pinD, depth: t, through: true, face: 'inside', why: 'pin hole' }));
-  part('Left side', cm, H - sh, D, { kind: 'side', ops: [...grooves, ...toe, ...leftOps, ...pinOps].map(down) });
-  part('Right side', cm, H - sh, D, { kind: 'side', ops: [...grooves, ...toe, ...rightOps, ...pinOps.map(o => ({ ...o }))].map(down) });
+  // Blind corner: what the opening's blind-side wall carries (plates of doors hinged there, runners, shelf pins) goes on the
+  // inside panel, one piece between each pair of the bottom, drawer stretchers and the top.
+  const bpPieces = [];
+  if (bpC) {
+    blindPieces(c, p, t, rails).forEach(q => bpPieces.push({ ...q, ops: [] }));
+    const from = bpC.side === 'L' ? leftOps : rightOps, face = bpC.side === 'L' ? 'right' : 'left';
+    from.splice(0).forEach(o => { const z = o.x ?? o.x1, q = bpPieces.find(b => z >= b.z0 - 1e-6 && z <= b.z1 + 1e-6);
+      if (q) q.ops.push({ ...o, ...(typeof o.x === 'number' ? { x: r3(o.x - q.z0) } : {}), ...(typeof o.x1 === 'number' ? { x1: r3(o.x1 - q.z0), x2: r3(o.x2 - q.z0) } : {}), face }); });
+    // The shelves rest on the inside panel there too.
+    pinOps.forEach(o => { const q = bpPieces.find(b => o.x >= b.z0 + 0.5 && o.x <= b.z1 - 0.5); if (q) q.ops.push({ ...o, x: r3(o.x - q.z0), face }); });
+  }
+  const pinL = bpC && bpC.side === 'L' ? [] : pinOps, pinR = bpC && bpC.side === 'R' ? [] : pinOps;
+  part('Left side', cm, H - sh, D, { kind: 'side', ops: [...grooves, ...toe, ...leftOps, ...pinL].map(down) });
+  part('Right side', cm, H - sh, D, { kind: 'side', ops: [...grooves, ...toe, ...rightOps, ...pinR.map(o => ({ ...o }))].map(down) });
   const panelGroove = { type: 'groove', x1: 0, y1: backY + bt / 2, x2: inW, y2: backY + bt / 2, width: r3(bt + gc), depth: p.dadoDepth, face: 'inside', why: 'back dado' };
   part('Bottom', cm, inW, D, { kind: 'topbot', ops: p.dadoDepth > 0 ? [panelGroove] : [] });
   if ((c.construction || {}).top === 'stretchers') {
     part('Front stretcher', cm, inW, p.stretcherWidth, { kind: 'stretcher' });
     part('Rear stretcher', cm, inW, p.stretcherWidth, { kind: 'rearStretcher' });
   } else part('Top', cm, inW, D, { kind: 'topbot', ops: p.dadoDepth > 0 ? [{ ...panelGroove }] : [] });
+  // Drawer stretchers (caseRails): flat, the top stretcher's width deep, at the front, joined into the sides like it.
+  rails.stretchers.forEach((q, i) => { q.pt = part('Drawer stretcher' + (rails.stretchers.length > 1 ? ' ' + (i + 1) : ''), cm, inW, p.stretcherWidth, { kind: 'stretcher' }); });
   part('Back', bm, r3((zIn1 - zIn0) + 2 * gReach), r3(inW + 2 * gReach), { kind: 'back' });
   if (tk && p.toeSkin !== 'off') part(feet ? 'Toe skin' : 'Toe kick', tkm, W, tk, { kind: 'toekick' });
   // Ladder base (2026-11-09; its two settings are not in SHOP_PARAMS so older jobs export byte for byte the same): a box built under the cabinet, the toe kick height tall. Front and back rails run the full
@@ -785,21 +875,42 @@ function buildParts(c) {
   // Joins a panel into both sides. Horizontal panels (fx = height of their center) run front to back from a to b;
   // vertical ones (zr = [z0, z1]) sit at the back, in front of the back panel.
   const joinSides = (type, pt, fx, zr, a = 0, b = backY) => ['L', 'R'].forEach(end => {
-    const J = jFor(end), sp = sideP[end]; if (!J || !sp || !pt) return;
+    // A blind corner's fixed shelf stops at the inside panel, so its blind end is fastened into that (flush at the front).
+    const bq = type === 'shelf' && !zr && bpC && end === bpC.side ? bpPieces.find(q => q.pt && fx > q.z0 && fx < q.z1) : null;
+    const J = jFor(end), sp = bq ? bq.pt : sideP[end]; if (!J || !sp || !pt) return;
     // A side that is not the full depth (the open end of a 45° or 90° corner) starts that much further back:
     // its holes are measured from its own front edge, the panel's from the cabinet front.
-    const off = sp.outline ? 0 : Math.max(0, r3(D - sp.W));
+    const off = bq || sp.outline ? 0 : Math.max(0, r3(D - sp.W));
     const fem = [], label = `${J.name} (${pt.name.toLowerCase()})`;
     let pairs;
     if (zr) pairs = jtSpots(J, type, zr[0], zr[1], spots, t).map(z => ({ x: z, y: r3((pt.jy ?? backY - t / 2) - off), m: r3(zr[1] - z) }));
     // m runs along the panel's own edge, from its front (a rear stretcher starts well back of the cabinet front).
     else pairs = jtSpots(J, type, Math.max(a, off), b, spots, t).map(y => ({ x: fx, y: r3(y - off), m: r3(y - a) }));
-    jx.a = zr ? undefined : a; jx.b = zr ? undefined : b; jx.type = type; jx.side = sp; jx.off = off; jx.zs = [sh, H];
+    jx.a = zr ? undefined : a; jx.b = zr ? undefined : b; jx.type = type; jx.side = sp; jx.off = off; jx.zs = bq ? [bq.z0, bq.z1] : [sh, H];
     jtFasten(J, fem, pt, end === 'L' ? 0 : r3(pt.L), end === 'L' ? 'W1' : 'W2', pairs, label, jx);
-    sp.ops.push(...fem.map(down));
+    sp.ops.push(...fem.map(bq ? o => { const q = { ...o, face: bpC.side === 'L' ? 'right' : 'left' }; ['x', 'x1', 'x2'].forEach(k => { if (typeof q[k] === 'number') q[k] = r3(q[k] - bq.z0); }); return q; } : down));
   });
   [['Bottom', 'bottom', zIn0 - t / 2, 0, backY], ['Top', 'top', zIn1 + t / 2, 0, backY], ['Front stretcher', 'stretcher', zIn1 + t / 2, 0, p.stretcherWidth], ['Rear stretcher', 'stretcher', zIn1 + t / 2, backY - p.stretcherWidth, backY]]
     .forEach(([name, type, fx, a, b]) => { const pt = parts.find(q => q.cabId === c.id && q.name === name); if (pt) joinSides(type, pt, fx, null, a, b); });
+  rails.stretchers.forEach(q => joinSides('stretcher', q.pt, q.z, null, 0, p.stretcherWidth));
+  // Drawer partitions: fastened through what is under and over them, like the vertical divider into the bottom and top.
+  [...dParts.map((q, i) => ({ ...q, name: 'Drawer partition' + (dParts.length > 1 ? ' ' + (i + 1) : '') })),
+   ...bpPieces.map((q, i) => ({ ...q, blindUp: i > 0, name: 'Blind corner inside panel' + (bpPieces.length > 1 ? (i ? ' (upper)' : ' (lower)') : '') }))].forEach(q => {
+    const pt = part(q.name, cm, r3(q.z1 - q.z0), r3(inD - 0.0625), { kind: 'divider', ops: q.ops }), src = bpPieces.find(b => b.ops === q.ops); if (src) src.pt = pt;
+    const J = hw(cabSet(c, 'jointU')); if (!J || J.kind !== 'joint') return;
+    const mine = n => parts.find(z => z.cabId === c.id && z.name === n), rs = rails.stretchers.find(s => Math.abs(s.z + t / 2 - q.z0) < 1e-3), sh = rails.shelves.find(s => Math.abs(s.z - t / 2 - q.z1) < 1e-3), rsA = rails.stretchers.find(s => Math.abs(s.z - t / 2 - q.z1) < 1e-3);
+    const shelfPt = s => s && parts.find(z => z.cabId === c.id && z.name === `Fixed shelf ${s.row + 1}`);
+    // [host part, the partition edge (top or bottom), where it touches front to back]
+    // A blind corner's upper inside panel stands on the drawer stretcher the lower one is fastened up into (one hole can't hold both).
+    const below = rs ? (q.blindUp ? [] : [[rs.pt, 0, 0, p.stretcherWidth]]) : [[mine('Bottom'), 0, 0, pt.W]];
+    const top = mine('Top'), above = rsA ? [[rsA.pt, 1, 0, p.stretcherWidth]] : sh ? [[shelfPt(sh), 1, 0, pt.W]] : top ? [[top, 1, 0, pt.W]] : [[mine('Front stretcher'), 1, 0, p.stretcherWidth], [mine('Rear stretcher'), 1, backY - p.stretcherWidth, backY]];
+    [...below, ...above].forEach(([host, atTop, a, b]) => {
+      if (!host) return;
+      const fem = []; jx.a = a; jx.b = b; jx.type = 'divider'; jx.side = null; jx.off = 0;
+      jtFasten(J, fem, pt, atTop ? r3(pt.L) : 0, atTop ? 'W2' : 'W1', jtSpots(J, 'divider', a, Math.min(b, pt.W), spots, t).map(y => ({ x: r3(q.x + t / 2 - t), y: r3(y - a), m: y })), `${J.name} (${q.name.replace(/ \d+$| \((upper|lower)\)$/, '').toLowerCase()})`, jx);
+      host.ops.push(...fem);
+    });
+  });
   jtNailers(c, p, part, { cm, inW, zIn0, zIn1, t, bt, D, backY }).forEach(q => joinSides('nailer', q, null, q.jz));
   // A shaped cabinet's end panels (the open end of a corner's return) join to the bottom, top and the side they butt against.
   if (hasCabShape(c) && typeof edgeJoin === 'function') edgeJoin(c, parts, { t, sh, zIn0, zIn1, H, W, spots, jx, jFor });
@@ -841,7 +952,7 @@ function buildParts(c) {
     addB(h.name, h.perCabinet);
   });
   // Hand edits from the part editor (shape, operations, size), worked out again for this size.
-  if (typeof qBuildExtras === 'function') qBuildExtras(c, parts, warn, part, { cm, sm, inW, inD, t, fronts, addB, zIn0, zIn1 });
+  if (typeof qBuildExtras === 'function') qBuildExtras(c, parts, warn, part, { cm, sm, inW, shW: bpC ? bpC.o1 - bpC.o0 : inW, inD, t, fronts, addB, zIn0, zIn1, rails });
   if (typeof jtLate === 'function') jtLate(c, parts, jtLateCtx);
   if (typeof jtTabSlot === 'function') jtTabSlot(c, parts, jx);
   if (typeof vBuildExtras === 'function') vBuildExtras(c, parts, warn, p, { t, inD, zIn0, zIn1, addB, pin });
@@ -888,7 +999,7 @@ function runsBy(filter, keyOf, bridges) {
       }
       // A 45° or 90° corner is only its leg deep along its own wall; its return leg is covered from the other wall (cornerBridges).
       const cd = angledCorner(c) ? cornerLeg(c) : c.d;
-      const top = c.elev + c.h, k = keyOf(c), fl = fillersOf(c), s0 = Math.min(c.off, ...fl.map(x => x.a0)), s1 = Math.max(c.off + c.w, ...fl.map(x => x.a1));
+      const top = (typeof apronTop === 'function' && apronTop(c)) || c.elev + c.h, k = keyOf(c), fl = fillersOf(c), s0 = Math.min(c.off, ...fl.map(x => x.a0)), s1 = Math.max(c.off + c.w, ...fl.map(x => x.a1));
       if (cur && s0 <= cur.end + 0.25 && (cur.top === null || (Math.abs(top - cur.top) < 0.01 && cur.k === k))) {
         if (cur.top === null) { cur.top = top; cur.k = k; cur.bottom = c.elev; }
         cur.end = Math.max(cur.end, s1); cur.d = Math.max(cur.d, cd + (c.outset || 0)); cur.bottom = Math.min(cur.bottom, c.elev); cur.cabs.push(c.id);
