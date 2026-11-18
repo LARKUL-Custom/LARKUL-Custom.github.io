@@ -52,6 +52,57 @@ function bidWalls(walls) {
   return out.filter(w => w && w.len > 0).map(w => ({ ...w, thick: w.hidden ? 0 : NaN, height: NaN }));
 }
 
+// A native takeoff from Bid Reader (0.27.0 and later, "native": true): no Mozaik files, so the cabinets are made
+// here from the rows, in the same shape the Mozaik reader gives, and go through the same placing (mozRooms):
+// each row's category picks Base, Wall or Tall, its code, product and notes pick the closest library product,
+// and its wall, X and height place it. Rows with no X line up along their wall in table order, like Bid Reader
+// draws them. Rows Cabinet Designer builds itself or prices (shelves, millwork, tops, desks...) are left to
+// bidTakeoffAdd as before. Inches throughout.
+const BID_CAB_TYPE = { base: 1, drawer: 1, sink: 1, vanity: 1, wall: 2, tall: 3, panel: 0, filler: 0, door: 0 };
+const BID_DEF = { 1: [24, 34.5, 24], 2: [30, 30, 12], 3: [24, 84, 24] };
+function bidNativeData(tk) {
+  const own = new Set(bidTakeoffItems(tk));
+  const rows = (tk.rows || []).filter(r => !own.has(r) && r.category in BID_CAB_TYPE);
+  const names = [...new Set([...(tk.rooms || []).map(r => r.name), ...rows.map(r => String(r.room || '').trim() || 'Room')])];
+  const rooms = names.map(name => {
+    const t = (tk.rooms || []).find(r => bidRoomKey(r.name) === bidRoomKey(name)) || { walls: [] };
+    const mine = rows.filter(r => bidRoomKey(r.room || 'Room') === bidRoomKey(name));
+    const tw = (t.walls || []).slice();
+    // Cabinets with no wall (or a room with no walls) go on a see-through line, like Bid Reader's Mozaik job.
+    // That includes pieces Cabinet Designer builds itself (open vanities, microwave bases, desks...), which need a wall too.
+    const builds = [...own].filter(r => bidRoomKey(r.room || 'Room') === bidRoomKey(name) && (k => k === 'lib' || k === 'made')((bidPlan(r) || {}).kind));
+    const loose = [...mine, ...builds].filter(r => !(parseInt(r.wall) > 0 && tw[parseInt(r.wall) - 1]));
+    if (loose.length) {
+      const len = Math.max(48, loose.reduce((a, r) => a + (+r.W || 24) * Math.max(1, Math.round(+r.qty || 1)), 0));
+      tw.push({ len, island: true, faces: 1, along: 0, distance: 72 });
+    }
+    const walls = bidWalls(tw);
+    if (+t.height > 0) walls.forEach(w => { w.height = +t.height; });
+    const looseWall = loose.length ? walls.length : 0, cursor = {}, prods = [];
+    mine.forEach(r => {
+      let type = BID_CAB_TYPE[r.category];
+      const text = [r.code, r.product, r.notes].filter(Boolean).join(' ');
+      if (!type) type = (+r.H || 0) >= 66 ? 3 : (+r.elev || 0) >= 40 ? 2 : 1;
+      const [dw, dh, dd] = BID_DEF[type];
+      const w = +r.W > 0 ? +r.W : dw, h = +r.H > 0 ? +r.H : dh, d = +r.D > 0 ? +r.D : dd;
+      const wi = parseInt(r.wall) > 0 && tw[parseInt(r.wall) - 1] ? parseInt(r.wall) : looseWall, back = +r.side === 2;
+      const elev = r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0 ? +r.elev : type === 2 ? Math.max(0, 84 - h) : 0;
+      const key = wi + ':' + back + ':' + (type === 2 ? 'up' : 'low');
+      const hasX = r.x !== '' && r.x != null && isFinite(+r.x);
+      const name = r.product || r.code || r.category;
+      const sub = r.category === 'filler' ? 7 : r.category === 'panel' ? 9 : NaN;
+      for (let k = 0; k < Math.max(1, Math.round(+r.qty || 1)); k++) {
+        const x = hasX && k === 0 ? +r.x : (cursor[key] || 0);
+        cursor[key] = Math.max(cursor[key] || 0, x + w);
+        prods.push({ name, desc: [r.category, text].join(' '), w, h, d, x, y: NaN, elev, outset: 0, rot: 0, wall: wi, back,
+          type: type, sub, num: 0, inserts: [], fronts: [], fromBid: true });
+      }
+    });
+    return { name, walls, prods, appls: [], hwNames: {} };
+  });
+  return { rooms, jobName: tk.job || '', inches: true };
+}
+
 // The library product floating shelves become: one in the Floating Shelves group, a "floating" one first.
 function bidShelfLib() {
   const ok = S.library.filter(l => l.cat !== 'Shape' && (libGroup(l) === 'shelf' || /shel(f|ves)/i.test(l.name || '')));
@@ -80,7 +131,7 @@ function bidTakeoffRows(rooms, tk, items, done) {
     let rm = rooms.find(r => bidRoomKey(r.name) === bidRoomKey(name));
     if (rm) return rm;
     const t = tkRoom(name) || { walls: [] };
-    rm = mozRooms({ rooms: [{ name, walls: bidWalls(t.walls || []), prods: [], appls: [], hwNames: {} }] })[0];
+    rm = mozRooms({ rooms: [{ name, walls: bidWalls(t.walls || []), prods: [], appls: [], hwNames: {} }], inches: true })[0];
     if (+t.height > 0) { rm.wallHeight = +t.height; rm.walls.forEach(w => { w.height = +t.height; }); }
     rm.block = rooms.length + 1; rooms.push(rm); done.rooms++;
     return rm;

@@ -140,7 +140,8 @@ function mozLib(p, cat) {
   const same = mozSameName(p); if (same && (same.cat === cat || /shelf/i.test(p.name))) return same;
   // Corner products only match Mozaik corners (not BF/WF corner fillers).
   const cornerOk = /blind|susan|corner/i.test(p.name || '') && !/^(bf|wf)\d*\b/i.test(p.name || '');
-  const libs = S.library.filter(l => l.cat === cat && (cornerOk || !l.corner)); if (!libs.length) return S.library[0];
+  // Shop-made pieces (desk, slat wall, privacy panel, ADA top) build differently, so a Mozaik cabinet never matches one.
+  const libs = S.library.filter(l => l.cat === cat && !l.made && (cornerOk || !l.corner)); if (!libs.length) return S.library[0];
   const words = s => new Set(s.toLowerCase().replace(/(\d)\s*(drw|drawers?)\b/g, '$1drawer').replace(/(\d)\s*(dr|doors?)\b/g, '$1door').split(/[^a-z0-9]+/).filter(Boolean));
   const pw = words(p.name + ' ' + p.desc);
   const score = l => { let s = 0; words(l.name).forEach(x => { if (pw.has(x)) s += /\d/.test(x) ? 3 : 1; }); return s - Math.abs(l.w - p.w) / 100; };
@@ -242,7 +243,8 @@ function mozIsland(rm, p) {
   return { wall: w.id, side: 1, off: 0 };
 }
 function mozRooms(data) {
-  const k = mozScale(data.rooms);
+  // Bid Reader's rooms are always inches; a long wall there must not be read as millimetres.
+  const k = data.inches ? 1 : mozScale(data.rooms);
   const sz = v => k === 1 ? r3(v) : Math.round(v * k * 32) / 32, cv = v => r3(v * k);
   return data.rooms.map((src, i) => {
     const rm = newRoom(uid('r'), src.name || 'Room ' + (i + 1), []); rm.block = i + 1;
@@ -317,9 +319,11 @@ function mozRooms(data) {
 // opts.folder: the Jobs folder to save it in; opts.from: where it came from, for the job notes. Resolves to the
 // new job's path, or null when nothing was imported.
 async function importMozaik(files, opts = {}) {
-  const data = readMozaik(await mozTexts(files));
+  let data = readMozaik(await mozTexts(files));
   // A job sent from Bid Reader carries its takeoff (bid-reader-takeoff.json) for what a Mozaik job can't hold.
   const tk = typeof bidTakeoffOf === 'function' ? await bidTakeoffOf(files) : null;
+  // A native takeoff (no Mozaik files at all): the rooms, walls and cabinets are built straight from it.
+  if (!data.rooms.length && tk && tk.native && typeof bidNativeData === 'function') data = bidNativeData(tk);
   if (!data.rooms.length && !(tk && bidTakeoffItems(tk).length)) { flash('No rooms, walls or cabinets found in that Mozaik file. Send it to Claude so the import can learn it.'); return null; }
   await flushJob();
   const first = files[0].name.replace(/\.[^.]+$/, '').replace(/ - Cabinet Designer$/, '');

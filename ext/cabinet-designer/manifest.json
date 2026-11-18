@@ -3,7 +3,7 @@
   "name": "Cabinet Designer",
   "icon": "🗄️",
   "description": "Draw rooms and walls, drag in cabinets and see them in plan, elevation and 3D. Job and room settings, libraries for materials, doors and hardware. Exports parts and drilling for the CNC.",
-  "version": "0.57.3",
+  "version": "0.58.0",
   "ui": "index.html",
   "server": "server.js",
   "order": 25,
@@ -17,5 +17,6 @@
   ],
   "inbox": "Cabinet Designer/From Bid Reader",
   "inboxTakes": "bid-reader-takeoff-1",
-  "inboxBuilds": 2
+  "inboxBuilds": 2,
+  "inboxNative": 1
 }
