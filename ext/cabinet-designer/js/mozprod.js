@@ -638,7 +638,9 @@ function mozFold3d(F, r, c, opts) {
     const V = (p, z) => toG(new THREE.Vector3(p.x, p.y, z).applyMatrix4(pc.M));
     const push = (p, z) => { const v = V(p, z); pos.push(v.x, v.y, v.z); uv.push(p.x / k, p.y / k); };
     const caps = THREE.ShapeUtils.triangulateShape(pc.P.map(p => new THREE.Vector2(p.x, p.y)), []);
-    caps.forEach(t => { t.forEach(j => push(pc.P[j], 0)); t.forEach(j => push(pc.top[j], F.T)); });
+    // The face at z 0 looks the other way, so its triangles go round the other way. Wound the same as the top, the
+    // outside skin faced in: the Realistic shading pass (one-sided) skipped it and shaded the inside onto it.
+    caps.forEach(t => { t.slice().reverse().forEach(j => push(pc.P[j], 0)); t.forEach(j => push(pc.top[j], F.T)); });
     for (let j = 0; j < n; j++) { const a = j, b = (j + 1) % n; [[pc.P[a], 0], [pc.P[b], 0], [pc.top[b], F.T], [pc.P[a], 0], [pc.top[b], F.T], [pc.top[a], F.T]].forEach(([p, z]) => push(p, z)); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals();
     const mesh = new THREE.Mesh(g, Md); if (!R3) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat3())); mesh.userData.part = F.q.name; out.push(mesh);

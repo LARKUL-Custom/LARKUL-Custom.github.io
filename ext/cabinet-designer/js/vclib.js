@@ -529,6 +529,7 @@ function vcJobParts() {
       ...(plan.clear.length && ct ? [{ tool: ct, label: 'Clear the flat areas', paths: vcLevels(ct, plan.flatDepth).flatMap(d => plan.clear.map(l => l.map(p => ({ x: p.x, y: p.y, z: -d })))) }] : []),
       ...(plan.v.length && vt ? [{ tool: vt, label: 'V-carve', paths: (() => { const lv = vcLevels(vt, plan.deep), out = []; lv.forEach((d, i) => { const prev = i ? lv[i - 1] : 0; plan.v.forEach(l => { if (i && !l.some(p => -p.z > prev + 1e-4)) return; out.push(l.map(p => ({ x: p.x, y: p.y, z: Math.max(p.z, -d) }))); }); }); return out; })() }] : []),
     ];
+    if (live.some(it => it.mode === '3d')) skipped.push(`Carve · ${name}: the 3D carving isn't in the parts file yet; run it from the sign's G-code (Carve › Save G-code)`);
     if (plan && (plan.v.length || plan.clear.length)) skipped.push(`Carve · ${name}: the V-carving goes in the parts file for CNC Cutlist to cut; if your CNC Cutlist doesn't cut it yet, run it from the sign's G-code (Carve › Save G-code)`);
     const outers = shapes.length ? shapes.filter(l => vcArea(l) > 0) : [[{ x: 0, y: 0 }, { x: +b.L || 24, y: 0 }, { x: +b.L || 24, y: +b.W || 12 }, { x: 0, y: +b.W || 12 }]];
     const holes = shapes.filter(l => vcArea(l) < 0);

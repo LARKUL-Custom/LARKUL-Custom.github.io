@@ -3284,7 +3284,7 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .vcx-tool:hover,.vcs-tile:hover{border-color:var(--accent)}
 .vcs-tile:hover{background:var(--panel)}
 .vcx-tool.on{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
-.vcx-mode,.vcx-mode.line,.vcx-mode.cut{background:var(--sunk);color:var(--muted)}
+.vcx-mode,.vcx-mode.line,.vcx-mode.cut,.vcx-mode.d3{background:var(--sunk);color:var(--muted)}
 /* Dark mode: the picked top tab was a pale grey box with pale text when the computer (not Settings) picked dark. */
 @media (prefers-color-scheme: dark) and (min-width: 961px){
   :root:not([data-theme="light"]) .tabs button[aria-selected="true"], :root:not([data-theme="light"]) .top .hdr-actions .btn{background:#353a47}

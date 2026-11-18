@@ -348,7 +348,7 @@ function vcRings(chains, off, cond) {
 const vcBoards = () => (S.job && S.job.carves) || [];
 const vcBoard = () => vcBoards().find(b => b.id === ui.vcBoard) || vcBoards()[0] || null;
 const vcVbits = () => CNC_LIB.tools.filter(t => t.type === 'vbit');
-const vcStraights = () => CNC_LIB.tools.filter(t => t.type !== 'vbit' && t.type !== 'drill').sort((a, b) => a.dia - b.dia);
+const vcStraights = () => CNC_LIB.tools.filter(t => t.type !== 'vbit' && t.type !== 'drill' && t.type !== 'ball').sort((a, b) => a.dia - b.dia);
 const vcAngle = t => +(t && t.angle) || 90;
 const vcCutTool = () => (CNC_LIB.tools.find(t => t.type === 'cutout') || vcStraights().slice(-1)[0] || {}).id || '';
 // The parts of this room's cabinets a board can be: the ones that show (doors, fronts, panels, ends, shelves).
@@ -376,7 +376,7 @@ function vcNewBoard() {
 // cancelled out; they keep doing that so their G-code stays the same. Newer signs (merge) add every "carve it in" design
 // together and take the "leave it raised" designs out of that.
 function vcBoardRegion(b) {
-  const act = (b.items || []).filter(it => !it.off && it.mode !== 'line' && it.mode !== 'cut');
+  const act = (b.items || []).filter(it => !it.off && it.mode !== 'line' && it.mode !== 'cut' && it.mode !== '3d');
   if (!b.merge) { const loops = []; act.forEach(it => loops.push(...vcItemLoops(it))); return loops; }
   const carve = [], raise = [];
   act.forEach(it => { const L = vcItemLoops(it); if (L.length) (it.mode === 'raise' ? raise : carve).push(L); });
@@ -425,6 +425,8 @@ function vcCutout(sz, tool, M) {
 // The toolpaths for a board, in run order: clearing, V-carve, cut-out.
 function vcBoardOps(b) {
   const sz = vcSize(b), plan = vcBoardPlan(b), ops = [], vt = cncTool(b.vbit) || vcVbits()[0], ct = b.clear && cncTool(b.clear), M = vcMach();
+  // 3D carving (js/vc3d.js) goes first: roughing, then the ball nose finish.
+  const d3 = typeof vc3Ops === 'function' ? vc3Ops(b) : { ops: [], field: null }; ops.push(...d3.ops);
   if (plan.clear.length && ct) ops.push({ tool: ct, label: 'Clear the flat areas', paths: vcLevels(ct, plan.flatDepth).flatMap(d => plan.clear.map(l => l.map(p => ({ x: p.x, y: p.y, z: -d })))) });
   const lines = vcBoardLines(b), allV = lines.length ? [...plan.v, ...lines] : plan.v, deep = Math.max(plan.deep, ...lines.map(l => -l[0].z));
   if (allV.length && vt) {
@@ -436,7 +438,7 @@ function vcBoardOps(b) {
   if (shapes.length && cutT) ops.push({ tool: cutT, label: 'Cut out shapes', paths: vcProfiles(shapes, sz, cutT, M) });
   const cut = b.cutout && cncTool(b.cutTool || vcCutTool());
   if (cut && !b.part) ops.push({ tool: cut, label: 'Cut out', paths: vcCutout(sz, cut, M) });
-  return { ops, sz, plan, lines, deep };
+  return { ops, sz, plan, lines, deep: Math.max(deep, d3.field ? d3.field.depth : 0), field: d3.field };
 }
 // "Cut out" designs: cut through on their outline (outside the shape, inside its holes), like VCarve's profile toolpath.
 function vcCutShapes(b) {
@@ -492,7 +494,7 @@ function vcGcode(ops, sz, name) {
     let at = null;
     g.ops.forEach(o => {
       lines.push(`(${o.label})`);
-      (o.label === 'Cut out shapes' ? o.paths : vcOrder(o.paths)).forEach(path => {
+      (o.keep || o.label === 'Cut out shapes' ? o.paths : vcOrder(o.paths)).forEach(path => {
         const P = path.map(p => ({ x: p.x - ox, y: p.y - oy, z: p.z + zOff }));
         lines.push(`G0 Z${f(safe)}`, `G0 X${f(P[0].x)} Y${f(P[0].y)}`, `G0 Z${f(clr)}`, `G1 Z${f(P[0].z)} F${rate(+t.plunge || 2000)}`);
         let lx = P[0].x, ly = P[0].y, lz = P[0].z, first = true;
@@ -535,6 +537,9 @@ function vcDrawPreview(cv, b, r, showPaths) {
     if (o.label === 'V-carve') [...plan.v, ...(r.lines || [])].forEach(p => walk(p, (x, y, z) => { if (z < 0) stamp(x, y, -z); }));
     else if (o.label === 'Clear the flat areas') plan.clear.forEach(p => walk(p.map(q => ({ ...q, z: -plan.flatDepth })), (x, y) => stamp(x, y, plan.flatDepth, o.tool.dia / 25.4 / 2)));
   });
+  // A 3D model: its depth below the top at each pixel.
+  const F = r.field;
+  if (F) for (let j = 0; j < h; j++) { const y = sz.W - (j + 0.5) / ppi; for (let i = 0; i < w; i++) { const x = (i + 0.5) / ppi, fi = Math.min(F.nx - 1, Math.floor(x / F.res)), fj = Math.min(F.ny - 1, Math.max(0, Math.floor(y / F.res))); if (!F.area[fj * F.nx + fi]) continue; const d = -vc3At(F, x, y), k = j * w + i; if (d > H[k]) H[k] = d; } }
   const img = c.createImageData(w, h), D = img.data, mx = Math.max(0.01, r.deep || plan.deep);
   const L = [-0.55, -0.6, 0.58], ll = Math.hypot(...L); L[0] /= ll; L[1] /= ll; L[2] /= ll;
   const g = 1 / ppi;
@@ -554,6 +559,8 @@ function vcDrawPreview(cv, b, r, showPaths) {
   if (showPaths) {
     const line = (path, col) => { c.strokeStyle = col; c.beginPath(); path.forEach((p, i) => c[i ? 'lineTo' : 'moveTo'](p.x * ppi, (sz.W - p.y) * ppi)); c.stroke(); };
     c.lineWidth = 1; plan.clear.forEach(p => line(p, 'rgba(37,99,235,.75)')); plan.v.forEach(p => line(p, 'rgba(225,29,99,.9)')); (r.lines || []).forEach(p => line(p, 'rgba(124,58,237,.95)'));
+    r.ops.filter(o => o.label === '3D roughing').forEach(o => o.paths.forEach(p => line(p, 'rgba(37,99,235,.55)')));
+    r.ops.filter(o => o.label === '3D finishing').forEach(o => o.paths.forEach((p, i) => { if (i % 3 === 0) line(p, 'rgba(234,88,12,.6)'); }));
     r.ops.filter(o => o.label === 'Cut out shapes').forEach(o => { c.setLineDash([5, 3]); o.paths.forEach(p => line(p, 'rgba(22,163,74,.95)')); c.setLineDash([]); });
     const cut = r.ops.find(o => o.label === 'Cut out'); if (cut) { c.setLineDash([6, 4]); line(cut.paths[cut.paths.length - 1], 'rgba(22,163,74,.95)'); c.setLineDash([]); }
   }
@@ -568,6 +575,12 @@ const vcSel = (label, k, v, opts) => `<label class="f"><span>${label}</span><sel
 const vcChk = (label, k, v) => `<label class="f chk"><input type="checkbox" class="vc-in" data-k="${k}"${v ? ' checked' : ''}> <span>${label}</span></label>`;
 const vcFoldState = () => { const f = ui.vcFold || (ui.vcFold = { board: false, bits: false, gcode: true }); if (!('pos' in f)) f.pos = true; return f; };
 const vcFold = (k, title, body) => { const f = vcFoldState(), shut = !!f[k]; return `<div class="vc-sec"><button class="vc-sech" data-act="vc-fold" data-id="${k}" aria-expanded="${!shut}"><span aria-hidden="true">${shut ? '▸' : '▾'}</span>${title}</button>${shut ? '' : `<div class="vc-secb">${body}</div>`}</div>`; };
+// The 3D settings of a design: profile, how it combines with what is under it, height, base and angle.
+function vc3Form(it) {
+  const o = vc3d(it), seg = (act, list, cur, lbl) => `<div class="vc-wide vcx-modes"><span class="vc-lbl">${lbl}</span><div class="seg" role="group" aria-label="${lbl}">${list.map(([v, l, tip]) => `<button data-act="${act}" data-id="${v}" title="${esc(tip)}" aria-pressed="${cur === v}">${l}</button>`).join('')}</div><small class="muted">${esc((list.find(x => x[0] === cur) || list[0])[2])}</small></div>`;
+  return `${seg('vc-3p', VC3_PROFILES, o.profile, 'Profile')}${seg('vc-3c', VC3_COMBINE, o.combine, 'Combine')}
+    <div class="vc-row3 vc-wide">${vcIn('3D height', 'i.d3h', o.h)}${vcIn('Base', 'i.d3base', +o.base || '')}${o.profile === 'angle' ? vcNum('Angle°', 'i.d3ang', o.ang, ' min="5" max="89"') : '<span></span>'}</div>`;
+}
 const vcItemName = it => it.kind === 'text' ? `“${String(it.text || '').split('\n')[0].slice(0, 24)}”` : it.name ? it.name : it.kind === 'shape' ? ((VC_GEN[it.shape] || {}).name || (VC_SHAPES.find(s => s[0] === it.shape) || [0, 'Shape'])[1]) : 'Picture';
 let vcLastImg = null; // the last opened picture, so the cut-off can change without opening it again
 
@@ -598,6 +611,10 @@ function renderCarve() {
   const tp = `${vcSel('V-bit', 'b.vbit', b.vbit || (vb[0] || {}).id || '', vbOpts)}
     ${vcIn('Max depth (blank = as deep as the bit goes)', 'b.depth', +b.depth || '')}
     ${vcSel('Clear wide areas with', 'b.clear', b.clear || '', [{ v: '', l: 'Nothing (V-bit only)' }, ...st.map(t => ({ v: t.id, l: `${t.id} (${fmtLen(t.dia / 25.4, 1)})` }))])}
+    ${vc3Items(b).length ? (() => { const bl = vcBalls(), rt = vc3RoughBit(b), ball = vc3Ball(b); return `<div class="vc-lbl vc-wide">3D carving</div>
+      ${vcSel('Finish with (ball nose)', 'b.r3ball', ball ? ball.id : '', bl.length ? bl.map(t => ({ v: t.id, l: `${t.id} (${fmtLen(t.dia / 25.4, 1)} ball)` })) : [{ v: '', l: 'Add a ball nose in Libraries › CNC tools' }])}
+      <div class="vc-row2">${vcNum('Finish stepover %', 'b.r3step', +b.r3step > 0 ? +b.r3step : (ball && +ball.stepover) || 10, ' min="2" max="50"')}${vcSel('Rough with', 'b.r3rough', rt ? rt.id : '', st.map(t => ({ v: t.id, l: `${t.id} (${fmtLen(t.dia / 25.4, 1)})` })))}</div>
+      ${vcSel('Carve', 'b.r3area', b.r3area || '', [{ v: '', l: 'Around the 3D shapes (1/4" past them)' }, { v: 'board', l: 'The whole board' }])}`; })() : ''}
     ${b.part ? '' : vcChk('Cut the sign out at the end', 'b.cutout', b.cutout) + (b.cutout || (b.items || []).some(it => it.mode === 'cut') ? vcSel('Cut-out bit', 'b.cutTool', b.cutTool || vcCutTool(), st.map(t => ({ v: t.id, l: `${t.id} (${fmtLen(t.dia / 25.4, 1)})` }))) : '')}`;
   const M = vcMach();
   const gset = `<div class="vc-row2">${vcSel('Units', 'm.gUnits', M.gUnits, [{ v: 'in', l: 'Inches (G20)' }, { v: 'mm', l: 'Millimeters (G21)' }])}${vcIn('File type', 'm.gExt', M.gExt)}</div>
@@ -607,7 +624,7 @@ function renderCarve() {
   const kindIc = it => it.kind === 'text' ? 'edit' : it.kind === 'art' ? 'upload' : 'cube';
   const tool = (act, ic, l, s, on) => `<button class="vcx-tool${on ? ' on' : ''}" data-act="${act}"><span class="vcx-ic">${icon(ic)}</span><b>${l}</b><small>${s}</small></button>`;
   const draw = `<div class="prx-navh">Draw</div><div class="vcx-tools">${tool('vc-addtext', 'edit', 'Text', 'Any font', false)}${tool('vc-pick', 'stack', 'Shapes', 'From the library', !!ui.vcPick)}${tool('vc-import', 'upload', 'Import', 'SVG or DXF', false)}${tool('vc-trace', 'camera', 'Trace', 'Picture to vector', false)}</div>${ui.vcPick ? vcPickerHTML() : ''}`;
-  const modeTag = it => it.mode === 'raise' ? '<i class="vcx-mode raise">Raised</i>' : it.mode === 'line' ? '<i class="vcx-mode line">Outline</i>' : it.mode === 'cut' ? '<i class="vcx-mode cut">Cut out</i>' : '';
+  const modeTag = it => it.mode === '3d' ? '<i class="vcx-mode d3">3D</i>' : it.mode === 'raise' ? '<i class="vcx-mode raise">Raised</i>' : it.mode === 'line' ? '<i class="vcx-mode line">Outline</i>' : it.mode === 'cut' ? '<i class="vcx-mode cut">Cut out</i>' : '';
   const designs = `<div class="prx-navh">On this ${b.part ? 'part' : 'sign'}</div>
     <div class="cl-mats">${(b.items || []).map(it => `<button class="cl-mat vcx-item${it.id === ui.vcSel ? ' on' : ''}${it.off ? ' off' : ''}" data-act="vc-sel" data-id="${it.id}"><span class="vcx-ic k-${it.kind}">${icon(kindIc(it))}</span><span><b>${esc(vcItemName(it))}</b><small>${it.kind === 'text' ? esc(it.font || 'Arial') + ' · ' : ''}${fmtLen(+it.h || 0, 1)} high</small></span>${modeTag(it)}</button>`).join('') || '<div class="note show">Nothing on it yet. Add text, a shape or a logo.</div>'}</div>`;
   el.innerHTML = `<div class="prx vcx"><aside class="prx-side"><div class="prx-grand vcx-grand"><span>${esc(b.name)}</span><b>${fmtLen(sz.L, 1)} × ${fmtLen(sz.W, 1)}</b><small id="vc-stats">Working…</small></div>${signs}${draw}${designs}</aside>
@@ -643,8 +660,8 @@ function vcItemForm(it) {
       ${vcIn('Border width (blank = solid)', k + 'frame', +it.frame > 0 ? +it.frame : '')}${+it.frame > 0 ? vcChk('Double line', k + 'double', it.double) : ''}`}`;
   }
   const sz = vcItemSize(it), mode = it.mode || 'carve';
-  const modes = `<div class="vc-wide vcx-modes"><span class="vc-lbl">Carve it</span><div class="seg" role="group" aria-label="Carve it">${[['carve', 'Carve'], ['raise', 'Raised'], ['line', 'Outline'], ['cut', 'Cut out']].map(([v, l]) => `<button data-act="vc-mode" data-id="${v}" aria-pressed="${mode === v}">${l}</button>`).join('')}</div>
-    <small class="muted">${mode === 'raise' ? 'The wood is left standing here and the shape it sits on is carved around it.' : mode === 'line' ? 'The V-bit follows the outline at one depth, like engraving.' : mode === 'cut' ? `Cut all the way through on the outline with ${esc((cncTool(vcBoard().cutTool || vcCutTool()) || {}).id || 'the cut-out bit')}, after the carving.` : 'Carved into the wood, sharp V walls.'}</small></div>${mode === 'line' ? vcIn('Outline depth', k + 'ldepth', vcLineDepth(it)) : ''}`;
+  const modes = `<div class="vc-wide vcx-modes"><span class="vc-lbl">Carve it</span><div class="seg" role="group" aria-label="Carve it">${[['carve', 'Carve'], ['raise', 'Raised'], ['line', 'Outline'], ['3d', '3D'], ['cut', 'Cut out']].map(([v, l]) => `<button data-act="vc-mode" data-id="${v}" aria-pressed="${mode === v}">${l}</button>`).join('')}</div>
+    <small class="muted">${mode === '3d' ? 'A raised 3D shape, carved with a ball nose like Aspire. Pick its profile and height.' : mode === 'raise' ? 'The wood is left standing here and the shape it sits on is carved around it.' : mode === 'line' ? 'The V-bit follows the outline at one depth, like engraving.' : mode === 'cut' ? `Cut all the way through on the outline with ${esc((cncTool(vcBoard().cutTool || vcCutTool()) || {}).id || 'the cut-out bit')}, after the carving.` : 'Carved into the wood, sharp V walls.'}</small></div>${mode === 'line' ? vcIn('Outline depth', k + 'ldepth', vcLineDepth(it)) : ''}${mode === '3d' ? vc3Form(it) : ''}`;
   const posShut = !!vcFoldState().pos;
   return `<div class="vc-formhead"><b>${esc(vcItemName(it))}</b><span class="grow"></span><button class="btn sm pe-x" data-act="vc-desel" aria-label="Done" title="Done">×</button></div>
     <div class="vc-grid">${f}${modes}
@@ -680,6 +697,8 @@ function vcPaint() {
     const live = (b.items || []).filter(it => !it.off);
     if (b.merge && live.some(it => it.mode === 'raise') && !live.some(it => !it.mode || it.mode === 'carve')) warn.push('Raised designs stand up out of a carved shape. Add a shape (a plaque or frame) set to Carve in, under them.');
     if (!b.merge && live.length > 1) warn.push(`This sign was made before designs merged: where designs overlap they cancel out and are left uncut. <button class="btn sm" data-act="vc-merge">Merge overlapping designs</button>`);
+    if (vc3Items(b).length && !vcBalls().length) warn.push('3D shapes need a ball nose bit. Add one in Libraries › CNC tools (type Ball nose).');
+    if (r.field && r.field.depth > 0 && r.field.depth < 0.01) warn.push('The 3D shapes have no height yet. Set a 3D height.');
     if (r.deep > sz.T * 0.8) warn.push(`The carving goes ${fmtLen(r.deep, 1)} deep, close to the board's ${fmtLen(sz.T, 1)} thickness. Set a max depth.`);
     $('#vc-warn').innerHTML = warn.map(w => `<div class="warnbox">${/^<|<button/.test(w) ? w : esc(w)}</div>`).join('');
   }, 0);
@@ -690,7 +709,7 @@ function vcSetVal(k, raw, t) {
   const b = vcBoard(); if (!b) return;
   const [o, f] = [k.slice(0, 1), k.slice(2)];
   if (o === 'm') { const M = CNC_LIB.machine; M[f] = f === 'gSafe' ? (+raw || 12.7) : String(raw).trim(); saveCncLib(); renderCarve(); return; }
-  const lenK = ['L', 'W', 'T', 'depth', 'h', 'w', 'x', 'y', 'r', 'band', 'frame', 'ldepth', 'arcr', 'p.r', 'p.rise', 'cgap'];
+  const lenK = ['L', 'W', 'T', 'depth', 'h', 'w', 'x', 'y', 'r', 'band', 'frame', 'ldepth', 'arcr', 'p.r', 'p.rise', 'cgap', 'd3h', 'd3base'];
   const val = t.type === 'checkbox' ? t.checked : t.classList.contains('vc-raw') ? (t.type === 'number' || t.type === 'range' ? (isFinite(+raw) ? +raw : 0) : raw) : lenK.includes(f) ? (String(raw).trim() === '' ? '' : (ui.vcMM && /^-?\d*\.?\d+$/.test(String(raw).trim()) ? +raw / 25.4 : parseLen(raw))) : f === 'text' ? String(raw).replace(/\r/g, '') : String(raw).trim();
   if (lenK.includes(f) && val !== '' && !isFinite(val)) { flash('Type a size, like 2, 1 1/2 or 38mm.'); renderCarve(); return; }
   mutate(() => {
@@ -716,6 +735,7 @@ function vcSetVal(k, raw, t) {
       else if (f === 'cnx' || f === 'cny' || f === 'cgap') { const c = { nx: 1, ny: 1, gap: 0.5, ...(it.copies || {}) }; c[f.slice(1)] = f === 'cgap' ? (val === '' ? 0.5 : Math.max(0, r3(val))) : Math.max(1, Math.min(60, Math.round(+val) || 1)); if (c.nx * c.ny > 1) it.copies = c; else delete it.copies; }
       else if (f === 'arcdir') { const r = Math.abs(+it.arc) || r3(Math.max(2, vcItemSize(it).w * 0.9)); if (val) it.arc = val === 'up' ? r : -r; else delete it.arc; }
       else if (f === 'arcr') { if (val > 0) it.arc = (+it.arc < 0 ? -1 : 1) * r3(val); }
+      else if (f === 'd3h' || f === 'd3base' || f === 'd3ang') { const o = { ...vc3d(it) }, kk = f.slice(2); o[kk === 'h' ? 'h' : kk] = kk === 'ang' ? Math.max(5, Math.min(89, +val || 45)) : val === '' ? 0 : r3(Math.max(kk === 'base' ? -10 : 0, +val)); it.d3 = o; }
       else if (f === 'frame') { if (val > 0) it.frame = r3(val); else { delete it.frame; delete it.double; } }
       else if (f === 'shape') { it.shape = val; if (!VC_GEN[val] || !VC_GEN[val].r) { if (it.p) delete it.p.r; } }
       else it[f] = typeof val === 'number' ? r3(val) : val;
@@ -762,7 +782,9 @@ function vcAct(a, id) {
     case 'vc-trace': vcPickFile('image/*', vcTraceStart); return true;
     case 'vc-pick': ui.vcPick = !ui.vcPick; renderCarve(); return true;
     case 'vc-addtext': return vcAct('vc-add', 'text');
-    case 'vc-mode': if (it) mutate(() => { it.mode = id === 'carve' ? undefined : id; if (it.mode === undefined) delete it.mode; if (id !== 'carve') b.merge = 1; }); return true;
+    case 'vc-3p': case 'vc-3c': if (it) mutate(() => { it.d3 = { ...vc3d(it), [a === 'vc-3p' ? 'profile' : 'combine']: id }; }); return true;
+    case 'vc-mode': if (it && id === '3d') { vc3EnsureBall(); if (!it.d3) it.d3 = vc3d(it); }
+      if (it) mutate(() => { it.mode = id === 'carve' ? undefined : id; if (it.mode === undefined) delete it.mode; if (id !== 'carve') b.merge = 1; }); return true;
     case 'vc-fill': if (it) { const sz = vcSize(b), one = { ...it, copies: undefined }, bx = vcBox(vcItemLoops(one).concat(vcItemGeo(one).open)), bitD = it.mode === 'cut' ? ((cncTool(b.cutTool || vcCutTool()) || {}).dia || 12.7) / 25.4 : 0, g = Math.max(it.copies ? +it.copies.gap || 0 : 0.5, bitD ? r3(bitD + 0.125) : 0), m = Math.max(0.5, r3(bitD + 0.25));
       // Cut-out copies are spaced the cut-out bit plus 1/8" apart so the cuts never run into each other.
       const nx = Math.max(1, Math.floor((sz.L - 2 * m + g) / (bx.w + g))), ny = Math.max(1, Math.floor((sz.W - 2 * m + g) / (bx.h + g)));

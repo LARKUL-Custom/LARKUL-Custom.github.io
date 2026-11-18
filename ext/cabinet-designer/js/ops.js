@@ -6,7 +6,7 @@
 
 /* ----- CNC tool library (O12) and machine settings (O14). Kept for every job, like the price sheets. ----- */
 // Sizes in mm, rates in mm a minute. Pass depth 0 = cut the full depth in one pass.
-const CNC_TOOL_TYPES = [['cutout', 'Cut out / route'], ['pocket', 'Pocket'], ['drill', 'Drill'], ['vbit', 'V-bit'], ['engrave', 'Engrave']];
+const CNC_TOOL_TYPES = [['cutout', 'Cut out / route'], ['pocket', 'Pocket'], ['drill', 'Drill'], ['vbit', 'V-bit'], ['engrave', 'Engrave'], ['ball', 'Ball nose']];
 const defaultCncTools = () => [
   { id: '1_2COMP', number: 1, dia: 12.7, type: 'cutout', passDepth: 19, stepover: 70, plunge: 4000, feed: 12000, thruExtra: 0.03 },
   { id: '3_8COMP', number: 2, dia: 9.525, type: 'pocket', passDepth: 12, stepover: 70, plunge: 4000, feed: 10000, thruExtra: 0.03 },
@@ -32,7 +32,7 @@ function saveCncLib() {
 }
 const cncTool = id => CNC_LIB.tools.find(t => t.id === id);
 // Straight bits for routes and pockets, biggest first, as [name, mm] like the old fixed list.
-const cncStraight = () => CNC_LIB.tools.filter(t => t.type !== 'vbit' && t.type !== 'drill').sort((a, b) => b.dia - a.dia).map(t => [t.id, t.dia]);
+const cncStraight = () => CNC_LIB.tools.filter(t => t.type !== 'vbit' && t.type !== 'drill' && t.type !== 'ball').sort((a, b) => b.dia - a.dia).map(t => [t.id, t.dia]);
 // How many passes a cut this deep takes with this tool, and the depth of each.
 function cncPasses(toolId, depth) {
   const t = cncTool(toolId), pd = t && t.passDepth > 0 ? t.passDepth : 0;
