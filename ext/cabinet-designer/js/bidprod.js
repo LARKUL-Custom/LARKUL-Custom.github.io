@@ -75,6 +75,7 @@ function ensureBidLib(s) {
   s.bidLibKeys = [...had];
   if (typeof ensureMadeLib === 'function') ensureMadeLib(s, lib);
   if (typeof ensureLamTop === 'function') ensureLamTop(s);
+  if (typeof ensureCmold === 'function') ensureCmold(s);
   return s;
 }
 

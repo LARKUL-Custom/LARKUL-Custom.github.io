@@ -231,6 +231,8 @@ function ensureLibPrices(ps) {
     moved = true;
   }
   if (ps && ps.tops && S.countertops.some(t => t.id === 'top-lam2') && ps.tops['top-lam2'] === undefined) { ps.tops['top-lam2'] = 45; savePrices(); }
+  // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
+  if (ps && ps.molds && !ps.cmold4 && S.moldings.some(m => m.id === 'mo-cmold')) { ps.molds['mo-cmold'] = 4; ps.cmold4 = 1; savePrices(); }
   // 0.57.0: concealed floating shelf brackets and in-wall blocking start at rough shop prices.
   if (ps && ps.adders && (ps.adders.perBracket === undefined || ps.adders.perBlocking === undefined)) { if (ps.adders.perBracket === undefined) ps.adders.perBracket = 15; if (ps.adders.perBlocking === undefined) ps.adders.perBlocking = 35; savePrices(); }
   if (ps && !ps.panelAdd) {

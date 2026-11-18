@@ -273,6 +273,13 @@ function ensureLamTop(s) {
   if (!s.countertops.some(t => t.id === LAM2_TOP.id)) s.countertops.push({ ...LAM2_TOP, mat: (s.materials || []).some(m => m.id === 'm-lam') ? 'm-lam' : (s.countertops[0] || {}).mat });
   s.lamTop2 = 1; return s;
 }
+// Ayden 2026-11-18: a flat crown called Cmold for crown runs, about $4/ft. Added once per job (s.cmold), so a deleted one stays deleted.
+const CMOLD = { id: 'mo-cmold', name: 'Cmold', profile: 'flat', h: 3.5, d: 0.75, fill: false, mat: 'm-mdf' };
+function ensureCmold(s) {
+  if (!s || s.cmold || !Array.isArray(s.moldings)) return s;
+  if (!s.moldings.some(m => m.id === CMOLD.id)) s.moldings.push({ ...CMOLD, mat: (s.materials || []).some(m => m.id === 'm-mdf') ? 'm-mdf' : (s.moldings[0] || {}).mat });
+  s.cmold = 1; return s;
+}
 const topRate = (t, len, depth, rate) => t.priceBy === 'ft' ? len / 12 * rate : len * depth / 144 * rate;
 // The room's shop-built tops in the job export (and so the CNC parts file), as one entry after the cabinets.
 function topExportCab(partEx) {
