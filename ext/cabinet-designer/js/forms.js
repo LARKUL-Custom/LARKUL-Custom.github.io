@@ -6,8 +6,10 @@ function ctl(o, f, val, type, x = {}) {
   if (type === 'select' || type === 'selnum') {
     const one = op => { const v = typeof op === 'object' ? op.v : op, l = typeof op === 'object' ? op.l : op; return `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(l)}</option>`; };
     // Options with a group (g) go under that header, ungrouped ones first (L3).
-    const gs = [...new Set(x.options.map(op => op && op.g).filter(Boolean))];
-    const inner = gs.length ? x.options.filter(op => !(op && op.g)).map(one).join('') + gs.map(g => `<optgroup label="${esc(g)}">${x.options.filter(op => op && op.g === g).map(one).join('')}</optgroup>`).join('') : x.options.map(one).join('');
+    // Options marked last (like "+ Add material…") always go at the bottom, after the groups.
+    const all = x.options.filter(op => !(op && op.last)), tail = x.options.filter(op => op && op.last).map(one).join('');
+    const gs = [...new Set(all.map(op => op && op.g).filter(Boolean))];
+    const inner = (gs.length ? all.filter(op => !(op && op.g)).map(one).join('') + gs.map(g => `<optgroup label="${esc(g)}">${all.filter(op => op && op.g === g).map(one).join('')}</optgroup>`).join('') : all.map(one).join('')) + tail;
     return `<select ${base} aria-label="${esc(x.label || f)}">${inner}</select>`;
   }
   if (type === 'bool') return `<input type="checkbox" ${base}${val ? ' checked' : ''} aria-label="${esc(x.label || f)}">`;

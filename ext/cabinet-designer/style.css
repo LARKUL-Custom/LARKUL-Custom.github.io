@@ -3332,3 +3332,32 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
   .room .dock .dockhead{padding:8px 6px 0}
   .room .dock .dockbody.dock-item{padding:6px 12px 0}
 }
+/* 0.56.5: the bottom panel takes less of the drawing (Ayden: "takes up too much of the drawing screen").
+   Still one set size, just a compact one: 0.82 of the design size, tighter padding, smaller tab rows. */
+@media (min-width: 961px){
+  .room .dock{--u:0.82px}
+  .room .dock .dockbody.dock-item{padding:4px 10px 0}
+  .room .dock .docktabs{gap:1px;padding:4px 4px 4px 0}
+  .room .dock .docktabs button{font-size:14.5px;min-height:30px;padding:4px 8px}
+  .room .dock .docktabs button .ic{width:17px;height:17px}
+  .room .dock .dockhead{padding:4px 4px 0}
+}
+/* Laptop-size windows: a little smaller still, so the item bar keeps to one row instead of wrapping. */
+@media (min-width: 961px) and (max-width: 1599px){
+  .room .dock{--u:0.68px}
+  .room .dock .docktabs button{font-size:13px;min-height:26px;padding:3px 6px;gap:5px}
+  .room .dock .docktabs button .ic{width:15px;height:15px}
+}
+
+/* Quick add material (Settings dropdowns, 0.56.6) */
+.qm-dlg{width:min(520px,100%)}
+.qm-dlg .qe-head b{display:flex;align-items:center;gap:6px}
+.qm-body{display:flex;flex-direction:column;gap:10px;padding:14px 16px;overflow:auto}
+.qm-body .f{grid-template-columns:minmax(0,1fr) minmax(0,240px)}
+.qm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
+.qm-grid .f{grid-template-columns:minmax(0,1fr) 96px}
+.qm-grid .f.chk{display:flex}
+.qm-use{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line);padding-top:10px}
+.qm-use .chk{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer}
+.qm-dlg .qe-foot{justify-content:flex-end}
+@media (max-width:560px){.qm-grid{grid-template-columns:minmax(0,1fr)}}

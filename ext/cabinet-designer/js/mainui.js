@@ -163,7 +163,7 @@ setDesignScale();
 
 // Panel under the drawing: drag its top edge to make it taller or shorter (remembered), and its
 // contents shrink or grow to fit it, so it never needs scroll bars. Double-click the edge to reset.
-const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh3';
+const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh4';
 // The panel can be dragged as short or tall as you like (down to a thin strip); its contents
 // always scale to fit. Heights saved back when the panel scrolled instead of scaling are dropped (key .dockh2).
 function dockMinH() { return 40; }
@@ -171,7 +171,7 @@ function dockMinH() { return 40; }
 // a smaller height (at most 70% of the room) and goes back to yours as soon as the window has room again.
 // (It used to overwrite your height, so a minimized or briefly small hub window left the panel tiny for good.)
 // Starting height of the panel under the drawing: the item bar at its set size, in screen pixels.
-const DOCK_H = 196;
+const DOCK_H = 150;
 function applyDockH() {
   let h = 0; try { h = +localStorage.getItem(DOCK_KEY()) || 0; } catch (_) {}
   const room = document.getElementById('tab-room'); if (!room) return;

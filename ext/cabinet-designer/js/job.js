@@ -227,8 +227,9 @@ function renderTplTab() {
     const sd = SETTINGS.find(x => x.k === k), list = sd.list();
     const v = scope ? (scope.settings || {})[k] || '' : d[k] || '', eff = scope ? roomSet(k, scope) : d[k] || '';
     const pic = k === 'pull' && !eff ? tplPic('pull', doorTpl(scope ? roomSet('doorT', scope) : d.doorT).pull) : tplPic(k, eff);
-    const sel = scope ? ctl('rset:' + scope.id, k, v, 'select', { options: setOpts(k, list), label: sd.label + ' for ' + scope.name })
-      : ctl('jobd', k, v, 'select', { options: sd.blank ? [{ v: '', l: sd.blank }, ...list] : list, label: sd.label });
+    const qa = typeof qmOpt === 'function' ? qmOpt(k) : [];
+    const sel = scope ? ctl('rset:' + scope.id, k, v, 'select', { options: [...setOpts(k, list), ...qa], label: sd.label + ' for ' + scope.name })
+      : ctl('jobd', k, v, 'select', { options: [...(sd.blank ? [{ v: '', l: sd.blank }, ...list] : list), ...qa], label: sd.label });
     return `<div class="tpltile${scope && v ? ' own' : ''}"><div class="tt-h">${sd.label.replace(' (edgebanding)', '')}</div><div class="tt-pic">${pic}</div>${sel}
       <div class="tt-f">${scope && v ? '<span class="tt-own">This room</span>' : ''}<button class="linkbtn" data-act="tab" data-id="${sd.tab}">Edit library</button></div></div>`;
   };
@@ -258,7 +259,7 @@ function renderDash() {
   const cell = (r, k) => {
     if (TPL_WALL[k]) return ctl('room:' + r.id, k, r[k] ?? S.job[k], 'len', { label: TPL_WALL[k] + ' for ' + r.name });
     const sd = SETTINGS.find(x => x.k === k), v = (r.settings || {})[k] || '';
-    return `<div class="setcell${v ? ' own' : ''}">${settingPreview(k, roomSet(k, r))}${ctl('rset:' + r.id, k, v, 'select', { options: setOpts(k, sd.list()), label: sd.label + ' for ' + r.name })}</div>`;
+    return `<div class="setcell${v ? ' own' : ''}">${settingPreview(k, roomSet(k, r))}${ctl('rset:' + r.id, k, v, 'select', { options: [...setOpts(k, sd.list()), ...(typeof qmOpt === 'function' ? qmOpt(k) : [])], label: sd.label + ' for ' + r.name })}</div>`;
   };
   const label = k => TPL_WALL[k] || SETTINGS.find(x => x.k === k).label.replace(' (edgebanding)', '');
   return `<div class="card dashcard"><div class="cardhead"><h3>${icon('home')}Rooms in this job</h3><div class="row-actions"><button class="btn" data-act="dash-csv">${icon('download')}Export</button><button class="btn primary" data-act="room-add">${icon('plus')}Add room</button></div></div>
