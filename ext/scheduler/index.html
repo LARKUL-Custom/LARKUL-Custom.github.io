@@ -2170,7 +2170,7 @@ document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.cl
    - A design change after the doors are ordered moves the job to the next open slot.
    - Customers get an install week; the exact day is confirmed 2 weeks ahead.
    Install dates from here go into the job's "Install starts", so the Calendar and Manufacturing tabs follow it. */
-const PLAN_DEF={promiseWeeks:8,slotsPer2Weeks:3,spareSlotsPerMonth:1,doorWeeksMin:2,doorWeeksMax:3,spareDays:2,shopWeeks:2,installAfterWeeks:1,confirmWeeks:2,auto:true,weekSlots:{}};
+const PLAN_DEF={promiseWeeks:8,slotsPer2Weeks:3,spareSlotsPerMonth:1,doorWeeksMin:2,doorWeeksMax:2,spareDays:2,shopWeeks:2,installAfterWeeks:1,confirmWeeks:2,auto:true,weekSlots:{}};
 const PLAN_ANCHOR='2026-11-16'; /* this week gets the second slot; then every other week */
 const SLOT_TYPES=['kitchen','house','room','bath','laundry','builtin','custom','hood','mantel'];
 const PS=()=>state.settings.plan;
@@ -2263,8 +2263,10 @@ function autoPlan(){
 /* Ayden's jobs from before paint slots: already sold, so they count as paid and signed. A job with an install date
    keeps it and takes a slot the week before; if that week is full it's marked over the limit instead of being moved. */
 function planMigrate(){
+  /* 0.16.1: Ayden says Bywater doors take about 2 weeks; switch saved data from the first guess of 3, unless it was changed */
+  if(num(state.settings.planRev)===1){state.settings.planRev=2;if(num(PS().doorWeeksMax)===3&&num(PS().doorWeeksMin)===2)PS().doorWeeksMax=2}
   if(num(state.settings.planRev)>=1)return [];
-  state.settings.planRev=1;const out=[];
+  state.settings.planRev=2;const out=[];
   for(const j of state.jobs){
     if(j.example||finished(j)||(j.plan&&('deposit' in j.plan||'signed' in j.plan)))continue;
     j.plan={deposit:'yes',signed:true,legacy:true,doorsOrdered:'yes'};out.push(j.name);

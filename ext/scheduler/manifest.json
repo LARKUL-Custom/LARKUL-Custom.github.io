@@ -3,7 +3,7 @@
   "name": "Scheduler",
   "icon": "\ud83d\udcc5",
   "description": "Larkul shop schedule: books each sold job into a paint slot on its own, plans doors, CNC, assembly, paint and install weeks with spare time, plus calendars, materials and Claude",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "ui": "index.html",
   "server": "server.js",
   "order": 30,
