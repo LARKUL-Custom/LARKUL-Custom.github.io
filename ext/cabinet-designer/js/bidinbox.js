@@ -110,12 +110,15 @@ function bidTakeoffRows(rooms, tk, items, done) {
           }
           const wl = given || walls.reduce((a, b) => (!a || len(b) > len(a) ? b : a), null) || rm.walls[0];
           const side = +r.side === 2 ? -1 : 1, key = wl.id + ':' + side;
-          let off = hasX ? +r.x : (cursor[key] || 0);
+          // X (from the bid, or the running cursor) is measured from the inside face of the left wall, like
+          // "From left wall": the wall's thickness is behind 0, not in front of it (0.57.3; it sat half a wall in).
+          const F = wallFaces(wl.id, side), room = F.hi - F.lo;
+          let x = hasX ? +r.x : (cursor[key] || 0);
           // Shelves without a spot that would run past the wall's end start a new row 14" higher.
-          if (!hasX && off > 0 && off + w > len(wl) + 0.1) { off = 0; cursor[key + 'up'] = (cursor[key + 'up'] || 0) + 14; }
+          if (!hasX && x > 0 && x + w > room + 0.1) { x = 0; cursor[key + 'up'] = (cursor[key + 'up'] || 0) + 14; }
           if (!hasX) y += cursor[key + 'up'] || 0;
-          cursor[key] = Math.max(cursor[key] || 0, off + w + 2);
-          at = { wall: wl.id, side, off: r3(off) };
+          cursor[key] = Math.max(cursor[key] || 0, x + w + 2);
+          at = { wall: wl.id, side, off: offFromLeft(wl.id, side, x, w) };
           if (!given || !hasX) done.unplaced++;
           const c = newCab(S, lib, at.wall, at.side, at.off);
           Object.assign(c, { w, h, d, elev: r3(y), fromBid: true, notes: [r.code, r.material, r.notes].filter(Boolean).join(' · ') });

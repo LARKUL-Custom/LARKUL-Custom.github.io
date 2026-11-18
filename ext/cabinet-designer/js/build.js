@@ -413,6 +413,23 @@ function caseRails(c, p, fronts, t) {
 // at the blind edge, just behind the edge of the doors like a cabinet side, so a door hinged on that edge gets its plates
 // on it (hinged the other way they go on the cabinet side). The blind panel goes on the front, beside the doors.
 // x0/x1 are the inside panel's faces, o0/o1 the opening beside it.
+// A sink base stands its front stretcher up as a 7" apron behind the fronts, as Ayden's Mozaik library does (Ayden
+// 2026-11-18). Farm house, apron and vanity sinks keep the flat stretcher like there, and so does a sink with real drawers on top. Returns the apron height, or 0.
+function sinkApronH(c, p) {
+  p = p || effParams(c); const h = +p.sinkApron || 0;
+  if (h <= 0 || c.cat !== 'Base' || (c.construction || {}).top !== 'stretchers' || faceFrame(c) || angledCorner(c) || blindCorner(c) || hasCabShape(c) || (cabTopShape(c) || {}).edges) return 0;
+  const lib = [...(S.library || []), ...(typeof AMERICAN_LIB !== 'undefined' ? AMERICAN_LIB : [])].find(l => l.id === c.libId) || {};
+  const txt = [c.name, lib.name, lib.folder, lib.desc].join(' ');
+  // Real drawers at the top (a drawer sink) keep the flat stretcher: the apron would stand in front of them.
+  if (((c.rows || [])[0] || {}).type === 'drawer') return 0;
+  return /sink/i.test(txt) && !/farm|apron|vanity/i.test(txt) ? Math.min(h, c.h / 2) : 0;
+}
+// The rear stretcher runs out to the back edge with the back in a groove in it (Ayden 2026-11-18, like Mozaik), when the
+// back sits inside its width. Returns its front edge (inches from the cabinet front) and the groove, or null.
+function rearStretcherAt(p, D, backY, bt) {
+  const sw = p.stretcherWidth; if (!(D - backY < sw - 0.25)) return null;
+  return { y0: r3(D - sw), y1: D, groove: r3(backY + bt / 2 - (D - sw)) };
+}
 function blindPart(c, p, t) {
   if (!blindCorner(c) || faceFrame(c)) return null;
   p = p || effParams(c); const bw = blindWidth(c), g = p.frontGap, sr = p.frontSideReveal, W = c.w;
@@ -782,6 +799,7 @@ function buildParts(c) {
   // Room in every groove and dado (Ayden 2026-11-10: a little slop, or a slightly thick sheet won't go in): the groove is
   // gc wider than the panel, and the panel stops gc short of the groove's bottom.
   const gc = gcB, gReach = Math.max(0, p.dadoDepth - gc);
+  const apH = sinkApronH(c, p), rsAt = rearStretcherAt(p, D, backY, bt), rsA0 = rsAt ? rsAt.y0 : r3(backY - p.stretcherWidth);
   const backGroove = { type: 'groove', x1: sh, y1: backY + bt / 2, x2: H, y2: backY + bt / 2, width: r3(bt + gc), depth: p.dadoDepth, face: 'inside', why: 'back dado' };
   const toe = tk && !feet ? [{ type: 'notch', x: 0, y: 0, w: tk, h: p.toeKickSetback, why: 'toe kick' }] : [];
   // No dado (depth 0, the dollhouse set): the back is glued in between the sides, top and bottom.
@@ -810,8 +828,9 @@ function buildParts(c) {
   const panelGroove = { type: 'groove', x1: 0, y1: backY + bt / 2, x2: inW, y2: backY + bt / 2, width: r3(bt + gc), depth: p.dadoDepth, face: 'inside', why: 'back dado' };
   part('Bottom', cm, inW, D, { kind: 'topbot', ops: p.dadoDepth > 0 ? [panelGroove] : [] });
   if ((c.construction || {}).top === 'stretchers') {
-    part('Front stretcher', cm, inW, p.stretcherWidth, { kind: 'stretcher' });
-    part('Rear stretcher', cm, inW, p.stretcherWidth, { kind: 'rearStretcher' });
+    if (apH) { const q = part('Sink apron', cm, inW, apH, { kind: 'stretcher' }); q.jy = r3(t / 2); }
+    else part('Front stretcher', cm, inW, p.stretcherWidth, { kind: 'stretcher' });
+    part('Rear stretcher', cm, inW, p.stretcherWidth, { kind: 'rearStretcher', ops: rsAt && p.dadoDepth > 0 ? [{ ...panelGroove, y1: rsAt.groove, y2: rsAt.groove }] : [] });
   } else part('Top', cm, inW, D, { kind: 'topbot', ops: p.dadoDepth > 0 ? [{ ...panelGroove }] : [] });
   // Drawer stretchers (caseRails): flat, the top stretcher's width deep, at the front, joined into the sides like it.
   rails.stretchers.forEach((q, i) => { q.pt = part('Drawer stretcher' + (rails.stretchers.length > 1 ? ' ' + (i + 1) : ''), cm, inW, p.stretcherWidth, { kind: 'stretcher' }); });
@@ -894,9 +913,10 @@ function buildParts(c) {
     jtFasten(J, fem, pt, end === 'L' ? 0 : r3(pt.L), end === 'L' ? 'W1' : 'W2', pairs, label, jx);
     sp.ops.push(...fem.map(bq ? o => { const q = { ...o, face: bpC.side === 'L' ? 'right' : 'left' }; ['x', 'x1', 'x2'].forEach(k => { if (typeof q[k] === 'number') q[k] = r3(q[k] - bq.z0); }); return q; } : down));
   });
-  [['Bottom', 'bottom', zIn0 - t / 2, 0, backY], ['Top', 'top', zIn1 + t / 2, 0, backY], ['Front stretcher', 'stretcher', zIn1 + t / 2, 0, p.stretcherWidth], ['Rear stretcher', 'stretcher', zIn1 + t / 2, backY - p.stretcherWidth, backY]]
+  [['Bottom', 'bottom', zIn0 - t / 2, 0, backY], ['Top', 'top', zIn1 + t / 2, 0, backY], ['Front stretcher', 'stretcher', zIn1 + t / 2, 0, p.stretcherWidth], ['Rear stretcher', 'stretcher', zIn1 + t / 2, rsA0, backY]]
     .forEach(([name, type, fx, a, b]) => { const pt = parts.find(q => q.cabId === c.id && q.name === name); if (pt) joinSides(type, pt, fx, null, a, b); });
   rails.stretchers.forEach(q => joinSides('stretcher', q.pt, q.z, null, 0, p.stretcherWidth));
+  { const ap = parts.find(q => q.cabId === c.id && q.name === 'Sink apron'); if (ap) joinSides('nailer', ap, null, [r3(zIn1 + t - ap.W), r3(zIn1 + t)]); }
   // Drawer partitions: fastened through what is under and over them, like the vertical divider into the bottom and top.
   [...dParts.map((q, i) => ({ ...q, name: 'Drawer partition' + (dParts.length > 1 ? ' ' + (i + 1) : '') })),
    ...bpPieces.map((q, i) => ({ ...q, blindUp: i > 0, name: 'Blind corner inside panel' + (bpPieces.length > 1 ? (i ? ' (upper)' : ' (lower)') : '') }))].forEach(q => {
@@ -907,7 +927,7 @@ function buildParts(c) {
     // [host part, the partition edge (top or bottom), where it touches front to back]
     // A blind corner's upper inside panel stands on the drawer stretcher the lower one is fastened up into (one hole can't hold both).
     const below = rs ? (q.blindUp ? [] : [[rs.pt, 0, 0, p.stretcherWidth]]) : [[mine('Bottom'), 0, 0, pt.W]];
-    const top = mine('Top'), above = rsA ? [[rsA.pt, 1, 0, p.stretcherWidth]] : sh ? [[shelfPt(sh), 1, 0, pt.W]] : top ? [[top, 1, 0, pt.W]] : [[mine('Front stretcher'), 1, 0, p.stretcherWidth], [mine('Rear stretcher'), 1, backY - p.stretcherWidth, backY]];
+    const top = mine('Top'), above = rsA ? [[rsA.pt, 1, 0, p.stretcherWidth]] : sh ? [[shelfPt(sh), 1, 0, pt.W]] : top ? [[top, 1, 0, pt.W]] : [[mine('Front stretcher'), 1, 0, p.stretcherWidth], [mine('Rear stretcher'), 1, rsA0, backY]];
     [...below, ...above].forEach(([host, atTop, a, b]) => {
       if (!host) return;
       const fem = []; jx.a = a; jx.b = b; jx.type = 'divider'; jx.side = null; jx.off = 0;

@@ -48,6 +48,7 @@ const PARAM_DEFS = [
   { k: 'ada', g: 'base', label: 'ADA toe kick (9" high, 6" deep)', type: 'select', cats: ['Base', 'Tall'], options: [{ v: '', l: 'Off' }, { v: 'on', l: 'On' }] },
   { k: 'feetCount', g: 'base', label: 'Feet per cabinet (0 = automatic)', type: 'int', cats: ['Base', 'Tall'] },
   { k: 'stretcherWidth', g: 'box', label: 'Top stretcher width', type: 'len', cats: ['Base'] },
+  { k: 'sinkApron', g: 'box', label: 'Sink base front: upright apron this tall (0 = flat stretcher)', type: 'len', cats: ['Base'] },
   // 0.55.44, from Ayden's Mozaik library: a stretcher under the top drawer of a stack, a fixed shelf over a stack with a door above.
   { k: 'drawerRails', g: 'box', label: 'Drawer stretchers and fixed shelves at drawer stacks', type: 'select', options: [{ v: 'on', l: 'Add automatically (like Mozaik)' }, { v: 'off', l: 'Leave off' }] },
   // 0.55.15 (Ayden 2026-11-09): every cabinet gets top and bottom nailers unless its back or construction says otherwise.
@@ -82,7 +83,7 @@ const PARAM_DEFS = [
 // Parameter groups, by what they are for.
 const PARAM_GROUPS = [['base', 'Legs and toe kick'], ['box', 'Cabinet construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
 const SHOP_PARAMS = {
-  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.75, dadoDepth: 0.375, grooveClear: 0.03125,
+  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.8125, dadoDepth: 0.375, sinkApron: 7, grooveClear: 0.03125,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
   frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'dovetail', dovetailPin: 0, drawerRails: 'on',
 };
@@ -629,7 +630,10 @@ function migrate(s) {
   // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.
   if (!s.miniGone) { const used = s.rooms.some(r => (r.cabinets || []).some(c => c.libId === 'mini-ad')), L = !s.libSet || s.libSet === 'main' ? s.library : (s.libSets || {}).main;
     if (!used && Array.isArray(L)) { const i = L.findIndex(l => l.id === 'mini-ad'); if (i >= 0) L.splice(i, 1); } s.miniGone = 1; }
-  return attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))))));
+  const out = attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))))));
+  // 0.57.3: bid shelves and products were placed from the wall's centerline end, half the corner wall's thickness inside it.
+  if (!out.bidFace && typeof bidFaceFix === 'function') { const keep = S; S = out; try { bidFaceFix(out); } catch (_) {} finally { S = keep; } out.bidFace = 1; }
+  return out;
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
 // The open job lives in its own file (see jobs.js); browser storage keeps a working copy too.

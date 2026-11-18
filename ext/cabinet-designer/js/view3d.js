@@ -214,8 +214,10 @@ function cabinetMeshes(c, opts = {}) {
     });
     grp.add(box3(W - 2 * t, t, D, cmM, W / 2, tk + t / 2, D / 2));
     if ((c.construction || {}).top === 'stretchers') {
-      grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, D - p.stretcherWidth / 2));
-      grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, p.stretcherWidth / 2 + p.backInset + bt));
+      const apH = sinkApronH(c, p), rsAt = rearStretcherAt(p, D, D - p.backInset - bt, bt);
+      if (apH) grp.add(box3(W - 2 * t, apH, t, cmM, W / 2, H - apH / 2, D - t / 2));
+      else grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, D - p.stretcherWidth / 2));
+      grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, rsAt ? p.stretcherWidth / 2 : p.stretcherWidth / 2 + p.backInset + bt));
     } else grp.add(box3(W - 2 * t, t, D, cmM, W / 2, H - t / 2, D / 2));
     grp.add(box3(W - 2 * t, H - tk - 2 * t, bt, L3(bm, 'inside'), W / 2, tk + H / 2 - tk / 2, p.backInset + bt / 2, false));
   }

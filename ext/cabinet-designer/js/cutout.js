@@ -268,7 +268,15 @@ function coVisible(R) {
 // every front and every cabinet is its own hole, pulled in half a strip where it meets another so a thin strip of paper stays
 // wherever two of them meet.
 function coCuts(R, doors, px) {
-  const vis = coVisible(R);
+  // Everything is kept inside the picture: a part running out of the frame (an island in the front of the view) is cut
+  // off along the picture's edge, so no cut line runs into the margin or over the caption.
+  const frame = [[{ X: 0, Y: 0 }, { X: R.w * CO_SC, Y: 0 }, { X: R.w * CO_SC, Y: R.h * CO_SC }, { X: 0, Y: R.h * CO_SC }]];
+  const vis = new Map();
+  coVisible(R).forEach((ps, k) => { const c = coInter(ps, frame); if (c.length) vis.set(k, c); });
+  const cuts = coCutsIn(vis, doors, px);
+  return cuts.flatMap(p => coInter([p], frame)).filter(p => p.length > 2 && Math.abs(coArea(p)) >= px.minA);
+}
+function coCutsIn(vis, doors, px) {
   // Drops anything thinner than 2r. Growing back can poke a sharp corner out past where it was, so it is kept inside.
   const open = (paths, r) => coInter(coOffset(coOffset(paths, -r), r), paths);
   // One hole per run: everything joined, with the hairline cracks between parts closed (grow, then shrink back).

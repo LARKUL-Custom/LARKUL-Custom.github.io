@@ -189,14 +189,17 @@ function bidSpot(rm, r, w, cursor) {
   const wi = parseInt(r.wall) || 0, given = wi > 0 && rm.walls[wi - 1] ? rm.walls[wi - 1] : null;
   const side = +r.side === 2 ? -1 : 1, hasX = r.x !== '' && r.x != null && isFinite(+r.x);
   // Without a spot on the bid: the first wall, longest first, with room left at its end for it.
-  const after = x => Math.max(cursor[x.id + ':' + side] || 0, (u => u ? u + 2 : 0)(rm.cabinets.filter(c => c.wall === x.id && c.side === side && (r.lvl === 'up' ? c.cat !== 'Base' : c.cat !== 'Wall')).reduce((a, c) => Math.max(a, c.off + c.w), 0)));
+  // X runs from the inside face of the viewer's left wall, like "From left wall" (0.57.3: it was from the wall's centerline end,
+  // so a shelf at X 0 sat half the corner wall's thickness inside it).
+  const room = x => { const f = wallFaces(x.id, side); return f.hi - f.lo; };
+  const after = x => Math.max(cursor[x.id + ':' + side] || 0, (u => u ? u + 2 : 0)(rm.cabinets.filter(c => c.wall === x.id && c.side === side && (r.lvl === 'up' ? c.cat !== 'Base' : c.cat !== 'Wall')).reduce((a, c) => Math.max(a, fromEnd(c, 'L') + c.w), 0)));
   const byLen = walls.slice().sort((a, b) => len(b) - len(a));
-  const wl = given || byLen.find(x => after(x) + w <= len(x) + 0.01) || byLen[0] || rm.walls[0];
+  const wl = given || byLen.find(x => after(x) + w <= room(x) + 0.01) || byLen[0] || rm.walls[0];
   if (!wl) return null;
   const key = wl.id + ':' + side;
-  const off = hasX && given ? +r.x : (after(wl) + w <= len(wl) + 0.01 ? after(wl) : 0);
-  cursor[key] = Math.max(cursor[key] || 0, off + w + 2);
-  return { wall: wl.id, side, off: r3(off), placed: !!given && hasX };
+  const x = hasX && given ? +r.x : (after(wl) + w <= room(wl) + 0.01 ? after(wl) : 0);
+  cursor[key] = Math.max(cursor[key] || 0, x + w + 2);
+  return { wall: wl.id, side, off: offFromLeft(wl.id, side, x, w), placed: !!given && hasX };
 }
 // Builds one planned row in room rm (S.rooms holds the new rooms while this runs). Returns what it made, for the note.
 function bidBuild(rm, r, plan, cursor, done) {

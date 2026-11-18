@@ -326,6 +326,23 @@ function setFromEnd(c, end, v) {
   const { lo, hi } = runLimits(c), left = end === 'L';
   c.off = r3((c.side === 1) === left ? lo + v : hi - v - c.w);
 }
+// The inside wall faces on one side of a wall, for placing things by "from the left wall" before a cabinet exists.
+// 0 from the left is the inside face of the wall at that end; the wall's thickness is behind it, never in front.
+const wallFaces = (wallId, side) => wall(wallId) ? runLimits({ id: null, wall: wallId, side, off: 0, w: 0, d: 1, h: 1, elev: 0, outset: 0 }) : { lo: 0, hi: 0 };
+// Saved jobs from before 0.57.3: a row of bid-placed items (same wall, side and height) whose first one starts inside the
+// left wall moves right together, so the first one sits at 0 and the 2" gaps stay. Rows that start at or past 0 stay put.
+function bidFaceFix(st) {
+  st.rooms.forEach(rm => withRoom(rm, () => {
+    const rows = {};
+    (rm.cabinets || []).forEach(c => { if (c.fromBid && c.wall && wall(c.wall)) (rows[[c.wall, c.side, r3(c.elev || 0)].join('|')] ||= []).push(c); });
+    Object.values(rows).forEach(cs => {
+      const d = -Math.min(...cs.map(c => fromEnd(c, 'L'))); if (!(d > 0.01)) return;
+      cs.forEach(c => { c.off = r3(c.off + (c.side === -1 ? -d : d)); });
+    });
+  }));
+}
+// The along-the-wall offset for something w wide that sits x from the viewer's left wall face.
+function offFromLeft(wallId, side, x, w) { const { lo, hi } = wallFaces(wallId, side); return r3(side === -1 ? hi - x - w : lo + x); }
 // Centers a cabinet between the wall faces, or in the open space between its nearest neighbors.
 function centerCab(c, inOpening) {
   let { lo, hi } = runLimits(c);

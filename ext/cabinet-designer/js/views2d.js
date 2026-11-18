@@ -791,6 +791,11 @@ function renderElev(pr) {
   if (svg) svg.setAttribute('viewBox', vb);
   const zc = !pr && $('#elevzoom'); if (zc) zc.style.display = z ? '' : 'none';
   let body = `<rect class="ev-wall nss"${wallFill2d()} x="0" y="${-H}" width="${L}" height="${H}"/><line class="ev-floor nss" x1="-8" x2="${L + 8}" y1="0" y2="0" stroke-width="2"/>`;
+  // The walls that meet this one at its ends, cut through: 0 for "From left wall" is their inside face, so the room starts
+  // where they stop (0.57.3; before, the drawing started at the wall's centerline end, half a wall early).
+  { const f = wallFaces(w.id, side), eL = side === 1 ? f.lo : L - f.hi, eR = side === 1 ? L - f.hi : f.lo;
+    if (eL > 0.01) body += `<rect class="ev-cap ev-endwall nss" x="0" y="${-H}" width="${eL}" height="${H}"><title>The wall at this end</title></rect>`;
+    if (eR > 0.01) body += `<rect class="ev-cap ev-endwall nss" x="${L - eR}" y="${-H}" width="${eR}" height="${H}"><title>The wall at this end</title></rect>`; }
   const mats = [], dims = []; let labels = '';
   // Doors and windows sit in the wall, behind the cabinets.
   body += fixtElevSVG(w, side, L, fs, true);
