@@ -23,7 +23,7 @@ function cncPartFile(scoped) {
   const inRoom = ri => !scoped || ui.cutRoom === 'all' || !roomById(ui.cutRoom) || S.rooms[ri].id === ui.cutRoom;
   const keep = (ri, cabId, kind) => inRoom(ri) && (!scoped || cutKeep(cutPartKey({ cabId, kind })));
   d.rooms.forEach((rm, ri) => rm.cabinets.forEach((c, ci) => c.parts.forEach((p, pi) => {
-    if (!keep(ri, S.rooms[ri].cabinets[ci].id, p.kind)) return;
+    if (!keep(ri, (S.rooms[ri].cabinets[ci] || { id: 'top:' + S.rooms[ri].id }).id, p.kind)) return;
     const where = `${rm.name} · ${c.label} · ${p.name}`;
     const m = S.materials.find(x => x.id === p.material);
     if (!m || m.kind !== 'sheet') { skipped.push(`${where}: not a sheet material, left off`); return; }

@@ -282,6 +282,7 @@ function renderRoom() {
   renderLayers3d();
   renderViews3d();
   $('#render3d').innerHTML = `${icon('sun')}Realistic`; $('#render3d').setAttribute('aria-pressed', String(!!ui.render3d && !ui.hidden3d));
+  { const sp = $('#sunpick'), real = !!ui.render3d && !ui.hidden3d; if (sp) { sp.hidden = !real; const r = $('#sunhour'); if (r && typeof SUN !== 'undefined' && +r.value !== SUN.hour) r.value = SUN.hour; const l = $('#sunlbl'); if (l && typeof sunLabel === 'function') l.textContent = sunLabel(SUN.hour); } }
   $('#hidden3d').innerHTML = `${icon('cube')}Hidden line`; $('#hidden3d').setAttribute('aria-pressed', String(!!ui.hidden3d));
   $('[data-act=snap3d]').innerHTML = `${icon('camera')}Save image`;
   $('[data-act=co-open]').innerHTML = `${icon('print')}Cutout card`;
@@ -623,7 +624,7 @@ function dockBody(k) {
 /* ---------- Placing and applying ---------- */
 function placeCabinet(libId, g) {
   const l = libItem(libId); if (!l || !g) return;
-  let nc; mutate(() => { nc = newCab(S, l, g.wall, g.side, g.off); if (g.w) nc.w = g.w; S.cabinets.push(nc); { const fo = fillerFlushOutset(nc); if (fo !== null) nc.outset = fo; } if (l.lights && l.lights.length) addCabStrips(nc.id, l.lights); });
+  let nc; mutate(() => { nc = newCab(S, l, g.wall, g.side, g.off); if (g.w) nc.w = g.w; S.cabinets.push(nc); { const fo = fillerFlushOutset(nc); if (fo !== null) nc.outset = fo; } if (l.lights && l.lights.length) addCabStrips(nc.id, l.lights); if (l.sinkOn && nc.wall && typeof sinkOnCab === 'function') sinkOnCab(nc, l.sinkOn); });
   ui.sel = { type: 'cab', id: nc.id }; ui.elevWall = g.wall; renderRoom();
 }
 function applyPayload(cabId, kind, val) {
@@ -1310,9 +1311,10 @@ document.addEventListener('click', e => {
     case 'mold-del': mutate(() => { S.moldings = S.moldings.filter(m => m.id !== id); allCabs().forEach(c => { if (c.molding === id) c.molding = null; }); unsetPick('molding', id, S.moldings[0].id); }); break;
     case 'mold-quick': {
       const box = el.closest('.qm-box'), q = k => box.querySelector('.qm-' + k);
-      const mid = q('mold').value, gap = parseLen(q('gap').value), tall = q('tall').checked;
-      if (!isFinite(gap)) { q('note').textContent = 'Enter a distance, like 12 or 6 1/2.'; break; }
-      ui.qmGap = gap; ui.qmTall = tall; let n = 0;
+      // Blank distance: every upper gets it (a crown run along the tops of the uppers, wherever the ceiling is).
+      const mid = q('mold').value, gt = q('gap').value.trim(), gap = gt === '' ? Infinity : parseLen(gt), tall = q('tall').checked;
+      if (gt !== '' && !isFinite(gap)) { q('note').textContent = 'Enter a distance, like 12 or 6 1/2.'; break; }
+      ui.qmGap = isFinite(gap) ? gap : ''; ui.qmTall = tall; let n = 0;
       mutate(() => { curRoom().settings.molding = mid === S.job.defaults.molding ? '' : mid; S.cabinets.forEach(c => { const w = wall(c.wall); if (!w) return; if ((c.cat === 'Wall' || (tall && c.cat === 'Tall')) && w.height - (c.elev + c.h) <= gap + 1e-6) { c.molding = mid; n++; } }); });
       flash(n ? `Molding added to ${nCab(n)}` : 'No upper cabinets are that close to the ceiling'); break;
     }

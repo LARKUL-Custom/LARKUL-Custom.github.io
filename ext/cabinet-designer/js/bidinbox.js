@@ -27,7 +27,9 @@ async function bidTakeoffOf(files) {
 // Rows the takeoff brings that a Mozaik job can't: shelves are drawn, the rest are priced on the Quote.
 const BID_SHELF = r => r.category === 'shelf';
 const BID_PRICED = r => ['millwork', 'countertop', 'other', 'wood top'].includes(r.category) && !(r.category === 'wood top' && +r.W > 0);
-const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => BID_SHELF(r) || BID_PRICED(r));
+// 0.57.0: and the rows Cabinet Designer now builds itself (desks, slat walls, microwave drawer bases... see bidPlan in bidprod.js).
+const bidOwn = r => typeof bidPlan === 'function' && !!bidPlan(r);
+const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => BID_SHELF(r) || BID_PRICED(r) || bidOwn(r));
 
 // Bid Reader's walls ({ len, turn } chained clockwise, islands free-standing) as Mozaik walls in inches, the
 // same layout Bid Reader writes into the Mozaik job, so a room that only has shelves still gets its walls.
@@ -63,8 +65,15 @@ const bidSize = r => ['W', 'H', 'D'].map(k => +r[k] > 0 ? fmtLen(+r[k]) : '').fi
 // Rooms the Mozaik job didn't have (only shelves or millwork in them) are made from the takeoff's walls.
 // Returns what it did, for the message after the import.
 function bidTakeoffAdd(rooms, tk) {
-  const done = { shelves: 0, priced: 0, unplaced: 0, noShelf: 0, rooms: 0 };
+  const done = { shelves: 0, priced: 0, unplaced: 0, noShelf: 0, rooms: 0, built: 0, lines: 0, sinks: 0, options: [] };
   const items = bidTakeoffItems(tk); if (!items.length) return done;
+  // The new rooms stand in for the job's while this runs, so room lookups (neighbours, sinks, tops) find them.
+  const keepRooms = S.rooms; S.rooms = rooms;
+  try { return bidTakeoffRows(rooms, tk, items, done); } finally { S.rooms = keepRooms; }
+}
+function bidTakeoffRows(rooms, tk, items, done) {
+  if (typeof bidAfter === 'function') bidAfter(rooms, tk, done);
+  const buildAt = {};
   const tkRoom = n => (tk.rooms || []).find(r => bidRoomKey(r.name) === bidRoomKey(n));
   const roomFor = n => {
     const name = String(n || '').trim() || 'Room';
@@ -78,7 +87,10 @@ function bidTakeoffAdd(rooms, tk) {
   };
   const lib = bidShelfLib(), cursor = {};
   items.forEach(r => {
+    if (r._drawn) return;
     const rm = roomFor(r.room), qty = Math.max(1, Math.round(+r.qty || 1));
+    const plan = typeof bidPlan === 'function' ? bidPlan(r) : null;
+    if (plan && withRoom(rm, () => bidBuild(rm, r, plan, buildAt, done)) !== false) return;
     if (BID_SHELF(r) && lib && +r.W > 0) {
       withRoom(rm, () => {
         const walls = rm.walls.filter(w => !w.island);
@@ -107,6 +119,7 @@ function bidTakeoffAdd(rooms, tk) {
           if (!given || !hasX) done.unplaced++;
           const c = newCab(S, lib, at.wall, at.side, at.off);
           Object.assign(c, { w, h, d, elev: r3(y), fromBid: true, notes: [r.code, r.material, r.notes].filter(Boolean).join(' · ') });
+          if (typeof isFloatShelf === 'function' && isFloatShelf(c)) bidShelfExtras(c, r);
           rm.cabinets.push(c); done.shelves++;
         }
       });
@@ -125,6 +138,10 @@ function bidTakeoffNote(d) {
   const bits = [];
   if (d.shelves) bits.push(`${d.shelves} floating shel${d.shelves === 1 ? 'f' : 'ves'}${d.unplaced ? ` (${d.unplaced} without a spot on the bid, set along the longest wall)` : ''}`);
   if (d.priced) bits.push(`${d.priced} millwork or countertop line${d.priced === 1 ? '' : 's'} to price on Pricing › Quote`);
+  if (d.built) bits.push(`${d.built} piece${d.built === 1 ? '' : 's'} Cabinet Designer now builds itself (desks, panels, vanities, open shelving, microwave bases) (check where each one sits)`);
+  if (d.lines) bits.push(`${d.lines} window sill${d.lines === 1 ? '' : 's'} on Pricing › Quote › Job lines to price by the foot`);
+  if (d.sinks) bits.push(`${d.sinks} sink${d.sinks === 1 ? '' : 's'} set on sink bases for the countertop cutouts`);
+  if ((d.options || []).length) bits.push(d.options.join(', '));
   if (d.noShelf) bits.push(`${d.noShelf} shel${d.noShelf === 1 ? 'f' : 'ves'} put on the Quote because the library has no floating shelf`);
   return bits.length ? ' From the bid: ' + bits.join(', ') + '.' : '';
 }

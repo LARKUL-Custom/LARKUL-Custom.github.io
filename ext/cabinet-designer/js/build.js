@@ -85,6 +85,7 @@ const elevX = (c, L) => c.side === 1 ? c.off : L - c.off - c.w;
 /* ---------- Fronts ---------- */
 function computeFronts(c, p) {
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return [];
+  if (c.made && typeof madeDef === 'function' && madeDef(c)) return [];
   p = p || effParams(c);
   // Face frame cabinets: fronts overlay the frame's openings.
   const ffr = faceFrame(c); if (ffr) return ffFronts(c, p, ffr);
@@ -93,7 +94,8 @@ function computeFronts(c, p) {
   const gap = p.frontGap, bw = blindCorner(c) ? blindWidth(c) : 0;
   // A blind corner's fronts only cover the open part; the blind side has its blind panel.
   const xl = bw && cornerSide(c) === 'L' ? bw + gap : p.frontSideReveal, xr = bw && cornerSide(c) === 'R' ? c.w - bw - gap : c.w - p.frontSideReveal;
-  const rows = c.rows || [];
+  // A row holding an appliance (bidprod.js) is as tall as the appliance's cutout needs.
+  const rows = (c.rows || []).map((r, i) => r.appl && typeof applOpen === 'function' && applOpen(r.appl) ? { ...r, h: applRowH(c, p, r, i) } : r);
   const fixed = rows.reduce((a, r) => a + (r.h === '*' ? 0 : (+r.h || 0)), 0);
   const stars = rows.filter(r => r.h === '*').length;
   const avail = (zt - zb) - gap * Math.max(0, rows.length - 1);
@@ -395,6 +397,7 @@ function caseRails(c, p, fronts, t) {
   if (t === undefined) t = (mat(cabMatT(cabSet(c, 'cabMatT')).carcass) || S.materials[0]).thick;
   const out = { stretchers: [], shelves: [] }, rows = c.rows || [];
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return out;
+  if (c.made && typeof madeDef === 'function' && madeDef(c)) return out;
   const tk = hasToe(c) ? p.toeKickHeight : 0, zIn0 = tk + t, zIn1 = c.h - t, first = i => fronts.find(f => f.row === i && !f.face);
   const auto = p.drawerRails !== 'off' && !faceFrame(c) && !angledCorner(c) && !hasCabShape(c) && !(cabTopShape(c) || {}).edges;
   rows.forEach((r, i) => {
@@ -492,7 +495,8 @@ function notchedBack(L, W, nw, nh) {
 /* ---------- Parts ---------- */
 function buildParts(c) {
   // Mozaik products (fillers, C mold, hoods...) bring their own parts (js/mozprod.js).
-  if (c.moz && typeof isMoz === 'function' && isMoz(c)) return mozBuildParts(c);
+  if (c.moz && typeof isMoz === 'function' && isMoz(c)) { const mb = mozBuildParts(c); return typeof shelfExtras === 'function' ? shelfExtras(c, mb) : mb; }
+  if (c.made && typeof madeBuildParts === 'function' && madeDef(c)) return madeBuildParts(c);
   const p = effParams(c), lbl = LBL[c.id] || c.name;
   const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = drawerMatT(cabSet(c, 'drawerMatT'));
   const cm = mat(mt.carcass) || S.materials[0], t = cm.thick;
@@ -956,6 +960,7 @@ function buildParts(c) {
   if (typeof jtLate === 'function') jtLate(c, parts, jtLateCtx);
   if (typeof jtTabSlot === 'function') jtTabSlot(c, parts, jx);
   if (typeof vBuildExtras === 'function') vBuildExtras(c, parts, warn, p, { t, inD, zIn0, zIn1, addB, pin });
+  if (typeof bidBuildExtras === 'function') bidBuildExtras(c, parts, warn, part, { p, cm, addB, legs: onLegs(c, p) });
   if (c.addParts && c.addParts.length && typeof addedParts === 'function') addedParts(c, parts, warn, part, cm);
   const removed = (c.partEdits && typeof applyPartEdits === 'function') ? applyPartEdits(c, parts, warn, ptT) : [];
   // A Finished product (editor › Materials and hardware): the box parts you can see are cut from the finish material, when it is the same thickness.

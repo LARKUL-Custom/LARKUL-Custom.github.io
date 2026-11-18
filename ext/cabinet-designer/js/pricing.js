@@ -3,7 +3,7 @@
 let PRICES = [];
 const money = v => '$' + (Math.round(v * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Inserts, doors and fronts, and materials are priced in their own libraries; the sheet keeps labor adders only.
-const PRICE_ADDERS = [['perDrawer', 'Each drawer (box and slides labor)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler']];
+const PRICE_ADDERS = [['perDrawer', 'Each drawer (box and slides labor)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
@@ -118,11 +118,12 @@ function savePrices() {
 // Price of one cabinet, split into lines so the quote can show where it comes from.
 // A product priced on its own (a floating shelf, a mantel): its row on the sheet's Products card is its whole price.
 // It isn't a cabinet: no doors, materials, hardware or paint, no installation, and it's left out of the cabinet counts.
-const ownRule = (c, ps) => { const o = (ps.products || {})[c.libId]; return o && o.own ? o : null; };
+// Desks, slat walls and the other shop-built pieces (madeprod.js) are priced on their own from the start.
+const ownRule = (c, ps) => { const o = (ps.products || {})[c.libId]; return o && o.own ? o : !o && c.made && typeof madePrice === 'function' ? madePrice(c) : null; };
 function priceCab(c, ps) {
   const own = ownRule(c, ps);
   if (own) {
-    const each = (+own.base || 0) + (+own.perFt || 0) * c.w / 12, custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, upcharge = (each + custom) * (+c.pxUp || 0) / 100;
+    const each = (+own.base || 0) + (+own.perFt || 0) * c.w / 12 + (+own.perSq || 0) * c.w * c.h / 144 + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0), custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, upcharge = (each + custom) * (+c.pxUp || 0) / 100;
     const sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0, total: 0, eb: 0 };
     return { own: true, each, box: 0, doors: 0, extras: 0, ends: 0, hardware: 0, materials: 0, sq, paint: 0, banding: 0, custom, upcharge, total: each + custom + upcharge };
   }
@@ -139,7 +140,7 @@ function priceCab(c, ps) {
   const ad = ps.adders, ins = c.inserts || [], p = effParams(c);
   const nDr = fr.filter(f => f.type === 'drawer').length;
   // Each insert has its own price in the insert library (a lazy susan is not a tray divider).
-  const extras = nDr * (+ad.perDrawer || 0) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0);
+  const extras = nDr * (+ad.perDrawer || 0) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied');
   const ends = panelParts.reduce((a, pt) => a + pt.qty * ((ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps).total * gMark(ps, 'doors') : 0) + panelAdd(ps, c.cat)), 0) + fillersOf(c).length * (+ad.perFiller || 0);
@@ -229,6 +230,9 @@ function ensureLibPrices(ps) {
     if (om.sheets) S.materials.forEach(m => { const v = om.sheets[m.id]; if (v != null && isFinite(+v)) m.cost = +v; });
     moved = true;
   }
+  if (ps && ps.tops && S.countertops.some(t => t.id === 'top-lam2') && ps.tops['top-lam2'] === undefined) { ps.tops['top-lam2'] = 45; savePrices(); }
+  // 0.57.0: concealed floating shelf brackets and in-wall blocking start at rough shop prices.
+  if (ps && ps.adders && (ps.adders.perBracket === undefined || ps.adders.perBlocking === undefined)) { if (ps.adders.perBracket === undefined) ps.adders.perBracket = 15; if (ps.adders.perBlocking === undefined) ps.adders.perBlocking = 35; savePrices(); }
   if (ps && !ps.panelAdd) {
     const was = +((ps.counts || {}).panels) || 0; ps.panelAdd = { Base: was, Wall: was, Tall: was };
     if (ps.counts) { if (+ps.counts.fillers) ps.adders.perFiller = (+ps.adders.perFiller || 0) + +ps.counts.fillers; delete ps.counts.panels; delete ps.counts.fillers; }
@@ -243,7 +247,7 @@ function priceJob(ps) {
     const own = all.filter(k => k.own).map(k => ({ name: `${k.label} ${k.c.name} (${fmtLen(k.c.w, 1)} wide)`, amount: k.total, own: true }));
     // Tops and molding are one line each for the room, not one per wall (Ayden 2026-11-06). The kinds used go in brackets.
     const oneLine = (name, runs, kind, amt) => { if (!runs.length) return []; const kinds = [...new Set(runs.map(kind))]; return [{ name: `${name} (${kinds.join(', ')})`, amount: runs.reduce((a, x) => a + amt(x), 0) }]; };
-    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on), t => t.tpl.name, t => t.len * t.depth / 144 * (+ps.tops[t.tpl.id] || 0));
+    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on), t => t.tpl.name, t => (typeof topRate === 'function' ? topRate(t.tpl, t.len, t.depth, +ps.tops[t.tpl.id] || 0) : t.len * t.depth / 144 * (+ps.tops[t.tpl.id] || 0)));
     const molds = oneLine('Molding', moldingRuns(), m => m.m.name, m => m.len / 12 * (+ps.molds[m.m.id] || 0));
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));
@@ -254,7 +258,7 @@ function priceJob(ps) {
     const lines = [...own, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : []), ...inst, ...xs];
     return { r, cabs, lines, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
   }));
-  const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 }));
+  const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 })).concat(typeof jobLinePrices === 'function' ? jobLinePrices() : []);
   // Percent charges (fuel and delivery, commission) are taken on everything above them, before markup and tax.
   const base = rooms.reduce((a, r) => a + r.total, 0) + jobLines.reduce((a, k) => a + k.amount, 0);
   const pct = ps.extras.filter(x => x.per === 'pct' && +x.amount).map(x => ({ name: `${x.name} ${+x.amount}%`, amount: base * +x.amount / 100 }));
@@ -328,7 +332,7 @@ function priceQuote(ps, q = priceJob(ps)) {
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
   const anyOpen = q.rooms.some(R => !roomShut(R.r));
   const fold = q.rooms.length > 1 ? `<button class="btn" data-act="prx-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${icon('chevr', anyOpen ? '' : 'rot90')}${anyOpen ? 'Collapse all rooms' : 'Expand all rooms'}</button>` : '';
-  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${paintCard(ps, q)}`;
+  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${paintCard(ps, q)}`;
 }
 // Which rooms are folded on Pricing › Quote, per job, kept on this computer. Only the view; prices are untouched.
 const PRX_FOLD_KEY = () => KEY + '.prxfold';
@@ -379,7 +383,7 @@ function priceEditor(ps) {
     <div class="note">Price per square foot of painted surface. Leave it at 0 to only show the square footage. Pick which surfaces count on the quote.</div>${fld('Paint ($/sq ft)', P('paint'), 'rate', paintOf(ps).rate, 'num')}
     <div class="note">Parts cut from a prefinished material (melamine, prefinished plywood) are not painted. They are charged this lower rate instead. Each material says which it is in Libraries › Materials.</div>${fld('Edgebanding, prefinished ($/sq ft)', P('paint'), 'ebRate', paintOf(ps).ebRate, 'num')}</div></div>
   <div class="psec box prx-sec" id="ps-tops">${secHead('ruler', 'Tops and molding', 'violet')}<div class="prx-h"></div><div class="cardbody">
-    ${S.countertops.map(t => fld(esc(t.name) + ' ($/sq ft)', P('tops'), t.id, ps.tops[t.id] ?? 0, 'num')).join('')}${S.moldings.map(m => fld(esc(m.name) + ' ($/ft)', P('molds'), m.id, ps.molds[m.id] ?? 0, 'num')).join('')}</div></div>
+    ${S.countertops.map(t => fld(esc(t.name) + (t.priceBy === 'ft' ? ' ($/ft)' : ' ($/sq ft)'), P('tops'), t.id, ps.tops[t.id] ?? 0, 'num')).join('')}${S.moldings.map(m => fld(esc(m.name) + ' ($/ft)', P('molds'), m.id, ps.molds[m.id] ?? 0, 'num')).join('')}</div></div>
   <div class="psec box prx-sec wide" id="ps-extra">${secHead('plus', 'Extra charges', 'teal')}<div class="prx-h"><button class="btn sm" data-act="ps-x-add">${icon('plus')}Add charge</button></div><div class="cardbody">
     ${ps.extras.map((x, i) => `<div class="xrow">${ctl(P('extras.' + i), 'name', x.name, 'text', { label: 'Charge name' })}${ctl(P('extras.' + i), 'amount', x.amount, 'num', { label: 'Amount' })}${ctl(P('extras.' + i), 'per', x.per, 'select', { label: 'Per', options: [{ v: 'job', l: 'Per job' }, { v: 'room', l: 'Per room' }, { v: 'cabinet', l: 'Per cabinet' }, { v: 'pct', l: '% of the job' }] })}<button class="btn sm danger" data-act="ps-x-del" data-id="${i}" aria-label="Remove charge">${icon('trash')}</button></div>`).join('') || '<div class="note">None</div>'}</div></div>
   <div class="psec box prx-sec wide" id="ps-pay">${secHead('list', 'Payment schedule', 'rose')}<div class="prx-h">${(() => { const t = (ps.payments || []).reduce((a, x) => a + (+x.pct || 0), 0); return `<span class="note"${t !== 100 ? ' style="color:var(--danger,#c62828)"' : ''}>Adds up to ${t}%</span>`; })()}<button class="btn sm" data-act="ps-pay-add">${icon('plus')}Add payment</button></div><div class="cardbody">

@@ -194,6 +194,7 @@ function wallGroup(w, side, leftAlong, out = 0) {
 }
 function cabinetMeshes(c, opts = {}) {
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return mozMeshes(c, opts);
+  if (c.made && typeof madeDef === 'function' && madeDef(c)) return madeMeshes(c, opts);
   const grp = new THREE.Group();
   const p = effParams(c), mt = cabMatT(cabSet(c, 'cabMatT'));
   const cm = mat(mt.carcass) || S.materials[0], bm = mat(mt.back) || cm, t = cm.thick, bt = bm.thick;
@@ -446,7 +447,7 @@ class Viewer3D {
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x8a8577, 0.85); this.scene.add(this.hemi);
     const sun = this.sun = new THREE.DirectionalLight(0xffffff, 0.55); sun.position.set(-120, 260, 180); this.scene.add(sun); this.scene.add(sun.target);
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.3; sun.shadow.radius = 5;
-    const fill = this.fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(200, 120, -150); this.scene.add(fill);
+    const fill = this.fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(200, 120, -150); this.scene.add(fill); this.scene.add(fill.target);
     this.root = new THREE.Group(); this.scene.add(this.root);
     this.persp = new THREE.PerspectiveCamera(40, 1, 1, 20000);
     this.ortho = new THREE.OrthographicCamera(-100, 100, 100, -100, -20000, 20000);
@@ -500,6 +501,7 @@ class Viewer3D {
     this.hemi.intensity = on ? 0.55 : 0.85; this.sun.intensity = on ? 1.9 : 0.55;
     // Realistic: warm light from above, a cool sky fill and a warm floor bounce, like a room with daylight and bulbs.
     this.sun.color.set(on ? 0xfff1df : 0xffffff); this.hemi.color.set(on ? 0xeef2ff : 0xffffff); this.hemi.groundColor.set(on ? 0xb39b7e : 0x8a8577); this.sun.castShadow = on; this.fill.intensity = on ? 0.2 : 0.25;
+    if (!on) { this.fill.position.set(200, 120, -150); this.fill.color.set(0xffffff); this.sun.position.set(-120, 260, 180); this.sun.target.position.set(0, 0, 0); }
     // Materials shared with the plain look have to recompile for the shadow and tone settings.
     [plain3, metal3, matCache3].forEach(c => Object.values(c).forEach(m => { if (m && m.isMaterial) m.needsUpdate = true; }));
   }
@@ -516,7 +518,10 @@ class Viewer3D {
   // Point the sun's shadow at the whole room.
   fitShadow() {
     const b = this.bounds(), c = b.getCenter(new THREE.Vector3()), R = Math.max(60, b.getSize(new THREE.Vector3()).length() / 2), s = this.sun.shadow.camera;
-    this.sun.target.position.copy(c); this.sun.position.copy(c).add(new THREE.Vector3(-0.3, 1.9, 0.6).normalize().multiplyScalar(R * 2));
+    // Realistic: the sun's place and every light level come from the time of day (realLight in real3d.js).
+    if (typeof realLight === 'function') realLight(this);
+    const dir = this.sunDir || new THREE.Vector3(-0.3, 1.9, 0.6).normalize();
+    this.sun.target.position.copy(c); this.sun.position.copy(c).add(dir.clone().multiplyScalar(R * 2));
     s.left = -R; s.right = R; s.top = R; s.bottom = -R; s.near = 1; s.far = R * 4; s.updateProjectionMatrix();
   }
   clear() {
@@ -770,7 +775,7 @@ function buildRoomScene(v) {
   if (!v.fitted) { v.fitted = true; v.look({ x: -0.6, y: 0.75, z: 1 }); }
   if (R3) {
     v.root.traverse(o => { if (o.isMesh && !o.material.transparent && !o.receiveShadow && o.userData.layer !== 'lights') { o.castShadow = true; o.receiveShadow = true; } });
-    v.root.children.forEach(o => { if (o.userData.wall) o.traverse(m => { m.castShadow = false; }); });
+    // Walls and the ceiling cast shadows too, so daylight only gets in through windows, doorways and open sides.
     v.fitShadow();
   }
   v.requestRender();

@@ -44,11 +44,17 @@ const PARAM_DEFS = [
   { k: 'toeKickHeight', g: 'base', label: 'Toe kick / feet height', type: 'len', cats: ['Base', 'Tall'] },
   { k: 'toeKickSetback', g: 'base', label: 'Toe kick / toe skin setback', type: 'len', cats: ['Base', 'Tall'] },
   { k: 'toeSkinMaxL', g: 'base', label: 'Toe skin stock length (longer ones split)', type: 'len', cats: ['Base', 'Tall'] },
+  // 0.57.0 (bids): an ADA toe kick is 9" high and at least 6" deep (adaParams in bidprod.js).
+  { k: 'ada', g: 'base', label: 'ADA toe kick (9" high, 6" deep)', type: 'select', cats: ['Base', 'Tall'], options: [{ v: '', l: 'Off' }, { v: 'on', l: 'On' }] },
   { k: 'feetCount', g: 'base', label: 'Feet per cabinet (0 = automatic)', type: 'int', cats: ['Base', 'Tall'] },
   { k: 'stretcherWidth', g: 'box', label: 'Top stretcher width', type: 'len', cats: ['Base'] },
   // 0.55.44, from Ayden's Mozaik library: a stretcher under the top drawer of a stack, a fixed shelf over a stack with a door above.
   { k: 'drawerRails', g: 'box', label: 'Drawer stretchers and fixed shelves at drawer stacks', type: 'select', options: [{ v: 'on', l: 'Add automatically (like Mozaik)' }, { v: 'off', l: 'Leave off' }] },
   // 0.55.15 (Ayden 2026-11-09): every cabinet gets top and bottom nailers unless its back or construction says otherwise.
+  // 0.57.0 (bids): laminate outside, melamine inside. Exposed ends are cut from the Finish material, no applied panel, and a
+  // wall cabinet's bottom is finished. Blank keeps applied end panels. Not in SHOP_PARAMS, so old jobs export the same.
+  { k: 'exterior', g: 'box', label: 'Exposed ends and wall cabinet bottoms', type: 'select', options: [{ v: '', l: 'Applied end panels' }, { v: 'finish', l: 'Finished (Finish material outside, cabinet material inside)' }] },
+  { k: 'abovePanel', g: 'box', label: 'Panel above tall cabinets less than 18" below the ceiling', type: 'select', cats: ['Tall'], options: [{ v: '', l: 'Leave off' }, { v: 'on', l: 'Add (Finish material)' }] },
   { k: 'nailers', g: 'box', label: 'Nailers (hanging strips at the back)', type: 'select', options: [{ v: 'both', l: 'Top and bottom' }, { v: 'top', l: 'Top only' }, { v: 'bottom', l: 'Bottom only' }, { v: 'none', l: 'None' }] },
   { k: 'nailerWidth', g: 'box', label: 'Nailer width', type: 'len' },
   { k: 'backInset', g: 'box', label: 'Back inset from rear', type: 'len' },
@@ -414,7 +420,7 @@ function seed() {
   };
   // The sample shows its tops already built.
   S.rooms.forEach(r => { r.autoTops = true; });
-  ensureEdgeLibs(S); ensureJoinery(S); ensureFaceFrames(S); if (typeof ensureInteriorLib === 'function') ensureInteriorLib(S); if (typeof ensureMozLib === 'function') ensureMozLib(S); attachRoom(S);
+  ensureEdgeLibs(S); ensureJoinery(S); ensureFaceFrames(S); if (typeof ensureInteriorLib === 'function') ensureInteriorLib(S); if (typeof ensureMozLib === 'function') ensureMozLib(S); if (typeof ensureBidLib === 'function') ensureBidLib(S); attachRoom(S);
   S.shapeLib = defaultShapeLib(S); S.formulas = {}; S.job.vars = [];
   const put = (libId, wall, off, o = {}) => S.cabinets.push(Object.assign(newCab(S, S.library.find(l => l.id === libId), wall, 1, off), o));
   // Runs start a filler's width off the wall (see LAYOUT_DEFAULTS); open ends get panels automatically.
@@ -452,12 +458,12 @@ function newCab(S, lib, wallId, side, off) {
     slide: lib.slide || '', hinge: lib.hinge || '', pull: lib.pull || '', panelStyle: lib.panelStyle || '', partT: lib.partT || '',
     panelL: lib.appliedL ? 'on' : '', panelR: lib.appliedR ? 'on' : '', molding: null,
     // Products that bring their own finish, joints, filler rule or no countertop (the dollhouse set) keep them.
-    ...['finish', 'jointU', 'jointF', 'fillL', 'fillR', 'noTop'].reduce((o, k) => (lib[k] && (o[k] = lib[k]), o), {}),
+    ...['finish', 'jointU', 'jointF', 'fillL', 'fillR', 'noTop', 'finished', 'finInt', 'wrap', 'appl', 'made'].reduce((o, k) => (lib[k] && (o[k] = lib[k]), o), {}),
     construction: clone(lib.construction || defaultConstruction(lib.cat)),
     rows: clone(lib.rows), libParams: { ...(lib.params || {}) }, params: {}, custom: clone(lib.custom || []), vars: clone(lib.vars || []), inserts: clone(lib.inserts || []),
     ...(lib.corner ? { corner: clone(lib.corner) } : {}), ...(lib.moz ? { moz: lib.moz } : {}),
     // Parts and operations changed on the product in the library come with every copy placed.
-    ...['partEdits', 'addParts', 'shape', 'mozPrm'].reduce((o, k) => (lib[k] !== undefined && (o[k] = clone(lib[k])), o), {}),
+    ...['partEdits', 'addParts', 'shape', 'mozPrm', 'mp'].reduce((o, k) => (lib[k] !== undefined && (o[k] = clone(lib[k])), o), {}),
   };
 }
 
@@ -615,6 +621,7 @@ function migrate(s) {
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
   if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
   if (typeof ensureMozLib === 'function') ensureMozLib(s);
+  if (typeof ensureBidLib === 'function') ensureBidLib(s);
   if (s.dollKit && typeof ensureDollKit === 'function') ensureDollKit(s);
   ensureMelBoxes(s);
   // Jobs that already use the easy assembly test library get its current joint templates.
@@ -827,7 +834,7 @@ const feetCount = (c, p) => { const n = (p || effParams(c)).feetCount | 0; retur
 // toeOn: the cabinet's raised-base switch. hasToe: it really has one (the base is not set to None).
 const toeOn = c => c.construction ? !!c.construction.toeKick : (c.cat === 'Base' || c.cat === 'Tall');
 const hasToe = c => toeOn(c) && effParams(c).baseType !== 'none';
-const effParams = c => Object.assign({}, SHOP_PARAMS, S.job.params, curRoom().params || {}, c.libParams || c.params0 || {}, c.params || {});
+const effParams = c => { const o = Object.assign({}, SHOP_PARAMS, S.job.params, curRoom().params || {}, c.libParams || c.params0 || {}, c.params || {}); return o.ada === 'on' && typeof adaParams === 'function' ? adaParams(o) : o; };
 /* ---------- Rooms and settings ---------- */
 const curRoom = () => S.rooms.find(r => r.id === S.roomId) || S.rooms[0];
 const roomById = id => S.rooms.find(r => r.id === id);

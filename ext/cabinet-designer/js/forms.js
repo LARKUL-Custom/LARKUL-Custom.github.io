@@ -51,10 +51,12 @@ function resolve(ref) {
     case 'rset': { const r = roomById(id); return r && (r.settings = r.settings || {}); }
     case 'roomp': { const r = roomById(id); return r && (r.params = r.params || {}); }
     case 'cab': case 'cabpos': case 'cabgap': return cab(id); case 'cabk': { const c = cab(id); return c && c.corner; } case 'cabp': { const c = cab(id); return c && c.params; }
+    case 'cabmp': { const c = cab(id); return c && (c.mp = c.mp || {}); }
     case 'cabc': { const c = cab(id); return c && (c.construction = c.construction || defaultConstruction(c.cat)); }
     case 'wall': return wall(id);
     // A line from the bid on Pricing › Quote: bidi:<room id>:<line id>
     case 'bidi': return bidItemRef(id);
+    case 'jline': return typeof jobLineRef === 'function' ? jobLineRef(id) : null;
     case 'wcapx': { const [wid, cid] = id.split(':'), w = wall(wid); return w && (w.caps || []).find(x => x.id === cid) || null; }
     case 'wcap': { const [wid, end] = id.split(':'), w = wall(wid); if (!w) return null; const k = 'cap' + end; return (w[k] = w[k] || { ...capDefaults(w), side: elevSide(w) }); }
     case 'lib': return libItem(id); case 'libp': { const l = libItem(id); return l && (l.params = l.params || {}); }
@@ -185,6 +187,8 @@ document.addEventListener('change', e => {
     // An appliance, window or doorway on a wall grows its width the same way a cabinet does (see qGrow).
     if (ref.startsWith('fixt:') && field === 'w' && v > 0 && o.wall && wall(o.wall) && typeof qGrow === 'function') { const px = xProxy(o); qGrow(px, v); o.off = px.off; o.w = v; return; }
     if (ref.startsWith('fixtpos:') || ref.startsWith('shppos:')) { const px = xProxy(o); setFromEnd(px, field, v); o.off = px.off; return; }
+    if (ref.startsWith('cab:') && field === 'appl' && typeof setAppl === 'function') return setAppl(o, v);
+    if (ref.startsWith('cabmp:') && typeof madeSync === 'function') { o[field] = v; madeSync(cab(ref.slice(6))); return; }
     if (ref.startsWith('wall:') && field === 'len') return setWallLen(o, v);
     if (ref.startsWith('wall:') && field === 'angle') return setWallAngle(o, v);
     if (ref === 'layout') {

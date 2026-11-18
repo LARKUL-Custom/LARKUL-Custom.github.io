@@ -44,7 +44,7 @@ void main() {
   occ = clamp(occ * 2.0 * strength / float(SAMPLES), 0.0, 1.0);
   gl_FragColor = vec4(vec3(1.0 - occ), 1.0);
 }`;
-// Smooths the shade in two passes (across, then up and down), 8 taps each; taps on a surface at another depth are skipped so the shade stays sharp at edges. The second pass
+// Smooths the shade in two passes (across, then up and down), 5 taps each so door details stay crisp; taps on a surface at another depth are skipped so the shade stays sharp at edges. The second pass
 // multiplies it over the picture.
 const AO_BLUR = `
 precision highp float;
@@ -58,7 +58,7 @@ void main() {
   // there, which would draw it as a dashed line.
   float zl = min(lin(vUv - dir), lin(vUv - 2.0 * dir)), zr = min(lin(vUv + dir), lin(vUv + 2.0 * dir));
   if (zl < z0 - tol && zr < z0 - tol) { gl_FragColor = vec4(1.0); return; }
-  for (int i = -4; i <= 3; i++) {
+  for (int i = -2; i <= 2; i++) {
     vec2 uv = vUv + float(i) * dir;
     // Only taps on the same face count: same depth and facing the same way (eased edges don't smear onto faces).
     float a = texture2D(tAO, uv).x, wd = abs(lin(uv) - z0) < tol ? 1.0 : 0.02, w = wd * (dot(texture2D(tNormal, uv).xyz * 2.0 - 1.0, n0) > 0.9 ? 1.0 : 0.02);
@@ -66,7 +66,7 @@ void main() {
   }
   // A pixel with hardly any neighbours on its face (an eased edge seen from afar) takes the plain depth blur instead,
   // so thin edges don't come out as dotted lines.
-  gl_FragColor = vec4(vec3(wsum > 2.5 ? sum / wsum : dsum / dw), 1.0);
+  gl_FragColor = vec4(vec3(wsum > 1.5 ? sum / wsum : dsum / dw), 1.0);
 }`;
 function aoSetup(v) {
   if (v.aoS) return v.aoS;
@@ -77,7 +77,7 @@ function aoSetup(v) {
   const quad = m => { const s = new THREE.Scene(), me = new THREE.Mesh(tri, m); me.frustumCulled = false; s.add(me); return s; };
   const shade = new THREE.ShaderMaterial({
     vertexShader: AO_VERT, fragmentShader: AO_FRAG.replace('__N__', aoCoarse() ? '10' : '16'), depthTest: false, depthWrite: false,
-    uniforms: { tDepth: { value: null }, tNormal: { value: null }, invProj: { value: new THREE.Matrix4() }, proj: { value: new THREE.Matrix4() }, size: { value: new THREE.Vector2() }, radius: { value: 4 }, strength: { value: 1.6 } },
+    uniforms: { tDepth: { value: null }, tNormal: { value: null }, invProj: { value: new THREE.Matrix4() }, proj: { value: new THREE.Matrix4() }, size: { value: new THREE.Vector2() }, radius: { value: 2.5 }, strength: { value: 1.3 } },
   });
   const blur = () => new THREE.ShaderMaterial({
     vertexShader: AO_VERT, fragmentShader: AO_BLUR, depthTest: false, depthWrite: false, toneMapped: false, blending: THREE.NoBlending,
@@ -121,7 +121,7 @@ function realAO(v) {
     S.shade.uniforms.proj.value.copy(cam.projectionMatrix); S.shade.uniforms.invProj.value.copy(cam.projectionMatrixInverse);
     S.shade.uniforms.size.value.set(w, h);
     // Radius grows a little with the room so whole-room views still read, but stays near a hand's width.
-    S.shade.uniforms.radius.value = cam.isOrthographicCamera ? Math.max(4, (cam.top - cam.bottom) / cam.zoom / 60) : 3;
+    S.shade.uniforms.radius.value = cam.isOrthographicCamera ? Math.max(4, (cam.top - cam.bottom) / cam.zoom / 60) : 2.5;
     r.setRenderTarget(S.at); r.render(S.shadeScene, S.cam);
     const B = S.blurX.uniforms, M = S.mix.uniforms;
     B.tAO.value = S.at.texture; B.tDepth.value = S.nt.depthTexture; B.tNormal.value = S.nt.texture; B.dir.value.set(1 / w, 0); B.invProj.value.copy(cam.projectionMatrixInverse);
@@ -156,3 +156,47 @@ function bevelBox3(w, h, d, r) {
   for (let f = 0; f < 6; f++) for (let i = 0; i < per; i++) { const j = f * per + i; uv.setXY(j, ut(uv.getX(j), dims[f][0]), ut(uv.getY(j), dims[f][1])); }
   return g;
 }
+
+/* ---------- Realistic look: light from the real sources ----------
+   The sun stands where it would at the chosen time of day (plan top = north) and only gets in where nothing blocks it:
+   walls and the ceiling cast shadows, so daylight comes through windows, door openings and open sides of the room.
+   The room's own ceiling lights and LED strips stay lit (lights.js); at night they are what lights the room. The sky
+   and the light bounced around the room fade with the sun. */
+const SUN = { hour: 15 };
+try { const h = parseFloat(localStorage.getItem('cabinet-designer.v2.sunhour')); if (h >= 5 && h <= 22) SUN.hour = h; } catch (_) {}
+const sunLabel = h => { const m = Math.round(h * 60), hh = Math.floor(m / 60) % 24, mm = m % 60; return `${(hh + 11) % 12 + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`; };
+// Sun position for an hour of the day: rises in the east at 6, highest (60°) in the south at 1 PM, sets in the west at 20.
+function sunAt(h) {
+  const t = (h - 6) / 14, el = Math.sin(Math.PI * Math.max(0, Math.min(1, t))) * 60 * Math.PI / 180, az = (90 + 180 * t) * Math.PI / 180;
+  const up = t > 0 && t < 1 ? Math.sin(el) : -0.2;
+  // x east, y up, z south (plan y runs down the page).
+  return { dir: new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.max(up, 0.02), -Math.cos(az) * Math.cos(el)).normalize(), day: Math.max(0, Math.min(1, (h - 5.5) / 1.5, (20.5 - h) / 1.5)), low: Math.max(0, 1 - el / (25 * Math.PI / 180)) };
+}
+const mixHex = (a, b, k) => new THREE.Color(a).lerp(new THREE.Color(b), Math.max(0, Math.min(1, k)));
+function realLight(v) {
+  const S0 = sunAt(SUN.hour), d = S0.day, hasLamps = typeof roomLights === 'function' && roomLights().some(l => l.kind === 'ceiling');
+  v.sunDir = S0.dir;
+  // Sun: warm and orange when low, white at midday, gone at night.
+  v.sun.intensity = 2.4 * d; v.sun.castShadow = d > 0.01; v.sun.color.copy(mixHex(0xfff3e2, 0xffa860, S0.low));
+  // Sky and bounce: bright in the day, a dim blue at night.
+  v.hemi.intensity = 0.14 + 0.42 * d; v.hemi.color.copy(mixHex(0x5a6a90, 0xeef2ff, d)); v.hemi.groundColor.copy(mixHex(0x2a2a30, 0xb39b7e, d));
+  // A soft light from overhead stands in for room lighting when the room has no ceiling lights drawn.
+  v.fill.intensity = hasLamps ? 0.05 + 0.1 * d : 0.18 + 0.12 * d; v.fill.color.set(0xfff4e8);
+  v.fill.position.set(0, 1, 0.25); v.fill.target.position.set(0, 0, 0);
+  v.renderer.toneMappingExposure = 0.75 + 0.2 * d;
+  if (typeof realCeil3 === 'function') realCeil3().emissive.copy(mixHex(0x141418, 0x5a5854, d));
+  v.envK = 0.25 + 0.75 * d;
+  v.scene.traverse(o => { if (!o.isMesh) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+    if (!m || !m.isMeshStandardMaterial) return;
+    if (m.userData.env0 === undefined) m.userData.env0 = m.envMapIntensity;
+    m.envMapIntensity = m.userData.env0 * v.envK;
+  }); });
+  v.setBackground('#' + mixHex(0x1c2233, 0xe4e1db, d).getHexString());
+}
+// The small time of day slider beside Realistic.
+function sunSet(h) {
+  SUN.hour = h; try { localStorage.setItem('cabinet-designer.v2.sunhour', String(h)); } catch (_) {}
+  const l = document.getElementById('sunlbl'); if (l) l.textContent = sunLabel(h);
+  viewers.forEach(v => { if (v.ok && v.real) { v.fitShadow(); v.requestRender(); } });
+}
+document.addEventListener('input', e => { if (e.target && e.target.id === 'sunhour') sunSet(+e.target.value); });

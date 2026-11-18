@@ -108,9 +108,15 @@ function washMat(col, up) {
 function addLights3d(v, R3, layerOn) {
   if (!layerOn) return;
   let lamps = 0;
-  const lamp = (grp, col, x, y, z, k, dist) => {
+  let shadows = 0;
+  const lamp = (grp, col, x, y, z, k, dist, ceiling) => {
     if (!R3 || lamps >= MAX_LAMPS) return;
     const pl = new THREE.PointLight(new THREE.Color(col), k, dist, 2); pl.position.set(x, y, z); grp.add(pl); lamps++;
+    // The first few ceiling lights cast soft shadows (under wall cabinets, beside tall ones), so a room lit by its
+    // ceiling lights looks different from one lit by a window. Phones and tablets skip this for speed.
+    if (ceiling && shadows < 4 && !(typeof aoCoarse === 'function' && aoCoarse())) {
+      pl.castShadow = true; pl.shadow.mapSize.set(512, 512); pl.shadow.bias = -0.002; pl.shadow.normalBias = 0.4; pl.shadow.radius = 3; pl.shadow.camera.near = 1; pl.shadow.camera.far = dist; shadows++;
+    }
   };
   roomLights().forEach(l => {
     if (l.kind !== 'strip') return;
@@ -138,11 +144,11 @@ function addLights3d(v, R3, layerOn) {
       const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, drop - 5, 6), flat3('#2b2b2b')); cord.position.y = bottom + 5 + (drop - 5) / 2; g.add(cord);
       const shade = new THREE.Mesh(new THREE.ConeGeometry(5, 5, 24, 1, true), shadeMat()); shade.position.y = bottom + 2.5; g.add(shade);
       const bulb = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), glowMat(col)); bulb.position.y = bottom + 0.8; g.add(bulb);
-      lamp(g, col, 0, bottom - 1, 0, 1.2, 200);
+      lamp(g, col, 0, bottom - 1, 0, 1.3, 200, true);
     } else {
       const r = l.style === 'flush' ? 6 : 2.6;
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r, l.style === 'flush' ? 1.6 : 0.3, 24), glowMat(col)); disc.position.y = hgt - (l.style === 'flush' ? 0.8 : 0.16); g.add(disc);
-      lamp(g, col, 0, hgt - 4, 0, 1.1, 220);
+      lamp(g, col, 0, hgt - 4, 0, 1.3, 220, true);
     }
     g.traverse(o => { o.userData.layer = 'lights'; o.userData.noBounds = true; });
     v.root.add(g);

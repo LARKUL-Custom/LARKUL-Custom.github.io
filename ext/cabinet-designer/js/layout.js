@@ -167,7 +167,7 @@ function fillerFlushOutset(c) {
 }
 // Fillers between a cabinet and a wall, by the viewer's end: [{ end, gap, a0, a1 }].
 function fillersOf(c) {
-  if (c.moz) return []; // a Mozaik product is its own filler or trim
+  if (c.moz || c.made) return []; // a Mozaik product is its own filler or trim
   const ly = lay(); if (!c.wall || (!ly.autoFillers && c.fillL !== 'on' && c.fillR !== 'on')) return [];
   return inRoomOf(c, () => {
     if (!wall(c.wall)) return [];
@@ -185,10 +185,14 @@ function fillersOf(c) {
 }
 // Does this end of the cabinet get an applied panel? end is the viewer's L or R.
 function hasPanel(c, end) {
-  if (c.moz) return false;
+  if (c.moz || c.made) return false;
   const m = panelMode(c, end);
+  // Products wrapped in the finish material all round (open shelf units, the open vanity) are their own finished ends.
+  if (c.wrap && m !== 'on') return false;
   if (m === 'on') return true;
   if (m === 'off' || !c.wall) return false;
+  // A finished exterior (laminate outside) is its own finished end; it gets no applied panel unless one is asked for.
+  if (typeof finExterior === 'function' && finExterior(c)) return false;
   const ly = lay(); if (!ly.autoPanels) return false;
   return inRoomOf(c, () => {
     if (!wall(c.wall)) return false;

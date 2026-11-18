@@ -903,7 +903,7 @@ function renderCountertops() {
   const stylesBody = `<div class="ctx-style-grid"><div class="psec box ctx-pic">${secHead('stack', esc(t.name), 'amber')}<div class="ctx-pv">${topSectionSVG(t)}</div>
       <div class="edx-stats">${tile('amber', 'ruler', fmtLen(t.thick), 'Thickness')}${tile('teal', 'ruler', fmtLen(t.frontOverhang), 'Front overhang')}${tile('violet', 'ruler', fmtLen(t.endOverhang), 'Open end overhang')}${tile('blue', 'home', n, 'Runs using it')}</div></div>
     <div class="ctx-props"><div class="psec box">${secHead('edit', 'Style', 'amber')}${fld('Name', R, 'name', t.name, 'text', { wide: true })}<div class="ctx-matrow">${swatch(m, 30)}${fld('Material', R, 'mat', t.mat, 'select', { options: matOpts('top'), wide: true })}</div></div>
-      <div class="psec box">${secHead('ruler', 'Size', 'teal')}<div class="grid2">${fld('Thickness', R, 'thick', t.thick, 'len')}${fld('Backsplash height', R, 'backsplash', t.backsplash, 'len')}${fld('Front overhang', R, 'frontOverhang', t.frontOverhang, 'len')}${fld('End overhang', R, 'endOverhang', t.endOverhang, 'len')}</div><div class="note help">Ends against a wall or a tall cabinet get no overhang; open ends get the end overhang.</div></div></div></div>`;
+      <div class="psec box">${secHead('ruler', 'Size', 'teal')}<div class="grid2">${fld('Thickness', R, 'thick', t.thick, 'len')}${fld('Backsplash height', R, 'backsplash', t.backsplash, 'len')}${fld('Front overhang', R, 'frontOverhang', t.frontOverhang, 'len')}${fld('End overhang', R, 'endOverhang', t.endOverhang, 'len')}</div><div class="note help">Ends against a wall or a tall cabinet get no overhang; open ends get the end overhang.</div></div>${typeof topBuildBox === 'function' ? topBuildBox(t) : ''}</div></div>`;
   const b = (act, ic, l, x = '', bid = '') => `<button class="btn${x}" data-act="${act}"${bid ? ` data-id="${esc(bid)}"` : ''}>${icon(ic)}${l}</button>`;
   const acts = `<div class="prx-acts">${auto ? b('tops-auto', 'check', 'Rebuild tops', ' primary') + b('tops-auto-off', 'close', 'Turn off auto tops') : b('tops-auto', 'check', 'Auto build countertops', ' primary')}
     ${b('gtop-add', 'plus', 'Add a top by hand')}${b('tab', 'home', 'Show in the room', '', 'room')}
@@ -945,7 +945,7 @@ function genMoldsCard() {
 function autoMoldBox(runs) {
   return `<div class="qm-box"><div class="quick">
       <label class="f wide"><span>Molding</span><select class="qm-mold">${S.moldings.map(m => `<option value="${m.id}"${m.id === roomSet('molding') ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
-      <label class="f"><span>Within this much of the ceiling</span><input type="text" class="num qm-gap" value="${esc(fmtLen(ui.qmGap ?? 12))}"></label>
+      <label class="f"><span>Within this much of the ceiling (blank = every upper)</span><input type="text" class="num qm-gap" value="${esc(ui.qmGap === '' ? '' : fmtLen(ui.qmGap ?? 12))}"></label>
       <label class="checkrow"><input type="checkbox" class="qm-tall"${ui.qmTall !== false ? ' checked' : ''}> Include tall cabinets</label>
       <div class="row-actions"><button class="btn primary" data-act="mold-quick">Auto build molding</button><button class="btn" data-act="mold-clear">Remove from cabinets</button></div>
     </div><div class="note qm-note">${runs.length ? `${runs.length} run${runs.length === 1 ? '' : 's'} in ${esc(curRoom().name)}.` : `No moldings in ${esc(curRoom().name)} yet.`}</div></div>`;
@@ -1159,6 +1159,7 @@ function cutScope() {
   rooms.forEach(rm => withRoom(rm, () => {
     S.cabinets.forEach(c => { cabs.push({ c, room: rm }); if (!c.noCut) buildParts(c).parts.forEach(p => { if (cutKeep(cutPartKey(p))) parts.push({ ...p, room: rm.name }); }); });
     shapeParts().forEach(p => { if (cutKeep(cutPartKey(p))) parts.push({ ...p, room: rm.name }); });
+    if (typeof topCoreParts === 'function') topCoreParts().forEach(p => { if (cutKeep(cutPartKey(p))) parts.push({ ...p, room: rm.name }); });
     countertopRuns().filter(r => r.on).forEach(r => tops.push({ ...r, room: rm.name, wallN: wallName(wall(r.wall)) + (typeof ctjNote === 'function' ? ctjNote(r) : '') }));
     moldingRuns().forEach(r => molds.push({ ...r, room: rm.name, wallN: wallName(wall(r.wall)) }));
   }));
@@ -1222,6 +1223,8 @@ function exportData(units) {
   const f = units === 'mm' ? 25.4 : 1, r = v => Math.round(v * f * 1000) / 1000;
   const lenKeys = new Set(PARAM_DEFS.filter(d => d.type === 'len').map(d => d.k));
   const conv = o => { const out = {}; Object.entries(o).forEach(([k, v]) => out[k] = typeof v === 'number' && k !== 'qty' && k !== 'user' && k !== 'passes' ? r(v) : k === 'pts' && Array.isArray(v) ? v.map(q => ({ x: r(q.x), y: r(q.y) })) : v); return out; };
+  const partEx = q => ({ name: q.report || q.name, ...(q.report ? { partName: q.name } : {}), kind: q.kind, material: q.mat, qty: q.qty, length: r(q.L), width: r(q.W), thickness: r(q.T), grain: q.grain, edges: q.edges,
+          edgebanding: Object.fromEntries(EDGE_KEYS.map(k => { const eb = edgeband(q.band[k]); return [k, eb ? { edge: partKind(q.kind).edges[k], band: eb.name, thicknessMM: eb.thickMM } : null]; })), ops: q.ops.map(conv), ...(q.note ? { comment: q.note } : {}), ...(q.cncGroup ? { cncGroup: q.cncGroup } : {}), ...(q.outline ? { outline: q.outline.map(o => ({ x: r(o.x), y: r(o.y) })) } : {}), ...(q.outline && q.outlineEdges ? { outlineEdges: q.outlineEdges.slice() } : {}) });
   const room = rm => withRoom(rm, () => ({
     name: rm.name,
     settings: { cabinetMaterials: cabMatT(roomSet('cabMatT')).name, drawerMaterials: drawerMatT(roomSet('drawerMatT')).name, doorTemplate: doorTpl(roomSet('doorT')).name,
@@ -1240,10 +1243,9 @@ function exportData(units) {
         fronts: b.fronts.filter(x => x.type !== 'open').map(x => ({ type: x.type, width: r(x.x1 - x.x0), height: r(x.z1 - x.z0) })),
         parameters: pp, custom: Object.fromEntries((c.custom || []).filter(x => x.k).map(x => [x.k, x.v])),
         warnings: b.warn, hardware: b.bom,
-        parts: (c.noCut ? [] : b.parts).map(q => ({ name: q.report || q.name, ...(q.report ? { partName: q.name } : {}), kind: q.kind, material: q.mat, qty: q.qty, length: r(q.L), width: r(q.W), thickness: r(q.T), grain: q.grain, edges: q.edges,
-          edgebanding: Object.fromEntries(EDGE_KEYS.map(k => { const eb = edgeband(q.band[k]); return [k, eb ? { edge: partKind(q.kind).edges[k], band: eb.name, thicknessMM: eb.thickMM } : null]; })), ops: q.ops.map(conv), ...(q.note ? { comment: q.note } : {}), ...(q.cncGroup ? { cncGroup: q.cncGroup } : {}), ...(q.outline ? { outline: q.outline.map(o => ({ x: r(o.x), y: r(o.y) })) } : {}), ...(q.outline && q.outlineEdges ? { outlineEdges: q.outlineEdges.slice() } : {}) })),
+        parts: (c.noCut ? [] : b.parts).map(partEx),
       };
-    }),
+    }).concat(typeof topExportCab === 'function' ? topExportCab(partEx) : []),
     shapes: S.shapes.map(s => { const b = shapeBox(s.pts); return { name: s.name, lies: s.plane, material: s.mat, wall: s.wall, side: s.side, positionAlongWall: r(s.off), outset: r(s.outset || 0), elevation: r(s.elev), thickness: r(s.thick), width: r(b.w), depth: r(b.h), points: s.pts.map(q => ({ x: r(q.x), y: r(q.y), ...(q.r ? { cornerRadius: r(q.r) } : {}), ...(q.b ? { bulge: r(q.b) } : {}) })), outline: shapeOutline(s.pts).map(q => [r(q.x - b.x0), r(q.y - b.y0)]) }; }),
     countertops: countertopRuns().filter(x => x.on).map(x => ({ wall: x.wall, style: x.tpl.name, material: x.tpl.mat, length: r(x.len), depth: r(x.depth), thickness: r(x.thick), cabinets: x.cabs.map(id => LBL[id]) })),
     moldings: moldingRuns().map(x => ({ wall: x.wall, molding: x.m.name, material: x.m.mat, height: r(x.h), front: r(x.front), returns: r(x.returns), total: r(x.len), cabinets: x.cabs.map(id => LBL[id]) })),
