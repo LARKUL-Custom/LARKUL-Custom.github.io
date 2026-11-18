@@ -3242,3 +3242,55 @@ main:has(#tab-carve:not([hidden])){padding:0;background:var(--sunk)}
 .vcx-mode.cut{background:color-mix(in srgb,#16a34a 14%,var(--panel));color:#16a34a}
 .vcx-copies{display:flex;flex-direction:column;gap:4px}
 .vcx-copies .btn{align-self:flex-start}
+
+/* ===== Plain look (0.56.0, 2026-11-18) =====
+   Ayden: less "AI style". One accent colour (blue) for what is picked and the main button, neutral greys for
+   everything else. No rainbow tone colours on icons, tiles and section bars, no gradients, one font, no all-caps labels.
+   Colour still comes from the real things drawn (materials, doors, wood), and red stays for a real problem. */
+:root{
+  --t-indigo:var(--t-n)!important; --t-teal:var(--t-n)!important; --t-amber:var(--t-n)!important; --t-violet:var(--t-n)!important;
+  --t-rose:var(--t-n)!important; --t-green:var(--t-n)!important; --t-blue:var(--t-n)!important; --t-slate:var(--t-n)!important; --t-stone:var(--t-n)!important;
+  --t-n:#56647a; --accent-2:var(--accent)!important;
+  --f-label:var(--f-ui)!important; --f-mono2:var(--f-ui)!important; --f-tree:var(--f-ui)!important; --f-field:var(--f-ui)!important;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --t-n:#9aa8bf } }
+:root[data-theme="dark"]{ --t-n:#9aa8bf }
+/* Library pages: the picked tab, list row and title use the one accent colour. */
+main{--libtone:var(--accent)!important}
+/* No all-caps or letter-spaced labels anywhere. */
+.top *, .tabs button, .roompick, .eyebrow, .chip, .seglbl, table.t th, .ptab .src, .catpill, .qtile span, .tplprev .f span, .tt-own,
+.doorcat, .lgrp-h, .ptab tr.pgroup th, .settable tr.pgroup th, .pe-railh, .ed-logh, .ms-pick>span, .ms-l, .tx-src, .grp-tog,
+.prx-navh, .prx-acth, .ln-gh, .vcs-gh, #jobname, .viewbar .seglbl{text-transform:none!important;letter-spacing:0!important}
+.prx-navh, .prx-acth, .ln-gh, .vcs-gh, .pe-railh, .ed-logh, .ms-l, .eyebrow{font-weight:600}
+/* Flat buttons: solid accent for the main one, no gradient or glow. */
+.btn.primary, .jobsbtn{background:var(--accent)!important;box-shadow:none!important}
+/* Big total tiles: white with a dark number and a plain border, the same on every page. */
+.prx-grand, .ctx-grand, .mdx-grand, .vcx-grand{background:var(--panel)!important;color:var(--ink)!important;border:1.5px solid var(--line);box-shadow:none!important}
+.prx-grand span, .prx-grand small{color:var(--muted);opacity:1}
+.prx-grand b{color:var(--ink)}
+.prx-tot tr.grand td{background:var(--sunk)}
+/* Pictures sit on a flat background, not a fade. */
+.plx-pv, .mlx-pv, .hwx-main .preview, .ctp-svg, .ctx-pv, .hwx-pv{background:var(--panel)!important}
+.plx-pv{background:var(--sunk)!important}
+.edx .edx-top{background:var(--panel)}
+main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
+/* Library groups: no rainbow dot per group. */
+.lg-base,.lg-wall,.lg-tall,.lg-hood,.lg-shelf,.lg-special,.lg-fixt{--tone:var(--t-n)}
+.plx-list .lgrp-h::before{display:none}
+/* Room view bar: draw buttons in the same dark text as the rest of the bar. */
+:root{--d-teal:var(--d-pillink)!important}
+/* Carve: plain icons and the accent for the picked tool, like every other page. */
+.vcx-ic,.vcx-ic.k-text,.vcx-ic.k-shape,.vcx-ic.k-art,.vcx-empty-art{background:var(--sunk);color:var(--t-n)}
+.vcx-tool:hover,.vcs-tile:hover{border-color:var(--accent)}
+.vcs-tile:hover{background:var(--panel)}
+.vcx-tool.on{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+.vcx-mode,.vcx-mode.line,.vcx-mode.cut{background:var(--sunk);color:var(--muted)}
+/* Dark mode: the picked top tab was a pale grey box with pale text when the computer (not Settings) picked dark. */
+@media (prefers-color-scheme: dark) and (min-width: 961px){
+  :root:not([data-theme="light"]) .tabs button[aria-selected="true"], :root:not([data-theme="light"]) .top .hdr-actions .btn{background:#353a47}
+}
+/* Room bottom panel with nothing picked: one quiet line, not a big blue headline. */
+@media (min-width: 961px){
+  .ib-hint{font:400 15px/1.45 var(--f-ui);color:var(--muted)}
+  .ib-hint b{color:var(--ink);font-weight:600}
+}

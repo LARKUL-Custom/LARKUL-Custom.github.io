@@ -262,9 +262,9 @@ function renderMaterials() {
   S.materials.forEach(m => { const u = use[m.id], sheets = u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0; totalSheets += m.kind === 'top' ? 0 : sheets; totalCost += sheets * (m.cost || 0); });
   const sheetsOf = m => { const u = use[m.id]; return u && u.area ? Math.ceil(u.area * 1.15 / (m.sheetW * m.sheetL)) : 0; };
   if (!mat(ui.matSel)) ui.matSel = (S.materials[0] || {}).id;
-  const view = ['mats', 'finishes', 'templates', 'hw'].includes(ui.matView) ? ui.matView : 'mats';
+  const view = ['mats', 'finishes', 'templates'].includes(ui.matView) ? ui.matView : 'mats';
   const mc = S.matTemplates.cabinet, md = S.matTemplates.drawer;
-  const m = mat(ui.matSel), tabs = [['mats', 'Materials', S.materials.length, 'palette'], ['finishes', 'Finishes', finishList().length, 'face'], ['templates', 'Material templates', matSets().length + mc.length + md.length, 'stack'], ['hw', 'Hardware list', Object.keys(bom).length, 'sliders']];
+  const m = mat(ui.matSel), tabs = [['mats', 'Materials', S.materials.length, 'palette'], ['finishes', 'Finishes', finishList().length, 'face'], ['templates', 'Material templates', matSets().length + mc.length + md.length, 'stack']];
   const tabRow = `<div class="mlx-tabs" role="tablist">${tabs.map(([k, l, n, ic]) => `<button role="tab" data-act="mat-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}<span>${l}</span><span class="ct">${n}</span></button>`).join('')}</div>`;
   const totals = `<span class="mlx-sum"><b>${totalSheets}</b> sheets<i></i><b>$${totalCost.toLocaleString()}</b> material<i></i><b>${allCabs().length}</b> cabinets</span>`;
   $('#tab-materials').innerHTML = `<div class="pagehead"><div><h2>Materials</h2><p>Pick a material on the left to see and change it. Click the big swatch to upload your own texture photo. Finishes say what finished parts are cut from; templates bundle materials so a cabinet picks one template instead of five materials.</p></div><div class="row-actions">${totals}${view === 'mats' ? `<button class="btn" data-act="tex-lib" data-id="">From texture library</button><button class="btn primary" data-act="mat-add">${icon('plus')}Add material</button>` : ''}</div></div>
@@ -286,8 +286,7 @@ function renderMaterials() {
       <div class="autogrid">${fld('Sides, front, back', 'mtd:' + t.id, 'sides', t.sides, 'select', { options: matOpts('sheet') })}${fld('Bottom', 'mtd:' + t.id, 'bottom', t.bottom, 'select', { options: matOpts('sheet') })}${fld('Box build', 'mtd:' + t.id, 'box', t.box || '', 'select', { options: DRAWER_BOX_TYPES })}${t.box === 'slide12' ? `${fld('Side trim below the bottom', 'mtd:' + t.id, 'trim', t.trim ?? 0.125, 'len')}${fld('Back notch width', 'mtd:' + t.id, 'notchW', t.notchW ?? 35 / 25.4, 'len')}` : ''}</div>${t.box === 'slide12' ? '<div class="note help">The back gets a notch at each bottom corner as tall as the runner\'s bottom recess. The inside of the sides (not the box front, where the locking devices go) is cut back by the trim below the bottom, and the bottom groove goes that much deeper.</div>' : ''}</div>`).join('')}</div></div>
   </div>
 ` : ''}
-  ${view === 'hw' ? `<div class="card">${cardHead('Hardware list', '<span class="note">Counted from every cabinet in the job</span>')}
-    <div class="tscroll"><table class="t"><thead><tr><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${Object.entries(bom).sort().map(([k, q]) => `<tr><td>${esc(k)}</td><td class="n">${q}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">No hardware yet</td></tr>'}</tbody></table></div></div>` : ''}`;
+`;
 }
 
 /* ---------- Doors ---------- */

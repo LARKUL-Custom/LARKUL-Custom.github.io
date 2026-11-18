@@ -330,16 +330,6 @@ function renderProps() {
   tmp.insertAdjacentHTML('beforeend', `<div class="notesw"><button class="linkbtn" data-act="look" data-id="help:${hid ? 'show' : 'hide'}">${icon('eye')}${hid ? 'Show help text' : 'Hide help text'}</button>${wideQuery.matches ? '' : `<button class="linkbtn" data-act="props-toggle" title="Fold this panel to give the drawing more room">${icon('chevr')}Hide panel</button>`}</div>`);
   setHTML(el, tmp);
 }
-// Auto build countertops and molding, right on the Room screen next to the plan.
-function roomTopsMoldBoxes(rm) {
-  const runs = countertopRuns().filter(r => !r.generic), on = runs.filter(r => r.on).length, auto = rm.autoTops !== false, mr = moldingRuns().length;
-  const tset = (rm.settings || {}).countertop || '';
-  return `<div class="psec box">${secHead('stack', 'Countertops', 'amber')}
-    ${fld('Style', 'rset:' + rm.id, 'countertop', tset, 'select', { options: [{ v: '', l: 'Job: ' + countertop(S.job.defaults.countertop).name }, ...opts(S.countertops)] })}
-    <div class="row-actions">${auto ? `<button class="btn" data-act="tops-auto">Rebuild</button><button class="btn" data-act="tops-auto-off">Turn off</button>` : `<button class="btn primary" data-act="tops-auto">${icon('check')}Auto build countertops</button>`}<button class="btn" data-act="dock" data-id="tops">${icon('list')}Runs</button></div>
-    <div class="note qm-note" style="display:block">${auto ? `${on} run${on === 1 ? '' : 's'} built${(S.genTops || []).length ? ', plus ' + S.genTops.length + ' placed by hand' : ''}.` : 'Automatic tops are off in this room.'}</div></div>
-  <div class="psec box">${secHead('stack', 'Molding', 'violet')}<div class="note">${mr} molding run${mr === 1 ? '' : 's'}${(S.genMolds || []).length ? `, plus ${S.genMolds.length} drawn by hand` : ''}.</div><div class="row-actions"><button class="btn" data-act="gmold-draw">${icon('ruler')}Draw molding</button><button class="btn" data-act="dock" data-id="molding">${icon('list')}Runs</button></div></div>`;
-}
 function renderPropsBody(el = $('#props')) {
   if (multiIds().length > 1) { el.innerHTML = multiProps(); return; }
   if (ui.sel && ui.sel.type === 'cab') { const c = cab(ui.sel.id); if (c) { el.innerHTML = cabProps(c); return; } }
@@ -353,7 +343,6 @@ function renderPropsBody(el = $('#props')) {
   <div class="psec">${fld('Room name', 'room:' + rm.id, 'name', rm.name, 'text')}
     <div class="note">Click a cabinet or a wall to edit it. Room settings are on the Settings tab, under Job dashboard.</div><button class="btn" data-act="set-dash">${icon('home')}Job dashboard</button>
     ${S.job.labelStyle !== 'type' ? `<div class="note">Cabinets here are numbered #${rm.block || ''}01 and up. They keep their numbers as you edit; renumber to put them back in wall order.</div><button class="btn" data-act="renumber">${icon('list')}Renumber cabinets</button>` : ''}</div>
-  ${roomTopsMoldBoxes(rm)}
   <div class="psec how">${secHead('hint', 'How to', 'blue')}
     <p><b>Walls:</b> press <kbd>W</kbd> or Draw walls, click each corner, click the first corner to close the room.</p>
     <p><b>Cabinets:</b> drag one from the left onto a wall, or click it in the list and click a wall.</p>

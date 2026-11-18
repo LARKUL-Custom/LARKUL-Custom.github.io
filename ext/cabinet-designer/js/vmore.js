@@ -47,10 +47,10 @@ function vBuildExtras(c, parts, warn, p, x) {
   sides.forEach((sd, i) => {
     const st = sd.T, fr = fronts[i], bk = backs[i], bt = bots[i];
     if (kind === 'dovetail') {
-      const pin = Math.min(st, +p.dovetailPin > 0 ? +p.dovetailPin : st * 0.67), cut = 2 * (st - pin);
+      const pin = Math.min(st, +p.dovetailPin > 0 ? +p.dovetailPin : st), cut = 2 * (st - pin);
       sd.L = r3(sd.L - cut); sd.ops.forEach(o => { if (o.type === 'groove') o.x2 = Math.min(o.x2, sd.L); if (o.type === 'hbore' && o.x > sd.L) o.x = sd.L; });
       [fr, bk].forEach(q => { if (!q) return; q.L = r3(q.L + 2 * st); q.ops.forEach(o => { if (o.type === 'groove') { o.x2 = q.L; } }); q.note = 'Dovetailed'; });
-      sd.note = `Dovetailed, ${fmtLen(pin, 1)} pins`;
+      sd.note = pin >= st - 1e-6 ? 'Through dovetailed' : `Dovetailed, ${fmtLen(pin, 1)} pins`;
     } else if (kind === 'nofront' && fr) {
       parts.splice(parts.indexOf(fr), 1);
       if (bt) { bt.L = r3(bt.L + st); bt.note = 'Runs to the drawer face'; }

@@ -70,7 +70,7 @@ const PARAM_DEFS = [
   { k: 'hingeInset', g: 'fronts', label: 'Hinge from top of door', type: 'len' },
   { k: 'hingeInsetB', g: 'fronts', label: 'Hinge from bottom of door', type: 'len' },
   { k: 'drawerBox', g: 'drawers', label: 'Drawer box joints', type: 'select', options: [{ v: 'butt', l: 'Sides overlap the front and back' }, { v: 'dovetail', l: 'Dovetail (sides between front and back)' }, { v: 'nofront', l: 'No box front (face screws to the bottom)' }] },
-  { k: 'dovetailPin', g: 'drawers', label: 'Dovetail pin depth', type: 'len' },
+  { k: 'dovetailPin', g: 'drawers', label: 'Dovetail pin depth (0 = through dovetails)', type: 'len' },
   { k: 'drawerBottomDado', g: 'drawers', label: 'Drawer bottom dado', type: 'len' },
 ];
 // Parameter groups, by what they are for.
@@ -78,7 +78,7 @@ const PARAM_GROUPS = [['base', 'Legs and toe kick'], ['box', 'Cabinet constructi
 const SHOP_PARAMS = {
   baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.75, dadoDepth: 0.375, grooveClear: 0.03125,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
-  frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'butt', dovetailPin: 0.5, drawerRails: 'on',
+  frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'dovetail', dovetailPin: 0, drawerRails: 'on',
 };
 const R = (type, h, count = 1) => ({ type, h, count });
 const FACE_PRESETS = [
