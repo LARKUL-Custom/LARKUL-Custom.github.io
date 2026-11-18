@@ -291,13 +291,13 @@ function priceJob(ps) {
   const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 })).concat(typeof jobLinePrices === 'function' ? jobLinePrices() : []);
   // Percent charges (fuel and delivery, commission) are taken on everything above them, before markup and tax.
   const base = rooms.reduce((a, r) => a + r.total, 0) + jobLines.reduce((a, k) => a + k.amount, 0);
-  const pct = ps.extras.filter(x => x.per === 'pct' && +x.amount).map(x => ({ name: `${x.name} ${+x.amount}%`, amount: base * +x.amount / 100 }));
+  const pct = ps.extras.map((x, xi) => ({ x, xi })).filter(({ x }) => x.per === 'pct' && +x.amount).map(({ x, xi }) => ({ name: `${x.name} ${+x.amount}%`, amount: base * +x.amount / 100, xi }));
   jobLines.push(...pct);
   const sub = base + pct.reduce((a, k) => a + k.amount, 0);
   const markup = sub * (+ps.markup || 0) / 100, tax = (sub + markup) * (+ps.tax || 0) / 100;
   // Linear feet and cabinet total by type, for a price per foot. Cabinets only: tops, molding and charges are left out.
   const perFt = CAT_FT.map(([cat, name]) => { const ks = rooms.flatMap(R => R.cabs).filter(k => k.c.cat === cat && !k.c.noCount), ft = ks.reduce((a, k) => a + k.c.w, 0) / 12, total = ks.reduce((a, k) => a + k.total, 0); return { cat, name, n: ks.length, ft, total, rate: ft ? total / ft : 0 }; });
-  const total = sub + markup + tax, payments = (ps.payments || []).filter(x => +x.pct).map(x => ({ name: x.name, pct: +x.pct, amount: total * x.pct / 100 }));
+  const total = sub + markup + tax, payments = (ps.payments || []).map((x, pi) => ({ x, pi })).filter(({ x }) => +x.pct).map(({ x, pi }) => ({ name: x.name, pct: +x.pct, amount: total * x.pct / 100, pi }));
   return { rooms, jobLines, sub, markup, tax, total, payments, sq: addSq(rooms.map(R => R.sq)), perFt };
 }
 function quoteCSV(ps) {
@@ -328,23 +328,27 @@ function renderPricing() {
   const b = (act, ic, l, x = '') => `<button class="btn${x}" data-act="${act}">${icon(ic)}${l}</button>`;
   const acts = `<div class="prx-acts">
     ${b('quote-print', 'print', 'Print or save quote', ' primary')}
-    ${installerPick(ps)}
     ${b('quote-copy', 'copy', 'Copy quote CSV')}${inHub() ? b('quote-save', 'folder', 'Save quote to Files') : ''}
     <span class="edx-sep"></span><div class="prx-acth">Price sheet</div>
     ${b('ps-new', 'plus', 'New sheet')}${b('ps-dup', 'copy', 'Copy this sheet')}${b('ps-export', 'download', 'Save sheet as file')}
     <label class="btn">${icon('upload')}Open sheet file<input type="file" accept=".json,application/json" data-ps-import hidden></label>
     <span class="ed-gap"></span>${PRICES.length > 1 ? `<button class="btn danger" data-act="ps-del">${icon('trash')}${ui.psConfirm ? 'Click again to delete' : 'Delete this sheet'}</button>` : ''}</div>`;
   $('#tab-pricing').innerHTML = `<div class="prx"><aside class="prx-side">${priceSide(ps, q, view)}</aside>
-    <section class="prx-main"><div class="prx-top"><h2>Pricing</h2>${tabs}<div class="prx-r">${sheetPick}</div></div><div class="prx-body ${view}">${body}</div></section>${acts}</div>`;
+    <section class="prx-main"><div class="prx-top"><h2>Pricing</h2>${tabs}<div class="prx-r">${sheetPick}${installerPick(ps)}</div></div><div class="prx-body ${view}">${body}</div></section>${acts}</div>`;
 }
 // The left column: the job total, price per foot by type, the totals with markup, tax and payments, and where to jump.
 function priceSide(ps, q, view) {
   const nCab = q.rooms.reduce((a, R) => a + R.cabs.length, 0);
   const tone = { Base: 'amber', Wall: 'blue', Tall: 'violet' };
   const tiles = q.perFt.map(t => `<div class="prx-ft ${tone[t.cat] || 'teal'}"><span>${esc(t.name)}</span><b>${t.n ? money(t.rate) + '<em>/ft</em>' : '–'}</b><small>${t.n ? `${ftLen(t.ft)} ft · ${money(t.total)}` : 'None in this job'}</small></div>`).join('');
-  const tot = `<table class="prx-tot"><tbody>${q.jobLines.map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}
-    <tr><td>Subtotal</td><td class="n">${money(q.sub)}</td></tr>${ps.markup ? `<tr><td>Markup ${ps.markup}%</td><td class="n">${money(q.markup)}</td></tr>` : ''}${ps.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="n">${money(q.tax)}</td></tr>` : ''}
-    <tr class="grand"><td>Total</td><td class="n">${money(q.total)}</td></tr>${q.payments.map(x => `<tr class="pay"><td>${esc(x.name)} (${x.pct}%)</td><td class="n">${money(x.amount)}</td></tr>`).join('')}</tbody></table>`;
+  // The percents are edited right here (Ayden 2026-11-18); they save to the price sheet like Edit prices does.
+  const pin = (ref, f, v, label) => `<span class="prx-pct">${ctl(ref, f, v ?? 0, 'num', { label })}%</span>`, R = 'psh:' + ps.id, X = i => `pshp:${ps.id}:extras.${i}`;
+  const pcts = ps.extras.map((x, i) => ({ x, i })).filter(({ x }) => x.per === 'pct').map(({ x, i }) => { const l = q.jobLines.find(k => k.xi === i);
+    return `<tr><td>${esc(x.name)} ${pin(X(i), 'amount', x.amount, x.name + ' percent')}</td><td class="n">${money(l ? l.amount : 0)}</td></tr>`; }).join('');
+  const tot = `<table class="prx-tot"><tbody>${q.jobLines.filter(l => l.xi == null).map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}${pcts}
+    <tr><td>Subtotal</td><td class="n">${money(q.sub)}</td></tr><tr><td>Markup ${pin(R, 'markup', ps.markup, 'Markup percent')}</td><td class="n">${money(q.markup)}</td></tr><tr><td>Tax ${pin(R, 'tax', ps.tax, 'Tax percent')}</td><td class="n">${money(q.tax)}</td></tr>
+    <tr class="grand"><td>Total</td><td class="n">${money(q.total)}</td></tr>${(ps.payments || []).map((x, i) => { const p = q.payments.find(y => y.pi === i);
+      return `<tr class="pay"><td>${esc(x.name)} ${pin(`pshp:${ps.id}:payments.${i}`, 'pct', x.pct, x.name + ' percent')}</td><td class="n">${money(p ? p.amount : 0)}</td></tr>`; }).join('')}</tbody></table>`;
   const jump = view === 'edit' ? `<nav class="prx-nav"><div class="prx-navh">Jump to</div>${PRICE_SECS.map(([k, l, ic]) => `<a href="#ps-${k}" data-act="prx-jump" data-id="${k}">${icon(ic)}${l}</a>`).join('')}</nav>`
     : view === 'quote' ? `<nav class="prx-nav"><div class="prx-navh">Rooms</div>${q.rooms.map((R, i) => `<a href="#prx-room-${i}" data-act="prx-jump" data-id="room-${i}">${icon('home')}<span>${esc(R.r.name)}</span><b>${money(R.total)}</b></a>`).join('')}<a href="#prx-room-paint" data-act="prx-jump" data-id="room-paint">${icon('palette')}<span>Paint</span><b>${sqft(q.sq.total)} sq ft</b></a></nav>` : '';
   return `<div class="prx-grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${nCab} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>

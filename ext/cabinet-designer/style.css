@@ -2655,8 +2655,10 @@ main:has(#tab-pricing:not([hidden])){padding:0;background:var(--sunk)}
 .prx-acts .btn .ic{color:var(--accent)}
 .prx-acts .btn.primary{height:44px;font:600 15px var(--f-ui);justify-content:center}
 .prx-acts .btn.primary .ic,.prx-acts .btn.danger .ic{color:inherit}
-.prx-inst{display:flex;flex-direction:column;gap:3px;font:600 12.5px var(--f-ui);color:var(--muted)}
-.prx-inst select{width:100%;min-height:34px;font:600 14px var(--f-ui);color:var(--ink)}
+.prx-inst{display:flex;align-items:center;gap:8px;font:600 13.5px var(--f-ui);color:var(--muted)}
+.prx-inst select{min-width:150px;min-height:34px;font:600 14.5px var(--f-ui);color:var(--ink)}
+.prx-tot .prx-pct{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+.prx-tot .prx-pct input{width:52px;min-height:24px;height:24px;padding:0 4px;text-align:right;font:500 13px var(--f-ui)}
 .prx-acts .btn.danger{color:var(--danger,#c62828)}
 .prx-acts label.btn{cursor:pointer}
 @media (max-width:1400px){.prx-body.edit .pricegrid{column-count:2}}
