@@ -3361,3 +3361,51 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .qm-use .chk{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer}
 .qm-dlg .qe-foot{justify-content:flex-end}
 @media (max-width:560px){.qm-grid{grid-template-columns:minmax(0,1fr)}}
+/* 0.56.9: bottom panel fits a smaller section (Ayden 2026-11-18). It can't be dragged taller or shorter any more: it is
+   always just tall enough for what it shows. Copy, Autofill, Flip and Delete sit to the right of Edit, not under it. */
+@media (min-width: 961px){
+  .room .dock .dockgrip{display:none}
+  .room .dock .itembar .ib-acts{flex-direction:row;align-items:stretch;width:auto;padding-top:0;align-self:center}
+  .room .dock .itembar .ib-acts .ib-edit{width:auto;padding-inline:18px;white-space:nowrap}
+  .room .dock .itembar .ib-small{grid-auto-columns:minmax(64px,auto)}
+  .room .dock .itembar:not(.ib-wrap):not(.ib-empty) > .ib-acts{grid-column:auto;grid-row:auto}
+}
+@media (min-width: 961px) and (max-width: 1599px){
+  .room .dock .itembar .ib-small{grid-auto-flow:row;grid-template-columns:repeat(2,minmax(58px,auto));grid-auto-columns:auto}
+  .room .dock .itembar .ib-small button{flex-direction:row;gap:4px;padding:3px 6px}
+}
+@media (min-width: 961px) and (max-width: 1599px){
+  .room .dock .itembar{gap:8px}
+  .room .dock .itembar .ib-acts{gap:6px}
+  .room .dock .itembar .ib-acts .ib-edit{padding-inline:10px}
+  .room .dock .docktabs button{padding:3px 5px}
+}
+/* 0.56.9 compact item bar: less open space so the panel is shorter. One row on mouse and touch screens:
+   Position, Size, Automatic, then Edit with Copy, Autofill, Flip and Delete beside it. */
+@media (min-width: 961px){
+  .room .dock .itembar:not(.ib-empty){display:flex!important;flex-direction:row;flex-wrap:nowrap;align-items:stretch;gap:10px}
+  .room .dock .itembar:not(.ib-empty) > *{grid-column:auto!important;grid-row:auto!important}
+  .room .dock .itembar > .ib-pos, .room .dock .itembar > .ib-size, .room .dock .itembar > .ib-togs{padding:20px 10px 6px}
+  .room .dock .itembar > .ib-pos::before, .room .dock .itembar > .ib-size::before, .room .dock .itembar > .ib-togs::before{top:4px;left:10px}
+  .room .dock .ib-pos, .room .dock .ib-size{row-gap:2px}
+  .room .dock .ib-f input, .room .dock .ib-pos .ib-f input{height:30px}
+  .room .dock .ib-f > span{line-height:1.15}
+  .room .dock .ib-slidewrap{padding-top:2px}
+  .room .dock .ib-slide{height:14px;margin:0}
+  .room .dock .itembar > .ib-togs{gap:8px;justify-content:center}
+  .room .dock .itembar .ib-acts{align-self:center}
+  .room .dock .itembar .ib-acts .ib-edit{height:38px}
+  .room .dock .dockbody.dock-item{padding:6px 10px}
+}
+@media (min-width: 961px){
+  .room .dock .itembar:not(.ib-empty){align-items:flex-start}
+  .room .dock .ib-pos, .room .dock .ib-size{align-content:start}
+  .room .dock .itembar > .ib-togs{padding-top:22px;gap:6px}
+  .room .dock .docktabs{padding-top:2px;padding-bottom:2px}
+}
+@media (min-width: 961px) and (max-width: 1599px){
+  .room .dock .itembar:not(.ib-empty){gap:6px}
+  .room .dock .itembar .ib-small button{padding:2px 4px;font-size:11.5px}
+  .room .dock .itembar .ib-small{grid-template-columns:repeat(2,minmax(52px,auto))}
+  .room .dock .dockbody.dock-item{padding:6px 6px}
+}

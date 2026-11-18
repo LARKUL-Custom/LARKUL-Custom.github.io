@@ -5,6 +5,8 @@ const has3D = () => typeof THREE !== 'undefined' && THREE.OrbitControls;
 const matCache3 = {};
 // True while the room is built in the realistic look: generated wood grain, soft shadows, no outlines.
 let R3 = false;
+// BEVEL3.off: build without eased edges (the cutout card traces part outlines).
+const BEVEL3 = { off: false };
 function mat3(m, opts = {}) {
   if (!m) m = { id: '_none', color: '#cccccc' };
   const tx = opts.noTex ? null : texURL(m);
@@ -43,10 +45,11 @@ function woodCanvas(hex, strength, across) {
   const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data, base = hexRGB(hex), n1 = noise2(3), n2 = noise2(11), n3 = noise2(29);
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const u = (across ? y : x) / N, w = (across ? x : y) / N;
-    const t = u * 16 + n1(u * 4, w * 2, 4, 2) * 2.2 + n2(u * 3, w * 1, 3, 1) * 0.8;
-    const ring = Math.pow(Math.abs(Math.sin(t * Math.PI)), 10);
-    const pore = n3(u * 220, w * 3, 220, 3), drift = n2(u * 5, w * 5, 5, 5) - 0.5;
-    const v = strength * (0.55 * ring + 0.45 * (pore - 0.5) + 0.35 * drift);
+    // Few, wandering growth lines (flat sawn), fine straight streaks along the grain and broad soft tone changes.
+    const t = u * 7 + n1(u * 3, w * 2, 3, 2) * 3.2 + n2(u * 2, w * 1, 2, 1) * 1.5;
+    const ring = Math.pow(Math.abs(Math.sin(t * Math.PI)), 5);
+    const pore = n3(u * 160, w * 2, 160, 2), drift = n2(u * 4, w * 3, 4, 3) - 0.5;
+    const v = strength * (0.4 * ring + 0.3 * (pore - 0.5) + 0.45 * drift);
     const i = (y * N + x) * 4;
     for (let k = 0; k < 3; k++) d[i + k] = Math.max(0, Math.min(255, base[k] * (1 - v)));
     d[i + 3] = 255;
@@ -54,23 +57,55 @@ function woodCanvas(hex, strength, across) {
   g.putImageData(img, 0, 0);
   return (texCache3[key] = cv);
 }
-// Wood plank floor: 6 in planks over a 48 in tile, staggered joints, each board its own tone.
+// Wood plank floor over a 96 in tile: 5 in planks of random lengths (24 to 72 in) with staggered joints, each board its
+// own tone and grain, and a thin dark seam between boards.
 function floorCanvas() {
   if (texCache3.floor) return texCache3.floor;
-  const N = 1024, P = 8, pw = N / P, cv = document.createElement('canvas'); cv.width = cv.height = N;
-  const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data, base = hexRGB('#b48d63'), n1 = noise2(5), n3 = noise2(17);
-  const off = [0, 410, 170, 690, 300, 860, 90, 560], tone = [0.01, -0.035, 0.025, -0.015, 0.04, -0.025, 0, 0.03, -0.04, 0.015, -0.01, 0.035, -0.02, 0.02, 0.005, -0.03];
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    const p = Math.floor(x / pw), j = (y + off[p]) % N, seg = Math.floor(j / (N / 2)), u = x / N, w = y / N;
-    const gap = x % pw < 2 || j % (N / 2) < 2;
-    const t = u * 40 + n1(u * 16, w * 2, 16, 2) * 2.5, ring = Math.pow(Math.abs(Math.sin(t * Math.PI)), 8), pore = n3(u * 300, w * 4, 300, 4);
-    const v = gap ? 0.45 : 0.09 * ring + 0.07 * (pore - 0.5) - tone[p * 2 + seg];
-    const i = (y * N + x) * 4;
-    for (let k = 0; k < 3; k++) d[i + k] = Math.max(0, Math.min(255, base[k] * (1 - v)));
-    d[i + 3] = 255;
+  const N = 2048, IN = N / 96, P = 96 / 5, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data, base = hexRGB('#b8916a'), n1 = noise2(5), n2 = noise2(9), n3 = noise2(17);
+  // Board joints along each row: a fixed pseudo-random walk so the floor is the same every time, wrapping at 96 in.
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rows = []; for (let r = 0; r < Math.ceil(P); r++) {
+    const cuts = []; let at = rnd() * 60; while (at < 96 + 72) { cuts.push(at % 96); at += 24 + rnd() * 48; }
+    rows.push({ cuts: cuts.sort((x, y) => x - y), tone: [] }); for (let i = 0; i <= cuts.length; i++) rows[r].tone.push((rnd() - 0.5) * 0.12);
+  }
+  for (let y = 0; y < N; y++) {
+    const yi = y / IN, r = Math.min(rows.length - 1, Math.floor(yi / 5)), row = rows[r], inRow = yi - r * 5;
+    for (let x = 0; x < N; x++) {
+      const xi = x / IN; let k = 0; while (k < row.cuts.length && row.cuts[k] <= xi) k++;
+      const near = Math.min(...row.cuts.map(c => Math.min(Math.abs(c - xi), 96 - Math.abs(c - xi))));
+      const seam = inRow < 0.06 || inRow > 4.94 || near < 0.05;
+      const u = x / N, w = y / N, off = r * 0.37 + k * 0.61;
+      // Grain runs along the board (x): growth lines vary across it (y) and wander with x.
+      const t = (w * 96 * 0.9 + off * 7) + n1(u * 12 + off, w * 24, 12, 24) * 1.4, ring = Math.pow(Math.abs(Math.sin(t * Math.PI)), 6);
+      const pore = n3(u * 64, w * 400, 64, 400), drift = n2(u * 6 + off, w * 20, 6, 20) - 0.5;
+      const v = seam ? 0.38 : 0.1 * ring + 0.05 * (pore - 0.5) + 0.08 * drift - row.tone[k];
+      const i = (y * N + x) * 4;
+      for (let c = 0; c < 3; c++) d[i + c] = Math.max(0, Math.min(255, base[c] * (1 - v)));
+      d[i + 3] = 255;
+    }
   }
   g.putImageData(img, 0, 0);
   return (texCache3.floor = cv);
+}
+// Quartz-like stone for a top with no photo: its own color with soft clouds, fine speckle and a few faint veins.
+function stoneCanvas(hex) {
+  const key = 's' + hex; if (texCache3[key]) return texCache3[key];
+  const N = 1024, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data, base = hexRGB(hex), n1 = noise2(21), n2 = noise2(33), n3 = noise2(47);
+  const light = (base[0] + base[1] + base[2]) / 765 > 0.6;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N, w = y / N;
+    const cloud = n1(u * 4, w * 4, 4, 4) * 0.6 + n2(u * 9, w * 9, 9, 9) * 0.4 - 0.5;
+    const vein = Math.pow(1 - Math.abs(Math.sin((u * 3 + w * 1.5 + n2(u * 5, w * 5, 5, 5) * 1.6) * Math.PI)), 28);
+    const speck = n3(u * 512, w * 512, 512, 512);
+    let v = 0.05 * cloud + (speck > 0.82 ? 0.08 : speck < 0.12 ? -0.03 : 0) + (light ? 0.14 : -0.12) * vein;
+    const i = (y * N + x) * 4;
+    for (let c = 0; c < 3; c++) d[i + c] = Math.max(0, Math.min(255, base[c] * (1 - v)));
+    d[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return (texCache3[key] = cv);
 }
 const WOOD_STRENGTH = { oak: 0.24, maple: 0.12, birch: 0.1 };
 // How a material reads in the realistic look, from its texture setting and name.
@@ -84,7 +119,7 @@ function surfaceLook(m) {
     const st = WOOD_STRENGTH[proc] || (/oak|ash|hickory/.test(name) ? 0.28 : /walnut|cherry|alder/.test(name) ? 0.22 : 0.12);
     return { canvas: woodCanvas(m.color, st, m.kind === 'top'), rough: 0.55, env: 0.45, scale: m.kind === 'top' ? 36 : 30 };
   }
-  if (m.kind === 'top') return { rough: 0.32, env: 0.8 };
+  if (m.kind === 'top') return { canvas: stoneCanvas(m.color || '#eeeeee'), rough: 0.22, env: 0.9, scale: 60 };
   return { rough: /paint/.test(name) ? 0.42 : 0.5, env: 0.3 };
 }
 function realMat3(m, opts) {
@@ -102,6 +137,16 @@ function realMat3(m, opts) {
   if (opts.sel) { mm.emissive = new THREE.Color(opts.sel); mm.emissiveIntensity = 0.25; }
   return mm;
 }
+// The same material with its picture turned a quarter turn, for parts whose grain runs the other way.
+function grainAcross3(m) {
+  if (!m || !m.map) return m;
+  const c = grainAcross3.c || (grainAcross3.c = new Map()); if (c.has(m)) return c.get(m);
+  const t = m.map.clone(); t.rotation = Math.PI / 2; t.needsUpdate = true;
+  // A photo still loading: refresh the turned copy once the original has its picture.
+  if (!m.map.image || (m.map.image.complete === false)) { const prev = m.map.onUpdate; m.map.onUpdate = function () { if (prev) prev.call(this); t.needsUpdate = true; viewers.forEach(v => v.requestRender()); }; }
+  const mm = m.clone(); mm.map = t; mm.userData = { ...m.userData }; c.set(m, mm);
+  return mm;
+}
 const metal3 = color => metal3[color] || (metal3[color] = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.32, metalness: 0.85 }));
 const plain3 = {};
 function flat3(color, opacity) {
@@ -112,10 +157,12 @@ function flat3(color, opacity) {
 const edgeMat3 = () => edgeMat3.m || (edgeMat3.m = new THREE.LineBasicMaterial({ color: 0x2b2b2b, transparent: true, opacity: 0.35 }));
 // Box with UVs in world inches so textures keep their real scale on every face.
 function box3(w, h, d, material, x, y, z, edges = true) {
-  const g = new THREE.BoxGeometry(Math.max(w, 0.01), Math.max(h, 0.01), Math.max(d, 0.01));
+  // Realistic: parts thicker than a back get eased edges (see bevelBox3).
+  const mn = Math.min(w, h, d), bev = R3 && !BEVEL3.off && mn >= 0.3 && typeof bevelBox3 === 'function' && !(material.transparent);
+  const g = bev ? bevelBox3(w, h, d, Math.min(0.07, mn / 5)) : new THREE.BoxGeometry(Math.max(w, 0.01), Math.max(h, 0.01), Math.max(d, 0.01));
   const k = (material.userData && material.userData.texScale) || 24;
-  const uv = g.attributes.uv, dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
-  for (let f = 0; f < 6; f++) for (let i = 0; i < 4; i++) { const j = f * 4 + i; uv.setXY(j, uv.getX(j) * dims[f][0] / k, uv.getY(j) * dims[f][1] / k); }
+  const uv = g.attributes.uv, dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]], per = uv.count / 6;
+  for (let f = 0; f < 6; f++) for (let i = 0; i < per; i++) { const j = f * per + i; uv.setXY(j, uv.getX(j) * dims[f][0] / k, uv.getY(j) * dims[f][1] / k); }
   const mesh = new THREE.Mesh(g, material);
   mesh.position.set(x, y, z);
   if (edges && !R3) { const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), edgeMat3()); mesh.add(e); }
@@ -125,7 +172,10 @@ function box3(w, h, d, material, x, y, z, edges = true) {
 // A countertop slab from its plan outline (corners can miter or cut it), thickness down from its top.
 function ctTop3(r, tm) {
   const sh = new THREE.Shape(r.poly.map(p => new THREE.Vector2(p.x, p.y)));
-  const g = new THREE.ExtrudeGeometry(sh, { depth: r.thick, bevelEnabled: false, curveSegments: 1 });
+  // Realistic: a small eased edge all round (1/16"), the slab keeps its outline and thickness.
+  const be = R3 && !BEVEL3.off && r.thick > 0.5 ? 0.0625 : 0;
+  const g = new THREE.ExtrudeGeometry(sh, be ? { depth: r.thick - 2 * be, bevelEnabled: true, bevelThickness: be, bevelSize: be, bevelOffset: -be, bevelSegments: 2, curveSegments: 1 } : { depth: r.thick, bevelEnabled: false, curveSegments: 1 });
+  if (be) g.translate(0, 0, be);
   const k = (tm.userData && tm.userData.texScale) || 24, uv = g.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / k, uv.getY(i) / k);
   const mesh = new THREE.Mesh(g, tm);
@@ -328,7 +378,8 @@ function doorMeshes(ds, framed, f, ft, fmM, panelM, D, add) {
       // One piece: outline of the whole door, frame at full thickness, fields recessed.
       const ol = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(fw, fh, ft)), edgeMat3()); ol.position.set(f.x0 + fw / 2, f.z0 + fh / 2, D + ft / 2); add(ol);
     }
-    lay.frame.forEach(m => box(m.x0, m.z0, m.x1, m.z1, ft, D + ft / 2, fmM, !routed));
+    // Realistic: rails (wider than tall) run their grain across, like a real five-piece door.
+    lay.frame.forEach(m => box(m.x0, m.z0, m.x1, m.z1, ft, D + ft / 2, R3 && m.x1 - m.x0 > m.z1 - m.z0 ? grainAcross3(fmM) : fmM, !routed));
     lay.fields.forEach(fl => {
       const w = fl.x1 - fl.x0, h = fl.z1 - fl.z0, r = Math.min(ds.raiseW, w / 2 - 0.5, h / 2 - 0.5);
       if (fl.pt === 'glass') { const g = box3(w, h, 0.15, glass3(), X((fl.x0 + fl.x1) / 2), Z((fl.z0 + fl.z1) / 2), D + ft * 0.4, false); add(g); g.userData.layer = 'glass'; return; }
@@ -390,11 +441,11 @@ class Viewer3D {
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     if ('outputEncoding' in this.renderer && THREE.sRGBEncoding) this.renderer.outputEncoding = THREE.sRGBEncoding;
     host.appendChild(this.renderer.domElement);
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.scene = new THREE.Scene();
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x8a8577, 0.85); this.scene.add(this.hemi);
     const sun = this.sun = new THREE.DirectionalLight(0xffffff, 0.55); sun.position.set(-120, 260, 180); this.scene.add(sun); this.scene.add(sun.target);
-    sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.3;
+    sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.3; sun.shadow.radius = 5;
     const fill = this.fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(200, 120, -150); this.scene.add(fill);
     this.root = new THREE.Group(); this.scene.add(this.root);
     this.persp = new THREE.PerspectiveCamera(40, 1, 1, 20000);
@@ -439,14 +490,16 @@ class Viewer3D {
     this.requestRender();
   }
   requestRender() { if (!this.ok || this.raf) return; this.raf = requestAnimationFrame(() => { this.raf = 0; this.draw(); }); }
-  draw() { if (this.beforeDraw) this.beforeDraw(); this.renderer.render(this.scene, this.cam); }
+  draw() { if (this.beforeDraw) this.beforeDraw(); this.renderer.render(this.scene, this.cam); if (this.real && typeof realAO === 'function') realAO(this); }
   // Realistic look: tone mapping, soft shadows from one sun and reflections from a soft studio around the room.
   setReal(on) {
     if (!this.ok || this.real === on) return;
     this.real = on; const r = this.renderer;
-    r.shadowMap.enabled = on; r.toneMapping = on ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping; r.toneMappingExposure = on ? 0.85 : 1;
+    r.shadowMap.enabled = on; r.shadowMap.type = THREE.PCFShadowMap; r.toneMapping = on ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping; r.toneMappingExposure = on ? 0.95 : 1;
     this.scene.environment = on ? this.studio() : null;
-    this.hemi.intensity = on ? 0.35 : 0.85; this.sun.intensity = on ? 2.2 : 0.55; this.sun.castShadow = on; this.fill.intensity = on ? 0.2 : 0.25;
+    this.hemi.intensity = on ? 0.55 : 0.85; this.sun.intensity = on ? 1.9 : 0.55;
+    // Realistic: warm light from above, a cool sky fill and a warm floor bounce, like a room with daylight and bulbs.
+    this.sun.color.set(on ? 0xfff1df : 0xffffff); this.hemi.color.set(on ? 0xeef2ff : 0xffffff); this.hemi.groundColor.set(on ? 0xb39b7e : 0x8a8577); this.sun.castShadow = on; this.fill.intensity = on ? 0.2 : 0.25;
     // Materials shared with the plain look have to recompile for the shadow and tone settings.
     [plain3, metal3, matCache3].forEach(c => Object.values(c).forEach(m => { if (m && m.isMaterial) m.needsUpdate = true; }));
   }
@@ -463,7 +516,7 @@ class Viewer3D {
   // Point the sun's shadow at the whole room.
   fitShadow() {
     const b = this.bounds(), c = b.getCenter(new THREE.Vector3()), R = Math.max(60, b.getSize(new THREE.Vector3()).length() / 2), s = this.sun.shadow.camera;
-    this.sun.target.position.copy(c); this.sun.position.copy(c).add(new THREE.Vector3(-0.45, 1.4, 0.7).normalize().multiplyScalar(R * 2));
+    this.sun.target.position.copy(c); this.sun.position.copy(c).add(new THREE.Vector3(-0.3, 1.9, 0.6).normalize().multiplyScalar(R * 2));
     s.left = -R; s.right = R; s.top = R; s.bottom = -R; s.near = 1; s.far = R * 4; s.updateProjectionMatrix();
   }
   clear() {
@@ -570,6 +623,8 @@ function realWall3(op = 1) {
   const k = op >= 0.98 ? 1 : Math.round(op * 50) / 50, c = realWall3.c || (realWall3.c = {});
   return c[k] || (c[k] = new THREE.MeshStandardMaterial({ color: 0xeceae5, roughness: 0.95, envMapIntensity: 0.3, transparent: k < 1, opacity: k, depthWrite: k >= 1 }));
 }
+// The ceiling faces away from the sun; in a real room it is lit by light bouncing off the floor and counters.
+function realCeil3() { return realCeil3.m || (realCeil3.m = new THREE.MeshStandardMaterial({ color: 0xf2f0ec, emissive: 0x5a5854, roughness: 0.95, envMapIntensity: 0.3 })); }
 // What the 3D room shows. Each is on unless turned off in the Layers menu (the ceiling only shows from below).
 const LAYERS3D = [['walls', 'Walls'], ['ceiling', 'Ceiling'], ['floor', 'Floor'], ['box', 'Cabinet boxes'], ['fronts', 'Doors and drawer fronts'], ['drawerBox', 'Drawer boxes'], ['pulls', 'Pulls'], ['tops', 'Countertops'], ['molding', 'Molding'], ['shapes', 'Shapes, appliances and fixtures'], ['lights', 'Lights'], ['labels', 'Labels and sizes'], ['glass', 'Glass (3D and elevation)'], ['fasteners', 'Joint fasteners']];
 // Fasteners start hidden; everything else starts shown.
@@ -618,9 +673,9 @@ function buildRoomScene(v) {
   if (pts.length && L.ceiling && S.walls.length) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), hgt = Math.max(...S.walls.map(w => w.height || 96));
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    const vc = typeof vCeiling3d === 'function' ? vCeiling3d(v, wallLook3(1, R3 ? realWall3() : flat3(cssVar('--wall3d')))) : null;
+    const vc = typeof vCeiling3d === 'function' ? vCeiling3d(v, wallLook3(1, R3 ? realCeil3() : flat3(cssVar('--wall3d')))) : null;
     if (vc) v.root.add(vc);
-    else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), wallLook3(1, R3 ? realWall3() : flat3(cssVar('--wall3d'))));
+    else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), wallLook3(1, R3 ? realCeil3() : flat3(cssVar('--wall3d'))));
       cl.rotation.x = Math.PI / 2; cl.position.set((x0 + x1) / 2, hgt, (y0 + y1) / 2); cl.userData.noBounds = true; cl.userData.wall = true; v.root.add(cl); }
   }
   if (pts.length && L.floor) {
@@ -630,7 +685,7 @@ function buildRoomScene(v) {
     const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
     const fg = new THREE.PlaneGeometry(x1 - x0, y1 - y0);
     const fpk = texPickOf('floor');
-    if (R3 && !fpk) { const uv = fg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 48, uv.getY(i) * (y1 - y0) / 48); }
+    if (R3 && !fpk) { const uv = fg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 96, uv.getY(i) * (y1 - y0) / 96); }
     const fl = new THREE.Mesh(fg, floorLook3(R3 ? realFloor3() : flat3(cssVar('--floor3d')), fg, x1 - x0, y1 - y0));
     fl.rotation.x = -Math.PI / 2; fl.position.set((x0 + x1) / 2, -0.02, (y0 + y1) / 2); fl.userData.noBounds = true; fl.receiveShadow = true; v.root.add(fl);
   }

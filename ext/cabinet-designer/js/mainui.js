@@ -163,7 +163,7 @@ setDesignScale();
 
 // Panel under the drawing: drag its top edge to make it taller or shorter (remembered), and its
 // contents shrink or grow to fit it, so it never needs scroll bars. Double-click the edge to reset.
-const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh4';
+const DOCK_KEY = () => (typeof KEY === 'string' ? KEY : 'cd') + '.dockh5';
 // The panel can be dragged as short or tall as you like (down to a thin strip); its contents
 // always scale to fit. Heights saved back when the panel scrolled instead of scaling are dropped (key .dockh2).
 function dockMinH() { return 40; }
@@ -171,9 +171,10 @@ function dockMinH() { return 40; }
 // a smaller height (at most 70% of the room) and goes back to yours as soon as the window has room again.
 // (It used to overwrite your height, so a minimized or briefly small hub window left the panel tiny for good.)
 // Starting height of the panel under the drawing: the item bar at its set size, in screen pixels.
-const DOCK_H = 150;
+const DOCK_H = 120;
 function applyDockH() {
-  let h = 0; try { h = +localStorage.getItem(DOCK_KEY()) || 0; } catch (_) {}
+  // No drag handle on the desktop main screen any more (0.56.9): the panel is always its set height.
+  let h = 0; if (!deskUI()) try { h = +localStorage.getItem(DOCK_KEY()) || 0; } catch (_) {}
   const room = document.getElementById('tab-room'); if (!room) return;
   const rh = room.getBoundingClientRect().height, max = rh * 0.7;
   // A minimized or hidden window has no room to measure: keep the height you chose.
@@ -196,10 +197,12 @@ function fitDock(el = document.getElementById('dock')) {
   const tabs = el.querySelector('.dockhead .docktabs'); if (tabs) tabs.style.zoom = '';
   // A narrow window wraps the item bar onto a second row: the panel grows to show it (unless you dragged its height),
   // up to half the room, so Edit, Copy and Delete never hide behind a scroll bar.
-  let saved = 0; try { saved = +localStorage.getItem(DOCK_KEY()) || 0; } catch (_) {}
+  const saved = 0;
   const room = document.getElementById('tab-room');
-  if (el.isConnected && body && room && !saved && ui.dock === 'item') {
+  if (el.isConnected && body && room && !saved) {
+    const was = room.style.getPropertyValue('--dockh'); room.style.setProperty('--dockh', DOCK_H + 'px');
     const need = el.getBoundingClientRect().height + body.scrollHeight - body.clientHeight;
+    room.style.setProperty('--dockh', was || DOCK_H + 'px');
     const h = Math.round(Math.min(room.getBoundingClientRect().height * 0.5, Math.max(DOCK_H, need)));
     if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof redrawView === 'function') requestAnimationFrame(redrawView); }
   }

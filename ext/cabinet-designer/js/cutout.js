@@ -112,7 +112,9 @@ function coPieces(paths, minArea) {
 // labelled part's projected outline.
 function coRender(v, W, real) {
   // The card's picture is Realistic or the regular 3D look, whatever the 3D view is showing right now.
-  const keep = ui.sel, look = [ui.render3d, ui.hidden3d]; ui.sel = null; ui.render3d = !!real; ui.hidden3d = false; buildRoom3D();
+  const keep = ui.sel, look = [ui.render3d, ui.hidden3d]; ui.sel = null; ui.render3d = !!real; ui.hidden3d = false;
+  // Cut lines come from the parts' triangles: plain square edges keep them straight and quick (no eased edges).
+  BEVEL3.off = true; try { buildRoom3D(); } finally { BEVEL3.off = false; }
   const r = v.renderer, pr = r.getPixelRatio(), cw = v.host.clientWidth, ch = v.host.clientHeight, cam = v.cam;
   const mr = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true }); mr.setPixelRatio(1);
   // One shot = the normal picture, then the same view with every mesh in its own flat color.
