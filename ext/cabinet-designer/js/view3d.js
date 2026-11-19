@@ -331,8 +331,10 @@ function cabinetMeshes(c, opts = {}) {
   const ps = panelFor(c), pmM = L3(mat(ps.mat) || cm, 'finished'), pt = panelThick(c);
   const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pdL = endDepth(c, 'L') + ps.frontOverhang, pdR = endDepth(c, 'R') + ps.frontOverhang;
   const pL = hasPanel(c, 'L'), pR = hasPanel(c, 'R');
-  if (pL) grp.add(box3(pt, ph, pdL, pmM, -pt / 2, py0 + ph / 2, pdL / 2));
-  if (pR) grp.add(box3(pt, ph, pdR, pmM, W + pt / 2, py0 + ph / 2, pdR / 2));
+  // Each panel piece, step by step up the end (a strip past a shallower neighbour, notched round a shelf).
+  [['L', -pt / 2, pdL], ['R', W + pt / 2, pdR]].forEach(([sd, x, pd]) => (panelPieces(c, sd) || []).forEach(pc => pc.steps.forEach(q => {
+    const h = q.z1 - q.z0, d = pd - q.d0; if (h > 0 && d > 0) grp.add(box3(pt, h, d, pmM, x, q.z0 + h / 2, q.d0 + d / 2));
+  })));
   // Fillers to the wall, flush with the fronts, with a short return behind them.
   const flm = mat(fillerMat(c)) || cm, flM = L3(flm, 'finished'), fy0 = c.cat === 'Wall' ? 0 : tk;
   fillersOf(c).forEach(fl => {

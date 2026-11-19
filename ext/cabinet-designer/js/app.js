@@ -491,7 +491,8 @@ function qeOpening(c, i, part) {
       ${row.type === 'door' && n === 1 ? pick('Hinge', 'hinge', [['', 'Default'], ['L', 'Left'], ['R', 'Right']], row.hinge || '') : ''}
       ${row.type === 'false' ? pick('Pull', 'pull', [['', 'None'], ['1', 'Drawer pull']], row.pull ? '1' : '') : ''}
       ${row.type === 'open' ? '' : `<label class="qe-pick"><span>Style</span>${fctl(R, i + '.style', row.style || '', 'select', { options: styleOpts, label: 'Style' })}</label>`}
-      <label class="qe-pick"><span>Height</span>${fctl(R, i + '.h', row.h, 'rowh', { ph: '*', label: 'Height' })}</label>` : ''}
+      ${typeof mwSpot === 'function' && mwSpot(c, i) ? `<label class="qe-pick"><span>Microwave opening</span>${fctl('cab:' + c.id, 'mwH', mwClear(c), 'len', { label: 'Microwave opening height' })}</label>`
+        : `<label class="qe-pick"><span>Height</span>${fctl(R, i + '.h', row.h, 'rowh', { ph: '*', label: 'Height' })}</label>`}` : ''}
     ${inner ? intContents(c, i) : ''}
     </div>
     ${part === 'inside' && !inside ? '<div class="note">Drawers and false fronts have nothing inside to set. Pick a door or open opening.</div>' : ''}
@@ -590,7 +591,7 @@ function dockBody(k) {
   if (k === 'layout') {
     const L = lay();
     // Automatic fillers and panels are switched on the Item tab.
-    return `<div class="dockgrid">${LAYOUT_FIELDS.filter(f => !['autoFillers', 'autoPanels'].includes(f.k)).map(f => `<div class="dockfld">${f.type === 'bool'
+    return `<div class="dockgrid">${LAYOUT_FIELDS.filter(f => !['autoFillers', 'autoPanels', 'autoLights'].includes(f.k)).map(f => `<div class="dockfld">${f.type === 'bool'
       ? `<label class="checkrow">${ctl('layout', f.k, L[f.k], 'bool', { label: f.label })} <b>${f.label}</b></label>`
       : fld(f.label, 'layout', f.k, L[f.k], f.type, { options: f.options })}${f.note ? `<div class="note">${f.note}</div>` : ''}</div>`).join('')}</div>
       <div class="row-actions"><button class="btn sm" data-act="refit-fillers">Fit fillers to cabinets at walls now</button><span class="note">These apply to the whole job.</span></div>`;

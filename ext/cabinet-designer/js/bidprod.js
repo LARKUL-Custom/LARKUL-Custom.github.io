@@ -44,6 +44,38 @@ function setAppl(c, id) {
   c.w = s.w; c.h = s.h; c.d = s.d; if (c.cat === 'Wall') c.elev = r3(Math.max(0, top - s.h));
 }
 
+/* ---------- Microwave openings (0.58.29) ---------- */
+// Ayden's Mozaik library (2026 Larkul) has two: "Microwave Upper Open" (Appliance Uppers), a wall cabinet with a pair
+// of doors over an open bottom the microwave stands in on the cabinet bottom, and "Microwave drawer" (Base), an open top
+// the microwave drawer sits in on a fixed shelf over a drawer. Each has a fixed shelf at the opening and a third nailer
+// there. The open row is marked mw; its clear height (c.mwH, Size tab) sets the row, and the doors or drawer get the rest.
+// Clear height = from the cabinet bottom (upper) or the fixed shelf (base) up to the fixed shelf (upper) or the top.
+// Defaults are Mozaik's openings, rounded: 404.6 mm upper, 389.5 mm base.
+const MW_CLEAR = { Wall: 16, Base: 15.375 };
+// 'bottom' for an open row at the bottom of an upper (under doors), 'top' for one at the top of a base (over a drawer).
+function mwSpot(c, i) {
+  const rows = c.rows || [], r = rows[i];
+  if (!r || !r.mw || r.type !== 'open' || rows.length < 2 || c.moz || c.made) return '';
+  return i === rows.length - 1 ? 'bottom' : i === 0 ? 'top' : '';
+}
+const mwClear = c => +c.mwH > 0 ? +c.mwH : (MW_CLEAR[c.cat] || 16);
+const mwT = c => (mat(cabMatT(cabSet(c, 'cabMatT')).carcass) || S.materials[0]).thick;
+// The open row's front height for that clear height. Mozaik puts the fixed shelf's bottom face half a gap past the
+// front edge next to it: under the doors' bottom edge on the upper (the doors cover the shelf), under the drawer's
+// top edge on the base (the shelf shows in the opening).
+function mwRowH(c, p, i) {
+  const t = mwT(c), g = p.frontGap;
+  return mwSpot(c, i) === 'bottom' ? r3(mwClear(c) - p.frontBottomReveal - g / 2 + t) : r3(mwClear(c) - p.frontTopReveal - 1.5 * g + 2 * t);
+}
+// The centre height of the fixed shelf under row i (front f), or null when row i has no microwave shelf.
+function mwShelfZ(c, p, i, f, t) {
+  if (!(c.rows || []).some(r => r.mw)) return null;
+  const g = p.frontGap;
+  if (mwSpot(c, i + 1) === 'bottom') return f.z0 - g / 2 + t / 2;
+  if (mwSpot(c, i) === 'top') return f.z0 - 1.5 * g + t / 2;
+  return null;
+}
+
 /* ---------- The products ---------- */
 const R1 = (type, h, count = 1, x = {}) => ({ type, h, count, ...x });
 function bidLibItems() {
@@ -51,10 +83,7 @@ function bidLibItems() {
   const mk = (id, name, cat, w, h, d, elev, rows, params, x = {}) => ({ id, name, cat, w, h, d, elev, rows, params, construction: con(cat), ...x });
   const shelf = applShelfSize(applOpen('mw-ct'));
   return [
-    // 1. A 30" base with the microwave drawer's opening on top and a drawer under it; the ADA one is 32 1/2" tall with
-    // a 9" toe kick, so a 1 1/2" laminate top comes out at 34".
-    mk('b-mwd30', 'Microwave Drawer Base', 'Base', 30, 34.5, 24, 0, [R1('open', '*', 1, { appl: 'mwd30' }), R1('drawer', '*')], { shelfCount: 0 }, { appl: 'mwd30', folder: 'Appliance Bases' }),
-    mk('b-mwd30-ada', 'Microwave Drawer Base ADA', 'Base', 30, 32.5, 24, 0, [R1('open', '*', 1, { appl: 'mwd30' }), R1('drawer', '*')], { shelfCount: 0, ada: 'on' }, { appl: 'mwd30', folder: 'Appliance Bases' }),
+    // 1. Microwave drawer bases: Ayden's Mozaik one below (9.) replaced the first one, sized from a Sharp drawer (0.58.33).
     // 2. A vanity standing on legs: a drawer on top, open under it down to the bottom (the shelf). Seen all over, so finished.
     mk('b-vanity-legs', 'Open Vanity on Legs', 'Base', 30, 34.5, 21, 0, [R1('drawer', 6), R1('open', '*')], { shelfCount: 0, toeSkin: 'off', toeKickHeight: 6 }, { finished: true, finInt: true, wrap: true, folder: 'Vanities' }),
     mk('b-vanity-legs-sink', 'Open Vanity on Legs, Sink', 'Base', 30, 34.5, 21, 0, [R1('false', 6), R1('open', '*')], { shelfCount: 0, toeSkin: 'off', toeKickHeight: 6 }, { finished: true, finInt: true, wrap: true, sinkOn: 'sk-bath', folder: 'Vanities' }),
@@ -63,6 +92,11 @@ function bidLibItems() {
     mk('b-open-shelf', 'Open Shelf Unit, Base', 'Base', 30, 34.5, 16, 0, [R1('open', '*', 1, { shelves: 1 })], { shelfCount: 1 }, { finished: true, finInt: true, wrap: true, folder: 'Open Shelving' }),
     mk('w-open-shelf', 'Open Shelf Unit, Wall', 'Wall', 30, 30, 12, 54, [R1('open', '*', 1, { shelves: 2 })], { shelfCount: 2 }, { finished: true, finInt: true, wrap: true, folder: 'Open Shelving' }),
     // 8. A microwave shelf hung under the uppers: an open box sized from the appliance, wrapped all round.
+    // 9. Ayden's Mozaik microwave cabinets (sizes from the 2026 Larkul library): the opening height is set on the Size tab.
+    mk('w-mw-upper', 'Microwave Upper Open', 'Wall', 24, 36, 14, 54, [R1('door', '*', 2), R1('open', 16.5, 1, { mw: true })], { shelfCount: 1 }, { folder: 'Appliance Uppers' }),
+    mk('b-mw-drawer', 'Microwave Drawer', 'Base', 27, 34.5, 24, 0, [R1('open', 16.5, 1, { mw: true }), R1('drawer', '*')], { shelfCount: 0 }, { folder: 'Appliance Bases' }),
+    // ADA: 32 1/2" tall with a 9" toe kick, so a 1 1/2" laminate top comes out at 34".
+    mk('b-mw-drawer-ada', 'Microwave Drawer ADA', 'Base', 27, 32.5, 24, 0, [R1('open', 16.5, 1, { mw: true }), R1('drawer', '*')], { shelfCount: 0, ada: 'on' }, { folder: 'Appliance Bases' }),
     mk('w-mw-shelf', 'Microwave Shelf', 'Wall', shelf.w, shelf.h, shelf.d, r3(54 - shelf.h), [R1('open', '*')], { shelfCount: 0 }, { appl: 'mw-ct', finished: true, finInt: true, wrap: true, folder: 'Open Shelving' }),
   ];
 }
@@ -72,6 +106,9 @@ function ensureBidLib(s) {
   const lib = s.libSet && s.libSet !== 'main' ? ((s.libSets = s.libSets || {}).main = s.libSets.main || []) : (s.library = s.library || []);
   const had = new Set(s.bidLibKeys || []);
   bidLibItems().forEach(l => { if (had.has(l.id)) return; had.add(l.id); if (!lib.some(x => x.id === l.id)) lib.push(l); });
+  // 0.58.33 (Ayden 2026-11-19): the first Microwave Drawer Base and its ADA copy leave the library once; cabinets
+  // already placed from them keep building as they were.
+  if (!had.has('-mwd30')) { had.add('-mwd30'); for (let i = lib.length - 1; i >= 0; i--) if (['b-mwd30', 'b-mwd30-ada'].includes(lib[i].id)) lib.splice(i, 1); }
   s.bidLibKeys = [...had];
   if (typeof ensureMadeLib === 'function') ensureMadeLib(s, lib);
   if (typeof ensureLamTop === 'function') ensureLamTop(s);
@@ -124,8 +161,12 @@ function shelfExtrasPrice(c, ps) {
 function bidSizeBox(c) {
   if (c.made) return typeof madeBox === 'function' ? madeBox(c) : '';
   const R = 'cab:' + c.id; let s = '';
-  const hasOpen = (c.rows || []).some(r => r.type === 'open');
-  if (c.appl || (hasOpen && !c.moz)) {
+  const hasOpen = (c.rows || []).some(r => r.type === 'open'), mwI = (c.rows || []).findIndex((r, i) => mwSpot(c, i));
+  if (mwI >= 0) {
+    const up = mwSpot(c, mwI) === 'bottom';
+    s += `<div class="psec box">${secHead('box', 'Microwave opening', 'violet')}<div class="grid2">${fld('Opening height', R, 'mwH', mwClear(c), 'len')}</div>
+      <div class="note">Clear height ${up ? 'from the cabinet bottom up to the fixed shelf. The doors above' : 'from the fixed shelf up to the top. The drawer below'} get the rest.</div></div>`;
+  } else if (c.appl || (hasOpen && !c.moz)) {
     const list = APPL_OPEN.filter(a => c.cat === 'Wall' ? a.kind === 'shelf' : a.kind === 'drawer');
     s += `<div class="psec box">${secHead('box', 'Appliance in the opening', 'violet')}<div class="grid2">${fld('Appliance', R, 'appl', c.appl || '', 'select', { options: [{ v: '', l: 'None' }, ...list.map(a => ({ v: a.id, l: a.name }))] })}</div>
       <div class="note">${c.appl ? (c.cat === 'Wall' ? 'The shelf is sized to fit it with 1" of air round it.' : 'The open row is sized to its cutout, on a fixed shelf.') : 'Pick one and the opening is sized to it.'}</div></div>`;
@@ -171,7 +212,7 @@ function bidPlan(r) {
   if (/window\s*sill|\bsills?\b/.test(t)) return { kind: 'sill' };
   if (/\bcrown\b/.test(t) && !/cabinet|box/.test(cat)) return { kind: 'crown' };
   if (!ours) return null;
-  if (/microwave\s*drawer|\bmwd\b|mw\s*drawer/.test(t)) return { kind: 'lib', lib: ada ? 'b-mwd30-ada' : 'b-mwd30', appl: +r.W > 0 && +r.W < 27 ? 'mwd24' : 'mwd30' };
+  if (/microwave\s*drawer|\bmwd\b|mw\s*drawer/.test(t)) return { kind: 'lib', lib: ada ? 'b-mw-drawer-ada' : 'b-mw-drawer' };
   if (/microwave|\bmw\b/.test(t) && /shelf|open/.test(t)) return { kind: 'lib', lib: 'w-mw-shelf', appl: 'mw-ct' };
   if (/wall[- ]?hung|rakks|\behv\b|vanity\s*(counter)?top|lav(atory)?\s*top/.test(t) && /vanity|lav|ada|top|counter/.test(t)) return { kind: 'made', made: 'adatop', sink: /sink|lav|bowl/.test(t) };
   if (/vanity/.test(t) && /legs?|open/.test(t)) return { kind: 'lib', lib: /sink|lav|bowl/.test(t) ? 'b-vanity-legs-sink' : 'b-vanity-legs' };

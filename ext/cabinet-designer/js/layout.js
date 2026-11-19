@@ -2,7 +2,7 @@
 'use strict';
 
 /* ---------- Settings ---------- */
-const LAYOUT_DEFAULTS = { snapReach: 4, grid: 1, angleSnap: 45, autoFillers: true, fillerW: 1.5, fillerReach: 3, autoPanels: true, panelReach: 1, fitOpenings: true, fitMin: 9, fitMax: 36 };
+const LAYOUT_DEFAULTS = { snapReach: 4, grid: 1, angleSnap: 45, autoFillers: true, fillerW: 1.5, fillerReach: 3, autoPanels: true, panelReach: 1, autoLights: true, fitOpenings: true, fitMin: 9, fitMax: 36 };
 const LAYOUT_FIELDS = [
   { k: 'snapReach', label: 'Snap reach', type: 'len', note: 'Cabinets jump to walls, other cabinets and lined-up edges inside this distance.' },
   { k: 'grid', label: 'Wall grid', type: 'len', note: 'Wall ends and lengths round to this.' },
@@ -10,7 +10,8 @@ const LAYOUT_FIELDS = [
   { k: 'autoFillers', label: 'Automatic fillers', type: 'bool', note: 'A cabinet that ends at a wall stops short of it and gets a filler.' },
   { k: 'fillerW', label: 'Filler width', type: 'len' },
   { k: 'fillerReach', label: 'Fill gaps to a wall up to', type: 'len', note: 'Any gap to a wall this size or smaller is filled.' },
-  { k: 'autoPanels', label: 'Automatic end panels', type: 'bool', note: 'A cabinet end with nothing next to it gets an applied end panel.' },
+  { k: 'autoPanels', label: 'Automatic end panels', type: 'bool', note: 'Any cabinet end that shows gets an applied end panel: one with nothing next to it, the part of a deeper cabinet that sticks out past its neighbour, and the sides above and below a floating shelf or a shorter cabinet.' },
+  { k: 'autoLights', label: 'Automatic ceiling lights', type: 'bool', note: 'A closed-in room with no ceiling lights drawn gets recessed pucks in Realistic, shown dashed in the plan. Placing any ceiling light turns them off.' },
   { k: 'panelReach', label: 'Counts as next to something within', type: 'len' },
   { k: 'fitOpenings', label: 'Fit new cabinets to openings', type: 'bool', note: 'A cabinet dropped into a gap takes the width of the gap when it is inside the range below. It grows only between two cabinets; against a wall it only shrinks to fit.' },
   { k: 'fitMin', label: 'Narrowest fitted width', type: 'len' },
@@ -140,6 +141,14 @@ function settle(c) {
 // Kept per room (cabinet and wall lists) and per cabinet, and only while its place and size stay the same.
 let nearMemo = null;
 function nearWindow(fn) { if (nearMemo) return fn(); nearMemo = new WeakMap(); try { return fn(); } finally { nearMemo = null; } }
+// This cabinet's answers kept for the drawing window (null outside one).
+function nearSlot(c) {
+  if (!nearMemo || !c || typeof c !== 'object' || !S.cabinets || !S.walls) return null;
+  let a = nearMemo.get(S.cabinets); if (!a) nearMemo.set(S.cabinets, a = new WeakMap());
+  let b = a.get(S.walls); if (!b) a.set(S.walls, b = new WeakMap());
+  let m = b.get(c); if (!m) b.set(c, m = new Map());
+  return m;
+}
 function nearestAt(c, dir) {
   if (!nearMemo || !c || typeof c !== 'object' || !S.cabinets || !S.walls) return nearestAtNow(c, dir);
   let a = nearMemo.get(S.cabinets); if (!a) nearMemo.set(S.cabinets, a = new WeakMap());
@@ -200,23 +209,88 @@ function fillersOf(c) {
   });
 }
 // Does this end of the cabinet get an applied panel? end is the viewer's L or R.
-function hasPanel(c, end) {
-  if (c.moz || c.made) return false;
-  const m = panelMode(c, end);
+function hasPanel(c, end) { return !!panelPieces(c, end); }
+// Where the panel at this end goes: null for none, else pieces [{ z0, z1, steps: [{ z0, z1, d0 }] }] in the cabinet's
+// own terms: z up from its bottom, d0 how far from its back the panel starts (0 = full depth). A full end panel is one
+// piece with one step at d0 0.
+// 0.58.30: any part of an end that can be seen gets covered (Ayden 2026-11-19). A neighbour butted against the end covers
+// it only over the height it shares and only out to its own front face (doors included). An upper deeper than the
+// cabinets beside it gets a panel on the strip that sticks out; a floating shelf between two uppers leaves the sides above
+// and below it showing, so each upper gets a panel notched around the shelf. Set to Never, nothing.
+function panelPieces(c, end) {
+  if (c.moz || c.made) return null;
+  const m = panelMode(c, end), full = () => { const z0 = panelZ0(c); return [{ z0, z1: c.h, steps: [{ z0, z1: c.h, d0: 0 }] }]; };
   // Products wrapped in the finish material all round (open shelf units, the open vanity) are their own finished ends.
-  if (c.wrap && m !== 'on') return false;
-  if (m === 'on') return true;
-  if (m === 'off' || !c.wall) return false;
+  if (c.wrap && m !== 'on') return null;
+  if (m === 'on') return full();
+  if (m === 'off' || !c.wall) return null;
   // A finished exterior (laminate outside) is its own finished end; it gets no applied panel unless one is asked for.
-  if (typeof finExterior === 'function' && finExterior(c)) return false;
-  const ly = lay(); if (!ly.autoPanels) return false;
+  if (typeof finExterior === 'function' && finExterior(c)) return null;
+  const ly = lay(); if (!ly.autoPanels) return null;
   return inRoomOf(c, () => {
-    if (!wall(c.wall)) return false;
+    if (!wall(c.wall)) return null;
     const dir = (end === 'L') === (c.side === 1) ? -1 : 1, n = nearestAt(c, dir);
-    if (!n) return true;
-    if (n.kind === 'wall' && fillersOf(c).some(f => f.end === end)) return false;
-    return n.gap > Math.max(ly.panelReach, panelThick(c) + 0.01);
+    if (!n) return full();
+    if (n.kind === 'wall' && fillersOf(c).some(f => f.end === end)) return null;
+    if (n.gap > Math.max(ly.panelReach, panelThick(c) + 0.01)) return full();
+    return endExposed(c, end, dir);
   });
+}
+// The bottom of an end panel, up from the cabinet's bottom: a base stops on its toe kick unless the fit runs to the floor.
+function panelZ0(c) { return c.cat === 'Wall' || panelFor(c).toFloor || !hasToe(c) ? 0 : effParams(c).toeKickHeight; }
+// How far a cabinet's front sticks out from the wall: box plus its doors (a product with no doors, just its box).
+function faceOut(k) {
+  let ft = 0;
+  if (!k.moz && !k.made) { const fr = computeFronts(k).find(f => f.type !== 'open'); if (fr) ft = (mat(frontStyle(k, fr).ds.mat) || {}).thick || 0.75; }
+  return (k.outset || 0) + k.d + ft;
+}
+// The parts of an end that cabinets butted against it leave showing, as panel pieces (see panelPieces).
+// Bands up the end: each one is covered out to the deepest neighbour face in it. Strips under 1/2" deep or 1" tall
+// are left, they hide behind the panel's own overhang and the molding.
+function endExposed(c, end, dir) {
+  const memo = nearSlot(c), mk = ['exp', end, c.wall, c.side, c.off, c.w, c.d, c.h, c.elev, c.outset].join('|');
+  if (memo && memo.has(mk)) return memo.get(mk);
+  const reach = Math.max(lay().panelReach, panelThick(c) + 0.01), lo = c.off, hi = c.off + c.w, back = c.outset || 0;
+  const z0 = panelZ0(c), D = endDepth(c, end), covers = [];
+  let wallHit = false;
+  obstacles(c.wall, c.side, c, c.id).forEach(o => {
+    const gap = dir < 0 ? lo - o.a1 : o.a0 - hi; if (gap < -0.01 || gap > reach) return;
+    if (o.kind !== 'cab') { wallHit = true; return; }
+    const k = cab(o.id); if (!k) return;
+    // A filler beside the end (a Mozaik filler product) is that end's finish: a filler and a panel are never both needed.
+    // A fridge panel that wants fillers too is set to Always.
+    const kd = k.moz && typeof mozDef === 'function' && mozDef(k.moz);
+    if (kd && kd.group === 'filler' && !/ceiling/.test(k.moz)) { wallHit = true; return; }
+    covers.push({ z0: Math.max(z0, k.elev - c.elev), z1: Math.min(c.h, k.elev + k.h - c.elev), d: Math.min(D, faceOut(k) - back) });
+    // A base's countertop covers the end too, up its thickness and out to its overhang (a tall beside a base run).
+    if (k.cat === 'Base' && !k.noTop && curRoom().autoTops !== false && typeof countertop === 'function') {
+      const tp = countertop(roomSet('countertop')) || {}, kt = k.elev + k.h - c.elev;
+      if (+tp.thick > 0) covers.push({ z0: Math.max(z0, kt), z1: Math.min(c.h, kt + +tp.thick), d: Math.min(D, (k.outset || 0) + k.d + (+tp.frontOverhang || 0) - back) });
+    }
+  });
+  let out = null;
+  if (!wallHit) {
+    const zs = [...new Set([z0, c.h, ...covers.flatMap(v => [v.z0, v.z1])].filter(z => z >= z0 - 1e-6 && z <= c.h + 1e-6).map(z => Math.round(z * 1000) / 1000))].sort((a, b) => a - b);
+    const bands = [];
+    for (let i = 0; i + 1 < zs.length; i++) {
+      const a = zs[i], b = zs[i + 1], mid = (a + b) / 2; if (b - a < 1e-6) continue;
+      const cov = Math.max(0, ...covers.filter(v => v.z0 < mid && v.z1 > mid).map(v => v.d));
+      const prev = bands[bands.length - 1];
+      if (prev && Math.abs(prev.d0 - cov) < 1e-6 && Math.abs(prev.z1 - a) < 1e-6) prev.z1 = b; else bands.push({ z0: a, z1: b, d0: Math.round(cov * 1000) / 1000 });
+    }
+    // A band that is too thin or too shallow to see counts as covered, and splits the end into separate pieces.
+    const pieces = [];
+    let cur = null;
+    bands.forEach(bd => {
+      const show = D - bd.d0 > 0.5 && bd.z1 - bd.z0 >= 1;
+      if (!show) { cur = null; return; }
+      if (!cur) pieces.push(cur = { z0: bd.z0, z1: bd.z1, steps: [] });
+      cur.z1 = bd.z1; cur.steps.push(bd);
+    });
+    out = pieces.length ? pieces : null;
+  }
+  if (memo) memo.set(mk, out);
+  return out;
 }
 // Is this end of the cabinet a finished (exposed) end? Set by hand per end, else: no neighbor, wall or applied panel covers it.
 function endFinished(c, end) {

@@ -803,9 +803,9 @@ function renderElev(pr) {
     const ex = elevX(c, L), by = -c.elev, f = frontsSVG(c, ex, by, { withDefs: true, dims: ui.dims.fronts ? fs * 0.95 : 0, open: !!ui.open[c.id] });
     mats.push(...f.mats);
     body += `<g data-cab="${c.id}">` + f.svg;
-    const ps = panelFor(c), pt = panelThick(c), ph = ps.toFloor || c.cat === 'Wall' ? c.h : c.h - effParams(c).toeKickHeight, pm = texLook(mat(ps.mat), 'finished', c); mats.push(pm && pm.id);
-    if (hasPanel(c, 'L')) body += `<rect ${fillFor(pm, 'apanel')} x="${ex - pt}" y="${by - c.h}" width="${pt}" height="${ph}"/>`;
-    if (hasPanel(c, 'R')) body += `<rect ${fillFor(pm, 'apanel')} x="${ex + c.w}" y="${by - c.h}" width="${pt}" height="${ph}"/>`;
+    const ps = panelFor(c), pt = panelThick(c), pm = texLook(mat(ps.mat), 'finished', c); mats.push(pm && pm.id);
+    // Each panel piece over the height it covers (one piece for a full panel; parts round a shelf or shorter neighbour).
+    [['L', ex - pt], ['R', ex + c.w]].forEach(([sd, x]) => (panelPieces(c, sd) || []).forEach(pc => { body += `<rect ${fillFor(pm, 'apanel')} x="${x}" y="${by - pc.z1}" width="${pt}" height="${pc.z1 - pc.z0}"/>`; }));
     const fm = texLook(mat(fillerMat(c)), 'finished', c), ftk = c.cat === 'Wall' || !hasToe(c) ? 0 : effParams(c).toeKickHeight; mats.push(fm && fm.id);
     fillersOf(c).forEach(fl => { body += `<rect ${fillFor(fm, 'ev-filler')} x="${fl.end === 'L' ? ex - fl.gap : ex + c.w}" y="${by - c.h}" width="${fl.gap}" height="${c.h - ftk}"/>`; });
     body += `<rect class="ev-hit" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`;

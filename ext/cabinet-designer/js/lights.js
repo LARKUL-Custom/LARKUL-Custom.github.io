@@ -81,6 +81,8 @@ function lightsPlanSVG(px) {
     const t = l.where === 'top' ? 0.55 : l.where === 'toe' ? 0.8 : 0.92, a = { x: p[0].x + (p[3].x - p[0].x) * t, y: p[0].y + (p[3].y - p[0].y) * t }, b = { x: p[1].x + (p[2].x - p[1].x) * t, y: p[1].y + (p[2].y - p[1].y) * t };
     s += `<line class="ledsym nss" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
   });
+  // The automatic pucks, dashed: they are not saved and go away once a ceiling light is placed.
+  autoPucks().forEach(p => { s += `<circle class="lightsym ghost auto nss" cx="${r3(p.x)}" cy="${r3(p.y)}" r="3"><title>Automatic ceiling light (Realistic). Switch off with Ceiling lights in the bottom bar.</title></circle>`; });
   if (ui.placeLight === true && ui.mouse) s += `<circle class="lightsym ghost nss" cx="${ui.mouse.x}" cy="${ui.mouse.y}" r="4"/>`;
   return s;
 }
@@ -109,7 +111,8 @@ function washMat(col, up) {
    recessed pucks so it isn't dark. Placing any ceiling light turns these off. Look only, never saved. */
 const AUTO_CEIL = { n: 0, max: 6 };
 function autoPucks() {
-  const ws = S.walls; if (ws.length < 3 || roomLights().some(l => l.kind === 'ceiling')) return [];
+  // 0.58.30: Automatic ceiling lights switch in the bottom bar (on by default).
+  const ws = S.walls; if (lay().autoLights === false || ws.length < 3 || roomLights().some(l => l.kind === 'ceiling')) return [];
   const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), W = x1 - x0, D = y1 - y0;
   if (W < 48 || D < 48) return [];

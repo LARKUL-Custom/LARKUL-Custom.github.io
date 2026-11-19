@@ -13,6 +13,26 @@ function cabPoly(c, o) {
   return [wallPt(w, g, s, off, f), wallPt(w, g, s, off + c.w, f), wallPt(w, g, s, off + c.w, f + c.d), wallPt(w, g, s, off, f + c.d)];
 }
 function panelThick(c) { return (mat(panelFor(c).mat) || { thick: 0.75 }).thick; }
+// One applied panel piece as a part: its length (up the end) and width (front to back, overhang and scribe included),
+// and the notched outline when its back edge steps. Panel x runs up from the piece's bottom, y forward from its back edge.
+// The scribe at the back is only there when the piece reaches the wall; a strip in front of a neighbour gets none.
+function panelGeom(c, end, pc, ps) {
+  ps = ps || panelFor(c);
+  const D = endDepth(c, end), dmin = Math.min(...pc.steps.map(q => q.d0)), sc = dmin < 1e-6 ? ps.scribe : 0;
+  const L = pc.z1 - pc.z0, W = D - dmin + ps.frontOverhang + sc, y = dd => dd - dmin + sc;
+  const yb = q => q.d0 < 1e-6 ? 0 : r3(y(q.d0));
+  let outline = null;
+  if (pc.steps.some(q => Math.abs(q.d0 - dmin) > 1e-6)) {
+    const pts = [];
+    pc.steps.forEach(q => { pts.push({ x: r3(q.z0 - pc.z0), y: yb(q) }, { x: r3(q.z1 - pc.z0), y: yb(q) }); });
+    pts.push({ x: L, y: W }, { x: 0, y: W });
+    outline = pts.filter((q, i) => !i || Math.hypot(q.x - pts[i - 1].x, q.y - pts[i - 1].y) > 1e-4);
+  }
+  // A point on the piece, kept an inch inside its edges.
+  const full = !outline && dmin < 1e-6 && pc.steps.length === 1;
+  const inside = (x, yy) => full || x > 1 && x < L - 1 && yy < W - 1 && pc.steps.some(q => x + pc.z0 > q.z0 + 1 && x + pc.z0 < q.z1 - 1 && yy > yb(q) + 1);
+  return { D, dmin, sc, L, W, y, yb, outline, inside, full };
+}
 // Applied panel spans along the wall: [a0, a1] for the viewer's left and right ends. explicitOnly skips automatic ones.
 function panelSpans(c, explicitOnly) {
   const pt = panelThick(c), s = c.side, out = [];
@@ -27,8 +47,12 @@ function panelPolys(c, explicitOnly) {
   // 0.58.27: neighbor checks ask every cabinet in the room for its "Always" panels; most have none, so skip the panel lookup.
   if (explicitOnly && panelMode(c, 'L') !== 'on' && panelMode(c, 'R') !== 'on') return [];
   const w = wall(c.wall); if (!w) return [];
-  const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), depth = c.d + panelFor(c).frontOverhang;
-  return panelSpans(c, explicitOnly).map(({ end, a: [a0, a1] }) => { const dp = depth - c.d + endDepth(c, end); return [wallPt(w, g, s, a0, f), wallPt(w, g, s, a1, f), wallPt(w, g, s, a1, f + dp), wallPt(w, g, s, a0, f + dp)]; });
+  const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), oh = panelFor(c).frontOverhang;
+  return panelSpans(c, explicitOnly).map(({ end, a: [a0, a1] }) => {
+    // A strip in front of a shallower neighbour starts at that neighbour's face.
+    const pcs = explicitOnly ? null : panelPieces(c, end), d0 = pcs ? Math.min(...pcs.flatMap(pc => pc.steps.map(q => q.d0))) : 0, d1 = endDepth(c, end) + oh;
+    return [wallPt(w, g, s, a0, f + d0), wallPt(w, g, s, a1, f + d0), wallPt(w, g, s, a1, f + d1), wallPt(w, g, s, a0, f + d1)];
+  });
 }
 // Filler strips in plan: flush with the fronts, across the gap to the wall.
 function fillerPolys(c) {
@@ -97,7 +121,9 @@ function computeFronts(c, p) {
   // A blind corner's fronts only cover the open part; the blind side has its blind panel.
   const xl = bw && cornerSide(c) === 'L' ? bw + gap : p.frontSideReveal, xr = bw && cornerSide(c) === 'R' ? c.w - bw - gap : c.w - p.frontSideReveal;
   // A row holding an appliance (bidprod.js) is as tall as the appliance's cutout needs.
-  const rows = (c.rows || []).map((r, i) => r.appl && typeof applOpen === 'function' && applOpen(r.appl) ? { ...r, h: applRowH(c, p, r, i) } : r);
+  // A microwave opening (bidprod.js, mwSpot) is as tall as its clear height needs.
+  const rows = (c.rows || []).map((r, i) => r.appl && typeof applOpen === 'function' && applOpen(r.appl) ? { ...r, h: applRowH(c, p, r, i) }
+    : r.mw && typeof mwSpot === 'function' && mwSpot(c, i) ? { ...r, h: mwRowH(c, p, i) } : r);
   const fixed = rows.reduce((a, r) => a + (r.h === '*' ? 0 : (+r.h || 0)), 0);
   const stars = rows.filter(r => r.h === '*').length;
   const avail = (zt - zb) - gap * Math.max(0, rows.length - 1);
@@ -135,19 +161,45 @@ function frontFrame(c) {
   const g = wg(w), fb = w.thick / 2 + (c.outset || 0) + c.d + FRONT_T;
   return { w, P: (x, b) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, fb + b) };
 }
-// A door open to angle a, in plan. It turns on its front hinge-side corner (an overlay hinge), so at 90° it stands
-// in front of its own cabinet side and two doors hinged next to each other both clear.
-function doorPoly(c, f, a, fr) {
-  const R = f.hinge === 'R', hx = R ? f.x1 : f.x0, fw = f.x1 - f.x0, dir = R ? -1 : 1, P = fr.P;
-  const at = (s, t) => P(hx + dir * (s * Math.cos(a) + t * Math.sin(a)), s * Math.sin(a) - t * Math.cos(a));
-  return [at(0, 0), at(fw, 0), at(fw, FRONT_T), at(0, FRONT_T)];
+// One front's own frame in plan: L(x, out) is x along the front's face and out in front of the face it closes on.
+// A 45° or 90° corner's fronts sit on their angled faces.
+function frontLocal(c, f, fr) {
+  if (!f.face) return (x, out) => fr.P(x, out - FRONT_T);
+  return (x, out) => { const q = facePt(f.face, x, out); return fr.P(q.x, q.z - c.d - FRONT_T); };
 }
-// A drawer pulled out by tr, in plan: the part that sticks out past the cabinet, front included.
-function drawerPoly(c, f, tr, fr) { const e = 0.05; return [fr.P(f.x0 + e, -FRONT_T + e), fr.P(f.x1 - e, -FRONT_T + e), fr.P(f.x1 - e, tr), fr.P(f.x0 + e, tr)]; }
+// Where a front's pull is across the front (x0..x1 from the front's own left edge), and how far it stands out.
+const PULL_OUT = 1.0;
+function pullSpan(c, f) {
+  let pp = null; try { pp = pullPlacement(c, f); } catch (_) {}
+  if (!pp) return null;
+  const L = Math.max((pp.hw.lengthMM || 0) * MM, 1), w = pp.hw.ccMM && pp.vertical ? 0.45 : L;
+  return { x0: pp.x - w / 2, x1: pp.x + w / 2 };
+}
+// A door open to angle a, in plan: the door, plus its pull as a small block. It turns on its front hinge-side corner
+// (an overlay hinge), so at 90° it stands in front of its own cabinet side and two doors hinged next to each other both clear.
+function doorPoly(c, f, a, fr) {
+  const R = f.hinge === 'R', hx = R ? f.x1 : f.x0, fw = f.x1 - f.x0, dir = R ? -1 : 1, L = frontLocal(c, f, fr), ps = pullSpan(c, f);
+  const at = (s, t) => L(hx + dir * (s * Math.cos(a) + t * Math.sin(a)), FRONT_T + s * Math.sin(a) - t * Math.cos(a));
+  const out = [[at(0, 0), at(fw, 0), at(fw, FRONT_T), at(0, FRONT_T)]];
+  if (ps) { const s0 = R ? f.x1 - (f.x0 + ps.x1) : ps.x0, s1 = R ? f.x1 - (f.x0 + ps.x0) : ps.x1; out.push([at(s0, -PULL_OUT), at(s1, -PULL_OUT), at(s1, 0), at(s0, 0)]); }
+  return out;
+}
+// A drawer pulled out by tr, in plan: the part that sticks out past the cabinet with its front, plus its pull.
+function drawerPoly(c, f, tr, fr) {
+  const e = 0.05, L = frontLocal(c, f, fr), o = FRONT_T + tr, ps = pullSpan(c, f);
+  const out = [[L(f.x0 + e, e), L(f.x1 - e, e), L(f.x1 - e, o), L(f.x0 + e, o)]];
+  if (ps) out.push([L(f.x0 + ps.x0, o), L(f.x0 + ps.x1, o), L(f.x0 + ps.x1, o + PULL_OUT), L(f.x0 + ps.x0, o + PULL_OUT)]);
+  return out;
+}
+// A cabinet's footprint in plan; a 45° or 90° corner is its real angled or L shape, not the box around it.
+function cabPlanPoly(o) {
+  if (typeof angledCorner === 'function' && angledCorner(o)) { const fr = frontFrame(o); if (fr) return cornerTop(o).pts.map(q => fr.P(q.x, q.y - o.d - FRONT_T)); }
+  return cabPoly(o);
+}
 // Things a front of cabinet c between heights z0 and z1 can't go into: other cabinets, other walls, end caps.
 function fixedObstacles(c, z0, z1) {
   const w = wall(c.wall), over = (a0, a1) => a0 < z1 - 0.25 && a1 > z0 + 0.25, obs = [];
-  S.cabinets.forEach(o => { if (o.id === c.id) return; const poly = cabPoly(o); if (poly && over(o.elev || 0, (o.elev || 0) + o.h)) obs.push(poly); });
+  S.cabinets.forEach(o => { if (o.id === c.id) return; const poly = cabPlanPoly(o); if (poly && over(o.elev || 0, (o.elev || 0) + o.h)) obs.push(poly); });
   S.walls.forEach(ww => { if (ww !== w) { const gg = wg(ww), t = ww.thick / 2; obs.push([wallPt(ww, gg, 1, 0, -t), wallPt(ww, gg, 1, gg.L, -t), wallPt(ww, gg, 1, gg.L, t), wallPt(ww, gg, 1, 0, t)]); }
     // End caps are short walls too, on any wall, including the one this cabinet hangs on.
     capsOf(ww).forEach(cp => { if (cp.height === undefined || over(0, cp.height)) obs.push(capPoly(ww, cp)); }); });
@@ -164,18 +216,26 @@ function pairCap(c, f) {
 }
 // Opens one front as far as it goes before it meets a fixed obstacle or a front already placed.
 // Doors: the swing in radians. Drawers: how far out it slides.
-function openOne(c, f, placed, cap) {
+function openOne(c, f, placed, cap, shutAll) {
   const fr = frontFrame(c); if (!fr) return { v: f.type === 'door' ? DOOR_MAX : drawerTravel(c) };
   const z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1;
-  const obs = fixedObstacles(c, z0, z1).concat(placed.filter(p => !(p.c.id === c.id && p.f === f) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25).map(p => p.poly));
-  const hit = poly => obs.some(o => polysHit(poly, o));
+  // Cabinets, walls and fronts that stay shut are still; anything one of them already touches with this front shut
+  // (a corner door's edge over the next front, say) is how the cabinets were placed, not this front running into it.
+  const near = placed.filter(p => !(p.c.id === c.id && frontKey3(p.c, p.f) === frontKey3(c, f)) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
+  const still = fixedObstacles(c, z0, z1).concat(near.filter(p => p.v <= 0).reduce((a, p) => a.concat(p.poly), []))
+    .concat((shutAll || []).filter(q => q.key !== frontKey3(c, f) && q.z0 < z1 - 0.25 && q.z1 > z0 + 0.25).reduce((a, q) => a.concat(q.poly), []));
+  const moving = near.filter(p => p.v > 0).reduce((a, p) => a.concat(p.poly), []);
+  const shut = f.type === 'door' ? doorPoly(c, f, 0, fr) : drawerPoly(c, f, 0, fr);
+  const obs = still.filter(o => !shut.some(poly => polysHit(poly, o))).concat(moving);
+  const hit = polys => polys.some(poly => obs.some(o => polysHit(poly, o)));
   if (f.type === 'door') {
-    const max = Math.min(pairCap(c, f), cap || DOOR_MAX); let v = max;
+    const max = Math.min(f.face ? DOOR_MAX : pairCap(c, f), cap || DOOR_MAX); let v = max;
     for (let a = 0.04; a <= max + 1e-9; a += 0.02) if (hit(doorPoly(c, f, a, fr))) { v = Math.max(0, a - 0.06); break; }
     return { v, poly: doorPoly(c, f, v, fr), z0, z1 };
   }
-  const full = drawerTravel(c); let v = full;
-  if (hit(drawerPoly(c, f, full, fr))) { v = 0; for (let t = 0.25; t <= full; t += 0.25) { if (hit(drawerPoly(c, f, t, fr))) break; v = t; } }
+  // A drawer on a corner's angled face doesn't slide out in 3D; it stays shut but still blocks.
+  const full = f.face ? 0 : drawerTravel(c); let v = full;
+  if (full && hit(drawerPoly(c, f, full, fr))) { v = 0; for (let t = 0.25; t <= full; t += 0.25) { if (hit(drawerPoly(c, f, t, fr))) break; v = t; } }
   return { v, poly: drawerPoly(c, f, v, fr), z0, z1 };
 }
 const frontKey3 = (c, f) => c.id + ':' + f.row + ':' + f.idx + ':' + f.type;
@@ -187,22 +247,26 @@ function clearDoorLimits() { openCache = null; }
 function openSolve() {
   if (openCache) return openCache;
   const items = [];
-  S.cabinets.forEach((c, ci) => { if (!ui.open[c.id]) return; computeFronts(c).forEach(f => { if (!f.face && (f.type === 'door' || f.type === 'drawer')) items.push({ c, f, ci, area: (f.x1 - f.x0) * (f.z1 - f.z0) }); }); });
+  S.cabinets.forEach((c, ci) => { if (!ui.open[c.id]) return; computeFronts(c).forEach(f => { if (f.type === 'door' || f.type === 'drawer') items.push({ c, f, ci, area: (f.x1 - f.x0) * (f.z1 - f.z0) }); }); });
   items.sort((a, b) => b.area - a.area || a.ci - b.ci || a.f.row - b.f.row || a.f.idx - b.f.idx || (a.f.x0 - b.f.x0));
+  // Every front in the room, shut, with its pull: a door or drawer can't swing or slide into one that stays closed.
+  const shutAll = [];
+  S.cabinets.forEach(c => { const fr = frontFrame(c); if (!fr) return; computeFronts(c).forEach(f => { if (f.type !== 'door' && f.type !== 'drawer' && f.type !== 'false') return;
+    const z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1;
+    shutAll.push({ key: frontKey3(c, f), z0, z1, poly: f.type === 'door' ? doorPoly(c, f, 0, fr) : drawerPoly(c, f, 0, fr) }); }); });
   const placed = [], byKey = {}, SQUARE = Math.PI / 2 - 0.02;
-  items.forEach(it => { const r = openOne(it.c, it.f, placed, SQUARE); const p = { c: it.c, f: it.f, ...r }; if (r.poly) placed.push(p); byKey[frontKey3(it.c, it.f)] = p; });
+  items.forEach(it => { const r = openOne(it.c, it.f, placed, SQUARE, shutAll); const p = { c: it.c, f: it.f, ...r }; if (r.poly) placed.push(p); byKey[frontKey3(it.c, it.f)] = p; });
   placed.forEach(p => {
     if (p.f.type !== 'door' || p.v < SQUARE - 1e-6) return;
-    const r = openOne(p.c, p.f, placed); if (r.v > p.v) Object.assign(p, r);
+    const r = openOne(p.c, p.f, placed, 0, shutAll); if (r.v > p.v) Object.assign(p, r);
   });
-  return (openCache = { placed, byKey });
+  return (openCache = { placed, byKey, shutAll });
 }
 // How far one front opens: looked up when its cabinet is open, else worked out as if it opened last (closing animation).
 function openAmount(c, f) {
-  if (f.face) return f.type === 'door' ? DOOR_MAX : drawerTravel(c);
   const sol = openSolve(), k = frontKey3(c, f), hit = sol.byKey[k];
   if (hit) return hit.v;
-  const r = openOne(c, f, sol.placed, Math.PI / 2 - 0.02); sol.byKey[k] = { c, f, ...r }; return r.v;
+  const r = openOne(c, f, sol.placed, Math.PI / 2 - 0.02, sol.shutAll); sol.byKey[k] = { c, f, ...r }; return r.v;
 }
 // The widest a door can swing (radians, up to 1.75) before it runs into a wall, a cabinet that sticks out past it,
 // or another open door or drawer.
@@ -360,7 +424,10 @@ function interiorLayout(c, p, fronts) {
   p = p || effParams(c); fronts = fronts || computeFronts(c, p);
   const cm = mat(cabMatT(cabSet(c, 'cabMatT')).carcass) || S.materials[0], t = cm.thick;
   const tk = hasToe(c) ? p.toeKickHeight : 0, zIn0 = tk + t, zIn1 = c.h - t, inW = c.w - 2 * t;
-  const doorZones = fronts.filter(f => (f.type === 'door' || f.type === 'open') && f.idx === 0).map(f => Object.assign([Math.max(f.z0, zIn0), Math.min(f.z1, zIn1)], { row: f.row }));
+  // A microwave opening holds the microwave, not shelves or inserts; the doors over one start on its fixed shelf.
+  const mwRow = i => typeof mwSpot === 'function' && !!mwSpot(c, i);
+  const doorZones = fronts.filter(f => (f.type === 'door' || f.type === 'open') && f.idx === 0 && !mwRow(f.row))
+    .map(f => Object.assign([Math.max(f.z0, zIn0, mwRow(f.row + 1) ? f.z0 - p.frontGap / 2 + t : -1e9), Math.min(f.z1, zIn1)], { row: f.row }));
   const zones = doorZones.length ? doorZones : (fronts.length ? [] : [[zIn0, zIn1]]);
   const low = zones.length ? zones[zones.length - 1] : null, ins = c.inserts || [];
   const hasDoors = fronts.some(f => f.type === 'door');
@@ -447,7 +514,9 @@ function caseRails(c, p, fronts, t) {
   const auto = p.drawerRails !== 'off' && !faceFrame(c) && !angledCorner(c) && !hasCabShape(c) && !(cabTopShape(c) || {}).edges;
   rows.forEach((r, i) => {
     const f = first(i), nx = rows[i + 1]; if (!f) return;
-    if (nx && (r.fixShelf || (auto && r.type !== 'drawer' && nx.type === 'drawer'))) out.shelves.push({ row: i, auto: !r.fixShelf, z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, f.z0 - t / 2))) });
+    // A microwave opening always has its fixed shelf, placed as Ayden's Mozaik library does (mwShelfZ in bidprod.js).
+    const mz = typeof mwShelfZ === 'function' ? mwShelfZ(c, p, i, f, t) : null;
+    if (nx && (mz !== null || r.fixShelf || (auto && r.type !== 'drawer' && nx.type === 'drawer'))) out.shelves.push({ row: i, auto: mz === null && !r.fixShelf, ...(mz !== null ? { mw: true } : {}), z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, mz !== null ? mz : f.z0 - t / 2))) });
     if (auto && r.type === 'drawer' && !(i > 0 && rows[i - 1].type === 'drawer') && nx) {
       const b = first(i + 1); if (b) out.stretchers.push({ row: i, z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, (f.z0 + b.z1) / 2))) });
     }
@@ -995,16 +1064,19 @@ function buildParts(c) {
   }
   const jtLateCtx = { jt: (type, pt, fx, zr) => joinSides(type, pt, fx, zr, 0, Math.min(backY, pt.W)), jFor, spread: spots, addB };
 
-  // Applied end panels
+  // Applied end panels. 0.58.30: a panel covers only the part of the end that shows (see panelPieces): a strip past a
+  // shallower neighbour, or a panel notched around a floating shelf or a shorter cabinet beside it.
   const ps = panelFor(c), pm = mat(ps.mat) || cm;
   ['L', 'R'].forEach(sd => {
-    if (!hasPanel(c, sd)) return;
-    const L = c.cat === 'Wall' ? H : (ps.toFloor ? H : H - tk), Wd = endDepth(c, sd) + ps.frontOverhang + ps.scribe;
-    const ops = (ps.type === 'routed' && ps.frame > 0) ? [{ type: 'pocket', x: ps.frame, y: ps.frame + ps.scribe, w: L - 2 * ps.frame, h: Wd - 2 * ps.frame - ps.scribe, depth: ps.pocketDepth, face: 'show', why: 'panel recess' }] : [];
-    // Blind pin holes on the hidden face, lined up with the side's (the panel's y runs from its back edge).
-    const z0 = c.cat === 'Wall' || ps.toFloor ? 0 : tk;
-    pinSpots.forEach(q => ops.push({ type: 'bore', x: r3(q.z - z0), y: r3(Wd - ps.frontOverhang - q.y), dia: pinD, depth: r3(pm.thick / 2), face: 'hidden', why: 'pin hole' }));
-    part(`Applied end panel (${sd})`, pm, L, Wd, { kind: 'applied', ops });
+    const pcs = panelPieces(c, sd); if (!pcs) return;
+    pcs.forEach((pc, i) => {
+      const g = panelGeom(c, sd, pc, ps), { L, W: Wd } = g;
+      const ops = (ps.type === 'routed' && ps.frame > 0 && (g.full || (!g.outline && Wd - 2 * ps.frame - g.sc > 1 && L - 2 * ps.frame > 1))) ? [{ type: 'pocket', x: ps.frame, y: ps.frame + g.sc, w: L - 2 * ps.frame, h: Wd - 2 * ps.frame - g.sc, depth: ps.pocketDepth, face: 'show', why: 'panel recess' }] : [];
+      // Blind pin holes on the hidden face, lined up with the side's (the panel's y runs from its back edge).
+      pinSpots.forEach(q => { const y = g.y(g.D - q.y), x = r3(q.z - pc.z0); if (g.inside(x, y)) ops.push({ type: 'bore', x, y: r3(y), dia: pinD, depth: r3(pm.thick / 2), face: 'hidden', why: 'pin hole' }); });
+      const pt = part(`Applied end panel${i ? ' ' + (i + 1) : ''} (${sd})`, pm, g.L, Wd, { kind: 'applied', ops });
+      if (g.outline) pt.outline = g.outline;
+    });
   });
   // One rod per pin spot for each applied panel and for the cabinet beside this one on its right (each pair counted once).
   if (pinSpots.length) {

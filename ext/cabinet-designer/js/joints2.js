@@ -251,6 +251,12 @@ function nailerSpots(c, p, x) {
   const add = (name, z0, z1) => out.push({ name, z0: r3(z0), z1: r3(z1), y0, y1: r3(y1), w: nw });
   if (kind === 'top' || kind === 'both') add('Top nailer', x.zIn1 - nw, x.zIn1);
   if (kind === 'bottom' || kind === 'both') add('Bottom nailer', x.zIn0, x.zIn0 + nw);
+  // A microwave cabinet gets a third nailer at its fixed shelf, as in Ayden's Mozaik library: behind the back its top is
+  // level with the shelf top, in front of a back set flush it sits under the shelf.
+  if (kind !== 'none' && (c.rows || []).some(r => r.mw) && typeof caseRails === 'function') {
+    const s = caseRails(c, p, null, x.t).shelves.find(q => q.mw);
+    if (s) { const z1 = behind ? s.z + x.t / 2 : s.z - x.t / 2; if (z1 - nw > x.zIn0 + nw + 0.25 && z1 < x.zIn1 - nw - 0.25) add('Shelf nailer', z1 - nw, z1); }
+  }
   return out;
 }
 function jtNailers(c, p, part, x) {
