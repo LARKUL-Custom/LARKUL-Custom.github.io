@@ -196,18 +196,24 @@ function printNotesPage(pr, rooms, head) {
 
 /* ----- Scope of work: what the job includes, room by room, from the drawing, with the shop's own notes ----- */
 const SCOPE_EST = 'This is an estimate only. The final price can vary or change with final measurements, selections, materials and site conditions.';
-// One sentence for a room: "Build and install 8 base and 5 wall cabinets with Shaker doors, plus countertops and molding."
-function printScopeIdea(room, inst) {
+// One sentence for a room: "Build and install 8 base and 5 wall cabinets with Shaker doors, plus a slat wall, countertops and molding."
+// Products that aren't cabinets (slat walls, desks, floating shelves, anything priced on its own or left out of the
+// cabinet counts) and the bid's own rows are named, so nothing priced goes unmentioned (Ayden 2026-11-19: slat wall).
+function printScopeIdea(room, inst, ps) {
   return withRoom(room, () => {
-    const cabs = S.cabinets.filter(c => !c.noCount), n = cat => cabs.filter(c => c.cat === cat).length;
+    const special = c => c.noCount || c.made || (ps && typeof ownRule === 'function' && ownRule(c, ps));
+    const cabs = S.cabinets.filter(c => !special(c)), n = cat => cabs.filter(c => c.cat === cat).length;
     const kinds = [['Base', 'base'], ['Wall', 'wall'], ['Tall', 'tall']].map(([c, w]) => n(c) ? `${n(c)} ${w}` : '').filter(Boolean);
     const other = cabs.filter(c => !CAT_FT.some(([cat]) => cat === c.cat)).length;
     if (other) kinds.push(`${other} other`);
     const list = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0] || '';
-    const dt = doorTpl(roomSet('doorT', room)), extra = [];
+    const low = t => String(t || '').trim();
+    const named = new Map(), add = (name, q) => { const k = low(name); if (k) named.set(k, (named.get(k) || 0) + (q || 1)); };
+    S.cabinets.filter(special).forEach(c => add(c.name, 1));
+    (room.bidItems || []).forEach(it => add(it.name, +it.qty || 1));
+    const dt = doorTpl(roomSet('doorT', room)), extra = [...named].map(([k, q]) => q > 1 ? `${q} × ${k}` : k);
     if (countertopRuns().some(t => t.on)) extra.push('countertops');
     if (moldingRuns().length) extra.push('molding');
-    if ((room.bidItems || []).length) extra.push('the other items on the bid');
     if (!cabs.length && !extra.length) return '';
     const what = cabs.length ? `${list(kinds)} cabinet${cabs.length === 1 ? '' : 's'}${dt && dt.name ? ` with ${dt.name} doors` : ''}` : '';
     return `${inst ? 'Build and install' : 'Build'} ${[what, list(extra)].filter(Boolean).join(', plus ')}.`;
@@ -216,7 +222,7 @@ function printScopeIdea(room, inst) {
 function printScopePage(pr, rooms, head) {
   const ps = typeof priceSheet === 'function' ? priceSheet() : null, who = ps && typeof jobInstaller === 'function' ? jobInstaller(ps) : null;
   // Just the room and the general idea of the work, one line each (Ayden 2026-11-19); the details are on the room pages.
-  const ideas = rooms.map(room => [room, printScopeIdea(room, ps && roomInstaller(ps, room))]).filter(([, t]) => t);
+  const ideas = rooms.map(room => [room, printScopeIdea(room, ps && roomInstaller(ps, room), ps)]).filter(([, t]) => t);
   const cards = ideas.length ? `<table class="mp-spect mp-scopet">${ideas.map(([r, t]) => `<tr><th>${esc(r.name)}</th><td>${esc(t)}</td></tr>`).join('')}</table>` : '';
   let price = '';
   let opts = [];
