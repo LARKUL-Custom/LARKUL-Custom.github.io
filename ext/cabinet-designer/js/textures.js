@@ -42,7 +42,7 @@ function skinOf(p, m) {
   return (SKINS[id] = { ...base, ...lk, id, kind, dynamic: false, skin: p });
 }
 // Material m as it should look on surface k of cabinet c.
-function texLook(m, k, c) { const p = texPickOf(k, c); return p ? skinOf(p, m) : m; }
+function texLook(m, k, c) { const p = texPickOf(k, c) || (k === 'toe' ? texPickOf('finished', c) : ''); return p ? skinOf(p, m) : m; }
 // A cabinet marked Finished shows its whole box as finished; otherwise the box is the inside.
 const boxKey = c => (c && c.finished ? 'finished' : 'inside');
 const frontKey = f => (f && (f.type === 'drawer' || f.type === 'false') ? 'drawers' : 'doors');
@@ -77,7 +77,7 @@ function texBase(k, c) {
   if (k === 'finished') return mat(finishMat(c || null));
   const mt = cabMatT(cabSet(c, 'cabMatT')), cm = mat(mt.carcass);
   if (k === 'inside') return cm;
-  if (k === 'toe') return mat(mt.toeKick) || cm;
+  if (k === 'toe') return toeMat(c, mt) || cm;
   if (k === 'drawerBox') return mat(drawerMatT(cabSet(c, 'drawerMatT')).sides);
   if (k === 'tops') return mat(countertop(roomSet('countertop')).mat);
   if (k === 'molding') { const m = S.moldings.find(x => x.id === roomSet('molding')) || S.moldings[0]; return moldFinishLook(m && mat(m.mat), c); }

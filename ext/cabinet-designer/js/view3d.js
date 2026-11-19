@@ -229,13 +229,13 @@ function cabinetMeshes(c, opts = {}) {
     rl.stretchers.forEach(q => grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, q.z, D - p.stretcherWidth / 2)));
     rl.shelves.forEach(q => grp.add(box3(sb2 - sa, t, Math.max(1, inD0 - 0.0625), shM, (sa + sb2) / 2, q.z, p.backInset + bt + Math.max(1, inD0 - 0.0625) / 2)));
     [...drawerPartitions(c, p, computeFronts(c, p), t, rl), ...blindPieces(c, p, t, rl)].forEach(q => grp.add(box3(t, q.z1 - q.z0, inD0 - 0.0625, cmM, q.x + t / 2, (q.z0 + q.z1) / 2, D - (inD0 - 0.0625) / 2))); }
-  if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, L3(mat(mt.toeKick) || cm, 'toe'), o => grp.add(o)); else grp.add(box3(W, tk, t, L3(mat(mt.toeKick) || cm, 'toe'), W / 2, tk / 2, D - sb - t / 2)); }
+  if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, L3(toeMat(c, mt) || cm, 'toe'), o => grp.add(o)); else grp.add(box3(W, tk, t, L3(toeMat(c, mt) || cm, 'toe'), W / 2, tk / 2, D - sb - t / 2)); }
   // A blind corner's blind panel: inside the face frame's wide stile has it; otherwise it goes on the front beside the doors (blindPanelAt).
   if (blindCorner(c) && !faceFrame(c)) { const q = blindPanelAt(c, p), fr0 = computeFronts(c, p)[0], dm = (fr0 && mat(frontStyle(c, fr0).ds.mat)) || cm, ft = dm.thick;
     grp.add(box3(q.x1 - q.x0, q.z1 - q.z0, ft, L3(dm, 'doors'), (q.x0 + q.x1) / 2, (q.z0 + q.z1) / 2, c.d + ft / 2)); }
   // Ladder base: the same rails and rungs as the cut list (buildParts), under the box.
   if (onLadder(c, p) && tk && !angledCorner(c)) {
-    const lmat = mat(p.ladderMat) || cm, lt = lmat.thick, lM = L3(lmat, 'inside'), tkt = (mat(mt.toeKick) || cm).thick;
+    const lmat = mat(p.ladderMat) || cm, lt = lmat.thick, lM = L3(lmat, 'inside'), tkt = (toeMat(c, mt) || cm).thick;
     const yf = p.toeKickSetback + (p.toeSkin !== 'off' ? tkt : 0), dep = D - yf, gap = +p.ladderGap > 0 ? +p.ladderGap : 24, n = Math.max(2, Math.ceil((W - lt) / gap - 1e-6) + 1);
     grp.add(box3(W, tk, lt, lM, W / 2, tk / 2, D - yf - lt / 2));
     grp.add(box3(W, tk, lt, lM, W / 2, tk / 2, lt / 2));

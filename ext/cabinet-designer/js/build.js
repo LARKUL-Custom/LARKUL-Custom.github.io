@@ -61,6 +61,15 @@ function fillerPolys(c) {
   return fillersOf(c).map(fl => [wallPt(w, g, s, fl.a0, f + c.d), wallPt(w, g, s, fl.a1, f + c.d), wallPt(w, g, s, fl.a1, f + c.d + t), wallPt(w, g, s, fl.a0, f + c.d + t)]);
 }
 const fillerMat = c => finishRole(c, 'sheet');
+// 0.58.38: the toe skin (or built-in toe kick) is a part you see, so it is cut from the cabinet's finish (Ayden 2026-11-19:
+// it wasn't following the finish of the cabinet it's on). It stays in the template's toe material when the finish sheet is
+// not the same thickness (within 1/16"), or is a bought door material.
+function toeMat(c, mt) {
+  mt = mt || cabMatT(cabSet(c, 'cabMatT'));
+  const tm = mat(mt.toeKick) || mat(mt.carcass), fm = mat(finishMat(c));
+  if (!fm || !tm || fm.id === tm.id || fm.doorBuy || (fm.kind && fm.kind !== 'sheet') || Math.abs(fm.thick - tm.thick) > 0.07) return tm;
+  return fm;
+}
 // The material a cabinet's show parts are made in: the room's finish pick, else its door style's material.
 const finishMat = c => finishRole(c, 'sheet');
 function segDist(p, w) {
@@ -635,7 +644,7 @@ function buildParts(c) {
   const p = effParams(c), lbl = LBL[c.id] || c.name;
   const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = drawerMatT(cabSet(c, 'drawerMatT'));
   const cm = mat(mt.carcass) || S.materials[0], t = cm.thick;
-  const bm = mat(mt.back) || cm, bt = bm.thick, sm = mat(mt.shelf) || cm, tkm = mat(mt.toeKick) || cm;
+  const bm = mat(mt.back) || cm, bt = bm.thick, sm = mat(mt.shelf) || cm, tkm = toeMat(c, mt) || cm;
   const pin = hwPick(roomSet('shelfpin'), 'shelfpin'), hg = hwPick(cabSet(c, 'hinge'), 'hinge'), sl = hwPick(cabSet(c, 'slide'), 'slide');
   const hgAll = hg;
   // Room in every groove and dado (Ayden 2026-11-10: a little slop, or a slightly thick sheet won't go in).

@@ -232,8 +232,19 @@ function panelPieces(c, end) {
     const dir = (end === 'L') === (c.side === 1) ? -1 : 1, n = nearestAt(c, dir);
     if (!n) return full();
     if (n.kind === 'wall' && fillersOf(c).some(f => f.end === end)) return null;
-    if (n.gap > Math.max(ly.panelReach, panelThick(c) + 0.01)) return full();
+    if (n.gap > Math.max(ly.panelReach, panelThick(c) + 0.01)) return applianceGap(c, dir, n) ? null : full();
     return endExposed(c, end, dir);
+  });
+}
+// 0.58.38: an opening 15" to 36" wide between two base cabinets on the floor is an appliance space (dishwasher, range), even
+// when no appliance is drawn in it, as on jobs from Bid Reader. The cabinets beside it get no automatic panel there.
+function applianceGap(c, dir, n) {
+  if (c.cat !== 'Base' || (c.elev || 0) > 1 || n.kind !== 'cab' || n.gap < 14.5 || n.gap > 36.5) return false;
+  const lo = c.off, hi = c.off + c.w;
+  return obstacles(c.wall, c.side, c, c.id).some(o => {
+    if (o.kind !== 'cab') return false;
+    const gap = dir < 0 ? lo - o.a1 : o.a0 - hi; if (Math.abs(gap - n.gap) > 0.01) return false;
+    const k = cab(o.id); return !!k && k.cat === 'Base' && (k.elev || 0) <= 1 && !k.moz && !k.made;
   });
 }
 // The bottom of an end panel, up from the cabinet's bottom: a base stops on its toe kick unless the fit runs to the floor.
@@ -301,7 +312,7 @@ function endFinished(c, end) {
     if (!wall(c.wall)) return false;
     const dir = (end === 'L') === (c.side === 1) ? -1 : 1, n = nearestAt(c, dir);
     if (n && n.kind === 'wall' && fillersOf(c).some(f => f.end === end)) return false;
-    return !n || n.gap > Math.max(lay().panelReach || 0, 0.5);
+    return !n || (n.gap > Math.max(lay().panelReach || 0, 0.5) && !applianceGap(c, dir, n));
   });
 }
 // Moves cabinets that end at a wall so the gap matches the filler setting. from and to are layout settings.
