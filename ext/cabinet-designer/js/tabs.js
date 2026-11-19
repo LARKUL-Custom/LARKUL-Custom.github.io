@@ -245,7 +245,7 @@ function boughtDoorFields(m, R) {
   return `${cardHead('Bought doors', '')}<div class="cardbody"><div class="mlx-checks">${fld('Doors bought from Bywater', R, 'doorBuy', on, 'bool')}</div>
     ${on ? `<div class="mlx-checks">${fld('Special order color (adds the sheet cost)', R, 'doorSpecial', !!m.doorSpecial, 'bool')}</div>${fld('Price per piece', R, 'doorEach', m.doorEach, 'num')}${fld('Per sq ft', R, 'doorSq', m.doorSq, 'num')}${fld('Per foot of edge', R, 'doorFt', m.doorFt, 'num')}${fld('Each extra panel', R, 'doorPanel', m.doorPanel, 'num')}
     ${f('Bywater product', 'bwProduct', BW_MEL.bwProduct)}${fld('Bywater color', R, 'bwColor', m.bwColor || '', 'text', { wide: true, ph: 'Color name, goes in the Wood column', list: 'bw-mcolor' }) + `<datalist id="bw-mcolor">${BYWATER.wood.filter(v => /\d|White|Vicenza|Velvet/.test(v)).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`}
-    <div class="note">Fronts in this material are ordered from Bywater, not cut, and get no paint or edgebanding charge. The door style still gives the shape. Bywater 5 Piece Melamine (Nov 2026): special order $20.17 a piece + $8.72/sq ft + $1.78/ft of edge, plus the full sheets (Cost per sheet above, set it to Bywater's sheet price); stocked colors $19.97 + $11.27/sq ft + $3.83/ft. $23.93 per extra panel.</div>` : ''}</div>`;
+    <div class="note">Fronts in this material are ordered from Bywater, not cut, and get no paint or edgebanding charge. The door style still gives the shape. Bywater 5 Piece Melamine (Nov 2026): special order $20.17 a piece + $8.72/sq ft + $1.78/ft of edge, plus the full sheets (Cost per sheet above: average Wilsonart 4x8 laminate, $170.46 = $5.33/sq ft); stocked colors $19.97 + $11.27/sq ft + $3.83/ft. $23.93 per extra panel.</div>` : ''}</div>`;
 }
 function matDetailHTML(m, u, sheets, kinds) {
   const R = 'mat:' + m.id, tx = texURL(m), sheet = (m.kind || 'sheet') === 'sheet';
@@ -1255,7 +1255,7 @@ function exportData(units) {
         parts: (c.noCut ? [] : b.parts).map(partEx),
       };
     }).concat(typeof topExportCab === 'function' ? topExportCab(partEx) : []),
-    shapes: S.shapes.map(s => { const b = shapeBox(s.pts); return { name: s.name, lies: s.plane, material: s.mat, wall: s.wall, side: s.side, positionAlongWall: r(s.off), outset: r(s.outset || 0), elevation: r(s.elev), thickness: r(s.thick), width: r(b.w), depth: r(b.h), points: s.pts.map(q => ({ x: r(q.x), y: r(q.y), ...(q.r ? { cornerRadius: r(q.r) } : {}), ...(q.b ? { bulge: r(q.b) } : {}) })), outline: shapeOutline(s.pts).map(q => [r(q.x - b.x0), r(q.y - b.y0)]) }; }),
+    shapes: S.shapes.map(s => { const b = shapeBox(s.pts); return { name: s.name, lies: s.plane, material: shapeMatId(s), wall: s.wall, side: s.side, positionAlongWall: r(s.off), outset: r(s.outset || 0), elevation: r(s.elev), thickness: r(s.thick), width: r(b.w), depth: r(b.h), points: s.pts.map(q => ({ x: r(q.x), y: r(q.y), ...(q.r ? { cornerRadius: r(q.r) } : {}), ...(q.b ? { bulge: r(q.b) } : {}) })), outline: shapeOutline(s.pts).map(q => [r(q.x - b.x0), r(q.y - b.y0)]) }; }),
     countertops: countertopRuns().filter(x => x.on).map(x => ({ wall: x.wall, style: x.tpl.name, material: x.tpl.mat, length: r(x.len), depth: r(x.depth), thickness: r(x.thick), cabinets: x.cabs.map(id => LBL[id]) })),
     moldings: moldingRuns().map(x => ({ wall: x.wall, molding: x.m.name, material: x.m.mat, height: r(x.h), front: r(x.front), returns: r(x.returns), total: r(x.len), cabinets: x.cabs.map(id => LBL[id]) })),
   }));

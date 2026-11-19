@@ -314,7 +314,7 @@ function panelFor(c) {
 function shapePanelCat(s) { const b = shapeBox(s.pts || []); return b.h > 48 ? 'Tall' : (+s.elev || 0) >= 30 ? 'Wall' : 'Base'; }
 function priceShapes(ps) {
   return (S.shapes || []).map(s => {
-    const m = mat(s.mat), b = shapeBox(s.pts || []), cat = shapePanelCat(s), o = shapeOutline(s.pts || []), area = o.length > 2 ? Math.abs(o.reduce((t, q, i) => { const r = o[(i + 1) % o.length]; return t + q.x * r.y - r.x * q.y; }, 0)) / 2 : b.w * b.h;
+    const m = shapeMat(s), b = shapeBox(s.pts || []), cat = shapePanelCat(s), o = shapeOutline(s.pts || []), area = o.length > 2 ? Math.abs(o.reduce((t, q, i) => { const r = o[(i + 1) % o.length]; return t + q.x * r.y - r.x * q.y; }, 0)) / 2 : b.w * b.h;
     const amount = (m ? area * matSqIn(m, ps) : 0) + panelAdd(ps, cat);
     return { name: `Panel, ${s.name || 'shape'} (${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)}, ${cat.toLowerCase()})`, amount };
   });
@@ -558,7 +558,7 @@ function libUsage(ps) {
       b.parts.forEach(pt => { if (pt.cabId !== c.id) return; if (pt.kind === 'applied') add(doors, panelDoor(c).id, pt.L * pt.W * pt.qty / 144, pt.qty); if (pt.mat && !(ps.doors.on && (FRONT_KINDS.includes(pt.kind) || pt.kind === 'applied'))) add(mats, pt.mat, pt.L * pt.W * pt.qty / 144, pt.qty); });
       (c.inserts || []).forEach(it => add(ins, insertType(it.type).id, 0));
     });
-    (S.shapes || []).forEach(s => { const bx = shapeBox(s.pts || []); if (s.mat) add(mats, s.mat, bx.w * bx.h / 144); });
+    (S.shapes || []).forEach(s => { const bx = shapeBox(s.pts || []); const sm = shapeMatId(s); if (sm) add(mats, sm, bx.w * bx.h / 144); });
   }));
   return { doors, ins, mats };
 }

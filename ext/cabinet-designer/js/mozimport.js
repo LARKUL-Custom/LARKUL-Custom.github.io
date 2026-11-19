@@ -230,9 +230,9 @@ function mozFixtPreset(a) {
   return null;
 }
 // An upright panel standing on one side of a wall, from off along it, like the shapes drawn in the Shapes tool.
+// Cut from the room's finish material (Ayden 2026-11-19: not plywood with plastic laminate, cut it out of the finish).
 function mozPanel(rm, name, wallId, side, off, w, h, t) {
-  const sheet = S.materials.find(m => (m.kind || 'sheet') === 'sheet') || S.materials[0];
-  const sh = { id: uid('s'), libId: null, name, plane: 'upright', pts: rect4(w, h), thick: t, mat: sheet.id, wall: wallId, side, off: r3(off), outset: 0, elev: 0, fromMozaik: true };
+  const sh = { id: uid('s'), libId: null, name, plane: 'upright', pts: rect4(w, h), thick: t, mat: SHAPE_FIN, wall: wallId, side, off: r3(off), outset: 0, elev: 0, fromMozaik: true };
   rm.shapes.push(sh); return sh;
 }
 // A product with no wall (an island) gets a thin back wall of its own at its spot in the room.

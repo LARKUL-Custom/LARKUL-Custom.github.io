@@ -179,6 +179,8 @@ const TXQ_KEYS = {
 const txqObj = rid => (rid && roomById(rid)) || S.job;
 // The pick a tile shows: its own (same on every surface it covers), the job's when a room has none, or '' (the material).
 function txqPick(k, rid) {
+  if (k === 'shape') { const s = shapeById(rid), own = (s && s.tex && s.tex.finished) || '', up = s && s.mat === SHAPE_FIN ? texPickOf('finished') : '';
+    return own ? { p: own, from: 'own' } : up ? { p: up, from: 'room' } : { p: '', from: s && s.mat === SHAPE_FIN ? 'finish' : '' }; }
   if (k === 'mrun') { const r = mrunFind(rid), own = r ? mrunOwn(r) : '', up = texPickOf('molding');
     return own ? { p: own, from: 'own' } : up ? { p: up, from: 'room' } : { p: '', from: 'finish' }; }
   const keys = (TXQ_KEYS[k] || [[]])[0], o = txqObj(rid), t = o.tex || {}, j = S.job.tex || {};
@@ -189,7 +191,9 @@ function txqPick(k, rid) {
 // Color for the tile's little drawing (blank = draw it in the material's color).
 function txqColor(k, rid) { const q = txqPick(k, rid); return q.p && q.p !== 'mixed' ? pickColor(q.p) : ''; }
 function txqSet(k, rid, p) {
-  const put = o => { const t = o.tex = { ...(o.tex || {}) }; if (p) t.molding = p; else delete t.molding; if (!Object.keys(t).length) delete o.tex; };
+  const putK = (o, x) => { const t = o.tex = { ...(o.tex || {}) }; if (p) t[x] = p; else delete t[x]; if (!Object.keys(t).length) delete o.tex; };
+  const put = o => putK(o, 'molding'), put2 = o => putK(o, 'finished');
+  if (k === 'shape') { const s = shapeById(rid); if (!s) return; mutate(() => put2(s)); renderTxq(); return; }
   if (k === 'mrun') { const r = mrunFind(rid); if (!r) return; mutate(() => { if (r.generic) put((S.genMolds || []).find(g => g.id === r.generic) || {}); else r.cabs.forEach(id => { const c = cab(id); if (c) put(c); }); }); renderTxq(); return; }
   const keys = (TXQ_KEYS[k] || [[]])[0], o = txqObj(rid); if (!keys.length) return;
   mutate(() => { const t = o.tex = { ...(o.tex || {}) }; keys.forEach(x => { if (p) t[x] = p; else delete t[x]; }); if (!Object.keys(t).length) delete o.tex; });
@@ -197,7 +201,7 @@ function txqSet(k, rid, p) {
 }
 // The Look button under a tile's dropdown.
 function txqBtn(k, rid) {
-  if (!TXQ_KEYS[k] && k !== 'mrun') return '';
+  if (!TXQ_KEYS[k] && k !== 'mrun' && k !== 'shape') return '';
   const q = txqPick(k, rid), id = k + ':' + (rid || ''), on = ui.txq && ui.txq.id === id;
   const sw = q.p && q.p !== 'mixed' ? `<span class="sw" style="background:${esc(pickColor(q.p))}${isLibTex(q.p) || q.p.startsWith('m:') ? `;background-image:url('${esc(texURL(skinOf(q.p)) || '')}');background-size:cover` : ''}"></span>` : '<span class="sw none"></span>';
   const txt = q.p === 'mixed' ? 'Mixed' : q.p ? texName(q.p) + (q.from === 'job' ? ' (job)' : q.from === 'room' ? ' (room)' : '') : q.from === 'finish' ? 'Finish' : 'Material';
@@ -208,10 +212,11 @@ function renderTxq() {
   const q = ui.txq;
   if (!q) { if (el) el.remove(); return; }
   if (!el) { el = document.createElement('div'); el.id = 'txqpop'; el.className = 'txq'; el.setAttribute('role', 'dialog'); document.body.appendChild(el); }
-  const [k, rid] = q.id.split(':'), run = k === 'mrun' ? mrunFind(rid) : null, room = run ? curRoom() : rid ? roomById(rid) : null, cur = txqPick(k, rid), own = cur.from === 'own' ? cur.p : '';
-  const title = run ? 'Molding: ' + mrunName(run) : TXQ_KEYS[k][1];
-  const jobHas = keys => room && !run && keys.some(x => (S.job.tex || {})[x]);
-  const clear = run ? (texPickOf('molding') ? 'Same as the room' : 'Same as finish') : jobHas(TXQ_KEYS[k][0]) ? 'Same as job' : k === 'molding' ? 'Same as finish' : 'Material';
+  const [k, rid] = q.id.split(':'), shp = k === 'shape' ? shapeById(rid) : null, run = k === 'mrun' ? mrunFind(rid) : null, room = run || shp ? curRoom() : rid ? roomById(rid) : null, cur = txqPick(k, rid), own = cur.from === 'own' ? cur.p : '';
+  if (k === 'shape' && !shp) { ui.txq = null; el.remove(); return; }
+  const title = shp ? 'Panel: ' + (shp.name || 'Shape') : run ? 'Molding: ' + mrunName(run) : TXQ_KEYS[k][1];
+  const jobHas = keys => room && !run && !shp && keys.some(x => (S.job.tex || {})[x]);
+  const clear = shp ? (shp.mat === SHAPE_FIN ? 'Same as finished ends' : 'Material') : run ? (texPickOf('molding') ? 'Same as the room' : 'Same as finish') : jobHas(TXQ_KEYS[k][0]) ? 'Same as job' : k === 'molding' ? 'Same as finish' : 'Material';
   const chip = (p, ttl) => `<button class="accsw${own === p ? ' on' : ''}" data-act="tx-qset" data-id="${esc(p)}" title="${esc(ttl || texName(p))}" aria-label="${esc(ttl || texName(p))}" style="${p[0] === '#' ? `--c:${esc(p)}` : `--c:${esc(pickColor(p))};background-image:url('${esc(texURL(skinOf(p)) || '')}');background-size:cover`}"></button>`;
   const used = [...new Set([S.job, ...S.rooms, ...allCabs()].flatMap(o => Object.values((o && o.tex) || {})).filter(Boolean))].filter(p => !TEX_PAINTS.some(([c]) => c === p)).slice(0, 10);
   const mats = azOpts(S.materials, m => !m.dynamic);
@@ -240,7 +245,7 @@ function txqAct(a, id) {
     case 'tx-q': ui.txq = ui.txq && ui.txq.id === id ? null : { id }; renderTxq(); return true;
     case 'tx-qclose': ui.txq = null; renderTxq(); return true;
     case 'tx-qset': { const [k, rid] = ui.txq.id.split(':'); txqSet(k, rid, id); return true; }
-    case 'tx-qlib': { const [k] = ui.txq.id.split(':'), s = k === 'mrun' ? 'molding' : TXQ_KEYS[k][0][0]; openTexPick(null); ui.texPick.quick = ui.txq.id; ui.texPick.surf = s; ui.texPick.cat = s === 'tops' ? 'Tops' : texGuessCat(texBase(s)); renderTexPick(); return true; }
+    case 'tx-qlib': { const [k] = ui.txq.id.split(':'), s = k === 'mrun' ? 'molding' : k === 'shape' ? 'finished' : TXQ_KEYS[k][0][0]; openTexPick(null); ui.texPick.quick = ui.txq.id; ui.texPick.surf = s; ui.texPick.cat = s === 'tops' ? 'Tops' : texGuessCat(texBase(s)); renderTexPick(); return true; }
   }
   return false;
 }

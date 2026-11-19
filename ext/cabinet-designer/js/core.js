@@ -646,6 +646,9 @@ function migrate(s) {
   if (s.dollKit && typeof ensureDollKit === 'function') ensureDollKit(s);
   ensureMelBoxes(s);
   ensureMelCab(s);
+  // 0.58.25 (Ayden 2026-11-19): island back panels from a Mozaik import were cut from the first sheet material (plywood);
+  // they are cut from the finish material now. Once per job.
+  if (!s.finBack) { s.rooms.forEach(r => (r.shapes || []).forEach(x => { if (x.fromMozaik && /island back panel|panel back|back panel/i.test(x.name || '')) x.mat = 'finish'; })); s.finBack = 1; }
   // Jobs that already use the easy assembly test library get its current joint templates.
   if (Array.isArray(s.hardware) && s.hardware.some(h => h.id === 'jt-easy-u' || h.id === 'jt-easy-f')) ensureEasyJoints(s);
   // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.
@@ -898,11 +901,19 @@ function boughtFronts(ds) {
 //   Stocked colors (Pearl White 043 and the rest), 2026-11-18: $19.969 + $11.267/sq ft + $3.827/ft, nothing on top.
 // Each extra panel (2 wide or 2 high) about $23.93. Glass panels cost more.
 const BW_MEL_STOCK = { doorEach: 19.969, doorSq: 11.267, doorFt: 3.827 };
-const BW_MEL = { id: 'm-bw-mel', name: '3/4 Bywater Melamine (bought doors)', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 60, color: '#f4f4f2', texture: null, procedural: null, texScale: 24, fin: 'pre',
+// The special order sheet Bywater bills (0.58.24, Ayden 2026-11-19: "the average cost of wilsonart laminate sheet per sqft"):
+// 8 Wilsonart 4x8 sheets on cabinetparts.com, 2026-11-19 (sale prices, countertop and vertical grade): 253.80, 175.78, 163.29,
+// 184.57, 141.27, 148.33, 148.33, 148.33. Average $170.46 a 4x8 sheet = $5.33 per sq ft.
+const BW_SHEET = 170.46;
+const BW_MEL = { id: 'm-bw-mel', name: '3/4 Bywater Melamine (bought doors)', kind: 'sheet', thick: 0.75, sheetW: 48, sheetL: 96, grain: false, cost: BW_SHEET, color: '#f4f4f2', texture: null, procedural: null, texScale: 24, fin: 'pre',
   doorBuy: true, doorSpecial: true, doorEach: 20.17, doorSq: 8.718, doorFt: 1.775, doorPanel: 23.93, bwProduct: '5 Piece Melamine', bwColor: 'Non Stocked Color (Additional charges will be added)' };
 function ensureBoughtDoors(s) {
-  if (!s || !Array.isArray(s.materials) || !Array.isArray(s.finishes) || s.bwMelSeed >= 3) return s;
-  s.bwMelSeed = 3;
+  if (!s || !Array.isArray(s.materials) || !Array.isArray(s.finishes) || s.bwMelSeed >= 4) return s;
+  // 0.58.24: the $60 placeholder sheet becomes the average Wilsonart 4x8 laminate sheet. A price Ayden typed stays.
+  const was = s.materials.find(m => m.id === BW_MEL.id);
+  if (was && s.bwMelSeed === 3 && +was.cost === 60 && +was.sheetW === 49 && +was.sheetL === 97) Object.assign(was, { cost: BW_SHEET, sheetW: 48, sheetL: 96 });
+  if (s.bwMelSeed === 3) { s.bwMelSeed = 4; return s; }
+  s.bwMelSeed = 4;
   // A job that got an earlier draft of this material (slab, or stocked-color prices) takes the special order prices.
   const had = s.materials.find(m => m.id === BW_MEL.id);
   if (!had) s.materials.push({ ...BW_MEL });

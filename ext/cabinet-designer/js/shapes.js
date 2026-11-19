@@ -95,7 +95,21 @@ function blankShapeDesign(presetId = 'round-front') {
 const shapeLibItem = id => (S.shapeLib || []).find(x => x.id === id);
 const shapeById = id => (S.shapes || []).find(x => x.id === id);
 // A shape is as thick as the material it is cut from (Ayden 2026-11-09: everything goes off the material's thickness); its own thick is only a fallback.
-const shapeT = s => { const m = s && mat(s.mat); return m && +m.thick > 0 ? +m.thick : (+(s && s.thick) || 0.75); };
+// 0.58.25 (Ayden 2026-11-19): a shape whose material is 'finish' is cut from the room's finish (its finished panels
+// material), like the island back panel. It follows the finish when the job, room or material template changes it.
+const SHAPE_FIN = 'finish';
+const shapeMatId = s => { if (!s || s.mat !== SHAPE_FIN) return s && s.mat; const f = finishRole(null, 'sheet'), m = mat(f);
+  return m ? f : ((S.materials.find(x => (x.kind || 'sheet') === 'sheet') || {}).id || ''); };
+const shapeMat = s => mat(shapeMatId(s));
+// How a shape looks (look only): its own Look pick, else a finish-material panel wears the Finished ends look like
+// the cabinets' finished ends do, else its material.
+function shapeLook(s) {
+  const m = shapeMat(s), own = s && s.tex && s.tex.finished;
+  if (typeof skinOf !== 'function') return m;
+  return own ? skinOf(own, m) : s && s.mat === SHAPE_FIN ? texLook(m, 'finished') : m;
+}
+const shapeMatOpts = () => [{ v: SHAPE_FIN, l: 'Finish material' }, ...azOpts(S.materials)];
+const shapeT = s => { const m = s && shapeMat(s); return m && +m.thick > 0 ? +m.thick : (+(s && s.thick) || 0.75); };
 const shapeToLib = (d, id) => ({ id, name: d.name, plane: d.plane, pts: clone(d.pts), thick: d.thick, mat: d.mat });
 function defaultShapeLib(S) {
   const top = (S.materials.find(m => /butcher/i.test(m.name)) || S.materials[0]).id, sheet = (S.materials.find(m => (m.kind || 'sheet') === 'sheet') || S.materials[0]).id;
@@ -124,7 +138,7 @@ function shapesPlanSVG() {
   const px = ui.px;
   return S.shapes.map(s => {
     const poly = shapePlanPoly(s); if (!poly) return '';
-    const sel = ui.sel && ui.sel.type === 'shape' && ui.sel.id === s.id, m = mat(s.mat);
+    const sel = ui.sel && ui.sel.type === 'shape' && ui.sel.id === s.id, m = shapeLook(s);
     const c = poly.reduce((a, p) => ({ x: a.x + p.x / poly.length, y: a.y + p.y / poly.length }), { x: 0, y: 0 }), fs = 11 * px;
     return `${sel ? `<polygon class="halo nss" points="${polyPts(poly)}"/>` : ''}<polygon class="shp nss${sel ? ' sel' : ''}" style="fill:${esc((m && m.color) || '#d6b07c')}" points="${polyPts(poly)}"/>`
       + (s.plane === 'flat' ? `<text class="lbl-m" x="${c.x}" y="${c.y}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle" pointer-events="none">${esc(s.name)}</text>` : '');
@@ -135,7 +149,7 @@ function hitShapes(p) { return S.shapes.filter(s => { const poly = shapePlanPoly
 function shapesElevSVG(w, side, L, mats) {
   const g = ui.shapeGhost, gh = g && g.wall === w.id && g.side === side ? `<rect class="ghost nss" x="${side === 1 ? g.off : L - g.off - g.w}" y="${-(g.elev + g.h)}" width="${g.w}" height="${g.h}"/>` : '';
   return gh + S.shapes.filter(s => s.wall === w.id && s.side === side).map(s => {
-    const { box, out } = shapeLocal(s), x0 = side === 1 ? s.off : L - s.off - box.w, m = mat(s.mat); mats.push(m && m.id);
+    const { box, out } = shapeLocal(s), x0 = side === 1 ? s.off : L - s.off - box.w, m = shapeLook(s); mats.push(m && m.id);
     const sel = ui.sel && ui.sel.type === 'shape' && ui.sel.id === s.id;
     const shape = s.plane === 'flat' ? `<rect ${fillFor(m, 'ev-top')} x="${x0}" y="${-(s.elev + shapeT(s))}" width="${box.w}" height="${shapeT(s)}"/>`
       : `<polygon ${fillFor(m, 'ev-top')} points="${out.map(p => `${r3(x0 + p.x)},${r3(-(s.elev + p.y))}`).join(' ')}"/>`;
@@ -148,7 +162,7 @@ function shapeMesh3(s, opts = {}) {
   const w = wall(s.wall); if (!w) return null;
   const { box, out } = shapeLocal(s), sh = new THREE.Shape(out.map(p => new THREE.Vector2(p.x, p.y)));
   const g = new THREE.ExtrudeGeometry(sh, { depth: shapeT(s), bevelEnabled: false, curveSegments: 1 });
-  const mm = mat3(mat(s.mat), opts), k = (mm.userData && mm.userData.texScale) || 24, uv = g.attributes.uv;
+  const mm = mat3(shapeLook(s), opts), k = (mm.userData && mm.userData.texScale) || 24, uv = g.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / k, uv.getY(i) / k);
   const mesh = new THREE.Mesh(g, mm);
   if (!R3) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat3()));
@@ -191,12 +205,14 @@ function shapeProps(s) {
   <div class="psec box">${secHead('magnet', 'Position', 'blue')}
     <div class="grid2">${fld('Along the wall', R, 'off', s.off, 'len')}${fld('Out from wall', R, 'outset', s.outset || 0, 'len')}${fld(s.plane === 'flat' ? 'Bottom height' : 'Height off floor', R, 'elev', s.elev, 'len')}${fld('Thickness', R, 'thick', s.thick, 'len')}</div>
     <div class="note">Along the wall is measured from the wall's start to the shape's end nearest it.</div></div>
-  <div class="psec box">${secHead('palette', 'Finish', 'amber')}${fld('Name', R, 'name', s.name, 'text', { wide: true })}${fld('Material', R, 'mat', s.mat, 'select', { options: azOpts(S.materials) })}
+  <div class="psec box">${secHead('palette', 'Finish', 'amber')}${fld('Name', R, 'name', s.name, 'text', { wide: true })}${fld('Material', R, 'mat', s.mat, 'select', { options: shapeMatOpts() })}
+    <div class="f"><span>Look</span>${typeof txqBtn === 'function' ? txqBtn('shape', s.id) : ''}</div>
+    <div class="note">${s.mat === SHAPE_FIN ? `Cut from ${esc((shapeMat(s) || {}).name || 'the finish material')}, the room's finish. It wears the Finished ends look unless you pick one here.` : 'Look only changes how it looks; the cut list and price stay the same.'}</div>
     <div class="row-actions"><button class="btn sm" data-act="shape-to-lib" data-id="${id}">Save to shape library</button></div></div>${typeof vFitBox === 'function' ? vFitBox(s) : ''}`;
 }
 // Cut list rows for the shapes in the open room.
 function shapeParts() {
-  return S.shapes.map(s => { const b = shapeBox(s.pts); return { cabId: s.id, cab: 'Shape', name: s.name, kind: 'shape', qty: 1, L: r3(b.w), W: r3(b.h), T: shapeT(s), mat: s.mat, grain: false, edges: '', band: {}, ops: [], outline: shapeOutline(s.pts).map(p => ({ x: r3(p.x - b.x0), y: r3(p.y - b.y0) })) }; });
+  return S.shapes.map(s => { const b = shapeBox(s.pts); return { cabId: s.id, cab: 'Shape', name: s.name, kind: 'shape', qty: 1, L: r3(b.w), W: r3(b.h), T: shapeT(s), mat: shapeMatId(s), grain: false, edges: '', band: {}, ops: [], outline: shapeOutline(s.pts).map(p => ({ x: r3(p.x - b.x0), y: r3(p.y - b.y0) })) }; });
 }
 
 /* ---------- Shape editor (Designer › Custom shape) ---------- */
@@ -224,7 +240,7 @@ function shapeEditorSVG(d) {
   const cx = v.b.x0 + v.b.w / 2, side = (t, y) => `<text class="se-side" x="${r3(cx)}" y="${r3(y)}" font-size="${2.6 * k}" text-anchor="middle" dominant-baseline="middle">${t}</text>`;
   s += d.forMold ? side('TOP', Y(v.b.y1) - v.m * 0.45) : d.forCab || d.forWalls ? '' : v.flip ? side('TOP', Y(v.b.y1) - v.m * 0.45) + side('FRONT FACE · as seen from the room', Y(v.b.y0) + v.m * 0.55)
     : side('BACK · wall side', v.b.y0 - v.m * 0.5) + side('FRONT', v.b.y1 + v.m * 0.5);
-  const m = mat(d.mat);
+  const m = shapeMat(d);
   const outPts = o.map(p => `${r3(p.x)},${r3(Y(p.y))}`).join(' ');
   s += `<polygon class="se-shape nss" style="fill:${esc((m && m.color) || '#d6b07c')}" points="${outPts}"/>${d.forWalls && !d.forWalls.closed ? `<polyline class="se-line se-walls nss" points="${pts.map(p => `${r3(p.x)},${r3(Y(p.y))}`).join(' ')}"/>` : `<polygon class="se-line nss" points="${outPts}"/>`}`;
   // Lines across the drawing where a dragged point lines up with another point (Shift).
@@ -280,7 +296,7 @@ function renderShapeDesigner() {
       ${fld('Name', 'shd', 'name', d.name, 'text', { wide: true })}
       <div class="grid2">${fld('Lies', 'shd', 'plane', d.plane, 'select', { options: [{ v: 'flat', l: 'Flat (top, shelf)' }, { v: 'upright', l: 'Upright (panel)' }] })}${d.forMold ? fld('Thickness', 'shd', 'thick', d.thick, 'len') : ''}
       ${fld('Overall width', 'shd', 'bw', r3(b.w), 'len')}${fld(d.plane === 'flat' ? 'Overall depth' : 'Overall height', 'shd', 'bh', r3(b.h), 'len')}</div>
-      ${fld('Material', 'shd', 'mat', d.mat, 'select', { options: azOpts(S.materials), wide: true })}`;
+      ${fld('Material', 'shd', 'mat', d.mat, 'select', { options: shapeMatOpts(), wide: true })}`;
   $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="tab" data-id="library">${icon('back')}Products</button><h2>Shape editor</h2></div>
     <div class="row-actions">${desModeSeg()}${inRoom ? `<button class="btn primary" data-act="se-apply">${icon('check')}Apply to the shape in the room</button>` : ''}${src ? `<button class="btn" data-act="se-update">Update “${esc(src.name)}”</button>` : ''}<button class="btn" data-act="se-save">Save to shape library</button><button class="btn${inRoom ? '' : ' primary'}" data-act="se-place">${icon('plus')}Save and place in room</button></div></div>
   ${seMz(d, pal, rows, b, selBox, fields, 'Points and edges', `${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(shapeT(d), 1)} · ${r3(Math.abs(shapeArea2(o)) / 2 / 144)} sq ft · edge ${fmtLen(shapePerim(o), 1)} around`)}`;
