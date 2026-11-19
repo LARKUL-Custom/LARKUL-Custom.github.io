@@ -3678,3 +3678,10 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .prx .prx-roomh .prx-roominst select{width:auto!important;min-width:0!important;max-width:200px;min-height:24px;height:26px;padding:0 22px 0 6px;font:500 13px var(--f-ui)}
 .mp-scopet th{width:32%}.mp-scopet td{font-size:10pt}
 .mp-specs.mp-scopel{display:block}
+/* 0.59.21: the estimate box never runs off the page; with options the note wraps under them (Ayden's Refuge print). */
+.mp-estimate{flex-wrap:wrap;max-width:100%;box-sizing:border-box}
+.mp-estimate table.mp-wi{width:auto!important;flex:0 1 auto;min-width:0}
+.mp-estimate>div:last-child{flex:1 1 2.6in;min-width:2.6in}
+#multiprint .mp-page.mp-split>footer.pl-block{margin-top:auto}
+#multiprint .mp-page.mp-split>*{flex:none!important}
+#multiprint .mp-page.mp-split>.mp-esttag{position:static;text-align:right;margin-bottom:-4px}

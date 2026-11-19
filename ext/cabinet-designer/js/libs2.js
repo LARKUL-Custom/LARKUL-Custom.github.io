@@ -123,7 +123,8 @@ function mpPages(pr) {
   if (pr.items.includes('cabinets')) sc.cabs.forEach(({ c, room }) => withRoom(room, () => { const ps = buildParts(c).parts.filter(p => p.cabId === c.id); out.push(`<section class="mp-page mp-flow">${typeof qrSVG === 'function' ? `<div class="mp-qr">${qrSVG([S.job.name, room.name, LBL[c.id] || '', c.name].join(' | '), '0.9in')}</div>` : ''}<h2>${esc(LBL[c.id] || '')} · ${esc(c.name)} <span class="muted">${esc(room.name)}</span></h2><p>${fmtLen(c.w)} W × ${fmtLen(c.h)} H × ${fmtLen(c.d)} D</p>${typeof printNote === 'function' && printNote(c.notes) ? `<p><b>Notes</b> ${esc(printNote(c.notes))}</p>` : ''}${tbl(['✓', 'Part', 'Qty', 'Size', 'Material'], ps.map(p => `<tr><td class="mp-box"></td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)} × ${fmtLen(p.W)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td></tr>`))}</section>`); }));
   if (pr.items.includes('ops')) out.push(`<section class="mp-page mp-flow"><h2>Machining · ${esc(title)}</h2>${tbl(['Cab', 'Part', 'Operations'], sc.parts.filter(p => p.ops.length).map(p => `<tr><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.ops.map(o => esc(opText(o))).join('<br>')}</td></tr>`))}</section>`);
   if (pr.items.includes('recuts')) out.push(`<section class="mp-page mp-flow"><h2>Recuts · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Why'], (S.job.recuts || []).map(r => `<tr><td>${esc(r.room)}</td><td>${esc(r.cab)}</td><td>${esc(r.name)}</td><td>${r.qty}</td><td>${esc(r.why || '')}</td></tr>`))}</section>`);
-  return out.map((pg, i) => pg.split('%%PG%%').join(`${i + 1} of ${out.length}`)).join('');
+  // Page numbers go in after mpPaginate has cut long pages into sheets (mpNumber).
+  return out.join('');
 }
 function showMultiPrint() {
   let el = $('#multiprint'); if (!el) { el = document.createElement('div'); el.id = 'multiprint'; el.className = 'labelsheet mpsheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Print'); document.body.appendChild(el); }
@@ -146,7 +147,56 @@ function showMultiPrint() {
   el.hidden = false;
   // Pages are drawn at paper size; a narrow window shows them smaller.
   const pgs = el.querySelector('.mp-pages'); if (pgs) pgs.style.zoom = String(Math.min(1, (el.clientWidth - 40) / (pg.w * 96 + 32)));
+  if (pgs) { mpPaginate(pgs); mpNumber(pgs); }
   mpFitText(el);
+}
+// Long sheets with a title block (Notes, Scope of work, price pages) are cut into paper-size sheets, each with its own
+// title block, so nothing runs off a page on screen or on paper (Ayden 2026-11-19: "Price goes off the page as well").
+// Tables are split between rows; a table's header row repeats on the next sheet.
+function mpPaginate(root) {
+  root.querySelectorAll('.mp-page.mp-flow.mp-draw').forEach(src => {
+    const heads = [...src.children].filter(c => c.matches('.mp-esttag, footer.pl-block, header.mp-hd'));
+    const queue = [...src.children].filter(c => !heads.includes(c)), cls = src.className.replace(/\bmp-flow\b/, 'mp-split');
+    let cur;
+    const fresh = () => { cur = document.createElement('section'); cur.className = cls; heads.forEach(h => cur.appendChild(h.cloneNode(true))); src.parentNode.insertBefore(cur, src); };
+    // A little spare room: the printer's sheet is a touch shorter than the one on screen.
+    const over = () => { const pb = parseFloat(getComputedStyle(cur).paddingBottom) || 0, gap = parseFloat(getComputedStyle(cur).rowGap) || 0;
+      // Everything stacked (title block included) must fit above the bottom padding.
+      const used = [...cur.children].filter(c => getComputedStyle(c).position !== 'absolute').reduce((a, c) => a + c.offsetHeight + gap, 0);
+      return used + (parseFloat(getComputedStyle(cur).paddingTop) || 0) + pb + 6 > cur.clientHeight; };
+    const empty = () => cur.children.length === heads.length;
+    // Moves the rows of table n (or of the one table inside n) that fit onto this sheet; the rest stay in n.
+    const split = n => {
+      const t = n.tagName === 'TABLE' ? n : n.children.length === 1 && n.firstElementChild.tagName === 'TABLE' ? n.firstElementChild : null;
+      const tb = t && t.tBodies[0]; if (!tb || tb.rows.length < 2) return null;
+      const t1 = t.cloneNode(false); if (t.tHead) t1.appendChild(t.tHead.cloneNode(true));
+      const b1 = document.createElement('tbody'); t1.appendChild(b1);
+      const part = t === n ? t1 : n.cloneNode(false); if (part !== t1) part.appendChild(t1);
+      cur.appendChild(part);
+      while (tb.rows.length > 1) { const r = tb.rows[0]; b1.appendChild(r); if (over()) { tb.insertBefore(r, tb.firstChild); break; } }
+      if (!b1.rows.length) { part.remove(); return null; }
+      if (t1.tFoot) t1.tFoot.remove();
+      return part;
+    };
+    fresh();
+    while (queue.length) {
+      const n = queue.shift(); cur.appendChild(n);
+      if (!over()) continue;
+      n.remove();
+      if (split(n)) { queue.unshift(n); fresh(); continue; }
+      if (empty()) { cur.appendChild(n); if (queue.length) fresh(); continue; }
+      queue.unshift(n); fresh();
+    }
+    src.remove();
+  });
+}
+function mpNumber(root) {
+  const pages = [...root.querySelectorAll('.mp-page')];
+  pages.forEach((p, i) => {
+    const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT), hit = [];
+    while (w.nextNode()) if (w.currentNode.nodeValue.includes('%%PG%%')) hit.push(w.currentNode);
+    hit.forEach(t => { t.nodeValue = t.nodeValue.split('%%PG%%').join(`${i + 1} of ${pages.length}`); });
+  });
 }
 // Nothing runs off a page: title block and cover text that is too long for its box gets smaller until it fits, and a
 // drawing page whose lists don't fit shrinks their type (the drawing gives up room first, as it is scaled to fit).

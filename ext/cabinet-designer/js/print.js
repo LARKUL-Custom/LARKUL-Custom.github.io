@@ -188,12 +188,10 @@ function printDrawings(pr, rooms, head) {
 
 /* ----- Notes sheet (Ayden 2026-11-19: right after the cover): the job's notes, then ruled lines to write on ----- */
 function printNotesPage(pr, rooms, head) {
-  const notes = printNote(S.job.notes), lam = matAssumed() ? printLamByRoom(rooms) : '';
-  // A long laminate list (a bid job with many rooms) flows onto more sheets instead of running off the page and over
-  // the next one (Ayden 2026-11-19, Refuge: 19 rooms covered the Price summary).
-  const long = lam && rooms.length > 6, lines = Array.from({ length: long ? 10 : lam ? 24 : 40 }, () => '<i></i>').join('');
-  return `<section class="mp-page ${long ? 'mp-flow' : 'land'} mp-draw mp-notesp">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Notes')}
-    <h3 class="mp-nh">Notes</h3>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>${lam ? `<table class="mp-spect mp-mut">${lam}</table>` : ''}` : ''}${notes ? `<div class="mp-nt">${esc(notes)}</div>` : ''}<div class="mp-lines">${lines}</div></section>`;
+  // Notes are just notes (Ayden 2026-11-19): the laminate line on a bid job, the job's notes, and lines to write on.
+  const notes = printNote(S.job.notes), lines = Array.from({ length: 40 }, () => '<i></i>').join('');
+  return `<section class="mp-page land mp-draw mp-notesp">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Notes')}
+    <h3 class="mp-nh">Notes</h3>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}${notes ? `<div class="mp-nt">${esc(notes)}</div>` : ''}<div class="mp-lines">${lines}</div></section>`;
 }
 
 /* ----- Scope of work: what the job includes, room by room, from the drawing, with the shop's own notes ----- */
@@ -283,17 +281,12 @@ const jobFromBid = () => (S.rooms || []).some(r => (r.cabinets || []).some(c => 
   || /bid reader/i.test(S.job.notes || '') || (typeof jobs !== 'undefined' && /^Jobs\/Bids\//.test(jobs.path || ''));
 // Bid jobs only, and only on the Notes sheet (Ayden 2026-11-19: no Print option for it, just put it in the notes).
 const matAssumed = () => jobFromBid();
-const MAT_ASSUMED = 'Laminate: the bid documents do not state which laminate goes in which room. The laminate listed for each room is our assumption. Please confirm each room before we order material.';
+const MAT_ASSUMED = 'Laminate: the bid documents do not state which laminate goes in which room. The laminate shown on the room settings pages is our assumption. Please confirm each room before we order material.';
 // Notes on paper read like the shop wrote them: lines left by imports and the takeoff tools ("Imported from…", "From
 // Bid Reader", "(Claude: …)", "Seen 3× in plans; check qty") are left off (Ayden 2026-11-19).
 function printNote(t) {
   return String(t || '').split('\n').map(l => l.replace(/\((?:Claude|AI)\b[^)]*\)/gi, '').replace(/\bSeen \d+× in plans; check qty\b/gi, '').replace(/(^|\s·\s)From Bid Reader\b/gi, '').replace(/\s+·\s*$/, '').trim())
     .filter(l => l && !/^imported from\b/i.test(l) && !/\b(claude|chatgpt|\bAI\b|drawn in cabinet designer|cabinet designer)\b/i.test(l)).join('\n');
-}
-// Each room's laminate (fronts, finished ends, cabinet), for the Notes sheet on a bid job.
-function printLamByRoom(rooms) {
-  return rooms.map(room => { const mu = printMatUse(room).filter(([, v]) => /Doors and drawer fronts|Finished ends|Cabinet box/.test(v));
-    return mu.length ? `<tr><th>${esc(room.name)}</th><td>${mu.map(([k, v]) => `<b>${esc(k)}</b>: ${v.replace(/ <span class="muted">.*$/, '').replace(/, (Backs|Shelves|Toe skin|Drawer boxes)/g, '')}`).join('<br>')}</td></tr>` : ''; }).join('');
 }
 function printSpecPage(pr, rooms, head) {
   const out = [];
