@@ -263,9 +263,13 @@ function openSolve() {
   return (openCache = { placed, byKey, shutAll });
 }
 // How far one front opens: looked up when its cabinet is open, else worked out as if it opened last (closing animation).
+// A front that is closing keeps the amount it had while open, so it slides or swings back the way it went out
+// (a drawer held back by a bigger one doesn't jump out to full travel and close through it).
+const lastOpen = {};
 function openAmount(c, f) {
   const sol = openSolve(), k = frontKey3(c, f), hit = sol.byKey[k];
-  if (hit) return hit.v;
+  if (hit) { if (ui.open[c.id]) lastOpen[k] = hit.v; else if (k in lastOpen) return lastOpen[k]; return hit.v; }
+  if (!ui.open[c.id] && k in lastOpen) return lastOpen[k];
   const r = openOne(c, f, sol.placed, Math.PI / 2 - 0.02, sol.shutAll); sol.byKey[k] = { c, f, ...r }; return r.v;
 }
 // The widest a door can swing (radians, up to 1.75) before it runs into a wall, a cabinet that sticks out past it,

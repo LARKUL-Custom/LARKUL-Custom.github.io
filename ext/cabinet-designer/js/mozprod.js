@@ -346,7 +346,7 @@ const mozCache = new Map();
 // The product worked out at this cabinet's size, in mm, with each part's material. Cached by everything it reads.
 function mozRun(c) {
   const def = mozDef(c.moz); if (!def) return null;
-  const mats = def.parts.map(q => mozMatFor(c, q)), key = [c.moz, c.w, c.h, c.d, JSON.stringify(c.mozPrm || {}), mats.map(m => m && m.id + ':' + m.thick).join(',')].join('|');
+  const mats = def.parts.map(q => mozMatFor(c, q)), key = [c.moz, c.w, c.h, c.d, JSON.stringify(c.mozPrm || {}), c.mozFinR ? 'R' : '', mats.map(m => m && m.id + ':' + m.thick).join(',')].join('|');
   let r = mozCache.get(key); if (r) return r;
   const thByType = {}; def.parts.forEach((q, i) => { if (mats[i] && !(q.t in thByType)) thByType[q.t] = mats[i].thick * 25.4; });
   const prm = {}; Object.entries(c.mozPrm || {}).forEach(([k, v]) => { prm[k] = +v * 25.4; });
@@ -367,8 +367,18 @@ function mozRun(c) {
     const lo = Math.min(bp.x1, bp.x2), hi = Math.max(bp.x1, bp.x2);
     q.ops = q.ops.filter(o => !(o.type === 'groove' && Math.abs(o.x2 - o.x1) < 1 && Math.abs(o.y2 - o.y1) < q.W - 1 && (o.x1 < lo || o.x1 > hi)));
   });
+  // One finished end on the right (0.58.36, Ayden 2026-11-19): Mozaik's one-finished skin folds its end flap on the left,
+  // so for the right it is the same part turned end for end (outline and every slot and hole mirrored along its length).
+  const en = c.mozFinR && mozEnds(c);
+  if (en && en.now === 'R') r.parts.forEach(q => { if (q.qty > 0 && q.group !== 'metal') mozMirrorL(q); });
   if (mozCache.size > 200) mozCache.clear();
   mozCache.set(key, r); return r;
+}
+// A Mozaik part turned end for end: x runs back from its far end (mm). Outlines and paths keep their winding.
+function mozMirrorL(q) {
+  const L = q.L, fx = p => ({ ...p, x: L - p.x });
+  q.outline = q.outline.map(fx).reverse();
+  q.ops = q.ops.map(o => o.type === 'bore' ? { ...o, x: L - o.x } : o.type === 'groove' ? { ...o, x1: L - o.x1, x2: L - o.x2 } : o.type === 'path' ? { ...o, pts: o.pts.map(fx).reverse() } : o);
 }
 // Cut list parts: outline and every operation from Mozaik, in inches. The drawing's y runs up; operations measure
 // y down from the top edge (L1), as the rest of the program does.
@@ -695,13 +705,15 @@ function mozFrontSVG(c, ex, by, opts = {}) {
 }
 
 // Mozaik products that come in versions picked by their own settings. The mitre fold shelves: both ends finished,
-// one finished and one cleated, or both cleated (Mozaik's 1Fin and BothFin, 1" meaning yes).
-const MOZ_ENDS = [['both', 'Both finished'], ['one', 'One finished, one cleated'], ['none', 'Both cleated']];
+// one finished (left or right) and one cleated, or both cleated (Mozaik's 1Fin and BothFin, 1" meaning yes; the right
+// hand version is c.mozFinR, the left one mirrored).
+const MOZ_ENDS = [['none', 'None'], ['L', 'Left'], ['R', 'Right'], ['both', 'Both']];
+const MOZ_ENDS_SAY = { none: 'No finished ends (both on cleats)', L: 'Left end finished, right on a cleat', R: 'Right end finished, left on a cleat', both: 'Both ends finished' };
 const mozPrmKey = (d, n) => d && Object.keys(d.prm || {}).find(k => k.toLowerCase() === n);
 function mozEnds(c) {
   const d = mozDef(c.moz), k1 = mozPrmKey(d, '1fin'), kb = mozPrmKey(d, 'bothfin'); if (!k1 || !kb) return null;
   const v = k => { const o = (c.mozPrm || {})[k]; return o !== undefined ? +o * 25.4 : d.prm[k]; };
-  return { k1, kb, now: v(kb) > 0 ? 'both' : v(k1) > 0 ? 'one' : 'none' };
+  return { k1, kb, now: v(kb) > 0 ? 'both' : v(k1) > 0 ? (c.mozFinR ? 'R' : 'L') : 'none' };
 }
 // Sheppard rod brackets come in these backplate lengths (sheppardbrackets.com). Left on Auto, the shelf takes the
 // longest one at least 2" shorter than the shelf, as Sheppard advises; the slots are laid out from it.
@@ -714,9 +726,11 @@ function mozBracket(c) {
   const o = (c.mozPrm || {})[k], auto = o === undefined || o === null;
   return { k, auto, fit: sheppardFit(c.w), now: auto ? sheppardFit(c.w) : +o };
 }
+// Finished ends: only the Sheppard (mitre fold) shelves have them (Ayden 2026-11-19).
+const shelfEnds = c => (c && isMoz(c) ? mozEnds(c) : null);
 function mozBox(c) {
   if (!isMoz(c)) return ''; const e = mozEnds(c), b = mozBracket(c); let s = '';
-  if (e) s += `<div class="psec box">${secHead('plan', 'Ends', 'violet')}<div class="seg" role="group" aria-label="Ends">${MOZ_ENDS.map(([v, l]) => `<button data-act="moz-ends" data-id="${c.id}:${v}" aria-pressed="${e.now === v}">${l}</button>`).join('')}</div></div>`;
+  if (e) s += `<div class="psec box">${secHead('plan', 'Finished ends', 'violet')}${mozEndsSeg(c, e)}<div class="note">${MOZ_ENDS_SAY[e.now]}.</div></div>`;
   if (b) s += `<div class="psec box">${secHead('plan', 'Bracket', 'violet')}<select data-act="moz-bracket" data-id="${c.id}" aria-label="Bracket size"><option value="auto"${b.auto ? ' selected' : ''}>Auto (${b.fit}")</option>${SHEPPARD_SIZES.map(z => `<option value="${z}"${!b.auto && b.now === z ? ' selected' : ''}>${z}"${z > c.w - 2 ? ' (too long)' : ''}</option>`).join('')}</select></div>`;
   return s;
 }
@@ -729,9 +743,12 @@ if (typeof document !== 'undefined') document.addEventListener('change', ev => {
   ev.stopPropagation(); const c = cab(t.dataset.id); if (c) setMozBracket(c, t.value);
   if (ui.quick && typeof renderQuick === 'function') renderQuick();
 }, true);
+// The four buttons, also in the bottom item bar when a shelf is picked so it is one click to change.
+const mozEndsSeg = (c, e) => `<div class="seg" role="group" aria-label="Finished ends">${MOZ_ENDS.map(([v, l]) => `<button data-act="moz-ends" data-id="${c.id}:${v}" aria-pressed="${e.now === v}" title="${MOZ_ENDS_SAY[v]}">${l}</button>`).join('')}</div>`;
 function setMozEnds(c, v) {
-  const e = mozEnds(c); if (!e || e.now === v) return;
-  mutate(() => { c.mozPrm = { ...(c.mozPrm || {}), [e.k1]: v === 'one' ? 1 : 0, [e.kb]: v === 'both' ? 1 : 0 }; if (typeof cabLog === 'function') cabLog(c, 'Ends: ' + MOZ_ENDS.find(x => x[0] === v)[1]); });
+  if (v === 'one') v = 'L';
+  const e = shelfEnds(c); if (!e || e.now === v || !MOZ_ENDS_SAY[v]) return;
+  mutate(() => { c.mozPrm = { ...(c.mozPrm || {}), [e.k1]: v === 'L' || v === 'R' ? 1 : 0, [e.kb]: v === 'both' ? 1 : 0 }; if (v === 'R') c.mozFinR = true; else delete c.mozFinR; if (typeof cabLog === 'function') cabLog(c, 'Finished ends: ' + MOZ_ENDS_SAY[v]); });
 }
 if (typeof document !== 'undefined') document.addEventListener('click', ev => {
   const b = ev.target.closest && ev.target.closest('[data-act="moz-ends"]'); if (!b) return;

@@ -62,14 +62,20 @@ function itemBar(c) {
       ${pos('From left wall', 'cabpos:', 'L', c ? fromEnd(c, 'L') : 0)}<span class="ib-ctrs">${ctr('cab-center', 'W', 'Center it on the whole wall')}</span>${pos('From right wall', 'cabpos:', 'R', c ? fromEnd(c, 'R') : 0)}
       <div class="ib-slidewrap">${slide}</div>
     </div>
-    <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}${ceilCell()}${sz('Depth', 'd')}${sz('Outset', 'outset')}</div>
+    <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}${ceilCell()}${sz('Depth', 'd')}${sz('Outset', 'outset')}${finEndsCell(c)}</div>
     <div class="ib-togs">${tog('autoFillers', 'Fillers')}${tog('autoPanels', 'Panels')}${tog('autoLights', 'Ceiling lights')}</div>
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
-      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}${cornerBtn(c)}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
+      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}${cornerBtn(c)}${finIntBtn(c)}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
       : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
   </div>`;
 }
 
+// Finished interior on/off for the picked cabinet (Ayden 2026-11-19): the parts you see inside are cut from the
+// room's Finish material (build.js), never from the door style. Same switch as the editor's Interior tab.
+function finIntBtn(c) {
+  const on = !!c.finInt, fm = typeof finishMat === 'function' ? mat(finishMat(c)) : null, fn = fm ? fm.name : 'the finish material';
+  return `<button data-act="cab-finint" data-id="${c.id}" aria-pressed="${on}" title="${on ? `Finished interior is on: the inside is cut from ${esc(fn)}. Click to turn it off.` : `Make the inside finished: sides, top, bottom, shelves and dividers are cut from ${esc(fn)}.`}">${icon('shelf')}Fin. inside</button>`;
+}
 // The picked appliance, fixture or shape, for the same item bar as a cabinet.
 function xItem() {
   const s = ui.sel; if (!s) return null;
@@ -201,9 +207,11 @@ function fitDock(el = document.getElementById('dock')) {
   const room = document.getElementById('tab-room');
   if (el.isConnected && body && room && !saved) {
     const was = room.style.getPropertyValue('--dockh'); room.style.setProperty('--dockh', DOCK_H + 'px');
-    const need = el.getBoundingClientRect().height + body.scrollHeight - body.clientHeight;
+    const head = el.querySelector('.dockhead'), r = el.getBoundingClientRect().height;
+    // The tab list beside it must fit too (all nine tabs, no scroll bar).
+    const need = Math.max(r + body.scrollHeight - body.clientHeight, head ? r + head.scrollHeight - head.clientHeight : 0);
     room.style.setProperty('--dockh', was || DOCK_H + 'px');
-    const h = Math.round(Math.min(room.getBoundingClientRect().height * 0.5, Math.max(DOCK_H, need)));
+    const h = Math.round(Math.min(room.getBoundingClientRect().height * 0.6, Math.max(DOCK_H, need)));
     if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof redrawView === 'function') requestAnimationFrame(redrawView); }
   }
 }
@@ -294,6 +302,11 @@ function shiftUp(c) {
   c.elev = e; return true;
 }
 // Item bar cell under Width: the room's ceiling gap that Shift up (arrow above the push arrows) stops at.
+// Shelves (the mitre fold floating shelf, open shelf units): which ends are finished, one click to change (0.58.36).
+function finEndsCell(c) {
+  const e = typeof shelfEnds === 'function' ? shelfEnds(c) : null;
+  return e ? `<div class="ib-f ib-fin"><span>Finished ends</span>${mozEndsSeg(c, e)}</div>` : '';
+}
 function ceilCell() {
   return `<div class="ib-f ib-ceil"><span title="Room setting: cabinets stay this far below the ceiling (room for crown molding). Same as Room tab › Ceiling.">Off ceiling</span><div class="ib-ceilrow">${ctl('rceil', 'gap', ceilGap(), 'len', { label: 'Cabinets off the ceiling (room setting)' })}</div></div>`;
 }
