@@ -316,7 +316,12 @@ function libs2Act(a, id) {
     case 'mp-close': { const el = $('#multiprint'); if (el) el.hidden = true; document.body.classList.remove('printing-multi'); return true; }
     case 'mp-print': {
       const st = document.createElement('style'); st.id = 'mp-atpage'; st.textContent = mpAtPage(mpPaper()); document.head.appendChild(st);
-      document.body.classList.add('printing-multi'); setTimeout(() => { window.print(); document.body.classList.remove('printing-multi'); st.remove(); }, 50); return true;
+      // Save as PDF names the file from the page title: start it with the job name (Ayden 2026-11-19), then the preset.
+      // The hub shows the designer in a frame, so its title is set too when it can be, and both put back afterwards.
+      const fname = [S.job.name || 'Job', mpPreset().name].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]+/g, ' ').trim();
+      const docs = [document]; try { if (window.parent !== window && window.parent.document) docs.push(window.parent.document); } catch (_) { }
+      const was = docs.map(d => d.title); docs.forEach(d => { d.title = fname; });
+      document.body.classList.add('printing-multi'); setTimeout(() => { window.print(); document.body.classList.remove('printing-multi'); st.remove(); docs.forEach((d, i) => { d.title = was[i]; }); }, 50); return true;
     }
     case 'mp-new': { const p = { id: uid('pp'), name: 'New preset', title: '{JOB}', items: ['cutlist'] }; PRINT_PRESETS.push(p); ui.mpPreset = p.id; mpSave(); showMultiPrint(); return true; }
     case 'mp-del': { const pr = mpPreset(); PRINT_PRESETS = PRINT_PRESETS.filter(p => p !== pr); ui.mpPreset = PRINT_PRESETS[0].id; mpSave(); showMultiPrint(); return true; }
