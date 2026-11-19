@@ -752,7 +752,9 @@ function buildRoomScene(v) {
     if (ts && ts.sinks.length) v.root.add(ctTop3(r, tm, ts.outline, ts.holes));
     else if (r.poly) v.root.add(ctTop3(r, tm));
     else grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
-    if (r.tpl.backsplash > 0) { const off = r.side === 1 ? r.ovS : r.ovE; grp.add(box3(r.end - r.start, r.tpl.backsplash, 0.75, tm, off + (r.end - r.start) / 2, r.top + r.thick + r.tpl.backsplash / 2, 0.375)); }
+    if (r.bs > 0) { const off = r.side === 1 ? r.ovS : r.ovE; grp.add(box3(r.end - r.start, r.bs, 0.75, tm, off + (r.end - r.start) / 2, r.top + r.thick + r.bs / 2, 0.375)); }
+    // Waterfall ends: a panel the top's thickness from the floor up under the top, flush with its end.
+    [['S', ctX0(r)], ['E', ctX1(r) - r.thick]].forEach(([e, x]) => { if (!r['wf' + e]) return; const lx = r.side === 1 ? x - a : b - x - r.thick; grp.add(box3(r.thick, r.top, r.depth, tm, lx + r.thick / 2, r.top / 2, r.depth / 2)); });
     v.root.add(grp);
   });
   if (L.molding) moldingRuns().forEach(r => {

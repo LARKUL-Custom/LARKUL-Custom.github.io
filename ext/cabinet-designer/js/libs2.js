@@ -71,39 +71,86 @@ let PRINT_PRESETS = [PP_BUILD, PP_TOPS, { id: 'pp-shop', name: 'Shop packet', ti
 // Saved preset lists from before drawings could print get the builder preset added at the top.
 shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) { PRINT_PRESETS = v.some(p => p.id === PP_BUILD.id) ? v : [{ ...PP_BUILD }, ...v]; if (!PRINT_PRESETS.some(p => p.id === PP_TOPS.id)) PRINT_PRESETS.splice(1, 0, { ...PP_TOPS }); } });
 function mpPreset() { return PRINT_PRESETS.find(p => p.id === ui.mpPreset) || PRINT_PRESETS[0]; }
+// Paper sizes in inches (portrait width × height). Every preset prints on Letter, landscape, unless it is set otherwise.
+const MP_PAPERS = [['letter', 'Letter 8.5 × 11', 8.5, 11], ['legal', 'Legal 8.5 × 14', 8.5, 14], ['tabloid', 'Tabloid 11 × 17', 11, 17], ['archc', 'ARCH C 18 × 24', 18, 24], ['archd', 'ARCH D 24 × 36', 24, 36], ['a4', 'A4 210 × 297 mm', 8.27, 11.69], ['a3', 'A3 297 × 420 mm', 11.69, 16.54]];
+const MP_MARGIN = 0.35;
+// The page the preset prints on: { w, h } in inches with the orientation applied, and the drawing area inside the margins.
+function mpPaper(pr = mpPreset()) {
+  const p = MP_PAPERS.find(x => x[0] === pr.paper) || MP_PAPERS[0], port = pr.orient === 'port';
+  const w = port ? p[2] : p[3], h = port ? p[3] : p[2];
+  return { id: p[0], w, h, port, iw: w - 2 * MP_MARGIN, ih: h - 2 * MP_MARGIN };
+}
+// The printer's page size goes in only while Print prints, so labels and quotes keep their own.
+const mpAtPage = pg => `@page{size:${pg.w}in ${pg.h}in;margin:${MP_MARGIN}in}@page mpcover{size:${pg.w}in ${pg.h}in;margin:0}`;
+// The page size for the screen and for the printer, written for the preset being shown.
+function mpPageCSS(pg) {
+  const m = MP_MARGIN, ph = Math.max(1, pg.h - 2 * m - 0.05);
+  return `#multiprint .mp-page{width:${pg.w}in;height:${pg.h}in;padding:${m}in;box-sizing:border-box;flex:none;margin:0 auto;display:flex;flex-direction:column;gap:8px;overflow:hidden;border-radius:2px}
+#multiprint .mp-page.mp-flow{display:block;height:auto;min-height:${pg.h}in;overflow:visible}
+#multiprint .mp-page.mp-cover{padding:0;align-items:center;justify-content:center}
+@media print{
+  body.printing-multi #multiprint .mp-page{width:auto;height:${ph}in;padding:0;margin:0;page:auto}
+  body.printing-multi #multiprint .mp-page.mp-flow{height:auto;min-height:0}
+  body.printing-multi #multiprint .mp-page.mp-cover{page:mpcover;width:${pg.w}in;height:${pg.h - 0.05}in}
+}`;
+}
 function mpPages(pr) {
   const sc = cutScope(), title = fillVars(pr.title || '{JOB}', {}), out = [];
   // Drawing pages carry a title strip like a drawing sheet: job and room on the left, customer, date and page on the right.
   const head = (room, what) => (typeof printBlock === 'function' && printBlock(pr, room, what)) || `<header class="mp-hd"><div><b>${esc(title)}</b> · ${esc(room)} · <b>${esc(what)}</b></div><div>${esc(S.job.customer || '')}${S.job.customer ? ' · ' : ''}${new Date().toLocaleDateString()} · %%PG%%</div></header>`;
   const tbl = (head, rows) => `<table class="t mp-t"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${head.length}">None</td></tr>`}</tbody></table>`;
   if (pr.items.includes('cover') && typeof printCover === 'function') out.push(printCover(pr, sc.rooms));
-  else if (pr.items.includes('cover')) out.push(`<section class="mp-page"><h1>${esc(title)}</h1><p><b>Customer</b> ${esc(S.job.customer || '')}</p>${(S.job.fields || []).map(f => `<p><b>${esc(f.k)}</b> ${esc(f.v ?? '')}</p>`).join('')}
+  else if (pr.items.includes('cover')) out.push(`<section class="mp-page mp-flow"><h1>${esc(title)}</h1><p><b>Customer</b> ${esc(S.job.customer || '')}</p>${(S.job.fields || []).map(f => `<p><b>${esc(f.k)}</b> ${esc(f.v ?? '')}</p>`).join('')}
     <p><b>Rooms</b> ${sc.rooms.map(r => esc(r.name)).join(', ')}</p><p><b>Cabinets</b> ${sc.cabs.length} · <b>Parts</b> ${sc.parts.reduce((a, p) => a + p.qty, 0)}</p>${S.job.notes ? `<p><b>Notes</b> ${esc(S.job.notes)}</p>` : ''}<p class="muted">Printed ${new Date().toLocaleString()}</p></section>`);
   if (pr.items.includes('specs') && typeof printSpecPage === 'function') out.push(printSpecPage(pr, sc.rooms, head));
   if (typeof printDrawings === 'function') out.push(...printDrawings(pr, sc.rooms, head));
-  if (pr.items.includes('cutlist')) out.push(`<section class="mp-page"><h2>Cut list · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Length', 'Width', 'Thick', 'Material', 'Edges'], sc.parts.map(p => `<tr><td>${esc(p.room)}</td><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)}</td><td>${fmtLen(p.W)}</td><td>${fmtLen(p.T)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td><td>${esc(p.edges || '')}</td></tr>`))}</section>`);
-  if (pr.items.includes('hardware')) { const bom = {}; sc.cabs.forEach(({ c, room }) => withRoom(room, () => Object.entries(buildParts(c).bom || {}).forEach(([k, q]) => bom[k] = (bom[k] || 0) + q))); out.push(`<section class="mp-page"><h2>Hardware · ${esc(title)}</h2>${tbl(['Item', 'Qty'], Object.entries(bom).sort().map(([k, q]) => `<tr><td>${esc(k)}</td><td>${q}</td></tr>`))}</section>`); }
-  if (pr.items.includes('cabinets')) sc.cabs.forEach(({ c, room }) => withRoom(room, () => { const ps = buildParts(c).parts.filter(p => p.cabId === c.id); out.push(`<section class="mp-page">${typeof qrSVG === 'function' ? `<div class="mp-qr">${qrSVG([S.job.name, room.name, LBL[c.id] || '', c.name].join(' | '), '0.9in')}</div>` : ''}<h2>${esc(LBL[c.id] || '')} · ${esc(c.name)} <span class="muted">${esc(room.name)}</span></h2><p>${fmtLen(c.w)} W × ${fmtLen(c.h)} H × ${fmtLen(c.d)} D</p>${c.notes ? `<p><b>Notes</b> ${esc(c.notes)}</p>` : ''}${tbl(['✓', 'Part', 'Qty', 'Size', 'Material'], ps.map(p => `<tr><td class="mp-box"></td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)} × ${fmtLen(p.W)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td></tr>`))}</section>`); }));
-  if (pr.items.includes('ops')) out.push(`<section class="mp-page"><h2>Machining · ${esc(title)}</h2>${tbl(['Cab', 'Part', 'Operations'], sc.parts.filter(p => p.ops.length).map(p => `<tr><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.ops.map(o => esc(opText(o))).join('<br>')}</td></tr>`))}</section>`);
-  if (pr.items.includes('recuts')) out.push(`<section class="mp-page"><h2>Recuts · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Why'], (S.job.recuts || []).map(r => `<tr><td>${esc(r.room)}</td><td>${esc(r.cab)}</td><td>${esc(r.name)}</td><td>${r.qty}</td><td>${esc(r.why || '')}</td></tr>`))}</section>`);
+  if (pr.items.includes('cutlist')) out.push(`<section class="mp-page mp-flow"><h2>Cut list · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Length', 'Width', 'Thick', 'Material', 'Edges'], sc.parts.map(p => `<tr><td>${esc(p.room)}</td><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)}</td><td>${fmtLen(p.W)}</td><td>${fmtLen(p.T)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td><td>${esc(p.edges || '')}</td></tr>`))}</section>`);
+  if (pr.items.includes('hardware')) { const bom = {}; sc.cabs.forEach(({ c, room }) => withRoom(room, () => Object.entries(buildParts(c).bom || {}).forEach(([k, q]) => bom[k] = (bom[k] || 0) + q))); out.push(`<section class="mp-page mp-flow"><h2>Hardware · ${esc(title)}</h2>${tbl(['Item', 'Qty'], Object.entries(bom).sort().map(([k, q]) => `<tr><td>${esc(k)}</td><td>${q}</td></tr>`))}</section>`); }
+  if (pr.items.includes('cabinets')) sc.cabs.forEach(({ c, room }) => withRoom(room, () => { const ps = buildParts(c).parts.filter(p => p.cabId === c.id); out.push(`<section class="mp-page mp-flow">${typeof qrSVG === 'function' ? `<div class="mp-qr">${qrSVG([S.job.name, room.name, LBL[c.id] || '', c.name].join(' | '), '0.9in')}</div>` : ''}<h2>${esc(LBL[c.id] || '')} · ${esc(c.name)} <span class="muted">${esc(room.name)}</span></h2><p>${fmtLen(c.w)} W × ${fmtLen(c.h)} H × ${fmtLen(c.d)} D</p>${c.notes ? `<p><b>Notes</b> ${esc(c.notes)}</p>` : ''}${tbl(['✓', 'Part', 'Qty', 'Size', 'Material'], ps.map(p => `<tr><td class="mp-box"></td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)} × ${fmtLen(p.W)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td></tr>`))}</section>`); }));
+  if (pr.items.includes('ops')) out.push(`<section class="mp-page mp-flow"><h2>Machining · ${esc(title)}</h2>${tbl(['Cab', 'Part', 'Operations'], sc.parts.filter(p => p.ops.length).map(p => `<tr><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.ops.map(o => esc(opText(o))).join('<br>')}</td></tr>`))}</section>`);
+  if (pr.items.includes('recuts')) out.push(`<section class="mp-page mp-flow"><h2>Recuts · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Why'], (S.job.recuts || []).map(r => `<tr><td>${esc(r.room)}</td><td>${esc(r.cab)}</td><td>${esc(r.name)}</td><td>${r.qty}</td><td>${esc(r.why || '')}</td></tr>`))}</section>`);
   return out.map((pg, i) => pg.split('%%PG%%').join(`${i + 1} of ${out.length}`)).join('');
 }
 function showMultiPrint() {
   let el = $('#multiprint'); if (!el) { el = document.createElement('div'); el.id = 'multiprint'; el.className = 'labelsheet mpsheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Print'); document.body.appendChild(el); }
-  const pr = mpPreset();
-  el.innerHTML = `<div class="lbbar"><label class="f"><span>Preset</span><select class="mp-pick" aria-label="Print preset">${PRINT_PRESETS.map(p => `<option value="${p.id}"${p.id === pr.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
+  const pr = mpPreset(), pg = mpPaper(pr);
+  // The bar stays at the top while the pages scroll, so Back to the job and Print are always in reach.
+  el.innerHTML = `<div class="lbbar mp-bar"><div class="mp-barrow"><button class="btn mp-back" data-act="mp-close" title="Close Print and go back to the job (Esc)">${icon('back')}Back to the job</button><b class="mp-bt">Print</b>
+    <div class="row-actions"><button class="btn sm" data-act="mp-new">${icon('plus')}New preset</button>${PRINT_PRESETS.length > 1 ? `<button class="btn sm" data-act="mp-del">${icon('trash')}Delete preset</button>` : ''}<button class="btn primary" data-act="mp-print">${icon('print')}Print</button></div></div>
+    <div class="mp-barrow"><label class="f"><span>Preset</span><select class="mp-pick" aria-label="Print preset">${PRINT_PRESETS.map(p => `<option value="${p.id}"${p.id === pr.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
     <label class="f"><span>Preset name</span><input type="text" class="mp-name" value="${esc(pr.name)}" aria-label="Preset name"></label>${S.rooms.length > 1 ? `<label class="f"><span>Rooms</span><select class="mp-room" aria-label="Rooms to print"><option value="all">Whole job (${S.rooms.length} rooms)</option>${S.rooms.map(r => `<option value="${r.id}"${ui.cutRoom === r.id ? ' selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : ''}
     <label class="f"><span>Title</span><input type="text" class="mp-title" value="${esc(pr.title || '')}" aria-label="Title (variables allowed)" placeholder="{JOB}"></label>
+    <label class="f"><span>Paper</span><select class="mp-paper" aria-label="Paper size">${MP_PAPERS.map(([k, l]) => `<option value="${k}"${k === pg.id ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+    <div class="f"><span>Pages</span><div class="seg mp-orient" role="group" aria-label="Page direction"><button data-act="mp-orient" data-id="land" aria-pressed="${!pg.port}">Sideways</button><button data-act="mp-orient" data-id="port" aria-pressed="${pg.port}">Upright</button></div></div></div>
     <div class="mp-items">${MP_ITEMS.map(([k, l]) => `<label class="checkrow"><input type="checkbox" class="mp-item" value="${k}"${pr.items.includes(k) ? ' checked' : ''}> ${l}</label>`).join('')}<label class="checkrow mp-colorrow"><input type="checkbox" class="mp-color"${pr.color ? ' checked' : ''}> Drawings in color</label></div>
     ${typeof PRINT_LAYOUTS !== 'undefined' ? `<div class="mp-lay"><label class="f"><span>Cover</span><select class="mp-lpick" data-k="cover" aria-label="Cover layout">${PRINT_LAYOUTS.filter(l => l.kind === 'cover').map(l => `<option value="${l.id}"${plFor(pr, 'cover') === l ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>
       <label class="f"><span>Title block</span><select class="mp-lpick" data-k="block" aria-label="Title block layout"><option value="none"${pr.block === 'none' ? ' selected' : ''}>Plain strip</option>${PRINT_LAYOUTS.filter(l => l.kind === 'block').map(l => `<option value="${l.id}"${plFor(pr, 'block') === l ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>
-      <button class="btn sm" data-act="pl-open" data-id="${(plFor(pr, 'cover') || {}).id || ''}">${icon('edit')}Edit layouts</button></div>` : ''}
-    <div class="row-actions"><button class="btn sm" data-act="mp-new">${icon('plus')}New preset</button>${PRINT_PRESETS.length > 1 ? `<button class="btn sm" data-act="mp-del">${icon('trash')}Delete preset</button>` : ''}<button class="btn primary" data-act="mp-print">${icon('print')}Print</button><button class="btn" data-act="mp-close">Close</button></div></div>
-    <div class="mp-pages${pr.color ? '' : ' mp-line'}">${mpPages(pr)}</div>`;
+      <button class="btn sm" data-act="pl-open" data-id="${(plFor(pr, 'cover') || {}).id || ''}">${icon('edit')}Edit layouts</button></div>` : ''}</div>
+    <style id="mp-pagecss">${mpPageCSS(pg)}</style>
+    <div class="mp-pages${pr.color ? '' : ' mp-line'}${pg.port ? ' mp-port' : ''}">${mpPages(pr)}</div>`;
   el.hidden = false;
   // Pages are drawn at paper size; a narrow window shows them smaller.
-  const pg = el.querySelector('.mp-pages'); if (pg) pg.style.zoom = String(Math.min(1, (el.clientWidth - 40) / 1056));
+  const pgs = el.querySelector('.mp-pages'); if (pgs) pgs.style.zoom = String(Math.min(1, (el.clientWidth - 40) / (pg.w * 96 + 32)));
+  mpFitText(el);
 }
+// Nothing runs off a page: title block and cover text that is too long for its box gets smaller until it fits, and a
+// drawing page whose lists don't fit shrinks their type (the drawing gives up room first, as it is scaled to fit).
+function mpFitText(el) {
+  el.querySelectorAll('.mp-page .pl-text').forEach(t => {
+    const base = parseFloat(t.style.fontSize) || 10; let f = base;
+    while (f > base * 0.45 && (t.scrollHeight > t.clientHeight + 1 || t.scrollWidth > t.clientWidth + 1)) { f *= 0.92; t.style.fontSize = f.toFixed(2) + 'pt'; }
+  });
+  el.querySelectorAll('.mp-page.mp-draw').forEach(p => {
+    const lists = [...p.querySelectorAll('.mp-cabs,.ctp-spec,.mp-specs,.mp-notes,.mp-note,.mp-hd')]; if (!lists.length) return;
+    for (let i = 0, k = 1; i < 10 && p.scrollHeight > p.clientHeight + 1; i++) { k *= 0.9; lists.forEach(l => { l.style.zoom = String(k); }); }
+  });
+}
+// Esc leaves Print (the layout editor, when open over it, closes first).
+document.addEventListener('keydown', e => {
+  const el = $('#multiprint'); if (e.key !== 'Escape' || !el || el.hidden) return;
+  const ed = $('#pleditor'); if (ed && !ed.hidden) return;
+  e.stopImmediatePropagation(); el.hidden = true; document.body.classList.remove('printing-multi');
+}, true);
 function mpSave() { shopSave('printPresets', PRINT_PRESETS, 'print presets'); }
 document.addEventListener('change', e => {
   const t = e.target; if (!t.closest || !t.closest('#multiprint')) return;
@@ -113,6 +160,7 @@ document.addEventListener('change', e => {
   else if (t.classList.contains('mp-name')) pr.name = t.value || pr.name;
   else if (t.classList.contains('mp-title')) pr.title = t.value;
   else if (t.classList.contains('mp-color')) pr.color = t.checked;
+  else if (t.classList.contains('mp-paper')) { pr.paper = t.value; if (typeof printPicsClear === 'function') printPicsClear(); }
   else if (t.classList.contains('mp-lpick')) pr[t.dataset.k] = t.value;
   else if (t.classList.contains('mp-item')) pr.items = [...document.querySelectorAll('#multiprint .mp-item:checked')].map(x => x.value);
   else return;
@@ -196,8 +244,12 @@ document.addEventListener('change', e => {
 function libs2Act(a, id) {
   switch (a) {
     case 'mp-open': if (typeof printPicsClear === 'function') printPicsClear(); showMultiPrint(); return true;
+    case 'mp-orient': { const pr = mpPreset(); pr.orient = id === 'port' ? 'port' : 'land'; if (typeof printPicsClear === 'function') printPicsClear(); mpSave(); showMultiPrint(); return true; }
     case 'mp-close': { const el = $('#multiprint'); if (el) el.hidden = true; document.body.classList.remove('printing-multi'); return true; }
-    case 'mp-print': document.body.classList.add('printing-multi'); setTimeout(() => { window.print(); document.body.classList.remove('printing-multi'); }, 50); return true;
+    case 'mp-print': {
+      const st = document.createElement('style'); st.id = 'mp-atpage'; st.textContent = mpAtPage(mpPaper()); document.head.appendChild(st);
+      document.body.classList.add('printing-multi'); setTimeout(() => { window.print(); document.body.classList.remove('printing-multi'); st.remove(); }, 50); return true;
+    }
     case 'mp-new': { const p = { id: uid('pp'), name: 'New preset', title: '{JOB}', items: ['cutlist'] }; PRINT_PRESETS.push(p); ui.mpPreset = p.id; mpSave(); showMultiPrint(); return true; }
     case 'mp-del': { const pr = mpPreset(); PRINT_PRESETS = PRINT_PRESETS.filter(p => p !== pr); ui.mpPreset = PRINT_PRESETS[0].id; mpSave(); showMultiPrint(); return true; }
     case 'rc-add': {

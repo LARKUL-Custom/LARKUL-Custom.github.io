@@ -139,7 +139,7 @@ function instCounts(cabs, own) {
   });
   own.forEach(({ c }) => { const l = c.libId && typeof libItem === 'function' && libItem(c.libId); if (/floating|shelf|mantel/i.test(c.name || '') || (l && libGroup(l) === 'shelf')) n.shelf++; });
   const tops = countertopRuns().filter(t => t.on), molds = moldingRuns();
-  n.top8 = tops.reduce((a, t) => a + Math.ceil(t.len * t.depth / 144 / 8 - 1e-9), 0);
+  n.top8 = tops.reduce((a, t) => a + Math.ceil((t.area ?? t.len * t.depth) / 144 / 8 - 1e-9), 0);
   n.moldCut = molds.reduce((a, m) => a + 2 + 2 * ((m.retS ? 1 : 0) + (m.retE ? 1 : 0)), 0);
   n.caulk = molds.length + tops.length;
   n.scribe = n.filler + n.panel; n.scribeTall = n.panelTall;
@@ -359,7 +359,7 @@ function priceJob(ps) {
     const own = all.filter(k => k.own).map(k => ({ name: `${k.label} ${k.c.name} (${fmtLen(k.c.w, 1)} wide)`, amount: k.total, own: true }));
     // Tops and molding are one line each for the room, not one per wall (Ayden 2026-11-06). The kinds used go in brackets.
     const oneLine = (name, runs, kind, amt, top) => { if (!runs.length) return []; const kinds = [...new Set(runs.map(kind))]; return [{ name: `${name} (${kinds.join(', ')})`, amount: runs.reduce((a, x) => a + amt(x), 0), ...(top ? { top: true } : {}) }]; };
-    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on), t => t.tpl.name, t => t.len * t.depth / 144 * topSqFor(ps, r), true);
+    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on), t => t.tpl.name, t => (t.area ?? t.len * t.depth) / 144 * topSqFor(ps, r), true);
     const molds = oneLine('Molding', moldingRuns(), m => m.m.name, m => m.len / 12 * (+ps.molds[m.m.id] || 0));
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));

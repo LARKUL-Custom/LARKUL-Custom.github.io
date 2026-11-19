@@ -263,9 +263,11 @@ function topCoreParts() {
         part(`Countertop core${layers > 1 ? ', layer ' + (k + 1) : ''}${s.n > 1 ? `, piece ${j + 1} of ${s.n}` : ''}`, s.len, r.depth, { ops });
       }
     }
-    if (+t.backsplash > 0) { const b = splitLen(r.len, cm); part('Backsplash core', b.len, +t.backsplash, { kind: 'filler', qty: b.n }); }
+    if (r.bs > 0) { const b = splitLen(r.len, cm); part('Backsplash core', b.len, r.bs, { kind: 'filler', qty: b.n }); }
+    // Waterfall ends: a core panel per layer from the floor up under the top.
+    ['S', 'E'].forEach(e => { if (r['wf' + e]) part(`Waterfall end (${e === 'S' ? 'start' : 'end'})${layers > 1 ? `, ${layers} layers` : ''}`, r.top, r.depth, { kind: 'filler', qty: layers }); });
     const sideAt = t.sideSplash === 'ends' || (t.sideSplash === 'sinks' && sinks.length);
-    if (+t.backsplash > 0 && sideAt) [['S', r.blockS], ['E', r.blockE]].forEach(([e, blocked]) => { if (blocked) part(`Side splash (${e === 'S' ? 'start' : 'end'})`, r.depth - cm.thick, +t.backsplash, { kind: 'filler' }); });
+    if (r.bs > 0 && sideAt) [['S', r.blockS], ['E', r.blockE]].forEach(([e, blocked]) => { if (blocked) part(`Side splash (${e === 'S' ? 'start' : 'end'})`, r.depth - cm.thick, r.bs, { kind: 'filler' }); });
     if (notes.length) out.filter(p => p.cab === lbl).forEach(p => { p.note = notes.join('; '); });
   });
   return out;

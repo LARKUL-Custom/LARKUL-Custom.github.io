@@ -142,7 +142,35 @@ function ctjShowCtx(id, x, y) {
   m.hidden = false;
   const rc = m.getBoundingClientRect(); m.style.left = Math.min(x, innerWidth - rc.width - 8) + 'px'; m.style.top = Math.min(y, innerHeight - rc.height - 8) + 'px';
 }
+// A top's back edge or end, right-clicked on the Tops tab (0.59.1): backsplash on, off or a height; waterfall an end.
+function ctjEdgeCtx(id, x, y) {
+  const [key, part] = id.split('|'), runs = countertopRuns(), i = runs.findIndex(r => r.key === key), r = runs[i]; if (!r) return;
+  const m = $('#ctxmenu'), b = (v, label, on) => `<button role="menuitem" data-act="ctj-edge" data-id="${esc(key + '|' + v)}">${on ? '✓ ' : ''}${label}</button>`;
+  const st = ctjStore(r), def = Math.max(0, +r.tpl.backsplash || 0), own = has(st, 'bs') && st.bs !== '';
+  let h = `<div class="ctxhead">Top ${i + 1} · ${esc(wallName(wall(r.wall)))}</div>`;
+  if (part === 'back') {
+    h += b('bs=0', 'No backsplash', r.bs === 0);
+    [4, 6, 18].forEach(v => { h += b('bs=' + v, `${fmtLen(v)} backsplash`, own && r.bs === v); });
+    h += b('bs=', `Style's backsplash${def ? ` (${fmtLen(def)})` : ' (none)'}`, !own);
+    h += `<label class="ctx-in"><span>Height</span><input type="text" class="num cte-bs" data-id="${esc(key)}" value="${esc(fmtLen(r.bs))}" aria-label="Backsplash height"></label>`;
+  } else {
+    const on = !!r['wf' + part], side = (part === 'S') === (r.side === 1) ? 'left' : 'right';
+    h += b('wf' + part + '=' + (on ? 0 : 1), on ? `Take the waterfall off the ${side} end` : `Waterfall the ${side} end to the floor`, false);
+  }
+  m.innerHTML = h; m.hidden = false;
+  const rc = m.getBoundingClientRect(); m.style.left = Math.min(x, innerWidth - rc.width - 8) + 'px'; m.style.top = Math.min(y, innerHeight - rc.height - 8) + 'px';
+}
+function ctjEdgeSet(key, k, v) {
+  const r = countertopRuns().find(q => q.key === key); if (!r) return;
+  mutate(() => { const o = ctjStore(r, true); if (k === 'bs' && v === '') delete o.bs; else if (k === 'bs') o.bs = Math.max(0, +v || 0); else if (+v) o[k] = true; else delete o[k]; });
+}
+document.addEventListener('change', e => {
+  const t = e.target; if (!t.classList || !t.classList.contains('cte-bs')) return;
+  const n = parseLen(t.value); if (!isFinite(n)) return;
+  hideCtx(); ctjEdgeSet(t.dataset.id, 'bs', r3(n));
+});
 function ctjAct(a, id) {
+  if (a === 'ctj-edge') { const i = id.lastIndexOf('|'), key = id.slice(0, i), [k, v] = id.slice(i + 1).split('='); hideCtx(); ctjEdgeSet(key, k, v); return true; }
   if (a !== 'ctj-set') return false;
   const i = id.lastIndexOf('#'), cid = id.slice(0, i), v = id.slice(i + 1), k = ctjCorners().find(q => q.id === cid);
   hideCtx(); if (!k) return true;

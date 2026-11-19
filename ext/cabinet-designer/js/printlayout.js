@@ -121,12 +121,19 @@ function plPic(rooms) {
 }
 function printCover(pr, rooms) {
   const l = plFor(pr, 'cover'); if (!l) return '';
-  return `<section class="mp-page mp-cover"><div class="pl-box" style="width:${PL_COVER.w}in;height:${PL_COVER.h}in">${plHTML(l, plVars({ ROOMS: rooms.map(r => r.name).join(', ') }), plPic(rooms))}</div></section>`;
+  return `<section class="mp-page mp-cover"><div class="pl-box" style="width:${PL_COVER.w}in;height:${PL_COVER.h}in;zoom:${plPaperFit(PL_COVER.w, PL_COVER.h, "cover")}">${plHTML(l, plVars({ ROOMS: rooms.map(r => r.name).join(', ') }), plPic(rooms))}</div></section>`;
+}
+// Layouts are drawn for Letter sideways; on other paper the cover is scaled to fit the sheet and the title block to the
+// width inside the margins (uniformly, so text keeps its shape).
+function plPaperFit(w, h, kind) {
+  const pg = typeof mpPaper === 'function' ? mpPaper() : null; if (!pg) return 1;
+  return +(kind === 'cover' ? Math.min(pg.w / w, pg.h / h) : Math.min(1.6, pg.iw / w)).toFixed(4);
 }
 // The title block across the bottom of a drawing page, or the plain strip when the preset has none.
 function printBlock(pr, room, what) {
   const l = plFor(pr, 'block'); if (!l) return null;
-  return `<footer class="pl-block" style="height:${l.h || 0.85}in"><div class="pl-box" style="width:${PL_BLOCK_W}in;height:${l.h || 0.85}in">${plHTML(l, plVars({ ROOM: room, SHEET: what }), plPic())}</div></footer>`;
+  const z = plPaperFit(PL_BLOCK_W, 0, "block");
+  return `<footer class="pl-block" style="height:${(l.h || 0.85) * z}in"><div class="pl-box" style="width:${PL_BLOCK_W}in;height:${l.h || 0.85}in;zoom:${z}">${plHTML(l, plVars({ ROOM: room, SHEET: what }), plPic())}</div></footer>`;
 }
 
 /* ----- Symbols: ready pieces to drop on a layout ----- */

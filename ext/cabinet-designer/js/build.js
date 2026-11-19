@@ -1216,6 +1216,16 @@ function countertopRuns() {
   });
   // Corners where two tops meet: mitered or one running through (ctjoint.js). Reshapes the tops and their lengths.
   runs.corners = typeof ctjApply === 'function' ? ctjApply(runs) : [];
+  // 0.59.1 (Ayden 2026-11-19, right-click a top's edge in the Tops tab): each top's backsplash height (bs on the run, or
+  // the style's) and waterfall ends (wfS / wfE: the top turns down to the floor at that end, only where no corner joins).
+  // area: what the top is priced and counted by, its face plus any waterfall panels.
+  runs.forEach(r => {
+    const st = r.generic ? (S.genTops || []).find(g => g.id === r.generic) || {} : r.o || {};
+    r.bs = has(st, 'bs') && st.bs !== '' ? Math.max(0, +st.bs || 0) : Math.max(0, +r.tpl.backsplash || 0);
+    const j = r.joints || {}, wfH = r.top + r.thick;
+    r.wfS = !!st.wfS && !j.S; r.wfE = !!st.wfE && !j.E;
+    r.area = r.len * r.depth + ((r.wfS ? 1 : 0) + (r.wfE ? 1 : 0)) * wfH * r.depth;
+  });
   return runs;
 }
 

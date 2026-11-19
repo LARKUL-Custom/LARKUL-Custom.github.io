@@ -365,7 +365,8 @@ function fixtElevSVG(w, side, L, fs, holes) {
       else if (f.kind === 'ucfridge') s += `<rect class="fx-glass nss" x="${x + 2}" y="${y + 3}" width="${f.w - 4}" height="${f.h - 9}"/>`;
       else if (f.kind === 'range') s += `<path class="fx-line nss" d="M${x} ${y + 4}H${x + f.w}"/><rect class="fx-glass nss" x="${x + 3}" y="${y + 9}" width="${f.w - 6}" height="${f.h * 0.42}"/>`;
       else if (f.kind === 'washer' || f.kind === 'dryer') s += `<path class="fx-line nss" d="M${x} ${y + 6}H${x + f.w}"/><circle class="fx-glass nss" cx="${x + f.w / 2}" cy="${y + 6 + (f.h - 6) * 0.48}" r="${Math.min(f.w, f.h) * 0.3}"/>`;
-      if (fixtDef(f).ab) s += `<text class="lbl-m fx-lbl" x="${x + f.w / 2}" y="${y + f.h * 0.82}" font-size="${fs}" text-anchor="middle" pointer-events="none">${esc(fixtName(f))}</text>`;
+      // On paper every appliance is named, so the builders can tell a fridge from an opening.
+      if (fixtDef(f).ab || (ui.printing && !fixtHole(f))) s += `<text class="lbl-m fx-lbl" x="${x + f.w / 2}" y="${y + f.h * 0.82}" font-size="${fs}" text-anchor="middle" pointer-events="none">${esc(fixtName(f))}</text>`;
       s += `<rect class="ev-hit" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
       if (sel) s += `<rect class="ev-halo nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/><rect class="ev-sel nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
     }

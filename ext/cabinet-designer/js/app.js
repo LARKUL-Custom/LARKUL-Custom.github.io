@@ -797,7 +797,10 @@ document.addEventListener('pointerup', e => {
 }, true);
 document.addEventListener('contextmenu', e => { if (e.target.closest('#plan,#elev,#room3d,#ctxmenu')) e.preventDefault(); });
 // Tops tab: right-click (or click) a corner of the tops for its joint.
-document.addEventListener('contextmenu', e => { const cj = e.target.closest && e.target.closest('.ctp-svg [data-ctj]'); if (!cj) return; e.preventDefault(); ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); });
+document.addEventListener('contextmenu', e => {
+  const cj = e.target.closest && e.target.closest('.ctp-svg [data-ctj]'), ce = !cj && e.target.closest && e.target.closest('.ctp-svg [data-ctedge]');
+  if (cj) { e.preventDefault(); ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); } else if (ce) { e.preventDefault(); ctjEdgeCtx(ce.dataset.ctedge, e.clientX, e.clientY); }
+});
 document.addEventListener('click', e => { const cj = e.target.closest && e.target.closest('.ctp-svg [data-ctj]'); if (!cj) return; e.stopPropagation(); ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); }, true);
 window.addEventListener('blur', hideCtx);
 // Touch screens: press and hold on a cabinet or wall for the same menu a right-click opens.

@@ -3604,3 +3604,38 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .mp-tops .ctp-spec{font-size:10px;margin-top:6px}
 .mp-tops .ctp-spec td{vertical-align:top}
 .mp-tops .mp-note{font-size:9px;color:#555;margin-top:4px}
+.ctp-edge{stroke:transparent;pointer-events:stroke;cursor:context-menu}
+.ctp-edge:hover{stroke:var(--accent);stroke-opacity:.35}
+.ctp-bs{fill:var(--ink);fill-opacity:.55;pointer-events:none}
+.ctp-wf{fill:var(--ink);fill-opacity:.8;pointer-events:none}
+.ctp-print .ctp-bs{fill:#555}.ctp-print .ctp-wf{fill:#111}
+.ctxmenu .ctx-in{display:flex;align-items:center;gap:8px;padding:6px 10px}
+.ctxmenu .ctx-in input{width:80px}
+/* 0.59.2 Print: paper size and direction per preset (libs2.js mpPaper), a bar that stays on top with Back to the job,
+   walls with one dark outline, appliances in dark lines and named, flowing list pages. */
+.mpsheet{padding-top:0}
+.mpsheet .mp-bar{position:sticky;top:0;z-index:5;background:var(--bg);flex-direction:column;align-items:stretch;gap:8px;padding:10px 0;margin:0 0 6px;border-bottom:1px solid var(--line)}
+.mp-barrow{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.mp-barrow .row-actions{margin-left:auto}
+.mp-bt{font-size:18px;align-self:center}
+.mp-back{font-weight:600}
+.mp-orient button{min-height:34px}
+.mp-flow table{width:100%}
+.mp-flow tr{break-inside:avoid;page-break-inside:avoid}
+.mp-flow thead{display:table-header-group}
+.mp-draw{--line-strong:#333}
+.mp-draw .pwall-o polygon{fill:#111;stroke:#111;stroke-width:2.4;stroke-linejoin:miter}
+.mp-draw .wallpoly{fill:#d4d4d4;stroke:none}
+.mp-draw .wallpoly.cap{fill-opacity:1}
+.mp-draw .ev-wall{stroke:#111;stroke-width:.8}
+.mp-draw .ev-endwall{fill:#d4d4d4;stroke:#111;stroke-width:.8}
+.mp-draw .fixt{stroke:#222;stroke-width:1}
+.mp-draw .fx-lbl{fill:#111;font-weight:600}
+.mp-line .mp-draw .fx-glass{fill:#fff;stroke:#333}
+.mp-line .mp-draw .fixt{fill:#f4f4f4}
+.mp-fx b{color:#555}
+.mp-tops .ctp-print{flex:1 1 auto;height:auto;min-height:2.4in}
+.mp-draw .ev-endwall{fill-opacity:1}
+.seg.mp-orient{flex-wrap:nowrap}
+.mp-flow table.mp-t{width:100%!important;max-width:none}
+.mp-barrow > .f{flex:none}

@@ -38,10 +38,13 @@ function renderPlan(pr) {
   s += `<g class="cab-lbls" pointer-events="none">${planLabelBuf.join('')}</g>`; planLabelBuf = null;
   s += shapesPlanSVG();
   s += lightsPlanSVG(px);
-  // walls
+  // walls. On paper they get one dark outline round all of them (drawn wide underneath, the fills cover the joints),
+  // so corners read as one wall like an architect's plan instead of grey bars laid over each other.
+  const pwalls = ui.printing ? [] : null; s += '%%PWALL%%';
   S.walls.forEach(w => {
     const g = wg(w), h = w.thick / 2, P = (a, b) => ({ x: w.x1 + g.u.x * a + g.n.x * b, y: w.y1 + g.u.y * a + g.n.y * b });
     const isSel = ui.sel && ui.sel.type === 'wall' && ui.sel.id === w.id;
+    if (pwalls && !w.hidden) { pwalls.push(polyPts([P(-h, -h), P(g.L + h, -h), P(g.L + h, h), P(-h, h)])); capsOf(w).forEach(cp => pwalls.push(polyPts(capPoly(w, cp)))); }
     // An island line (see-through wall) shows as a dashed line.
     if (w.hidden) s += `<line class="wallhid nss${isSel ? ' sel' : ''}" data-wall="${w.id}" x1="${w.x1}" y1="${w.y1}" x2="${w.x2}" y2="${w.y2}" stroke-width="${Math.max(2 * px, w.thick)}" stroke-dasharray="${6 * px} ${4 * px}"/>`;
     else s += `<polygon class="wallpoly nss${isSel ? ' sel' : ''}" data-wall="${w.id}" points="${polyPts([P(-h, -h), P(g.L + h, -h), P(g.L + h, h), P(-h, h)])}"/>`;
@@ -56,6 +59,7 @@ function renderPlan(pr) {
     s += `<text class="lbl dimtxt walltxt" x="${m.x}" y="${m.y}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${m.x} ${m.y})"><tspan font-weight="600">${wallName(w)}</tspan> · ${fmtLen(g.L, 1)}</text>`;
     if (isSel) [[w.x1, w.y1], [w.x2, w.y2]].forEach(([x, y]) => { s += `<circle class="handle nss" cx="${x}" cy="${y}" r="${7 * px}"/>`; });
   });
+  s = s.replace('%%PWALL%%', pwalls && pwalls.length ? `<g class="pwall-o">${pwalls.map(p => `<polygon class="nss" points="${p}"/>`).join('')}</g>` : '');
   s += fixtPlanSVG();
   // ghost (placing from the library, or drag and drop)
   const gl = ui.ghost && libItem(ui.ghostLib || ui.placing);
@@ -848,7 +852,9 @@ function renderElev(pr) {
   countertopRuns().filter(rn => rn.on && rn.wall === w.id && rn.side === side).forEach(rn => {
     const a = side === 1 ? ctX0(rn) : L - ctX1(rn), m = texLook(mat(rn.tpl.mat), 'tops'); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-top')} x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}"/>`;
-    if (rn.tpl.backsplash > 0) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? rn.start : L - rn.end}" y="${-(rn.top + rn.thick + rn.tpl.backsplash)}" width="${rn.end - rn.start}" height="${rn.tpl.backsplash}" opacity=".75"/>`;
+    if (rn.bs > 0) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? rn.start : L - rn.end}" y="${-(rn.top + rn.thick + rn.bs)}" width="${rn.end - rn.start}" height="${rn.bs}" opacity=".75"/>`;
+    // Waterfall ends: the top turns down to the floor.
+    [['S', ctX0(rn)], ['E', ctX1(rn) - rn.thick]].forEach(([e, x]) => { if (rn['wf' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - rn.thick}" y="${-rn.top}" width="${rn.thick}" height="${rn.top}"/>`; });
   });
   moldingRuns().filter(rn => rn.wall === w.id && rn.side === side).forEach(rn => {
     const a = side === 1 ? rn.start - rn.extS : L - rn.end - rn.extE, m = typeof moldLook === 'function' ? moldLook(rn) : mat(rn.m.mat); mats.push(m && m.id);

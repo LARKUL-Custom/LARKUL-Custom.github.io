@@ -185,7 +185,7 @@ function materialUsage() {
       });
       Object.entries(b.bom).forEach(([k, q]) => bom[k] = (bom[k] || 0) + q);
     });
-    countertopRuns().filter(r => r.on).forEach(r => { const u = use[r.tpl.mat]; if (u) { u.area += r.len * r.depth; u.count++; } });
+    countertopRuns().filter(r => r.on).forEach(r => { const u = use[r.tpl.mat]; if (u) { u.area += r.area ?? r.len * r.depth; u.count++; } });
     moldingRuns().forEach(r => { const u = use[r.m.mat]; if (u) { u.area += r.len * r.h * 1.1; u.count++; } });
   }));
   return { use, bom };
@@ -867,7 +867,7 @@ function topsPlanSVG(runs, o = {}) {
   let svg = walls.map(w => `<line class="ctp-wall" x1="${w.x1}" y1="${w.y1}" x2="${w.x2}" y2="${w.y2}" stroke-width="${w.thick || 4.5}"/>`).join('');
   svg += S.cabinets.filter(c => c.cat !== 'Wall').map(c => { const p = cabPoly(c); return p ? `<polygon class="ctp-cab" points="${polyPts(p)}"/>` : ''; }).join('');
   const P2 = q => `${r3(q.x)} ${r3(q.y)}`, ring = pts => 'M' + pts.map(P2).join('L') + 'Z';
-  let dims = '', labels = '';
+  let dims = '', labels = '', edges = '';
   runs.forEach((r, i) => {
     const p = polys[i]; if (!p) return;
     const ts = typeof topWithSinks === 'function' ? topWithSinks(r) : null;
@@ -895,6 +895,15 @@ function topsPlanSVG(runs, o = {}) {
     if (endA !== null) {
       const e = !jS ? a0 : a1, A = P(endA, 0), B = P(endA, D), tk = dfs * 0.35;
       dims += `<g class="ctp-dl"><path d="M${P2(P(e, 0))}L${P2(P(endA + (endA < e ? -0.4 : 0.4) * dfs, 0))}M${P2(P(e, D))}L${P2(P(endA + (endA < e ? -0.4 : 0.4) * dfs, D))}M${P2(A)}L${P2(B)}M${P2(P(endA - tk, -tk))}L${P2(P(endA + tk, tk))}M${P2(P(endA - tk, D - tk))}L${P2(P(endA + tk, D + tk))}"/>${txt(P(endA + (endA < e ? -1 : 1) * dfs * 0.75, D / 2), fmtLen(r3(D), 1), dfs, 'ctp-dt', up(ang + 90))}</g>`;
+    }
+    // Backsplash along the back and waterfall ends, drawn on the top; right-click the back or a free end to change them.
+    if (r.bs > 0) { svg += `<path class="ctp-bs" d="M${P2(P(a0, 0))}L${P2(P(a1, 0))}L${P2(P(a1, Math.min(1.5, D / 4)))}L${P2(P(a0, Math.min(1.5, D / 4)))}Z"/>`; labels += txt(P((a0 + a1) / 2 + (a1 - a0) * 0.3, dfs * 0.9), `${fmtLen(r.bs, 1)} splash`, dfs * 0.7, 'ctp-st'); }
+    [['S', a0, a0 + r.thick], ['E', a1 - r.thick, a1]].forEach(([e, u0, u1]) => { if (!r['wf' + e]) return; svg += `<path class="ctp-wf" d="M${P2(P(u0, 0))}L${P2(P(u1, 0))}L${P2(P(u1, D))}L${P2(P(u0, D))}Z"/>`; labels += txt(P(e === 'S' ? u1 + dfs * 0.9 : u0 - dfs * 0.9, D / 2), 'waterfall', dfs * 0.7, 'ctp-st', up(ang + 90)); });
+    if (!o.print) {
+      const hw = r3(dfs * 0.9), hit = (q0, q1, part, tip) => `<line class="ctp-edge" data-ctedge="${esc(r.key + '|' + part)}" x1="${r3(q0.x)}" y1="${r3(q0.y)}" x2="${r3(q1.x)}" y2="${r3(q1.y)}" stroke-width="${hw}"><title>${tip}</title></line>`;
+      edges += hit(P(a0, 0), P(a1, 0), 'back', 'Right-click for the backsplash');
+      if (!jS) edges += hit(P(a0, 0), P(a0, D), 'S', 'Right-click to waterfall this end');
+      if (!jE) edges += hit(P(a1, 0), P(a1, D), 'E', 'Right-click to waterfall this end');
     }
     // Sinks: centre line from the left end, the cutout's size and corners, and how far back from the front edge.
     (ts ? ts.sinks : []).forEach(({ f: fx, k }) => {
@@ -929,21 +938,21 @@ function topsPlanSVG(runs, o = {}) {
   });
   // Grow the frame to take in the dimensions.
   const X0 = x0 - fs * 2, Y0 = y0 - fs * 2, W0 = x1 - x0 + fs * 4, H0 = y1 - y0 + fs * 4;
-  return `<svg class="ctp-svg${o.print ? ' ctp-print' : ''}" viewBox="${r3(X0)} ${r3(Y0)} ${r3(W0)} ${r3(H0)}" preserveAspectRatio="xMidYMid meet"${o.print ? ' role="img" aria-label="Countertop layout"' : ''}>${svg}<g class="ctp-dims" pointer-events="none">${dims}</g>${labels}</svg>`;
+  return `<svg class="ctp-svg${o.print ? ' ctp-print' : ''}" viewBox="${r3(X0)} ${r3(Y0)} ${r3(W0)} ${r3(H0)}" preserveAspectRatio="xMidYMid meet"${o.print ? ' role="img" aria-label="Countertop layout"' : ''}>${svg}<g class="ctp-dims" pointer-events="none">${dims}</g>${labels}${edges}</svg>`;
 }
 // What a countertop shop needs for each top, as table rows: size, style, edges, ends, corners and the sink cutouts.
 function topsSpecRows(runs) {
   return runs.filter(r => r.on && wall(r.wall)).map(r => {
     const i = runs.indexOf(r), t = r.tpl || {}, m = mat(t.mat) || {}, w = wall(r.wall), j = r.joints || {};
     const lName = r.side === 1 ? 'S' : 'E', rName = r.side === 1 ? 'E' : 'S';
-    const endTxt = e => j[e] ? (j[e] === 'mitered' ? 'mitered corner' : j[e] === 'runs through' ? 'runs through the corner' : 'butts the other top') : r['block' + e] ? 'wall / tall cabinet' : `open, ${fmtLen(r['ov' + e] || 0, 1)} overhang, finished`;
+    const endTxt = e => r['wf' + e] ? `waterfall to the floor (${fmtLen(r3(r.top + r.thick), 1)} tall)` : j[e] ? (j[e] === 'mitered' ? 'mitered corner' : j[e] === 'runs through' ? 'runs through the corner' : 'butts the other top') : r['block' + e] ? 'wall / tall cabinet' : `open, ${fmtLen(r['ov' + e] || 0, 1)} overhang, finished`;
     const sinks = (typeof runSinks === 'function' ? runSinks(r) : []).map(({ f, k }) => {
       const cx = (k.x0 + k.x1) / 2, left = r.side === 1 ? ctX0(r) : ctX1(r);
       return `${esc(fixtName(f))}: ${{ under: 'undermount', drop: 'drop-in', apron: 'apron front' }[k.mount]}, cutout ${fmtLen(k.w, 1)} × ${fmtLen(k.d, 1)}${k.oval ? ' oval' : k.r ? `, R ${fmtLen(k.r, 1)} corners` : ''}, centre line ${fmtLen(r3(Math.abs(cx - left)), 1)} from the left end${k.open ? ', open at the front' : `, ${fmtLen(k.front, 1)} back from the front edge`}`;
     }).join('<br>');
     const edge = typeof TOP_EDGES !== 'undefined' && t.edge ? (TOP_EDGES.find(e => e[0] === t.edge) || [0, ''])[1] : '';
     return `<tr><td><b>${i + 1}</b></td><td>${esc(wallName(w))}</td><td>${esc(r.generic ? r.name : t.name || '')}<br><span class="muted">${esc(m.name || '')}${t.thick ? ' · ' + fmtLen(r.thick) + ' thick' : ''}</span></td><td class="n">${fmtLen(r3(ctX1(r) - ctX0(r)), 1)}</td><td class="n">${fmtLen(r3(r.depth), 1)}</td>
-      <td>${edge ? esc(edge) + ' front' : 'Front'}${+t.backsplash > 0 ? `<br>${fmtLen(t.backsplash, 1)} backsplash` : ''}</td><td>Left: ${endTxt(lName)}<br>Right: ${endTxt(rName)}</td><td>${sinks || '<span class="muted">None</span>'}</td></tr>`;
+      <td>${edge ? esc(edge) + ' front' : 'Front'}${r.bs > 0 ? `<br>${fmtLen(r.bs, 1)} backsplash` : '<br>No backsplash'}</td><td>Left: ${endTxt(lName)}<br>Right: ${endTxt(rName)}</td><td>${sinks || '<span class="muted">None</span>'}</td></tr>`;
   }).join('');
 }
 // A printed page for the countertop shop: the room's tops with their sizes drawn on, and the list under it.
@@ -975,7 +984,7 @@ function topSectionSVG(t) {
 }
 function renderCountertops() {
   const runs = countertopRuns(), topOpts = opts(S.countertops), room = curRoom(), auto = room.autoTops !== false;
-  const on = runs.filter(r => r.on), sq = on.reduce((a, r) => a + r.len * r.depth / 144, 0), lf = on.reduce((a, r) => a + r.len, 0) / 12;
+  const on = runs.filter(r => r.on), sq = on.reduce((a, r) => a + (r.area ?? r.len * r.depth) / 144, 0), lf = on.reduce((a, r) => a + r.len, 0) / 12;
   const view = ui.topView === 'styles' ? 'styles' : 'runs';
   const id = pickId('top', S.countertops), t = S.countertops.find(x => x.id === id) || S.countertops[0];
   const usedRuns = x => S.rooms.reduce((n, r) => n + withRoom(r, () => countertopRuns().filter(q => q.on && q.tpl && q.tpl.id === x.id).length), 0);
@@ -991,7 +1000,7 @@ function renderCountertops() {
     return `<tr class="${r.on ? '' : 'off'}${ui.topRun === r.key ? ' on' : ''}"><td><span class="ctx-num" style="background:${r.on ? col : 'var(--muted)'}">${i + 1}</span></td><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(cid => LBL[cid]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts, label: 'Style' })}</td><td class="n">${fmtLen(r.len, 1)}</td><td class="n">${fmtLen(r.depth, 1)}</td>
       <td style="width:84px">${ctl(R, 'ovS', r.ovS, 'len', { label: 'Start overhang' })}</td><td style="width:84px">${ctl(R, 'ovE', r.ovE, 'len', { label: 'End overhang' })}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td></tr>`;
   }).join('');
-  const runsBody = `<div class="psec box ctx-plan">${secHead('home', `${esc(room.name)} from above`, 'amber')}${topsPlanSVG(runs)}${(runs.corners || []).length ? '<div class="note help">Right-click a corner to miter the tops or pick which one runs through.</div>' : ''}</div>
+  const runsBody = `<div class="psec box ctx-plan">${secHead('home', `${esc(room.name)} from above`, 'amber')}${topsPlanSVG(runs)}<div class="note help">Right-click a top's back edge for its backsplash, an open end to waterfall it${(runs.corners || []).length ? ', or a corner to miter the tops or pick which one runs through' : ''}.</div></div>
     <div class="psec box">${secHead('ruler', 'Automatic runs', 'teal')}${auto ? '' : '<div class="note show">Automatic tops are off in this room. Auto build countertops on the right lays a top on every run of base cabinets.</div>'}
       ${autoRows ? `<div class="tscroll"><table class="t ctx-t"><thead><tr><th>#</th><th>Wall</th><th>Cabinets</th><th>Style</th><th class="r">Length</th><th class="r">Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${autoRows}</tbody></table></div>` : auto ? '<div class="note show">Place base cabinets to get countertop runs.</div>' : ''}</div>
     ${(S.genTops || []).length ? genTopsCard(topOpts) : ''}`;

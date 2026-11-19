@@ -2,8 +2,11 @@
 // of each room and 3D pictures, as landscape pages the builders can read. Lists (cut list, hardware) stay in libs2.js.
 'use strict';
 
-// Page drawing area in CSS pixels: letter landscape less the margins, the page header and (elevations) the cabinet list.
-const PRINT_ELEV = { w: 980, h: 500 }, PRINT_PLAN = { w: 980, h: 640 };
+// Page drawing area in CSS pixels: the preset's paper less the margins, the title block and (elevations) the cabinet list.
+function printArea(kind) {
+  const pg = typeof mpPaper === 'function' ? mpPaper() : { iw: 10.3, ih: 7.8 };
+  return { w: Math.round(pg.iw * 96), h: Math.round(Math.max(2, pg.ih - (kind === 'elev' ? 1.55 : 1.05)) * 96) };
+}
 
 // Draws with nothing picked, dragged, opened or zoomed, so the paper shows the job and not the screen.
 function printQuiet(fn) {
@@ -23,12 +26,16 @@ function printWallSides(room) {
   }));
 }
 
+const elevFx = (f, L, side) => side === 1 ? f.off : L - f.off - f.w;
 // One wall side's elevation as a page: the drawing with its dimensions, and the cabinets on it listed by number.
 function printElevPage(room, { w, side, name }, head) {
   return withRoom(room, () => printQuiet(() => {
-    const d = renderElev({ wall: w, side, ...PRINT_ELEV }); if (!d) return '';
+    const d = renderElev({ wall: w, side, ...printArea('elev') }); if (!d) return '';
     const L = wg(w).L, cs = S.cabinets.filter(c => c.wall === w.id && c.side === side).sort((a, b) => (a.cat === 'Wall') - (b.cat === 'Wall') || elevX(a, L) - elevX(b, L));
-    const list = cs.map(c => `<div class="mp-cab"><b>${esc(LBL[c.id] || '')}</b> ${esc(c.name)} <span>${fmtLen(c.w)} W × ${fmtLen(c.h)} H × ${fmtLen(c.d)} D${c.notes ? ' · ' + esc(c.notes.split('\n')[0]) : ''}</span></div>`).join('');
+    const list = cs.map(c => `<div class="mp-cab"><b>${esc(LBL[c.id] || '')}</b> ${esc(c.name)} <span>${fmtLen(c.w)} W × ${fmtLen(c.h)} H × ${fmtLen(c.d)} D${c.notes ? ' · ' + esc(c.notes.split('\n')[0]) : ''}</span></div>`).join('')
+      // The appliances on this wall too (fridge, range, dishwasher, sink), so the builders know the openings they need.
+      + fixtList().filter(f => f.wall === w.id && f.side === side && !fixtHole(f)).sort((a, b) => elevFx(a, L, side) - elevFx(b, L, side))
+        .map(f => `<div class="mp-cab mp-fx"><b>Appliance</b> ${esc(fixtName(f))} <span>${fmtLen(f.w)} W × ${fmtLen(f.h)} H${f.d ? ' × ' + fmtLen(f.d) + ' D' : ''}</span></div>`).join('');
     return `<section class="mp-page land mp-draw">${head(room.name, name + ' · ' + fmtLen(L, 1))}
       <svg class="mp-svg" viewBox="${d.vb}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(name)} elevation">${d.html}</svg>
       ${list ? `<div class="mp-cabs">${list}</div>` : ''}</section>`;
@@ -44,9 +51,9 @@ function printPlanPage(room, head) {
     if (!pts.length) return '';
     let x0 = Math.min(...pts.map(p => p.x)), x1 = Math.max(...pts.map(p => p.x)), y0 = Math.min(...pts.map(p => p.y)), y1 = Math.max(...pts.map(p => p.y));
     const pad = 30; x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
-    const ar = PRINT_PLAN.h / PRINT_PLAN.w; let vw = x1 - x0; if ((y1 - y0) / vw > ar) vw = (y1 - y0) / ar;
+    const PA = printArea('plan'), ar = PA.h / PA.w; let vw = x1 - x0; if ((y1 - y0) / vw > ar) vw = (y1 - y0) / ar;
     const view = { x: (x0 + x1) / 2 - vw / 2, y: (y0 + y1) / 2 - vw * ar / 2, w: vw, h: vw * ar };
-    const d = renderPlan({ view, ...PRINT_PLAN }); if (!d) return '';
+    const d = renderPlan({ view, ...PA }); if (!d) return '';
     return `<section class="mp-page land mp-draw">${head(room.name, 'Floor plan')}<svg class="mp-svg" viewBox="${d.vb}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(room.name)} floor plan">${d.html}</svg></section>`;
   }));
 }
@@ -143,7 +150,7 @@ function printPic(key, shot) {
 }
 function print3DPages(room, head) {
   return print3DViews(room).map(vw => {
-    const key = room.id + '|' + vw.id, url = printPic(key, () => print3DShot(room, vw));
+    const PA = printArea('plan'), aspect = PA.w / PA.h, key = room.id + '|' + vw.id + '|' + aspect.toFixed(2), url = printPic(key, () => print3DShot(room, vw, { aspect, fit: true }));
     if (!url) return '';
     return `<section class="mp-page land mp-draw">${head(room.name, vw.name || '3D view')}<div class="mp-pic"><img src="${url}" alt="${esc(room.name)} ${esc(vw.name || '3D view')}" data-pic="${esc(key)}"></div></section>`;
   }).join('');
@@ -202,10 +209,16 @@ function printSpecRows(room) {
     return { rows, odd };
   });
 }
+// Two rooms to a page, so a big job's specs never run off the bottom.
 function printSpecPage(pr, rooms, head) {
+  const out = [];
+  for (let i = 0; i < Math.max(1, rooms.length); i += 2) out.push(printSpecSheet(pr, rooms.slice(i, i + 2), head, rooms.length, i === 0));
+  return out.join('');
+}
+function printSpecSheet(pr, rooms, head, all, first) {
   const cards = rooms.map(room => {
     const { rows, odd } = printSpecRows(room);
     return `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v || '—'}</td></tr>`).join('')}</table>${odd.length ? `<div class="mp-odd"><b>Different on these cabinets</b><br>${odd.join('<br>')}</div>` : ''}</div>`;
   }).join('');
-  return `<section class="mp-page land mp-draw">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Job specs')}<div class="mp-specs">${cards}</div>${S.job.notes ? `<div class="mp-notes"><b>Notes</b> ${esc(S.job.notes)}</div>` : ''}</section>`;
+  return `<section class="mp-page land mp-draw">${head(all > 2 ? rooms.map(r => r.name).join(', ') : all > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Job specs')}<div class="mp-specs">${cards}</div>${first && S.job.notes ? `<div class="mp-notes"><b>Notes</b> ${esc(S.job.notes)}</div>` : ''}</section>`;
 }
