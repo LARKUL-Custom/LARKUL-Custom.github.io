@@ -29,7 +29,7 @@ const opts = (arr, filter) => arr.filter(filter || (() => true)).map(m => ({ v: 
 // Options for a pick that can follow the level above: cabinet follows its room, a room follows the job.
 function setOpts(k, list, level = 'room') {
   const inh = level === 'cab' ? roomSet(k) : S.job.defaults[k] || '';
-  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'same as the doors' : 'none');
+  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'flat slab' : 'none');
   return [{ v: '', l: `${level === 'cab' ? 'Room' : 'Job'} · ${nm}` }, ...list];
 }
 // L1: name pickers list A to Z under their group headers.

@@ -683,7 +683,7 @@ function panelSideSVG(d, ds, m, H = 34.5, D = 24) {
 }
 function renderPanels() {
   // The panel's look and price come from a door style (Settings › Cabinet and panels); this library keeps only how it fits.
-  const ds = doorStyle(roomSet('panelDoor') || doorTpl(roomSet('doorT')).door), m = mat(ds.mat);
+  const ds = doorStyle(panelDoorPick(roomSet('panelDoor'), doorTpl(roomSet('doorT')), 'Base')), m = mat(ds.mat);
   const used = d => usedBy(c => (hasPanel(c, 'L') || hasPanel(c, 'R')) && cabSet(c, 'panelStyle') === d.id);
   const head = `<div class="pagehead"><div><h2>Applied panels</h2><p>Finished end panels for exposed cabinet sides. Each panel is made and priced in a door style picked for the job or room under Settings › Cabinet and panels. These only set how the panel fits.</p></div><div class="row-actions"><button class="btn primary" data-act="panel-add">${icon('plus')}Add panel fit</button></div></div>`;
   const mini = d => `<svg viewBox="-1 -36 28 37"><rect ${fillFor(m, 'ev-front')} x="0" y="-34.5" width="${24 + d.frontOverhang + d.scribe}" height="${d.toFloor ? 34.5 : 30.5}"/></svg>`;

@@ -6,7 +6,7 @@ const NF0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const NF2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), NF1 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const money = v => '$' + NF2.format(Math.round(v * 100) / 100);
 // Inserts, doors and fronts, and materials are priced in their own libraries; the sheet keeps labor adders only.
-const PRICE_ADDERS = [['perDrawer', 'Each drawer, extra (box and labor are in the box price below; slides are hardware)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
+const PRICE_ADDERS = [['perDrawer', 'Each drawer, extra (box and labor are in the box price below; slides are hardware)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler, on top of its material (cutting to fit)'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
@@ -91,8 +91,8 @@ function defaultPriceSheet(name = 'Standard pricing') {
     groupMarkup: { ...MZK.groupMarkup }, payments: MZK.payments.map(x => ({ ...x })),
     cab: { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } },
     products: {},
-    adders: { perDrawer: 0, perShelf: 12, perFiller: 25, perPull: 3 },
-    panelAdd: { Base: 0, Wall: 0, Tall: 0 },
+    adders: { perDrawer: 0, perShelf: 12, perFiller: 35, perPull: 3 },
+    panelAdd: { Base: 25, Wall: 25, Tall: 25 },
     doors: { on: true },
     materials: { on: false, waste: 15 },
     hardware: { on: true, items: hardware },
@@ -282,7 +282,10 @@ function priceCab(c, ps) {
   const extras = nPull * (+ad.perPull || 0) + nDr * ((+ad.perDrawer || 0) + boxEach) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied');
-  const ends = panelParts.reduce((a, pt) => a + pt.qty * ((ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0) + panelAdd(ps, c.cat)), 0) + fillersOf(c).length * (+ad.perFiller || 0);
+  // 0.59.21 (Ayden 2026-11-19): a flat slab end panel is its material by the sq ft plus the sheet's charge per panel ($25), like a
+  // loose panel. A panel in a framed door style (shaker...) is priced as that door, as before.
+  const slabP = pds.type === 'slab';
+  const ends = panelParts.reduce((a, pt) => { const m = mat(pt.mat); return a + pt.qty * (slabP ? (m ? pt.L * pt.W * matSqIn(m, ps) : 0) + panelAdd(ps, c.cat) : ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0); }, 0) + fillerPrice(c, b, ps);
   let hardware = 0;
   if (ps.hardware.on) Object.entries(b.bom).forEach(([k, q]) => { hardware += q * (+ps.hardware.items[k] || 0); });
   hardware *= gMark(ps, 'hardware');
@@ -304,6 +307,14 @@ function priceCab(c, ps) {
 const DBX_PRICES = [[/melamine/i, 28], [/solid|hardwood/i, 110], [/birch|ply/i, 70]];
 const dbxDefault = t => { const n = (t && t.name) || '', hit = DBX_PRICES.find(([re]) => re.test(n)); return hit ? hit[1] : 0; };
 const dbxPrice = (ps, t) => { if (!t) return 0; const v = (ps.drawerBox || {})[t.id]; return v !== '' && v != null && isFinite(+v) ? +v : dbxDefault(t); };
+// 0.59.22 (Ayden 2026-11-19: fillers "need to be closer to 40 because we have to cut them to fit"): each wall filler is its
+// material by the sq ft plus the sheet's charge per filler ($35 by default), so about $37-40.
+function fillerPrice(c, b, ps) {
+  const n = fillersOf(c).length; if (!n) return 0;
+  const parts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'filler' && /^Filler \(/.test(pt.name || ''));
+  const matAmt = parts.reduce((a, pt) => { const m = mat(pt.mat); return a + (m ? pt.L * pt.W * (pt.qty || 1) * matSqIn(m, ps) : 0); }, 0);
+  return matAmt + n * (+ps.adders.perFiller || 0);
+}
 const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
 // One door or front: its size times the style's price per sq ft (from the door library, or this job's own) plus material.
 // 0.55.34 (Ayden 2026-11-11): the style's Minimum per front ($20 by default) is a floor under that whole price, so a tiny
@@ -350,10 +361,15 @@ function insertPrice(it) {
 }
 const panelAdd = (ps, cat) => +((ps.panelAdd || {})[cat === 'Wall' || cat === 'Tall' ? cat : 'Base']) || 0;
 // The door style applied end panels are made and priced as: the job or room pick, or else the cabinet's own door.
-function panelDoor(c) {
-  const id = cabSet(c, 'panelDoor'); if (id && S.doorStyles.some(d => d.id === id)) return withFinish(doorStyle(id), c);
-  const t = doorTpl(cabSet(c, 'doorT')); return withFinish(doorStyle(c.cat === 'Wall' && t.wallDoor ? t.wallDoor : t.door), c);
+// 0.59.22 (Ayden 2026-11-19: "applied end panels are usually flat slabs but if they want their door style... i would change it"):
+// with no pick a panel is a flat slab (the door template's slab false front, else the first slab); 'same' = the door style.
+function panelSlabId(t) { const ff = t && S.doorStyles.find(d => d.id === t.falseFront && d.type === 'slab'); return (ff || S.doorStyles.find(d => d.type === 'slab') || {}).id; }
+function panelDoorPick(id, t, cat) {
+  if (id && id !== 'same' && S.doorStyles.some(d => d.id === id)) return id;
+  const door = cat === 'Wall' && t.wallDoor ? t.wallDoor : t.door;
+  return id === 'same' ? door : panelSlabId(t) || door;
 }
+function panelDoor(c) { return withFinish(doorStyle(panelDoorPick(cabSet(c, 'panelDoor'), doorTpl(cabSet(c, 'doorT')), c.cat)), c); }
 // The panel library keeps the fit (overhang, scribe, to the floor); the look comes from the door style.
 function panelFor(c) {
   const ps = panelStyle(cabSet(c, 'panelStyle')), ds = panelDoor(c), framed = ds.type !== 'slab';
@@ -402,6 +418,10 @@ function ensureLibPrices(ps) {
     if (ps.counts) { if (+ps.counts.fillers) ps.adders.perFiller = (+ps.adders.perFiller || 0) + +ps.counts.fillers; delete ps.counts.panels; delete ps.counts.fillers; }
     savePrices();
   }
+  // 0.59.22: fillers are material plus a charge each; sheets still on the old $25 go to $35 once.
+  if (ps && ps.adders && !ps.fillMat) { if (+ps.adders.perFiller === 25) ps.adders.perFiller = 35; ps.fillMat = 1; savePrices(); }
+  // 0.59.21: panels are priced by material plus a charge each; sheets with no charge yet get $25 once.
+  if (ps && !ps.panelMat) { const pa = ps.panelAdd || (ps.panelAdd = { Base: 0, Wall: 0, Tall: 0 }); if (['Base', 'Wall', 'Tall'].every(k => !+pa[k])) Object.assign(pa, { Base: 25, Wall: 25, Tall: 25 }); ps.panelMat = 1; savePrices(); }
   if (moved) save();
 }
 function priceJob(ps) {
@@ -613,7 +633,7 @@ function priceEditor(ps) {
     <div class="note">Box and labor for each drawer (slides are priced as hardware). Blank uses the shop price for that kind of box: melamine $28, Baltic birch or ply $70, solid wood $110.</div></div>
     <div class="note">Each insert has its own price in Libraries › Inserts.</div></div></div>
   <div class="psec box prx-sec" id="ps-panel">${secHead('box', 'Panels', 'teal')}<div class="prx-h"><span class="note">Each panel, by height</span></div><div class="cardbody">${PANEL_CATS.map(([k, l]) => fld(l, P('panelAdd'), k, (ps.panelAdd || {})[k] ?? 0, 'num')).join('')}
-    <div class="note">Applied end panels get this on top of their door style's price. Loose panels drawn in the room get it on top of their material.</div></div></div>
+    <div class="note">Each flat slab end panel and loose panel is its material by the sq ft plus this. An end panel in a framed door style (Settings › Cabinet and panels) is priced as that door instead.</div></div></div>
   <div class="psec box prx-sec" id="ps-doors">${secHead('door', 'Doors and fronts', 'amber')}<div class="prx-h">${toggleBtn('ps-doors', ps.doors.on, ps.doors.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
     <div class="note">Each door style's price per sq ft and minimum are set in the door designer (Libraries › Doors). Change them for this job only under Library prices on this job.</div></div></div>
   <div class="psec box prx-sec" id="ps-mats">${secHead('palette', 'Materials', 'violet')}<div class="prx-h">${toggleBtn('ps-mats', ps.materials.on, ps.materials.on ? 'Added to cabinets' : 'Not added')}</div><div class="cardbody">
