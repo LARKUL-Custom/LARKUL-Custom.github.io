@@ -270,7 +270,8 @@ function ensureLibPrices(ps) {
     if (om.sheets) S.materials.forEach(m => { const v = om.sheets[m.id]; if (v != null && isFinite(+v)) m.cost = +v; });
     moved = true;
   }
-  if (ps && ps.tops && S.countertops.some(t => t.id === 'top-lam2') && ps.tops['top-lam2'] === undefined) { ps.tops['top-lam2'] = 45; savePrices(); }
+  // 0.58.8 (Ayden 2026-11-19: countertops aren't his main thing): every top is one price per square foot, $70 to start.
+  if (ps && !ps.topSq) { ps.topSq = { rate: 70 }; savePrices(); }
   // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
   if (ps && ps.molds && !ps.cmold4 && S.moldings.some(m => m.id === 'mo-cmold')) { ps.molds['mo-cmold'] = 4; ps.cmold4 = 1; savePrices(); }
   // 0.57.0: concealed floating shelf brackets and in-wall blocking start at rough shop prices.
@@ -288,8 +289,8 @@ function priceJob(ps) {
     // Products priced on their own go on the room as lines of their own, never in with the cabinets.
     const own = all.filter(k => k.own).map(k => ({ name: `${k.label} ${k.c.name} (${fmtLen(k.c.w, 1)} wide)`, amount: k.total, own: true }));
     // Tops and molding are one line each for the room, not one per wall (Ayden 2026-11-06). The kinds used go in brackets.
-    const oneLine = (name, runs, kind, amt) => { if (!runs.length) return []; const kinds = [...new Set(runs.map(kind))]; return [{ name: `${name} (${kinds.join(', ')})`, amount: runs.reduce((a, x) => a + amt(x), 0) }]; };
-    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on), t => t.tpl.name, t => (typeof topRate === 'function' ? topRate(t.tpl, t.len, t.depth, +ps.tops[t.tpl.id] || 0) : t.len * t.depth / 144 * (+ps.tops[t.tpl.id] || 0)));
+    const oneLine = (name, runs, kind, amt, top) => { if (!runs.length) return []; const kinds = [...new Set(runs.map(kind))]; return [{ name: `${name} (${kinds.join(', ')})`, amount: runs.reduce((a, x) => a + amt(x), 0), ...(top ? { top: true } : {}) }]; };
+    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on), t => t.tpl.name, t => t.len * t.depth / 144 * topSqFor(ps, r), true);
     const molds = oneLine('Molding', moldingRuns(), m => m.m.name, m => m.len / 12 * (+ps.molds[m.m.id] || 0));
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));
@@ -357,7 +358,9 @@ function priceSide(ps, q, view) {
   const pin = (ref, f, v, label) => `<span class="prx-pct">${ctl(ref, f, v ?? 0, 'num', { label })}%</span>`, R = 'psh:' + ps.id, X = i => `pshp:${ps.id}:extras.${i}`;
   const pcts = ps.extras.map((x, i) => ({ x, i })).filter(({ x }) => x.per === 'pct').map(({ x, i }) => { const l = q.jobLines.find(k => k.xi === i);
     return `<tr><td>${esc(x.name)} ${pin(X(i), 'amount', x.amount, x.name + ' percent')}</td><td class="n">${money(l ? l.amount : 0)}</td></tr>`; }).join('');
-  const tot = `<table class="prx-tot"><tbody>${q.jobLines.filter(l => l.xi == null).map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}${pcts}
+  const topAmt = q.rooms.reduce((a, Rm) => a + Rm.lines.filter(l => l.top).reduce((b, l) => b + l.amount, 0), 0);
+  const topRow = q.rooms.some(Rm => Rm.lines.some(l => l.top)) || S.job.topSq != null ? `<tr class="prx-topsq"><td>Countertops <span class="prx-pct">$${ctl('job', 'topSq', topSqJob(ps), 'num', { label: 'Countertops dollars per square foot for the job', blank: true, ph: topSqRate(ps) })}/sq ft</span></td><td class="n">${money(topAmt)}</td></tr>` : '';
+  const tot = `<table class="prx-tot"><tbody>${topRow}${q.jobLines.filter(l => l.xi == null).map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}${pcts}
     <tr><td>Subtotal</td><td class="n">${money(q.sub)}</td></tr><tr><td>Markup ${pin(R, 'markup', ps.markup, 'Markup percent')}</td><td class="n">${money(q.markup)}</td></tr><tr><td>Tax ${pin(R, 'tax', ps.tax, 'Tax percent')}</td><td class="n">${money(q.tax)}</td></tr>
     <tr class="grand"><td>Total</td><td class="n">${money(q.total)}</td></tr>${(ps.payments || []).map((x, i) => { const p = q.payments.find(y => y.pi === i);
       return `<tr class="pay"><td>${esc(x.name)} ${pin(`pshp:${ps.id}:payments.${i}`, 'pct', x.pct, x.name + ' percent')}</td><td class="n">${money(p ? p.amount : 0)}</td></tr>`; }).join('')}</tbody></table>`;
@@ -366,6 +369,11 @@ function priceSide(ps, q, view) {
   return `<div class="prx-grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${nCab} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>
     <div class="prx-fts">${tiles}</div>${tot}${jump}`;
 }
+const topSqRate = ps => { const v = ((ps || {}).topSq || {}).rate; return v !== '' && v != null && isFinite(+v) ? +v : 70; };
+// Countertop $/sq ft: a room's own rate, else the job's (Pricing › Quote, left side), else the price sheet's (Ayden 2026-11-19).
+const numOr = (v, d) => v !== '' && v != null && isFinite(+v) ? +v : d;
+const topSqJob = ps => numOr(S.job.topSq, topSqRate(ps));
+const topSqFor = (ps, r) => numOr(r && r.topSq, topSqJob(ps));
 const PRICE_SECS = [['lib', 'Library prices', 'tag'], ['sheet', 'Markup and tax', 'tag'], ['install', 'Installers', 'home'], ['cab', 'Cabinets by type', 'box'], ['prod', 'Products', 'stack'], ['add', 'Adders', 'shelf'], ['panel', 'Panels', 'box'], ['doors', 'Doors and fronts', 'door'], ['mats', 'Materials', 'palette'], ['hw', 'Hardware', 'sliders'], ['paint', 'Paint', 'palette'], ['tops', 'Tops and molding', 'ruler'], ['extra', 'Extra charges', 'plus'], ['pay', 'Payment schedule', 'list']];
 // Quote's installer pick, down the right with the quote buttons.
 function installerPick(ps) {
@@ -388,7 +396,7 @@ function priceQuote(ps, q = priceJob(ps)) {
   // Paint is inside each cabinet's price, so every room's total is what to quote for that room.
   const paintNote = R => R.sq.total ? `<span class="note">Includes ${sqft(R.sq.total)} sq ft paint${+paintOf(ps).rate ? `, ${money(R.cabs.reduce((a, k) => a + k.paint, 0))}` : ''}</span>` : '';
   // A room can fold to one line (name and total) so every room's price shows at a glance. Folding only hides the table.
-  const room = (R, i) => { const shut = roomShut(R.r); return `<div class="psec box prx-room${shut ? ' shut' : ''}" id="prx-room-${i}"><button class="sechead teal prx-fold" data-act="prx-fold" data-id="${esc(R.r.id)}" aria-expanded="${!shut}" title="${shut ? 'Show' : 'Hide'} this room's cabinets">${icon('chevr', shut ? '' : 'rot90')}<span>${esc(R.r.name)}</span>${shut ? `<span class="prx-n">${R.cabs.length} ${R.cabs.length === 1 ? 'cabinet' : 'cabinets'}</span>` : ''}</button><div class="prx-roomh">${shut ? '' : paintNote(R)}<b class="money">${money(R.total)}</b></div>${shut ? '</div>' : `<div class="tscroll"><table class="t quote">
+  const room = (R, i) => { const shut = roomShut(R.r); return `<div class="psec box prx-room${shut ? ' shut' : ''}" id="prx-room-${i}"><button class="sechead teal prx-fold" data-act="prx-fold" data-id="${esc(R.r.id)}" aria-expanded="${!shut}" title="${shut ? 'Show' : 'Hide'} this room's cabinets">${icon('chevr', shut ? '' : 'rot90')}<span>${esc(R.r.name)}</span>${shut ? `<span class="prx-n">${R.cabs.length} ${R.cabs.length === 1 ? 'cabinet' : 'cabinets'}</span>` : ''}</button><div class="prx-roomh">${shut ? '' : paintNote(R)}${!shut && R.lines.some(l => l.top) ? `<span class="prx-pct prx-roomtop">Tops $${ctl('room:' + R.r.id, 'topSq', R.r.topSq ?? '', 'num', { label: R.r.name + ' countertops dollars per square foot', blank: true, ph: topSqJob(ps) })}/sq ft</span>` : ''}<b class="money">${money(R.total)}</b></div>${shut ? '</div>' : `<div class="tscroll"><table class="t quote">
     <thead><tr><th>Cabinet</th><th>Size</th><th class="r">Cabinet</th>${ps.doors.on ? '<th class="r">Doors and fronts</th>' : ''}<th class="r">Drawers, shelves, inserts</th><th class="r">Panels, fillers</th>${ps.hardware.on ? '<th class="r">Hardware</th>' : ''}${ps.materials.on ? '<th class="r">Materials</th>' : ''}<th class="r">Paint sq ft</th><th class="r">Total</th></tr></thead>
     <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || (R.lines.some(l => l.own) ? '' : '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>')}
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
@@ -445,7 +453,7 @@ function priceEditor(ps) {
     <div class="note">Price per square foot of painted surface. Leave it at 0 to only show the square footage. Pick which surfaces count on the quote.</div>${fld('Paint ($/sq ft)', P('paint'), 'rate', paintOf(ps).rate, 'num')}
     <div class="note">Parts cut from a prefinished material (melamine, prefinished plywood) are not painted. They are charged this lower rate instead. Each material says which it is in Libraries › Materials.</div>${fld('Edgebanding, prefinished ($/sq ft)', P('paint'), 'ebRate', paintOf(ps).ebRate, 'num')}</div></div>
   <div class="psec box prx-sec" id="ps-tops">${secHead('ruler', 'Tops and molding', 'violet')}<div class="prx-h"></div><div class="cardbody">
-    ${S.countertops.map(t => fld(esc(t.name) + (t.priceBy === 'ft' ? ' ($/ft)' : ' ($/sq ft)'), P('tops'), t.id, ps.tops[t.id] ?? 0, 'num')).join('')}${S.moldings.map(m => fld(esc(m.name) + ' ($/ft)', P('molds'), m.id, ps.molds[m.id] ?? 0, 'num')).join('')}</div></div>
+    ${fld('Countertops ($/sq ft)', P('topSq'), 'rate', topSqRate(ps), 'num')}<div class="note">One price for every countertop style, by the square foot of top.</div>${S.moldings.map(m => fld(esc(m.name) + ' ($/ft)', P('molds'), m.id, ps.molds[m.id] ?? 0, 'num')).join('')}</div></div>
   <div class="psec box prx-sec wide" id="ps-extra">${secHead('plus', 'Extra charges', 'teal')}<div class="prx-h"><button class="btn sm" data-act="ps-x-add">${icon('plus')}Add charge</button></div><div class="cardbody">
     ${ps.extras.map((x, i) => `<div class="xrow">${ctl(P('extras.' + i), 'name', x.name, 'text', { label: 'Charge name' })}${ctl(P('extras.' + i), 'amount', x.amount, 'num', { label: 'Amount' })}${ctl(P('extras.' + i), 'per', x.per, 'select', { label: 'Per', options: [{ v: 'job', l: 'Per job' }, { v: 'room', l: 'Per room' }, { v: 'cabinet', l: 'Per cabinet' }, { v: 'pct', l: '% of the job' }] })}<button class="btn sm danger" data-act="ps-x-del" data-id="${i}" aria-label="Remove charge">${icon('trash')}</button></div>`).join('') || '<div class="note">None</div>'}</div></div>
   <div class="psec box prx-sec wide" id="ps-pay">${secHead('list', 'Payment schedule', 'rose')}<div class="prx-h">${(() => { const t = (ps.payments || []).reduce((a, x) => a + (+x.pct || 0), 0); return `<span class="note"${t !== 100 ? ' style="color:var(--danger,#c62828)"' : ''}>Adds up to ${t}%</span>`; })()}<button class="btn sm" data-act="ps-pay-add">${icon('plus')}Add payment</button></div><div class="cardbody">

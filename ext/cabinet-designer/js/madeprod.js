@@ -263,11 +263,11 @@ function topBuildBox(t) {
   return `<div class="psec box">${secHead('stack', 'Built in the shop', 'violet')}<div class="grid2">
     ${fld('Core layers (0 = bought in)', R, 'layers', t.layers || 0, 'int')}${fld('Core material', R, 'core', t.core || '', 'select', { options: [{ v: '', l: 'Cabinet material' }, ...mats] })}
     ${fld('Front edge', R, 'edge', t.edge || 'square', 'select', { options: TOP_EDGES.map(([v, l]) => ({ v, l })) })}${fld('Side splash', R, 'sideSplash', t.sideSplash || '', 'select', { options: [{ v: '', l: 'None' }, { v: 'sinks', l: 'Only at sinks' }, { v: 'ends', l: 'Every end against a wall' }] })}
-    ${fld('Priced', R, 'priceBy', t.priceBy || 'sqft', 'select', { options: [{ v: 'sqft', l: 'By the square foot' }, { v: 'ft', l: 'By the foot' }] })}</div>
+</div>
     <div class="note help">With core layers, each run's layers, backsplash and side splashes are cut parts with the sink cutouts, and go to the CNC.</div></div>`;
 }
 // The shop's laminate top from the bids: laminate on 2 layers of 3/4" core, half bullnose, 4" splash, side splash at sinks, by the foot.
-const LAM2_TOP = { id: 'top-lam2', name: 'Laminate on 2 layers 3/4" ply, half bullnose', mat: 'm-lam', thick: 1.5, frontOverhang: 1, endOverhang: 0.75, backsplash: 4, layers: 2, core: '', edge: 'halfbull', sideSplash: 'sinks', priceBy: 'ft' };
+const LAM2_TOP = { id: 'top-lam2', name: 'Laminate on 2 layers 3/4" ply, half bullnose', mat: 'm-lam', thick: 1.5, frontOverhang: 1, endOverhang: 0.75, backsplash: 4, layers: 2, core: '', edge: 'halfbull', sideSplash: 'sinks' };
 function ensureLamTop(s) {
   if (!s || s.lamTop2 || !Array.isArray(s.countertops)) return s;
   if (!s.countertops.some(t => t.id === LAM2_TOP.id)) s.countertops.push({ ...LAM2_TOP, mat: (s.materials || []).some(m => m.id === 'm-lam') ? 'm-lam' : (s.countertops[0] || {}).mat });
@@ -280,7 +280,6 @@ function ensureCmold(s) {
   if (!s.moldings.some(m => m.id === CMOLD.id)) s.moldings.push({ ...CMOLD, mat: (s.materials || []).some(m => m.id === 'm-mdf') ? 'm-mdf' : (s.moldings[0] || {}).mat });
   s.cmold = 1; return s;
 }
-const topRate = (t, len, depth, rate) => t.priceBy === 'ft' ? len / 12 * rate : len * depth / 144 * rate;
 // The room's shop-built tops in the job export (and so the CNC parts file), as one entry after the cabinets.
 function topExportCab(partEx) {
   const ps = topCoreParts(); if (!ps.length) return [];

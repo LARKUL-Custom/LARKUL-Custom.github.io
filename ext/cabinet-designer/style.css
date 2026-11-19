@@ -2659,6 +2659,8 @@ main:has(#tab-pricing:not([hidden])){padding:0;background:var(--sunk)}
 .prx-inst select{min-width:150px;min-height:34px;font:600 14.5px var(--f-ui);color:var(--ink)}
 .prx-tot .prx-pct{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
 .prx-tot .prx-pct input{width:52px;min-height:24px;height:24px;padding:0 4px;text-align:right;font:500 13px var(--f-ui)}
+.prx-roomh .prx-roomtop{display:inline-flex;align-items:center;gap:3px;white-space:nowrap;font:500 13px var(--f-ui);color:var(--t-2,inherit)}
+.prx-roomh .prx-roomtop input{width:52px;min-height:24px;height:24px;padding:0 4px;text-align:right;font:500 13px var(--f-ui)}
 .prx-acts .btn.danger{color:var(--danger,#c62828)}
 .prx-acts label.btn{cursor:pointer}
 @media (max-width:1400px){.prx-body.edit .pricegrid{column-count:2}}
