@@ -3685,3 +3685,8 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 #multiprint .mp-page.mp-split>footer.pl-block{margin-top:auto}
 #multiprint .mp-page.mp-split>*{flex:none!important}
 #multiprint .mp-page.mp-split>.mp-esttag{position:static;text-align:right;margin-bottom:-4px}
+/* 0.59.25: Print bar fields size to what's in them (the 112px field column clipped Sideways/Upright), and everything wraps. */
+.mp-bar .f{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%}
+.mp-bar .f>select,.mp-bar .f>input{width:auto;max-width:100%}
+.mp-bar .mp-scopef{flex-direction:column;align-items:stretch;width:100%}
+.mp-bar,.mp-barrow,.mp-items{max-width:100%;min-width:0}

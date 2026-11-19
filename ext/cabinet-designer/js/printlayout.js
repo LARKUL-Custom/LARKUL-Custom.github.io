@@ -121,9 +121,40 @@ function plPic(rooms) {
     return url ? { url, key } : null;
   };
 }
+// The built-in cover laid out for Upright paper (Ayden 2026-11-19: Upright showed the sideways cover shrunk with blank
+// space above). Same pieces as the sideways one, stacked: logo and company name centered at the top, title, the 3D picture,
+// company details along the bottom.
+let PL_COVER_PORT = null;
+function plDefaultCoverPort() {
+  if (PL_COVER_PORT) return PL_COVER_PORT;
+  const e = (o) => ({ id: plId(), ...o }), O = '#d9731b', K = '#16202c', corner = (x, y, sx, sy) => [
+    e({ type: 'rect', x: sx > 0 ? x : x - 0.9, y: sy > 0 ? y : y - 0.09, w: 0.9, h: 0.09, fill: O }),
+    e({ type: 'rect', x: sx > 0 ? x : x - 0.09, y: sy > 0 ? y : y - 0.9, w: 0.09, h: 0.9, fill: O })];
+  return (PL_COVER_PORT = { id: 'pl-cover-port', name: 'Cover with 3D (upright)', kind: 'cover', els: [
+    e({ type: 'rect', x: 0.3, y: 0.3, w: 7.9, h: 10.4, stroke: K, sw: 2.25 }),
+    e({ type: 'rect', x: 0.42, y: 0.42, w: 7.66, h: 10.16, stroke: K, sw: 0.5 }),
+    ...corner(0.3, 0.3, 1, 1), ...corner(8.2, 0.3, -1, 1), ...corner(0.3, 10.7, 1, -1), ...corner(8.2, 10.7, -1, -1),
+    e({ type: 'logo', x: 3.7, y: 0.65, w: 1.1, h: 1.1 }),
+    e({ type: 'text', x: 3.0, y: 1.78, w: 2.5, h: 0.34, text: '{COMPANY}', size: 17, bold: true, align: 'center', color: K }),
+    e({ type: 'text', x: 5.9, y: 0.75, w: 2.0, h: 0.6, text: '{PHONE}\n{EMAIL}\n{WEB}', size: 8, align: 'right', color: '#4d5b70' }),
+    e({ type: 'text', x: 0.8, y: 2.35, w: 6.9, h: 0.62, text: '{JOB}', size: 30, bold: true, align: 'center', color: K }),
+    e({ type: 'text', x: 0.8, y: 3.0, w: 6.9, h: 0.32, text: '{CUSTOMER}', size: 13, align: 'center', color: '#4d5b70' }),
+    e({ type: 'rect', x: 3.65, y: 3.42, w: 1.2, h: 0.05, fill: O }),
+    e({ type: 'view3d', x: 0.9, y: 3.7, w: 6.7, h: 5.8 }),
+    e({ type: 'rect', x: 0.9, y: 3.7, w: 6.7, h: 5.8, stroke: K, sw: 1 }),
+    e({ type: 'line', x: 0.9, y: 9.72, w: 6.7, h: 0, stroke: '#c9d3e1', sw: 0.75 }),
+    e({ type: 'text', x: 0.9, y: 9.82, w: 2.4, h: 0.6, text: '{COMPANY}\n{ADDRESS}', size: 8, color: K }),
+    e({ type: 'text', x: 3.0, y: 9.82, w: 2.5, h: 0.62, text: '{ROOMS}\n{CUSTADDRESS}', size: 8, align: 'center', color: '#4d5b70' }),
+    e({ type: 'text', x: 5.6, y: 9.82, w: 2.0, h: 0.5, text: 'Printed {DATE}', size: 8, align: 'right', color: '#4d5b70' }),
+  ] });
+}
 function printCover(pr, rooms) {
-  const l = plFor(pr, 'cover'); if (!l) return '';
-  return `<section class="mp-page mp-cover"><div class="pl-box" style="width:${PL_COVER.w}in;height:${PL_COVER.h}in;zoom:${plPaperFit(PL_COVER.w, PL_COVER.h, "cover")}">${plHTML(l, plVars({ ROOMS: rooms.map(r => r.name).join(', ') }), plPic(rooms))}</div></section>`;
+  let l = plFor(pr, 'cover'); if (!l) return '';
+  // Upright paper: the built-in cover (not renamed) has its own upright layout; a cover you made is fitted to the page.
+  const port = typeof mpPaper === 'function' && mpPaper(pr).port, own = port && l.id === 'pl-cover' && l.name === 'Cover with 3D';
+  if (own) l = plDefaultCoverPort();
+  const C = own ? { w: PL_COVER.h, h: PL_COVER.w } : PL_COVER;
+  return `<section class="mp-page mp-cover"><div class="pl-box" style="width:${C.w}in;height:${C.h}in;zoom:${plPaperFit(C.w, C.h, "cover")}">${plHTML(l, plVars({ ROOMS: rooms.map(r => r.name).join(', ') }), plPic(rooms))}</div></section>`;
 }
 // Layouts are drawn for Letter sideways; on other paper the cover is scaled to fit the sheet and the title block to the
 // width inside the margins (uniformly, so text keeps its shape).
