@@ -6,7 +6,7 @@ const NF0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const NF2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), NF1 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const money = v => '$' + NF2.format(Math.round(v * 100) / 100);
 // Inserts, doors and fronts, and materials are priced in their own libraries; the sheet keeps labor adders only.
-const PRICE_ADDERS = [['perDrawer', 'Each drawer (box and slides labor)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
+const PRICE_ADDERS = [['perDrawer', 'Each drawer (slides and labor; the box is priced below)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
@@ -270,8 +270,8 @@ function priceCab(c, ps) {
   // Each insert has its own price in the insert library (a lazy susan is not a tray divider).
   // Pulls and knobs: what the hardware list counts of the job's pull hardware, at the sheet's drilling charge each.
   const pullNames = new Set(S.hardware.filter(h => h.kind === 'pull').map(h => h.name)), nPull = Object.entries(b.bom).reduce((a, [k, q]) => a + (pullNames.has(k) ? q : 0), 0);
-  // 0.59.10: each drawer material can cost more or less per drawer (Edit prices › Adders), on top of Each drawer. Blank or 0 adds nothing.
-  const boxEach = nDr ? +((ps.drawerBox || {})[drawerMatT(cabSet(c, 'drawerMatT')).id] || 0) || 0 : 0;
+  // 0.59.11: each drawer box has its own price by drawer material (Edit prices › Adders), on top of Each drawer.
+  const boxEach = nDr ? dbxPrice(ps, drawerMatT(cabSet(c, 'drawerMatT'))) : 0;
   const extras = nPull * (+ad.perPull || 0) + nDr * ((+ad.perDrawer || 0) + boxEach) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied');
@@ -292,6 +292,11 @@ function priceCab(c, ps) {
   const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = box + doors + extras + ends + hardware + materials + paint + banding + custom, upcharge = base * (+c.pxUp || 0) / 100;
   return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom };
 }
+// Drawer box prices, each (Ayden 2026-11-19): 3/4 melamine about $25-30, 5/8 Baltic birch ply about $70, solid wood about $110.
+// Picked by the drawer material's name unless the price sheet has its own number for it (Edit prices › Adders).
+const DBX_PRICES = [[/melamine/i, 28], [/solid|hardwood/i, 110], [/birch|ply/i, 70]];
+const dbxDefault = t => { const n = (t && t.name) || '', hit = DBX_PRICES.find(([re]) => re.test(n)); return hit ? hit[1] : 0; };
+const dbxPrice = (ps, t) => { if (!t) return 0; const v = (ps.drawerBox || {})[t.id]; return v !== '' && v != null && isFinite(+v) ? +v : dbxDefault(t); };
 const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
 // One door or front: its size times the style's price per sq ft (from the door library, or this job's own) plus material.
 // 0.55.34 (Ayden 2026-11-11): the style's Minimum per front ($20 by default) is a floor under that whole price, so a tiny
@@ -585,8 +590,8 @@ function priceEditor(ps) {
   <div class="psec box prx-sec wide" id="ps-prod">${secHead('stack', 'Products', 'violet')}<div class="prx-h"><span class="note">Give any library product its own price. Blank uses its type. Tick Own price for items like floating shelves.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Show priced only' : `Show all ${S.library.filter(l => l.cat !== 'Shape').length}`}</button></div>${prods.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th title="Priced only by this row: not a cabinet, not in the cabinet count, no installation, doors, materials or hardware">Own price</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${prods.map(l => { const o = ps.products[l.id] || {}, ph = k => String(o.own ? 0 : ps.cab[l.cat][k]); return `<tr${o.own ? ' class="own"' : ''}><td>${esc(l.name)}</td><td><span class="catpill cat-${l.cat}">${l.cat}</span></td><td style="width:90px">${ctl(P('products.' + l.id), 'own', !!o.own, 'bool', { label: l.name + ' has its own price' })}</td><td style="width:110px">${num(P('products.' + l.id), 'base', o.base, { blank: true, ph: ph('base') })}</td><td style="width:110px">${num(P('products.' + l.id), 'perFt', o.perFt, { blank: true, ph: ph('perFt') })}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="cardbody"><div class="note">No product has its own price yet. Show all to set one.</div></div>'}</div>
   <div class="psec box prx-sec" id="ps-add">${secHead('shelf', 'Adders', 'blue')}<div class="prx-h"></div><div class="cardbody">${PRICE_ADDERS.map(([k, l]) => fld(l, P('adders'), k, ps.adders[k], 'num')).join('')}
-    <div class="prx-dbx"><div class="eyebrow">Drawer boxes, each drawer, on top of Each drawer</div>${S.matTemplates.drawer.map(t => fld(t.name, P('drawerBox'), t.id, (ps.drawerBox || {})[t.id] ?? 0, 'num')).join('')}
-    <div class="note">Use a minus number for a box that costs less. Drawer what-if options on the quote use these.</div></div>
+    <div class="prx-dbx"><div class="eyebrow">Drawer box, each, by drawer material</div><table class="t"><tbody>${S.matTemplates.drawer.map(t => `<tr><td>${esc(t.name)}</td><td style="width:110px">${num(P('drawerBox'), t.id, (ps.drawerBox || {})[t.id], { blank: true, ph: String(dbxDefault(t)), label: t.name + ' box price' })}</td></tr>`).join('')}</tbody></table>
+    <div class="note">Added on top of Each drawer. Blank uses the shop price for that kind of box: melamine $28, Baltic birch or ply $70, solid wood $110.</div></div>
     <div class="note">Each insert has its own price in Libraries › Inserts.</div></div></div>
   <div class="psec box prx-sec" id="ps-panel">${secHead('box', 'Panels', 'teal')}<div class="prx-h"><span class="note">Each panel, by height</span></div><div class="cardbody">${PANEL_CATS.map(([k, l]) => fld(l, P('panelAdd'), k, (ps.panelAdd || {})[k] ?? 0, 'num')).join('')}
     <div class="note">Applied end panels get this on top of their door style's price. Loose panels drawn in the room get it on top of their material.</div></div></div>
