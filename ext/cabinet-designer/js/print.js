@@ -32,7 +32,7 @@ function printElevPage(room, { w, side, name }, head) {
   return withRoom(room, () => printQuiet(() => {
     const d = renderElev({ wall: w, side, ...printArea('elev') }); if (!d) return '';
     const L = wg(w).L, cs = S.cabinets.filter(c => c.wall === w.id && c.side === side).sort((a, b) => (a.cat === 'Wall') - (b.cat === 'Wall') || elevX(a, L) - elevX(b, L));
-    const list = cs.map(c => `<div class="mp-cab"><b>${esc(LBL[c.id] || '')}</b> ${esc(c.name)} <span>${fmtLen(c.w)} W × ${fmtLen(c.h)} H × ${fmtLen(c.d)} D${c.notes ? ' · ' + esc(c.notes.split('\n')[0]) : ''}</span></div>`).join('')
+    const list = cs.map(c => `<div class="mp-cab"><b>${esc(LBL[c.id] || '')}</b> ${esc(c.name)} <span>${fmtLen(c.w)} W × ${fmtLen(c.h)} H × ${fmtLen(c.d)} D${printNote(c.notes) ? ' · ' + esc(printNote(c.notes).split('\n')[0]) : ''}</span></div>`).join('')
       // The appliances on this wall too (fridge, range, dishwasher, sink), so the builders know the openings they need.
       + fixtList().filter(f => f.wall === w.id && f.side === side && !fixtHole(f)).sort((a, b) => elevFx(a, L, side) - elevFx(b, L, side))
         .map(f => `<div class="mp-cab mp-fx"><b>Appliance</b> ${esc(fixtName(f))} <span>${fmtLen(f.w)} W × ${fmtLen(f.h)} H${f.d ? ' × ' + fmtLen(f.d) + ' D' : ''}</span></div>`).join('');
@@ -188,9 +188,10 @@ function printDrawings(pr, rooms, head) {
 
 /* ----- Notes sheet (Ayden 2026-11-19: right after the cover): the job's notes, then ruled lines to write on ----- */
 function printNotesPage(pr, rooms, head) {
-  const lines = Array.from({ length: 40 }, () => '<i></i>').join('');
+  const notes = printNote(S.job.notes), lam = matAssumed() ? printLamByRoom(rooms) : '';
+  const lines = Array.from({ length: lam ? 24 : 40 }, () => '<i></i>').join('');
   return `<section class="mp-page land mp-draw mp-notesp">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Notes')}
-    <h3 class="mp-nh">Notes</h3>${S.job.notes ? `<div class="mp-nt">${esc(S.job.notes)}</div>` : ''}<div class="mp-lines">${lines}</div></section>`;
+    <h3 class="mp-nh">Notes</h3>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>${lam ? `<table class="mp-spect mp-mut">${lam}</table>` : ''}` : ''}${notes ? `<div class="mp-nt">${esc(notes)}</div>` : ''}<div class="mp-lines">${lines}</div></section>`;
 }
 
 /* ----- Scope of work: what the job includes, room by room, from the drawing, with the shop's own notes ----- */
@@ -208,7 +209,7 @@ function printScopeRows(room) {
     const tops = countertopRuns().filter(t => t.on);
     if (tops.length) { const sq = tops.reduce((a, t) => a + (t.area ?? t.len * t.depth), 0) / 144; rows.push(['Countertops', esc(`${[...new Set(tops.map(t => (t.tpl && t.tpl.name) || t.name || 'Top'))].join(', ')}, about ${Math.round(sq)} sq ft`)]); }
     const molds = moldingRuns(); if (molds.length) rows.push(['Molding', esc([...new Set(molds.map(m => m.m.name))].join(', ') + `, about ${ftLen(molds.reduce((a, m) => a + m.len, 0) / 12)} ft`)]);
-    const fx = fixtList().filter(f => !fixtHole(f)); if (fx.length) rows.push(['Appliances and sinks', esc(fx.map(f => fixtName(f)).join(', ')) + ' <span class="muted">(placed for the layout; supplied by others unless noted)</span>']);
+    const fx = fixtList().filter(f => !fixtHole(f)); if (fx.length) rows.push(['Appliances and sinks', esc(fx.map(f => fixtName(f)).join(', ')) + ' <span class="muted">(by others unless noted)</span>']);
     return rows;
   });
 }
@@ -222,8 +223,8 @@ function printScopePage(pr, rooms, head) {
   const optT = opts.length ? `<table class="mp-wi"><thead><tr><th>Options</th><th>Difference</th><th>New price</th></tr></thead><tbody>${opts.map(R => `<tr><td>${esc(R.name)}</td><td>${wiSigned(R.diff)}</td><td><b>${money(R.total)}</b></td></tr>`).join('')}</tbody></table>` : '';
   const inst = (ps && typeof anyInstaller === 'function' ? anyInstaller(ps) : who) ? 'Installation is included.' : 'Installation is not included.';
   return `<section class="mp-page land mp-draw mp-scope">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Scope of work')}
-    <div class="mp-specs">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
     ${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}
+    <div class="mp-specs">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
     <div class="mp-scopex"><b>${esc(inst)}</b>${S.job.scope ? `<div class="mp-scopen">${esc(S.job.scope)}</div>` : ''}</div>
     ${pr.estimate ? `<div class="mp-estimate">${price ? `<div class="mp-estp"><span>Estimated price</span><b>${price}</b></div>` : ''}${optT}<div>${SCOPE_EST}</div></div>` : ''}</section>`;
 }
@@ -274,9 +275,22 @@ function printMatUse(room) {
   });
 }
 // A bid job's documents often don't say which laminate goes where: the print says the materials are our pick, to confirm.
-const jobFromBid = () => (S.rooms || []).some(r => (r.cabinets || []).some(c => c.fromBid));
+// A job from a bid: cabinets placed from the takeoff, bid lines on a room, an import from Bid Reader, or a job in the Bids folder.
+const jobFromBid = () => (S.rooms || []).some(r => (r.cabinets || []).some(c => c.fromBid) || (r.bidItems || []).length)
+  || /bid reader/i.test(S.job.notes || '') || (typeof jobs !== 'undefined' && /^Jobs\/Bids\//.test(jobs.path || ''));
 const matAssumed = () => S.job.matAssume ?? jobFromBid();
-const MAT_ASSUMED = 'The bid documents do not say which laminate or material goes where. The materials listed here are what we assumed; please confirm them with us before anything is ordered or cut.';
+const MAT_ASSUMED = 'Laminate: the bid documents do not state which laminate goes in which room. The laminate listed for each room is our assumption. Please confirm each room before we order material.';
+// Notes on paper read like the shop wrote them: lines left by imports and the takeoff tools ("Imported from…", "From
+// Bid Reader", "(Claude: …)", "Seen 3× in plans; check qty") are left off (Ayden 2026-11-19).
+function printNote(t) {
+  return String(t || '').split('\n').map(l => l.replace(/\((?:Claude|AI)\b[^)]*\)/gi, '').replace(/\bSeen \d+× in plans; check qty\b/gi, '').replace(/(^|\s·\s)From Bid Reader\b/gi, '').replace(/\s+·\s*$/, '').trim())
+    .filter(l => l && !/^imported from\b/i.test(l) && !/\b(claude|chatgpt|\bAI\b|drawn in cabinet designer|cabinet designer)\b/i.test(l)).join('\n');
+}
+// Each room's laminate (fronts, finished ends, cabinet), for the Notes sheet on a bid job.
+function printLamByRoom(rooms) {
+  return rooms.map(room => { const mu = printMatUse(room).filter(([, v]) => /Doors and drawer fronts|Finished ends|Cabinet box/.test(v));
+    return mu.length ? `<tr><th>${esc(room.name)}</th><td>${mu.map(([k, v]) => `<b>${esc(k)}</b>: ${v.replace(/ <span class="muted">.*$/, '').replace(/, (Backs|Shelves|Toe skin|Drawer boxes)/g, '')}`).join('<br>')}</td></tr>` : ''; }).join('');
+}
 function printSpecPage(pr, rooms, head) {
   const out = [];
   for (let i = 0; i < Math.max(1, rooms.length); i += 2) out.push(printSpecSheet(pr, rooms.slice(i, i + 2), head, rooms.length, i === 0));
@@ -289,7 +303,7 @@ function printSpecSheet(pr, rooms, head, all, first) {
     return `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v || '—'}</td></tr>`).join('')}</table>
       ${mu.length ? `<h4 class="mp-muh">Materials and where they go</h4><table class="mp-spect mp-mut">${mu.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v}</td></tr>`).join('')}</table>` : ''}${odd.length ? `<div class="mp-odd"><b>Different on these cabinets</b><br>${odd.join('<br>')}</div>` : ''}</div>`;
   }).join('');
-  return `<section class="mp-page land mp-draw">${head(all > 2 ? rooms.map(r => r.name).join(', ') : all > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Room settings')}<div class="mp-specs">${cards}</div>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}${first && S.job.notes && !pr.items.includes('notes') ? `<div class="mp-notes"><b>Notes</b> ${esc(S.job.notes)}</div>` : ''}</section>`;
+  return `<section class="mp-page land mp-draw">${head(all > 2 ? rooms.map(r => r.name).join(', ') : all > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Room settings')}<div class="mp-specs">${cards}</div>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}${first && printNote(S.job.notes) && !pr.items.includes('notes') ? `<div class="mp-notes"><b>Notes</b> ${esc(printNote(S.job.notes))}</div>` : ''}</section>`;
 }
 
 /* ----- Price sheet (Ayden 2026-11-19): the customer's prices in Print, one page per room or one for the whole job.
