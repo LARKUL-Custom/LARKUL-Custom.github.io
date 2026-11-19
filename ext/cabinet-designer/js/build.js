@@ -24,6 +24,8 @@ function panelSpans(c, explicitOnly) {
   return out;
 }
 function panelPolys(c, explicitOnly) {
+  // 0.58.27: neighbor checks ask every cabinet in the room for its "Always" panels; most have none, so skip the panel lookup.
+  if (explicitOnly && panelMode(c, 'L') !== 'on' && panelMode(c, 'R') !== 'on') return [];
   const w = wall(c.wall); if (!w) return [];
   const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), depth = c.d + panelFor(c).frontOverhang;
   return panelSpans(c, explicitOnly).map(({ end, a: [a0, a1] }) => { const dp = depth - c.d + endDepth(c, end); return [wallPt(w, g, s, a0, f), wallPt(w, g, s, a1, f), wallPt(w, g, s, a1, f + dp), wallPt(w, g, s, a0, f + dp)]; });

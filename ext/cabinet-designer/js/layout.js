@@ -37,9 +37,11 @@ const panelMode = (c, end) => c['panel' + end] || ((end === 'L' ? c.appliedL : c
 function obstacles(wallId, side, spec, excludeId) {
   const w = wall(wallId); if (!w) return [];
   const F = wallFrame(w, side), f = w.thick / 2 + (spec.outset || 0), b0 = f, b1 = f + spec.d, out = [];
+  // 0.58.27: plain loop instead of four map() calls; this runs for every cabinet in the room on every neighbor check.
   const add = (poly, kind, id) => {
-    const q = poly.map(F), bl = Math.min(...q.map(p => p.b)), bh = Math.max(...q.map(p => p.b));
-    if (Math.min(bh, b1) - Math.max(bl, b0) > 0.01) out.push({ a0: Math.min(...q.map(p => p.a)), a1: Math.max(...q.map(p => p.a)), kind, id });
+    let al = Infinity, ah = -Infinity, bl = Infinity, bh = -Infinity;
+    for (let i = 0; i < poly.length; i++) { const p = F(poly[i]); if (p.a < al) al = p.a; if (p.a > ah) ah = p.a; if (p.b < bl) bl = p.b; if (p.b > bh) bh = p.b; }
+    if (Math.min(bh, b1) - Math.max(bl, b0) > 0.01) out.push({ a0: al, a1: ah, kind, id });
   };
   S.walls.forEach(k => { if (k.id !== w.id) add(wallPoly(k), 'wall', k.id); capsOf(k).forEach(cp => add(capPoly(k, cp), 'wall', k.id)); });
   S.cabinets.forEach(k => {
@@ -133,7 +135,21 @@ function settle(c) {
 
 /* ---------- Fillers and automatic panels ---------- */
 // The nearest thing past one end of a cabinet: { gap, kind } or null when nothing is that side of it on the wall.
+// 0.58.27: while the screen is drawn the job does not change, so each cabinet's neighbor answer is kept and reused.
+// A cabinet asks the same question many times (finished ends, panels, fillers, joints) and every ask walks the whole room.
+// Kept per room (cabinet and wall lists) and per cabinet, and only while its place and size stay the same.
+let nearMemo = null;
+function nearWindow(fn) { if (nearMemo) return fn(); nearMemo = new WeakMap(); try { return fn(); } finally { nearMemo = null; } }
 function nearestAt(c, dir) {
+  if (!nearMemo || !c || typeof c !== 'object' || !S.cabinets || !S.walls) return nearestAtNow(c, dir);
+  let a = nearMemo.get(S.cabinets); if (!a) nearMemo.set(S.cabinets, a = new WeakMap());
+  let b = a.get(S.walls); if (!b) a.set(S.walls, b = new WeakMap());
+  let m = b.get(c); if (!m) b.set(c, m = new Map());
+  const k = [dir, c.id, c.wall, c.side, c.off, c.w, c.d, c.h, c.elev, c.outset].join('|');
+  if (!m.has(k)) m.set(k, nearestAtNow(c, dir));
+  const r = m.get(k); return r && { ...r };
+}
+function nearestAtNow(c, dir) {
   const lo = c.off, hi = c.off + c.w;
   let best = null;
   obstacles(c.wall, c.side, c, c.id).forEach(o => {

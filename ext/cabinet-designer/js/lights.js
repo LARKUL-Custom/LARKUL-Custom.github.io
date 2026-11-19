@@ -105,7 +105,37 @@ function washMat(col, up) {
   g.fillStyle = gx; g.fillRect(0, 0, 64, 128);
   return (wash3[key] = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: new THREE.Color(col), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.3 }));
 }
-function addLights3d(v, R3, layerOn) {
+/* Realistic only: a room that is mostly closed in by walls and has a ceiling but no ceiling lights drawn gets a few
+   recessed pucks so it isn't dark. Placing any ceiling light turns these off. Look only, never saved. */
+const AUTO_CEIL = { n: 0, max: 6 };
+function autoPucks() {
+  const ws = S.walls; if (ws.length < 3 || roomLights().some(l => l.kind === 'ceiling')) return [];
+  const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), W = x1 - x0, D = y1 - y0;
+  if (W < 48 || D < 48) return [];
+  const loop = typeof roomLoop === 'function' ? roomLoop() : null;
+  const wallLen = ws.reduce((a, w) => a + Math.hypot(w.x2 - w.x1, w.y2 - w.y1), 0);
+  if (!loop && wallLen < 0.75 * 2 * (W + D)) return []; // open on more than a quarter: daylight is enough
+  const cl = typeof roomCeiling === 'function' ? roomCeiling() : {}, H = +cl.h > 0 ? +cl.h : ceilHeight();
+  const slope = cl.slope && cl.slope !== 'none' ? cl.slope : null, run = +cl.run > 0 ? +cl.run : 60;
+  // About one puck every 4 feet, at most 12, kept 2 ft off the walls.
+  const ins = Math.min(24, W / 4, D / 4), iw = W - 2 * ins, id = D - 2 * ins;
+  let nx = Math.max(1, Math.round(iw / 48)), ny = Math.max(1, Math.round(id / 48));
+  while (nx * ny > 12) { if (iw / nx < id / ny) nx--; else ny--; }
+  const out = [];
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+    // A small fixed nudge per puck so the layout isn't a perfect grid, the same every time.
+    const h = Math.sin((i + 1) * 12.9898 + (j + 1) * 78.233) * 43758.5453, jx = (h - Math.floor(h) - 0.5) * 6, jy = ((h * 7.13) - Math.floor(h * 7.13) - 0.5) * 6;
+    const x = x0 + ins + iw * (i + 0.5) / nx + (nx > 1 ? jx : 0), y = y0 + ins + id * (j + 0.5) / ny + (ny > 1 ? jy : 0);
+    if (loop && !vInPoly(x, y, loop)) continue;
+    if (slope) { const d = slope === 'N' ? y - y0 : slope === 'S' ? y1 - y : slope === 'W' ? x - x0 : x1 - x; if (d < run) continue; }
+    out.push({ x, y, h: H });
+  }
+  return out;
+}
+let puckGeo3 = null;
+function addLights3d(v, R3, layerOn, ceilOn) {
+  if (R3) AUTO_CEIL.n = 0;
   if (!layerOn) return;
   let lamps = 0;
   let shadows = 0;
@@ -153,6 +183,20 @@ function addLights3d(v, R3, layerOn) {
     g.traverse(o => { o.userData.layer = 'lights'; o.userData.noBounds = true; });
     v.root.add(g);
   });
+  // Auto pucks: every puck glows, but only a few carry a real light (each light costs every pixel), turned up to
+  // make up for the rest; two cast shadows on computers.
+  if (!R3 || !ceilOn) return;
+  const P = autoPucks(); if (!P.length) return;
+  const lit = Math.min(P.length, AUTO_CEIL.max, MAX_LAMPS - lamps); AUTO_CEIL.n = P.length;
+  const step = P.length / Math.max(1, lit), k = 0.9 * Math.sqrt(P.length / Math.max(1, lit)), col = lightColor('warm');
+  const g = new THREE.Group(); g.userData.noBounds = true;
+  // A disc facing down only, so looking in from above the room shows no floating dots.
+  puckGeo3 = puckGeo3 || new THREE.CircleGeometry(2.2, 20).rotateX(Math.PI / 2);
+  P.forEach((p, i) => { const m = new THREE.Mesh(puckGeo3, glowMat(col)); m.position.set(p.x, p.h - 0.05, p.y); g.add(m); });
+  shadows = 2; // no drawn ceiling lights here, so this leaves two shadow casters
+  for (let i = 0; i < lit; i++) { const p = P[Math.floor(i * step + step / 2)]; lamp(g, col, p.x, p.h - 4, p.y, k, 240, true); }
+  g.traverse(o => { o.userData.layer = 'lights'; o.userData.noBounds = true; });
+  v.root.add(g);
 }
 
 document.addEventListener('change', e => { const s = e.target.closest && e.target.closest('.strip-where'); if (s) { ui.stripWhere = s.value; render(); } });

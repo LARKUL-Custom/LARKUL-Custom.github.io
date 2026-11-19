@@ -175,14 +175,18 @@ function materialUsage() {
   const use = {}, bom = {};
   S.materials.forEach(m => use[m.id] = { area: 0, count: 0, edge: 0 });
   S.rooms.forEach(rm => withRoom(rm, () => {
-    allParts().forEach(p => {
-      const u = use[p.mat]; if (!u) return;
-      u.area += p.L * p.W * p.qty; u.count += p.qty;
-      u.edge += bandLen(p) * p.qty;
+    // 0.58.27: each cabinet is built once for both its parts and its hardware (it was built twice).
+    S.cabinets.forEach(c => {
+      const b = buildParts(c);
+      if (!c.noCut) b.parts.forEach(p => {
+        const u = use[p.mat]; if (!u) return;
+        u.area += p.L * p.W * p.qty; u.count += p.qty;
+        u.edge += bandLen(p) * p.qty;
+      });
+      Object.entries(b.bom).forEach(([k, q]) => bom[k] = (bom[k] || 0) + q);
     });
     countertopRuns().filter(r => r.on).forEach(r => { const u = use[r.tpl.mat]; if (u) { u.area += r.len * r.depth; u.count++; } });
     moldingRuns().forEach(r => { const u = use[r.m.mat]; if (u) { u.area += r.len * r.h * 1.1; u.count++; } });
-    S.cabinets.forEach(c => { const b = buildParts(c); Object.entries(b.bom).forEach(([k, q]) => bom[k] = (bom[k] || 0) + q); });
   }));
   return { use, bom };
 }

@@ -1,7 +1,9 @@
 // Pricing: price sheets kept for the whole shop (not inside a job), and a quote for the drawn job from the one it uses.
 'use strict';
 let PRICES = [];
-const money = v => '$' + (Math.round(v * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// 0.58.27: one number formatter kept, not a new one per number (toLocaleString with options builds one each call). Same text.
+const NF2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), NF1 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const money = v => '$' + NF2.format(Math.round(v * 100) / 100);
 // Inserts, doors and fronts, and materials are priced in their own libraries; the sheet keeps labor adders only.
 const PRICE_ADDERS = [['perDrawer', 'Each drawer (box and slides labor)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
@@ -17,7 +19,7 @@ const PREFIN_RX = /melamine|\btfl\b|\blpl\b|\bhpl\b|thermofused|thermofoil|lamin
 const matFinGuess = m => !m || m.kind === 'top' ? 'paint' : PREFIN_RX.test(m.name || '') ? 'pre' : 'paint';
 const matFin = m => m && (m.fin === 'pre' || m.fin === 'paint') ? m.fin : matFinGuess(m);
 const prefin = id => { const m = mat(id); return !!m && matFin(m) === 'pre'; };
-const sqft = v => (Math.round(v * 10) / 10).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const sqft = v => NF1.format(Math.round(v * 10) / 10);
 function paintCab(c, ps, b, fr) {
   const po = paintOf(ps), sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0 }, eb = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0 }, area = pt => pt.L * pt.W * pt.qty / 144;
   // Each surface goes to paint, or to edgebanding when its material is prefinished.

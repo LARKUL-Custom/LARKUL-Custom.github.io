@@ -777,7 +777,7 @@ function buildRoomScene(v) {
     });
     v.root.add(grp);
   });
-  addLights3d(v, R3, L.lights);
+  addLights3d(v, R3, L.lights, L.ceiling);
   if (!v.fitted) { v.fitted = true; v.look({ x: -0.6, y: 0.75, z: 1 }); }
   if (R3) {
     v.root.traverse(o => { if (o.isMesh && !o.material.transparent && !o.receiveShadow && o.userData.layer !== 'lights') { o.castShadow = true; o.receiveShadow = true; } });

@@ -174,7 +174,7 @@ function sunAt(h) {
 }
 const mixHex = (a, b, k) => new THREE.Color(a).lerp(new THREE.Color(b), Math.max(0, Math.min(1, k)));
 function realLight(v) {
-  const S0 = sunAt(SUN.hour), d = S0.day, hasLamps = typeof roomLights === 'function' && roomLights().some(l => l.kind === 'ceiling');
+  const S0 = sunAt(SUN.hour), d = S0.day, hasLamps = typeof roomLights === 'function' && (roomLights().some(l => l.kind === 'ceiling') || (typeof AUTO_CEIL === 'object' && AUTO_CEIL.n > 0));
   v.sunDir = S0.dir;
   // Sun: warm and orange when low, white at midday, gone at night.
   v.sun.intensity = 2.4 * d; v.sun.castShadow = d > 0.01; v.sun.color.copy(mixHex(0xfff3e2, 0xffa860, S0.low));

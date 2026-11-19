@@ -40,7 +40,8 @@ function fixSel() {
   if (!libItem(ui.libSel) && !(String(ui.libSel || '').startsWith('shape:') && shapeLibItem(ui.libSel.slice(6)))) ui.libSel = S.library[0] && S.library[0].id;
   if (ui.placing && !libItem(ui.placing) && !shapeLibItem(String(ui.placing).replace(/^shape:/, '')) && !fixtPreset(String(ui.placing).replace(/^fixt:/, ''))) ui.placing = null;
 }
-function render() {
+function render() { return typeof nearWindow === 'function' ? nearWindow(renderNow) : renderNow(); }
+function renderNow() {
   // Order lives on the Pricing page now (what to buy and the files to send).
   if (ui.tab === 'export') { ui.tab = 'pricing'; ui.priceView = 'order'; }
   LBL = labels(); fixSel();
