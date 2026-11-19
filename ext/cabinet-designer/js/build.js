@@ -1221,7 +1221,11 @@ function countertopRuns() {
   // area: what the top is priced and counted by, its face plus any waterfall panels.
   runs.forEach(r => {
     const st = r.generic ? (S.genTops || []).find(g => g.id === r.generic) || {} : r.o || {};
-    r.bs = has(st, 'bs') && st.bs !== '' ? Math.max(0, +st.bs || 0) : Math.max(0, +r.tpl.backsplash || 0);
+    // An island top (on an island wall or a see-through island line) gets no backsplash unless one is set on it
+    // by right-click (Ayden 2026-11-19: "it wont ever be there"); every job, old ones too, since it is worked out here.
+    const wl = wall(r.wall), island = !!(wl && (wl.island || wl.hidden));
+    r.island = island;
+    r.bs = has(st, 'bs') && st.bs !== '' ? Math.max(0, +st.bs || 0) : island ? 0 : Math.max(0, +r.tpl.backsplash || 0);
     const j = r.joints || {}, wfH = r.top + r.thick;
     r.wfS = !!st.wfS && !j.S; r.wfE = !!st.wfE && !j.E;
     r.area = r.len * r.depth + ((r.wfS ? 1 : 0) + (r.wfE ? 1 : 0)) * wfH * r.depth;

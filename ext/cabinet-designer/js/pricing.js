@@ -270,7 +270,9 @@ function priceCab(c, ps) {
   // Each insert has its own price in the insert library (a lazy susan is not a tray divider).
   // Pulls and knobs: what the hardware list counts of the job's pull hardware, at the sheet's drilling charge each.
   const pullNames = new Set(S.hardware.filter(h => h.kind === 'pull').map(h => h.name)), nPull = Object.entries(b.bom).reduce((a, [k, q]) => a + (pullNames.has(k) ? q : 0), 0);
-  const extras = nPull * (+ad.perPull || 0) + nDr * (+ad.perDrawer || 0) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
+  // 0.59.10: each drawer material can cost more or less per drawer (Edit prices › Adders), on top of Each drawer. Blank or 0 adds nothing.
+  const boxEach = nDr ? +((ps.drawerBox || {})[drawerMatT(cabSet(c, 'drawerMatT')).id] || 0) || 0 : 0;
+  const extras = nPull * (+ad.perPull || 0) + nDr * ((+ad.perDrawer || 0) + boxEach) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied');
   const ends = panelParts.reduce((a, pt) => a + pt.qty * ((ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0) + panelAdd(ps, c.cat)), 0) + fillersOf(c).length * (+ad.perFiller || 0);
@@ -527,7 +529,7 @@ function priceQuote(ps, q = priceJob(ps)) {
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
   const anyOpen = q.rooms.some(R => !roomShut(R.r));
   const fold = q.rooms.length > 1 ? `<button class="btn" data-act="prx-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${icon('chevr', anyOpen ? '' : 'rot90')}${anyOpen ? 'Collapse all rooms' : 'Expand all rooms'}</button>` : '';
-  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${hardwareCard(ps, q)}${paintCard(ps, q)}`;
+  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${typeof whatIfCard === 'function' ? whatIfCard(ps, q) : ''}${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${hardwareCard(ps, q)}${paintCard(ps, q)}`;
 }
 // Which rooms are folded on Pricing › Quote, per job, kept on this computer. Only the view; prices are untouched.
 const PRX_FOLD_KEY = () => KEY + '.prxfold';
@@ -583,6 +585,8 @@ function priceEditor(ps) {
   <div class="psec box prx-sec wide" id="ps-prod">${secHead('stack', 'Products', 'violet')}<div class="prx-h"><span class="note">Give any library product its own price. Blank uses its type. Tick Own price for items like floating shelves.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Show priced only' : `Show all ${S.library.filter(l => l.cat !== 'Shape').length}`}</button></div>${prods.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th title="Priced only by this row: not a cabinet, not in the cabinet count, no installation, doors, materials or hardware">Own price</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${prods.map(l => { const o = ps.products[l.id] || {}, ph = k => String(o.own ? 0 : ps.cab[l.cat][k]); return `<tr${o.own ? ' class="own"' : ''}><td>${esc(l.name)}</td><td><span class="catpill cat-${l.cat}">${l.cat}</span></td><td style="width:90px">${ctl(P('products.' + l.id), 'own', !!o.own, 'bool', { label: l.name + ' has its own price' })}</td><td style="width:110px">${num(P('products.' + l.id), 'base', o.base, { blank: true, ph: ph('base') })}</td><td style="width:110px">${num(P('products.' + l.id), 'perFt', o.perFt, { blank: true, ph: ph('perFt') })}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="cardbody"><div class="note">No product has its own price yet. Show all to set one.</div></div>'}</div>
   <div class="psec box prx-sec" id="ps-add">${secHead('shelf', 'Adders', 'blue')}<div class="prx-h"></div><div class="cardbody">${PRICE_ADDERS.map(([k, l]) => fld(l, P('adders'), k, ps.adders[k], 'num')).join('')}
+    <div class="prx-dbx"><div class="eyebrow">Drawer boxes, each drawer, on top of Each drawer</div>${S.matTemplates.drawer.map(t => fld(t.name, P('drawerBox'), t.id, (ps.drawerBox || {})[t.id] ?? 0, 'num')).join('')}
+    <div class="note">Use a minus number for a box that costs less. Drawer what-if options on the quote use these.</div></div>
     <div class="note">Each insert has its own price in Libraries › Inserts.</div></div></div>
   <div class="psec box prx-sec" id="ps-panel">${secHead('box', 'Panels', 'teal')}<div class="prx-h"><span class="note">Each panel, by height</span></div><div class="cardbody">${PANEL_CATS.map(([k, l]) => fld(l, P('panelAdd'), k, (ps.panelAdd || {})[k] ?? 0, 'num')).join('')}
     <div class="note">Applied end panels get this on top of their door style's price. Loose panels drawn in the room get it on top of their material.</div></div></div>
@@ -775,6 +779,7 @@ function quoteDoc(ps, detail, showPaint) {
   ${q.rooms.map(room).join('')}
   <table class="qp-totals"><tbody>${totals}${q.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="r">${money(q.tax)}</td></tr>` : ''}
     <tr class="grand"><td>Total</td><td class="r">${money(q.total)}</td></tr></tbody></table>
+  ${(() => { const W = typeof whatIfPrintRows === 'function' ? whatIfPrintRows(ps, q) : []; return W.length ? `<table class="qp-totals qp-wi"><thead><tr><th>Options</th><th class="r">Difference</th><th class="r">New total</th></tr></thead><tbody>${W.map(R => `<tr><td>${esc(R.name)}</td><td class="r">${wiSigned(R.diff)}</td><td class="r">${money(R.total)}</td></tr>`).join('')}</tbody></table>` : ''; })()}
   ${q.payments.length ? `<table class="qp-totals"><thead><tr><th>Payment schedule</th><th class="r">Amount</th></tr></thead><tbody>${q.payments.map(x => `<tr><td>${esc(x.name)} (${x.pct}%)</td><td class="r">${money(x.amount)}</td></tr>`).join('')}</tbody></table>` : ''}
   ${detail && types.length ? `<section class="qp-side"><h2>Price per foot</h2><table><thead><tr><th>Type</th><th class="r">Linear ft</th><th class="r">Total</th><th class="r">Per ft</th></tr></thead><tbody>
     ${types.map(t => `<tr><td>${t.name}</td><td class="r">${ftLen(t.ft)}</td><td class="r">${money(t.total)}</td><td class="r">${money(t.rate)}</td></tr>`).join('')}</tbody></table></section>` : ''}

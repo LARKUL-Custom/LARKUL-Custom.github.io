@@ -3654,3 +3654,22 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .mp-muh{margin:10px 0 4px;font-size:10pt;color:#111}
 .mp-mut th{font-weight:700;color:#111}.mp-mut td{font-weight:400}
 .mp-assume{flex:none;font-size:9pt;color:#111;background:#fff6ec;border-left:3px solid #d9731b;padding:6px 10px;font-weight:600}
+.mp-pricep .mp-nh{margin-top:10px}
+.mp-price{margin-bottom:6px}.mp-price td.r,.mp-price th.r,.mp-ptot td.r,.mp-ptot th.r{text-align:right;white-space:nowrap}
+.mp-price tfoot td{border-top:1px solid #111}
+.mp-ptot{width:auto!important;min-width:3.6in;margin:10px 0 0 auto}.mp-ptot .grand td{font-weight:700;font-size:12pt;border-top:1.5px solid #111}
+.mp-pricep .mp-estimate{margin-top:10px}
+.mp-priceby{margin:0 6px 0 -6px}.mp-priceby button{min-height:26px;padding:3px 9px;font-size:12px}
+.mp-flow .mp-esttag{display:none}
+.mp-pricep .mp-nh{break-after:avoid;page-break-after:avoid}
+/* 0.59.8 What-if options: Pricing › Quote card and the table beside the estimated price on Scope of work */
+.prx-wi .prx-wit{width:100%;margin:6px 0}
+.prx-wi .prx-wit td{vertical-align:top}
+.prx-wi .prx-wit input.wi-name{width:100%;min-width:180px}
+.prx-wi .prx-wit select{max-width:240px}
+.prx-wi .note.warn{color:#b45309}
+.prx-wi .row-actions{display:flex;gap:6px;flex-wrap:wrap}
+.mp-wi{flex:none;border-collapse:collapse;font-size:8.5pt;color:#111;border-left:.5px solid #aaa;padding-left:12px}
+.mp-wi th{font-size:7.5pt;color:#555;font-weight:600;text-align:left;padding:0 10px 2px 12px}
+.mp-wi td{padding:1px 10px 1px 12px;border-top:.5px solid #ccc;white-space:nowrap}
+.mp-wi td:nth-child(n+2),.mp-wi th:nth-child(n+2){text-align:right}

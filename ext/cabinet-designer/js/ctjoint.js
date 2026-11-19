@@ -151,7 +151,7 @@ function ctjEdgeCtx(id, x, y) {
   if (part === 'back') {
     h += b('bs=0', 'No backsplash', r.bs === 0);
     [4, 6, 18].forEach(v => { h += b('bs=' + v, `${fmtLen(v)} backsplash`, own && r.bs === v); });
-    h += b('bs=', `Style's backsplash${def ? ` (${fmtLen(def)})` : ' (none)'}`, !own);
+    h += b('bs=', r.island ? 'Island default (none)' : `Style's backsplash${def ? ` (${fmtLen(def)})` : ' (none)'}`, !own);
     h += `<label class="ctx-in"><span>Height</span><input type="text" class="num cte-bs" data-id="${esc(key)}" value="${esc(fmtLen(r.bs))}" aria-label="Backsplash height"></label>`;
   } else {
     const on = !!r['wf' + part], side = (part === 'S') === (r.side === 1) ? 'left' : 'right';

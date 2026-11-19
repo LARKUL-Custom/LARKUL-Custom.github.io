@@ -216,13 +216,16 @@ function printScopePage(pr, rooms, head) {
   const ps = typeof priceSheet === 'function' ? priceSheet() : null, who = ps && typeof jobInstaller === 'function' ? jobInstaller(ps) : null;
   const cards = rooms.map(room => { const rows = printScopeRows(room); return rows.length ? `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table></div>` : ''; }).join('');
   let price = '';
-  if (pr.estimate && ps && typeof priceJob === 'function') { try { price = money(priceJob(ps).total); } catch (_) { price = ''; } }
+  let opts = [];
+  if (pr.estimate && ps && typeof priceJob === 'function') { try { const q = priceJob(ps); price = money(q.total); opts = typeof whatIfPrintRows === 'function' ? whatIfPrintRows(ps, q) : []; } catch (_) { price = ''; } }
+  // What-if options (Pricing › Quote): what the price would go to with each change, beside the estimated price.
+  const optT = opts.length ? `<table class="mp-wi"><thead><tr><th>Options</th><th>Difference</th><th>New price</th></tr></thead><tbody>${opts.map(R => `<tr><td>${esc(R.name)}</td><td>${wiSigned(R.diff)}</td><td><b>${money(R.total)}</b></td></tr>`).join('')}</tbody></table>` : '';
   const inst = who ? 'Installation is included.' : 'Installation is not included.';
   return `<section class="mp-page land mp-draw mp-scope">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Scope of work')}
     <div class="mp-specs">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
     ${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}
     <div class="mp-scopex"><b>${esc(inst)}</b>${S.job.scope ? `<div class="mp-scopen">${esc(S.job.scope)}</div>` : ''}</div>
-    ${pr.estimate ? `<div class="mp-estimate">${price ? `<div class="mp-estp"><span>Estimated price</span><b>${price}</b></div>` : ''}<div>${SCOPE_EST}</div></div>` : ''}</section>`;
+    ${pr.estimate ? `<div class="mp-estimate">${price ? `<div class="mp-estp"><span>Estimated price</span><b>${price}</b></div>` : ''}${optT}<div>${SCOPE_EST}</div></div>` : ''}</section>`;
 }
 
 /* ----- Job specs: what the job is made of, room by room (door style, finish, cabinet material, hardware, color) ----- */
@@ -287,4 +290,34 @@ function printSpecSheet(pr, rooms, head, all, first) {
       ${mu.length ? `<h4 class="mp-muh">Materials and where they go</h4><table class="mp-spect mp-mut">${mu.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v}</td></tr>`).join('')}</table>` : ''}${odd.length ? `<div class="mp-odd"><b>Different on these cabinets</b><br>${odd.join('<br>')}</div>` : ''}</div>`;
   }).join('');
   return `<section class="mp-page land mp-draw">${head(all > 2 ? rooms.map(r => r.name).join(', ') : all > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Room settings')}<div class="mp-specs">${cards}</div>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}${first && S.job.notes && !pr.items.includes('notes') ? `<div class="mp-notes"><b>Notes</b> ${esc(S.job.notes)}</div>` : ''}</section>`;
+}
+
+/* ----- Price sheet (Ayden 2026-11-19): the customer's prices in Print, one page per room or one for the whole job.
+   Same numbers as Pricing › Quote (customer copy): markup spread over the rooms, job charges, tax and payments at the end. */
+function printPricePages(pr, rooms, head) {
+  const ps = typeof priceSheet === 'function' ? priceSheet() : null; if (!ps || typeof priceJob !== 'function') return [];
+  let q; try { q = priceJob(ps); } catch (_) { return []; }
+  const ids = new Set(rooms.map(r => r.id)), R = q.rooms.filter(x => ids.has(x.r.id)), whole = R.length === q.rooms.length;
+  const jl = q.jobLines.reduce((a, l) => a + (+l.amount || 0), 0), base = q.sub - jl, f = base > 0 ? (q.sub + q.markup) / base : 1, mm = v => money(v * f);
+  const est = pr.estimate ? `<div class="mp-estimate"><div>${SCOPE_EST}</div></div>` : '';
+  const roomTbl = x => `<h3 class="mp-nh">${esc(x.r.name)}</h3><table class="t mp-t mp-price"><thead><tr><th>#</th><th>Cabinet</th><th>Size (W × H × D)</th><th class="r">Price</th></tr></thead><tbody>
+    ${x.cabs.map(k => `<tr><td>${esc(k.label || '')}</td><td>${esc(k.c.name)}</td><td>${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="r">${mm(k.total)}</td></tr>`).join('') || '<tr><td colspan="4">No cabinets</td></tr>'}
+    ${x.lines.map(l => `<tr><td></td><td colspan="2">${esc(lineName(l.name))}</td><td class="r">${mm(l.amount)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3"><b>${esc(x.r.name)} total</b></td><td class="r"><b>${mm(x.total)}</b></td></tr></tfoot></table>`;
+  // Job charges and markup are spread over the room prices (as on the customer's quote), so the totals are the subtotal,
+  // tax and total. Totals: the whole job's (with payments), or the rooms printed with tax on them when only some are.
+  const roomsSum = R.reduce((a, x) => a + x.total * f, 0), taxPart = roomsSum * (+ps.tax || 0) / 100;
+  const totals = whole
+    ? `<table class="t mp-t mp-ptot"><tbody><tr><td>Subtotal</td><td class="r">${money(roomsSum)}</td></tr>
+      ${q.tax ? `<tr><td>Tax ${ps.tax}%</td><td class="r">${money(q.tax)}</td></tr>` : ''}<tr class="grand"><td>${pr.estimate ? 'Estimated total' : 'Total'}</td><td class="r">${money(q.total)}</td></tr></tbody></table>
+      ${(() => { const W = typeof whatIfPrintRows === 'function' ? whatIfPrintRows(ps, q) : []; return W.length ? `<table class="t mp-t mp-ptot mp-pwi"><thead><tr><th>Options</th><th class="r">Difference</th><th class="r">New total</th></tr></thead><tbody>${W.map(o => `<tr><td>${esc(o.name)}</td><td class="r">${wiSigned(o.diff)}</td><td class="r"><b>${money(o.total)}</b></td></tr>`).join('')}</tbody></table>` : ''; })()}
+      ${q.payments.length ? `<table class="t mp-t mp-ptot"><thead><tr><th>Payment schedule</th><th class="r">Amount</th></tr></thead><tbody>${q.payments.map(x => `<tr><td>${esc(x.name)} (${x.pct}%)</td><td class="r">${money(x.amount)}</td></tr>`).join('')}</tbody></table>` : ''}`
+    : `<table class="t mp-t mp-ptot"><tbody><tr><td>${esc(R.map(x => x.r.name).join(', '))}</td><td class="r">${money(roomsSum)}</td></tr>${taxPart ? `<tr><td>Tax ${ps.tax}%</td><td class="r">${money(taxPart)}</td></tr>` : ''}<tr class="grand"><td>${pr.estimate ? 'Estimated total' : 'Total'} for these rooms</td><td class="r">${money(roomsSum + taxPart)}</td></tr></tbody></table>`;
+  const page = (what, body) => `<section class="mp-page mp-flow mp-draw mp-pricep">${head(what.room, what.sheet)}${body}</section>`;
+  if (pr.priceBy === 'room') {
+    const out = R.map((x, i) => page({ room: x.r.name, sheet: 'Price' }, roomTbl(x) + (R.length === 1 ? totals + est : '')));
+    if (R.length > 1) out.push(page({ room: whole ? 'All rooms' : R.map(x => x.r.name).join(', '), sheet: 'Price summary' }, `<h3 class="mp-nh">Price summary</h3><table class="t mp-t mp-price"><tbody>${R.map(x => `<tr><td>${esc(x.r.name)}</td><td class="r">${mm(x.total)}</td></tr>`).join('')}</tbody></table>${totals}${est}`));
+    return out;
+  }
+  return [page({ room: whole ? 'All rooms' : R.map(x => x.r.name).join(', '), sheet: 'Price' }, R.map(roomTbl).join('') + totals + est)];
 }
