@@ -63,13 +63,15 @@ document.addEventListener('change', e => {
 });
 
 /* ----- L5: multi-print presets: one print of the pages you pick ----- */
-const MP_ITEMS = [['cover', 'Cover page'], ['specs', 'Job specs (door style, materials, hardware, color)'], ['plan', 'Floor plan (one per room)'], ['elev', 'Wall elevations with cabinet numbers'], ['3d', '3D views (saved views, or one per room)'], ['tops', 'Countertop layout with sizes (for the countertop shop)'], ['cutlist', 'Cut list'], ['hardware', 'Hardware list'], ['cabinets', 'Cabinet sheets (one per cabinet)'], ['ops', 'Machining per part'], ['recuts', 'Recut list']];
-const PP_BUILD = { id: 'pp-build', name: 'Builder drawings', title: '{JOB}', items: ['cover', 'specs', 'plan', 'elev', '3d'] };
+const MP_ITEMS = [['cover', 'Cover page'], ['notes', 'Notes sheet (job notes and lines to write on)'], ['3d', 'Realistic 3D views (saved views, or one per room)'], ['specs', 'Room settings (door style, materials, hardware, color)'], ['scope', 'Scope of work'], ['elev', 'Wall elevations with cabinet numbers'], ['plan', 'Floor plan (one per room)'], ['tops', 'Countertop layout with sizes (for the countertop shop)'], ['cutlist', 'Cut list'], ['hardware', 'Hardware list'], ['cabinets', 'Cabinet sheets (one per cabinet)'], ['ops', 'Machining per part'], ['recuts', 'Recut list']];
+const PP_BUILD = { id: 'pp-build', name: 'Builder drawings', title: '{JOB}', items: ['cover', 'notes', '3d', 'specs', 'scope', 'elev', 'plan'], v: 2 };
 // The countertop shop's sheet: each room's tops with their sizes and sink cutouts drawn on (Tops tab › Print tops layout).
 const PP_TOPS = { id: 'pp-tops', name: 'Countertop layout', title: '{JOB} countertops', items: ['tops'] };
 let PRINT_PRESETS = [PP_BUILD, PP_TOPS, { id: 'pp-shop', name: 'Shop packet', title: '{JOB}', items: ['cover', 'cutlist', 'hardware', 'cabinets'] }, { id: 'pp-cut', name: 'Cut list only', title: '{JOB} cut list', items: ['cutlist'] }];
 // Saved preset lists from before drawings could print get the builder preset added at the top.
-shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) { PRINT_PRESETS = v.some(p => p.id === PP_BUILD.id) ? v : [{ ...PP_BUILD }, ...v]; if (!PRINT_PRESETS.some(p => p.id === PP_TOPS.id)) PRINT_PRESETS.splice(1, 0, { ...PP_TOPS }); } });
+shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) { PRINT_PRESETS = v.some(p => p.id === PP_BUILD.id) ? v : [{ ...PP_BUILD }, ...v]; if (!PRINT_PRESETS.some(p => p.id === PP_TOPS.id)) PRINT_PRESETS.splice(1, 0, { ...PP_TOPS }); }
+  // 0.59.7: the saved Builder drawings preset gets the new Notes and Scope of work pages once.
+  const b = PRINT_PRESETS.find(p => p.id === PP_BUILD.id); if (b && (b.v || 0) < 2) { b.v = 2; ['notes', 'scope'].forEach(k => { if (!b.items.includes(k)) b.items.push(k); }); } });
 function mpPreset() { return PRINT_PRESETS.find(p => p.id === ui.mpPreset) || PRINT_PRESETS[0]; }
 // Paper sizes in inches (portrait width × height). Every preset prints on Letter, landscape, unless it is set otherwise.
 const MP_PAPERS = [['letter', 'Letter 8.5 × 11', 8.5, 11], ['legal', 'Legal 8.5 × 14', 8.5, 14], ['tabloid', 'Tabloid 11 × 17', 11, 17], ['archc', 'ARCH C 18 × 24', 18, 24], ['archd', 'ARCH D 24 × 36', 24, 36], ['a4', 'A4 210 × 297 mm', 8.27, 11.69], ['a3', 'A3 297 × 420 mm', 11.69, 16.54]];
@@ -97,12 +99,15 @@ function mpPageCSS(pg) {
 function mpPages(pr) {
   const sc = cutScope(), title = fillVars(pr.title || '{JOB}', {}), out = [];
   // Drawing pages carry a title strip like a drawing sheet: job and room on the left, customer, date and page on the right.
-  const head = (room, what) => (typeof printBlock === 'function' && printBlock(pr, room, what)) || `<header class="mp-hd"><div><b>${esc(title)}</b> · ${esc(room)} · <b>${esc(what)}</b></div><div>${esc(S.job.customer || '')}${S.job.customer ? ' · ' : ''}${new Date().toLocaleDateString()} · %%PG%%</div></header>`;
+  const head = (room, what) => (pr.estimate ? '<div class="mp-esttag">Estimate only · price can change</div>' : '') + ((typeof printBlock === 'function' && printBlock(pr, room, what)) || `<header class="mp-hd"><div><b>${esc(title)}</b> · ${esc(room)} · <b>${esc(what)}</b></div><div>${esc(S.job.customer || '')}${S.job.customer ? ' · ' : ''}${new Date().toLocaleDateString()} · %%PG%%</div></header>`);
   const tbl = (head, rows) => `<table class="t mp-t"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${head.length}">None</td></tr>`}</tbody></table>`;
   if (pr.items.includes('cover') && typeof printCover === 'function') out.push(printCover(pr, sc.rooms));
   else if (pr.items.includes('cover')) out.push(`<section class="mp-page mp-flow"><h1>${esc(title)}</h1><p><b>Customer</b> ${esc(S.job.customer || '')}</p>${(S.job.fields || []).map(f => `<p><b>${esc(f.k)}</b> ${esc(f.v ?? '')}</p>`).join('')}
     <p><b>Rooms</b> ${sc.rooms.map(r => esc(r.name)).join(', ')}</p><p><b>Cabinets</b> ${sc.cabs.length} · <b>Parts</b> ${sc.parts.reduce((a, p) => a + p.qty, 0)}</p>${S.job.notes ? `<p><b>Notes</b> ${esc(S.job.notes)}</p>` : ''}<p class="muted">Printed ${new Date().toLocaleString()}</p></section>`);
+  if (pr.items.includes('notes') && typeof printNotesPage === 'function') out.push(printNotesPage(pr, sc.rooms, head));
+  if (typeof print3DFirst === 'function') out.push(...print3DFirst(pr, sc.rooms, head));
   if (pr.items.includes('specs') && typeof printSpecPage === 'function') out.push(printSpecPage(pr, sc.rooms, head));
+  if (pr.items.includes('scope') && typeof printScopePage === 'function') out.push(printScopePage(pr, sc.rooms, head));
   if (typeof printDrawings === 'function') out.push(...printDrawings(pr, sc.rooms, head));
   if (pr.items.includes('cutlist')) out.push(`<section class="mp-page mp-flow"><h2>Cut list · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Length', 'Width', 'Thick', 'Material', 'Edges'], sc.parts.map(p => `<tr><td>${esc(p.room)}</td><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)}</td><td>${fmtLen(p.W)}</td><td>${fmtLen(p.T)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td><td>${esc(p.edges || '')}</td></tr>`))}</section>`);
   if (pr.items.includes('hardware')) { const bom = {}; sc.cabs.forEach(({ c, room }) => withRoom(room, () => Object.entries(buildParts(c).bom || {}).forEach(([k, q]) => bom[k] = (bom[k] || 0) + q))); out.push(`<section class="mp-page mp-flow"><h2>Hardware · ${esc(title)}</h2>${tbl(['Item', 'Qty'], Object.entries(bom).sort().map(([k, q]) => `<tr><td>${esc(k)}</td><td>${q}</td></tr>`))}</section>`); }
@@ -122,7 +127,8 @@ function showMultiPrint() {
     <label class="f"><span>Title</span><input type="text" class="mp-title" value="${esc(pr.title || '')}" aria-label="Title (variables allowed)" placeholder="{JOB}"></label>
     <label class="f"><span>Paper</span><select class="mp-paper" aria-label="Paper size">${MP_PAPERS.map(([k, l]) => `<option value="${k}"${k === pg.id ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
     <div class="f"><span>Pages</span><div class="seg mp-orient" role="group" aria-label="Page direction"><button data-act="mp-orient" data-id="land" aria-pressed="${!pg.port}">Sideways</button><button data-act="mp-orient" data-id="port" aria-pressed="${pg.port}">Upright</button></div></div></div>
-    <div class="mp-items">${MP_ITEMS.map(([k, l]) => `<label class="checkrow"><input type="checkbox" class="mp-item" value="${k}"${pr.items.includes(k) ? ' checked' : ''}> ${l}</label>`).join('')}<label class="checkrow mp-colorrow"><input type="checkbox" class="mp-color"${pr.color ? ' checked' : ''}> Drawings in color</label></div>
+    <div class="mp-items">${MP_ITEMS.map(([k, l]) => `<label class="checkrow"><input type="checkbox" class="mp-item" value="${k}"${pr.items.includes(k) ? ' checked' : ''}> ${l}</label>`).join('')}<label class="checkrow mp-colorrow"><input type="checkbox" class="mp-color"${pr.color ? ' checked' : ''}> Drawings in color</label><label class="checkrow mp-colorrow" title="Marks every page as an estimate and puts the estimated price on the Scope of work, with a note that the price can vary or change"><input type="checkbox" class="mp-est"${pr.estimate ? ' checked' : ''}> Estimate</label><label class="checkrow mp-colorrow" title="Adds a note on the Room settings and Scope of work pages that the bid didn't say which laminate goes where and the materials listed are our assumption, to confirm. On by itself for jobs from a bid."><input type="checkbox" class="mp-assume"${typeof matAssumed === 'function' && matAssumed() ? ' checked' : ''}> Materials not set by the bid</label></div>
+    ${pr.items.includes('scope') ? `<label class="f mp-scopef"><span>Scope of work notes (printed under the list; saved with the job)</span><textarea class="mp-scope" rows="2" placeholder="Anything else included or not included, e.g. Removal of old cabinets by others. Plumbing and electrical by others.">${esc(S.job.scope || '')}</textarea></label>` : ''}
     ${typeof PRINT_LAYOUTS !== 'undefined' ? `<div class="mp-lay"><label class="f"><span>Cover</span><select class="mp-lpick" data-k="cover" aria-label="Cover layout">${PRINT_LAYOUTS.filter(l => l.kind === 'cover').map(l => `<option value="${l.id}"${plFor(pr, 'cover') === l ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>
       <label class="f"><span>Title block</span><select class="mp-lpick" data-k="block" aria-label="Title block layout"><option value="none"${pr.block === 'none' ? ' selected' : ''}>Plain strip</option>${PRINT_LAYOUTS.filter(l => l.kind === 'block').map(l => `<option value="${l.id}"${plFor(pr, 'block') === l ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>
       <button class="btn sm" data-act="pl-open" data-id="${(plFor(pr, 'cover') || {}).id || ''}">${icon('edit')}Edit layouts</button></div>` : ''}</div>
@@ -160,6 +166,9 @@ document.addEventListener('change', e => {
   else if (t.classList.contains('mp-name')) pr.name = t.value || pr.name;
   else if (t.classList.contains('mp-title')) pr.title = t.value;
   else if (t.classList.contains('mp-color')) pr.color = t.checked;
+  else if (t.classList.contains('mp-est')) pr.estimate = t.checked;
+  else if (t.classList.contains('mp-assume')) { mutate(() => { S.job.matAssume = t.checked; }); showMultiPrint(); return; }
+  else if (t.classList.contains('mp-scope')) { mutate(() => { S.job.scope = t.value.trim(); }); showMultiPrint(); return; }
   else if (t.classList.contains('mp-paper')) { pr.paper = t.value; if (typeof printPicsClear === 'function') printPicsClear(); }
   else if (t.classList.contains('mp-lpick')) pr[t.dataset.k] = t.value;
   else if (t.classList.contains('mp-item')) pr.items = [...document.querySelectorAll('#multiprint .mp-item:checked')].map(x => x.value);

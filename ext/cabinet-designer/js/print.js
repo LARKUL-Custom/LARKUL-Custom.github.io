@@ -150,9 +150,9 @@ function printPic(key, shot) {
 }
 function print3DPages(room, head) {
   return print3DViews(room).map(vw => {
-    const PA = printArea('plan'), aspect = PA.w / PA.h, key = room.id + '|' + vw.id + '|' + aspect.toFixed(2), url = printPic(key, () => print3DShot(room, vw, { aspect, fit: true }));
+    const PA = printArea('plan'), aspect = PA.w / PA.h, key = room.id + '|' + vw.id + '|' + aspect.toFixed(2), url = printPic(key + '|real', () => print3DShot(room, vw, { aspect, fit: true, real: true }));
     if (!url) return '';
-    return `<section class="mp-page land mp-draw">${head(room.name, vw.name || '3D view')}<div class="mp-pic"><img src="${url}" alt="${esc(room.name)} ${esc(vw.name || '3D view')}" data-pic="${esc(key)}"></div></section>`;
+    return `<section class="mp-page land mp-draw">${head(room.name, vw.name || '3D view')}<div class="mp-pic"><img src="${url}" alt="${esc(room.name)} ${esc(vw.name || '3D view')}" data-pic="${esc(key + '|real')}"></div></section>`;
   }).join('');
 }
 // Wood textures load a moment after the first picture: take the pictures again once and swap them in.
@@ -169,17 +169,60 @@ function print3DLater() {
 function printPicsClear() { Object.keys(printPics).forEach(k => delete printPics[k]); printLateDone = {}; }
 
 // All the drawing pages for the preset's picks, room by room (plan, then the walls, then 3D).
+// Page order (Ayden 2026-11-19): the realistic 3D pictures come first (after the cover), then the room settings (Job specs)
+// and Scope of work (libs2.js mpPages), then each room's wall elevations, its floor plan and its countertop layout.
+function print3DFirst(pr, rooms, head) {
+  return pr.items.includes('3d') ? rooms.map(room => print3DPages(room, head)).filter(Boolean) : [];
+}
 function printDrawings(pr, rooms, head) {
   const want = k => pr.items.includes(k);
-  if (!want('plan') && !want('elev') && !want('3d') && !want('tops')) return [];
+  if (!want('plan') && !want('elev') && !want('tops')) return [];
   const out = [];
   rooms.forEach(room => {
+    if (want('elev')) printWallSides(room).forEach(ws => out.push(printElevPage(room, ws, head)));
     if (want('plan')) out.push(printPlanPage(room, head));
     if (want('tops') && typeof printTopsPage === 'function') out.push(printTopsPage(room, head));
-    if (want('elev')) printWallSides(room).forEach(ws => out.push(printElevPage(room, ws, head)));
-    if (want('3d')) out.push(print3DPages(room, head));
   });
   return out.filter(Boolean);
+}
+
+/* ----- Notes sheet (Ayden 2026-11-19: right after the cover): the job's notes, then ruled lines to write on ----- */
+function printNotesPage(pr, rooms, head) {
+  const lines = Array.from({ length: 40 }, () => '<i></i>').join('');
+  return `<section class="mp-page land mp-draw mp-notesp">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Notes')}
+    <h3 class="mp-nh">Notes</h3>${S.job.notes ? `<div class="mp-nt">${esc(S.job.notes)}</div>` : ''}<div class="mp-lines">${lines}</div></section>`;
+}
+
+/* ----- Scope of work: what the job includes, room by room, from the drawing, with the shop's own notes ----- */
+const SCOPE_EST = 'This is an estimate only. The final price can vary or change with final measurements, selections, materials and site conditions.';
+function printScopeRows(room) {
+  return withRoom(room, () => {
+    const rs = k => roomSet(k, room), nm = x => (x && x.name) || '';
+    const cabs = S.cabinets.filter(c => !c.noCount), rows = [];
+    const cats = CAT_FT.map(([cat, name]) => { const cs = cabs.filter(c => c.cat === cat); return cs.length ? `${cs.length} ${name.toLowerCase()} (${ftLen(cs.reduce((a, c) => a + c.w, 0) / 12)} ft)` : ''; }).filter(Boolean);
+    const other = cabs.filter(c => !CAT_FT.some(([cat]) => cat === c.cat)).length;
+    if (cats.length || other) rows.push(['Cabinets', esc([...cats, other ? `${other} other` : ''].filter(Boolean).join(', '))]);
+    const dt = doorTpl(rs('doorT')), fin = finishList().find(f => f.id === rs('finish')) || finishList()[0];
+    if (cabs.length) rows.push(['Doors and drawer fronts', esc([nm(dt), nm(fin)].filter(Boolean).join(', '))]);
+    const pull = hw(rs('pull') || (dt && dt.pull)); if (cabs.length) rows.push(['Hardware', esc([nm(hw(rs('hinge'))), nm(hw(rs('slide'))), nm(pull)].filter(Boolean).join(', '))]);
+    const tops = countertopRuns().filter(t => t.on);
+    if (tops.length) { const sq = tops.reduce((a, t) => a + (t.area ?? t.len * t.depth), 0) / 144; rows.push(['Countertops', esc(`${[...new Set(tops.map(t => (t.tpl && t.tpl.name) || t.name || 'Top'))].join(', ')}, about ${Math.round(sq)} sq ft`)]); }
+    const molds = moldingRuns(); if (molds.length) rows.push(['Molding', esc([...new Set(molds.map(m => m.m.name))].join(', ') + `, about ${ftLen(molds.reduce((a, m) => a + m.len, 0) / 12)} ft`)]);
+    const fx = fixtList().filter(f => !fixtHole(f)); if (fx.length) rows.push(['Appliances and sinks', esc(fx.map(f => fixtName(f)).join(', ')) + ' <span class="muted">(placed for the layout; supplied by others unless noted)</span>']);
+    return rows;
+  });
+}
+function printScopePage(pr, rooms, head) {
+  const ps = typeof priceSheet === 'function' ? priceSheet() : null, who = ps && typeof jobInstaller === 'function' ? jobInstaller(ps) : null;
+  const cards = rooms.map(room => { const rows = printScopeRows(room); return rows.length ? `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table></div>` : ''; }).join('');
+  let price = '';
+  if (pr.estimate && ps && typeof priceJob === 'function') { try { price = money(priceJob(ps).total); } catch (_) { price = ''; } }
+  const inst = who ? 'Installation is included.' : 'Installation is not included.';
+  return `<section class="mp-page land mp-draw mp-scope">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Scope of work')}
+    <div class="mp-specs">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
+    ${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}
+    <div class="mp-scopex"><b>${esc(inst)}</b>${S.job.scope ? `<div class="mp-scopen">${esc(S.job.scope)}</div>` : ''}</div>
+    ${pr.estimate ? `<div class="mp-estimate">${price ? `<div class="mp-estp"><span>Estimated price</span><b>${price}</b></div>` : ''}<div>${SCOPE_EST}</div></div>` : ''}</section>`;
 }
 
 /* ----- Job specs: what the job is made of, room by room (door style, finish, cabinet material, hardware, color) ----- */
@@ -210,6 +253,27 @@ function printSpecRows(room) {
   });
 }
 // Two rooms to a page, so a big job's specs never run off the bottom.
+// Which material goes on which parts, from the parts the cabinets are cut into (Ayden 2026-11-19: the Refuge job didn't
+// say which laminate goes where). Parts are put in plain groups so the shop and the customer can read it.
+const MAT_USE = [['Doors and drawer fronts', /^(door|drawer front|false front)|door (stile|rail|panel|raised|glass)/i], ['Drawer boxes', /drawer (side|box|bottom)/i],
+  ['Finished ends, panels and fillers', /fin\.? ?end|end panel|applied|filler|front (lower |top )?panel|^panel|scribe/i], ['Toe skin', /toe/i], ['Backs', /back/i], ['Shelves', /shelf/i],
+  ['Countertops', /countertop|^top \(/i], ['Molding', /molding|crown|light rail/i]];
+function printMatUse(room) {
+  return withRoom(room, () => {
+    const by = {}, cabsOf = {}, n = S.cabinets.length;
+    S.cabinets.forEach(c => { let ps = []; try { ps = buildParts(c).parts; } catch (_) {}
+      ps.forEach(p => { const m = mat(p.mat); if (!m) return; const nm = String(p.report || p.name || ''), g = (MAT_USE.find(([, re]) => re.test(nm)) || ['Cabinet box (sides, tops, bottoms, stretchers)'])[0];
+        ((by[m.id] = by[m.id] || { m, g: new Set() }).g).add(g); (cabsOf[m.id] = cabsOf[m.id] || new Set()).add(c.id); }); });
+    const rows = Object.values(by).map(({ m, g }) => { const cs = [...cabsOf[m.id]], few = cs.length < n && cs.length <= 8;
+      return [m.name, [...g].join(', ') + (few ? ` <span class="muted">(only on ${cs.map(id => esc(LBL[id] || '')).join(', ')})</span>` : '')]; });
+    countertopRuns().filter(t => t.on).forEach(t => { const m = mat(t.tpl && t.tpl.mat); if (m && !rows.some(r => r[0] === m.name)) rows.push([m.name, 'Countertops']); });
+    return rows;
+  });
+}
+// A bid job's documents often don't say which laminate goes where: the print says the materials are our pick, to confirm.
+const jobFromBid = () => (S.rooms || []).some(r => (r.cabinets || []).some(c => c.fromBid));
+const matAssumed = () => S.job.matAssume ?? jobFromBid();
+const MAT_ASSUMED = 'The bid documents do not say which laminate or material goes where. The materials listed here are what we assumed; please confirm them with us before anything is ordered or cut.';
 function printSpecPage(pr, rooms, head) {
   const out = [];
   for (let i = 0; i < Math.max(1, rooms.length); i += 2) out.push(printSpecSheet(pr, rooms.slice(i, i + 2), head, rooms.length, i === 0));
@@ -218,7 +282,9 @@ function printSpecPage(pr, rooms, head) {
 function printSpecSheet(pr, rooms, head, all, first) {
   const cards = rooms.map(room => {
     const { rows, odd } = printSpecRows(room);
-    return `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v || '—'}</td></tr>`).join('')}</table>${odd.length ? `<div class="mp-odd"><b>Different on these cabinets</b><br>${odd.join('<br>')}</div>` : ''}</div>`;
+    const mu = printMatUse(room);
+    return `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v || '—'}</td></tr>`).join('')}</table>
+      ${mu.length ? `<h4 class="mp-muh">Materials and where they go</h4><table class="mp-spect mp-mut">${mu.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v}</td></tr>`).join('')}</table>` : ''}${odd.length ? `<div class="mp-odd"><b>Different on these cabinets</b><br>${odd.join('<br>')}</div>` : ''}</div>`;
   }).join('');
-  return `<section class="mp-page land mp-draw">${head(all > 2 ? rooms.map(r => r.name).join(', ') : all > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Job specs')}<div class="mp-specs">${cards}</div>${first && S.job.notes ? `<div class="mp-notes"><b>Notes</b> ${esc(S.job.notes)}</div>` : ''}</section>`;
+  return `<section class="mp-page land mp-draw">${head(all > 2 ? rooms.map(r => r.name).join(', ') : all > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Room settings')}<div class="mp-specs">${cards}</div>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}${first && S.job.notes && !pr.items.includes('notes') ? `<div class="mp-notes"><b>Notes</b> ${esc(S.job.notes)}</div>` : ''}</section>`;
 }

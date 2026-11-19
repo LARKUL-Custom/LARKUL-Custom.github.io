@@ -3639,3 +3639,18 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .seg.mp-orient{flex-wrap:nowrap}
 .mp-flow table.mp-t{width:100%!important;max-width:none}
 .mp-barrow > .f{flex:none}
+/* 0.59.7 Print: Scope of work page, Estimate note, company name bigger on the cover and title block */
+.mp-esttag{position:absolute;top:.12in;right:.35in;font-size:8pt;font-weight:700;color:#b45309;letter-spacing:.02em}
+#multiprint .mp-page.mp-draw{position:relative}
+.mp-scopex{flex:none;font-size:9.5pt;color:#111;border-top:.5px solid #aaa;padding-top:6px}
+.mp-scopen{white-space:pre-line;margin-top:4px;font-weight:400}
+.mp-estimate{flex:none;border:1.5px solid #111;padding:8px 12px;font-size:9.5pt;color:#111;display:flex;gap:18px;align-items:center}
+.mp-estp{display:flex;flex-direction:column;flex:none}.mp-estp span{font-size:7.5pt;color:#555;font-weight:600}.mp-estp b{font-size:16pt}
+.mp-scopef{width:100%}.mp-scopef textarea{width:100%;min-height:44px}
+.mp-nh{margin:0;font-size:13pt;border-bottom:2px solid #d9731b;padding-bottom:3px;color:#111;flex:none}
+.mp-nt{flex:none;white-space:pre-line;font-size:10pt;color:#111}
+.mp-lines{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.mp-lines i{display:block;flex:none;height:.36in;border-bottom:.5px solid #bbb}
+.mp-muh{margin:10px 0 4px;font-size:10pt;color:#111}
+.mp-mut th{font-weight:700;color:#111}.mp-mut td{font-weight:400}
+.mp-assume{flex:none;font-size:9pt;color:#111;background:#fff6ec;border-left:3px solid #d9731b;padding:6px 10px;font-weight:600}
