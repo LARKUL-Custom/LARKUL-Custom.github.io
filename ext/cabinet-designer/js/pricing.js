@@ -311,13 +311,14 @@ const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
 function priceFront(ds, sq, ps, w, h) {
   // A front bought in its material (Bywater 5 Piece Melamine): a price per piece, per sq ft and per foot around the edge,
   // plus each panel past the first. Without the size, the front is taken as square.
-  const bm = ds.bought && boughtMat(ds.bought);
+  // The Bywater 5 piece melamine shaker style carries its own numbers (bwEach, bwSq, bwFt, bwPanelAdd, bwSheetSq).
+  const bm = ds.bought === 'style' ? { doorEach: ds.bwEach, doorSq: ds.bwSq, doorFt: ds.bwFt, doorPanel: ds.bwPanelAdd, sheetSq: ds.bwSheetSq } : ds.bought && boughtMat(ds.bought);
   if (bm) {
     if (!(w > 0 && h > 0)) w = h = Math.sqrt(sq * 144);
     const fr = typeof doorMids === 'function' && ds.type !== 'slab' ? doorMids(ds, w, h) : { nR: 0, nS: 0 }, extra = (fr.nR + 1) * (fr.nS + 1) - 1;
     const labor = (+bm.doorEach || 0) + sq * (+bm.doorSq || 0) + 2 * (w + h) / 12 * (+bm.doorFt || 0) + Math.max(0, extra) * (+bm.doorPanel || 0);
     // Special order colors: Bywater adds the full sheets of that color, so the sheet's cost per sq ft (with waste) goes on top.
-    const material = bm.doorSpecial ? sq * matSqIn(bm, ps) * 144 : 0;
+    const material = bm.sheetSq != null ? sq * (+bm.sheetSq || 0) * (1 + (+((ps || {}).materials || {}).waste || 0) / 100) : bm.doorSpecial ? sq * matSqIn(bm, ps) * 144 : 0;
     return { labor, material, total: labor + material };
   }
   const material = sq * doorMatRate(ds, ps), total = Math.max(doorMin(ds), sq * doorRate(ds) + material);

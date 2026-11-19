@@ -264,7 +264,7 @@ function matDetailHTML(m, u, sheets, kinds) {
       ${cardHead('Size', '')}<div class="cardbody">${fld('Thickness', R, 'thick', m.thick, 'len')}${sheet || m.kind === 'top' ? fld('Sheet width', R, 'sheetW', m.sheetW, 'len') + fld('Sheet length', R, 'sheetL', m.sheetL, 'len') : ''}<div class="mlx-checks">${fld('Has grain', R, 'grain', m.grain, 'bool')}${fld('Takes the room finish', R, 'dynamic', !!m.dynamic, 'bool')}</div></div>
       ${cardHead('Look', '')}<div class="cardbody">${fld('Color', R, 'color', m.color, 'color')}${fld('Texture size', R, 'texScale', m.texScale || 24, 'len')}<div class="mlx-tex"><button class="btn sm" data-act="tex-lib" data-id="${m.id}">${icon('palette')}Texture library</button>${m.texture ? `<button class="btn sm" data-act="tex-clear" data-id="${m.id}">Clear texture</button>` : ''}</div></div>
       ${cardHead('Price and CNC', '')}<div class="cardbody">${fld(m.kind === 'top' ? 'Cost per top' : 'Cost per sheet', R, 'cost', m.cost, 'num')}${m.kind === 'top' ? '' : fld('Finishing', R, 'fin', matFin(m), 'select', { options: [{ v: 'paint', l: 'Painted or stained' }, { v: 'pre', l: 'Prefinished, edgebanding only' }], wide: true })}${sheet ? fld('CNC feed %', R, 'feedRate', m.feedRate || 100, 'num') : ''}</div>
-      ${sheet ? boughtDoorFields(m, R) : ''}
+      ${sheet && m.doorBuy ? boughtDoorFields(m, R) : ''}
     </div><datalist id="matgroups">${[...new Set(S.materials.map(x => x.group).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('')}</datalist></div>`;
 }
 function renderMaterials() {
@@ -488,7 +488,7 @@ function foldDsecs(html) {
 }
 // Coloured tiles under the door picture: what this size costs and makes, and where the style is used.
 function doorStats(d, pw, ph, parts, nOps, usedIn, buyout) {
-  let price = ''; try { price = money(priceFront(d, pw * ph / 144, priceSheet()).total); } catch (_) {}
+  let price = ''; try { price = money(priceFront(boughtFronts(d), pw * ph / 144, priceSheet(), pw, ph).total); } catch (_) {}
   const cabs = (() => { try { const ids = new Set(S.doorTemplates.filter(t => [t.door, t.drawer, t.falseFront, t.wallDoor, t.drawerTop, t.drawerBot].includes(d.id)).map(t => t.id)); return allCabs().filter(c => ids.has(cabSet(c, 'doorT'))).length; } catch (_) { return 0; } })();
   const t = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${v}</b><span>${lb}</span></div>`;
   return `<div class="edx-stats plx-stats dstats">${price ? t('green', 'tag', price, 'This size') : ''}${buyout ? t('amber', 'download', 'Buyout', 'Door maker') : t('amber', 'list', parts.reduce((a, p) => a + p.qty, 0), 'Parts')}${buyout ? '' : t('blue', 'cube', nOps, 'Machining ops')}${t('violet', 'stack', usedIn, usedIn === 1 ? 'Template' : 'Templates')}${t('teal', 'home', cabs, 'Cabinets in this job')}</div>`;
@@ -603,6 +603,9 @@ function doorDesigner() {
         <div class="note">Material comes from the room's finish (${esc((finishOf(null) || {}).name || '')}), not the door style. Set finishes under Libraries › Materials.</div>
         ${fld('Outside edge', R, 'edgeProfile', d.edgeProfile, 'select', { options: EDGE_PROFILES })}
         ${buyout || d.type === 'fivepiece' ? '' : fld('CNC tool group', R, 'cncGroup', d.cncGroup || '', 'text', { wide: true, ph: 'Like 60 panel' })}${buyout || d.type === 'fivepiece' ? '' : `<div class="note">The panel tool group in CNC Cutlist that cuts this door's recess and edges, by its name there. Blank: pick it in CNC Cutlist.</div>`}</div>
+      ${buyout ? `<div class="dsec">${secHead('tag', 'Bywater price', 'amber')}<div class="mlx-checks">${fld('Priced like Bywater (per piece, sq ft, edge)', R, 'bwBuy', !!d.bwBuy, 'bool')}</div>
+        ${d.bwBuy ? `${fld('Per piece', R, 'bwEach', d.bwEach, 'num')}${fld('Per sq ft', R, 'bwSq', d.bwSq, 'num')}${fld('Per foot of edge', R, 'bwFt', d.bwFt, 'num')}${fld('Each extra panel', R, 'bwPanelAdd', d.bwPanelAdd, 'num')}${fld('Special order sheet per sq ft', R, 'bwSheetSq', d.bwSheetSq, 'num')}
+        <div class="note">Bywater 5 Piece Melamine, special order color (Nov 2026): $20.17 a piece + $8.72/sq ft + $1.78/ft of edge, $23.93 per extra panel, plus the sheet at the average Wilsonart laminate $5.33/sq ft with waste. No paint or edgebanding.</div>` : ''}</div>` : ''}
       ${buyout && doorExportOf(S) === 'bywater' ? bywaterStyleFields(d, R, framedT) : ''}${buyout && doorExportOf(S) !== 'bywater' ? `<div class="dsec">${secHead('list', 'Door maker order', 'amber')}
         <div class="note">What goes on the buyout door order. Blank boxes use this style's own settings.</div>
         ${fld('Their door name', R, 'vName', d.vName || '', 'text', { wide: true, ph: d.name })}

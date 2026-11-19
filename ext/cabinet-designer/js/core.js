@@ -925,6 +925,8 @@ function withFinish(ds, c) {
    so they get no paint or edgebanding charge either. */
 const boughtMat = id => { const m = mat(id); return m && m.doorBuy ? m : null; };
 function boughtFronts(ds) {
+  // 0.59.17: Bywater 5 piece melamine shaker is a door STYLE (Ayden 2026-11-19), priced by the style's own Bywater numbers.
+  if (ds.bwBuy) return { ...ds, source: 'buyout', bought: 'style' };
   const m = boughtMat(ds.mat); if (!m) return ds;
   const bw = (k, v) => String(m[k] || '').trim() || v;
   return { ...ds, source: 'buyout', bought: m.id, bwProduct: bw('bwProduct', BW_MEL.bwProduct), bwWood: bw('bwColor', ''), bwFace: bw('bwFace', 'Vertical Grain'), bwEdge: bw('bwEdge', ds.bwEdge) };
@@ -943,18 +945,40 @@ const BW_MEL_STOCK = { doorEach: 19.969, doorSq: 11.267, doorFt: 3.827 };
 const BW_SHEET = 170.46;
 const BW_MEL = { id: 'm-bw-mel', name: '3/4 Bywater Melamine (bought doors)', kind: 'sheet', thick: 0.75, sheetW: 48, sheetL: 96, grain: false, cost: BW_SHEET, color: '#f4f4f2', texture: null, procedural: null, texScale: 24, fin: 'pre',
   doorBuy: true, doorSpecial: true, doorEach: 20.17, doorSq: 8.718, doorFt: 1.775, doorPanel: 23.93, bwProduct: '5 Piece Melamine', bwColor: 'Non Stocked Color (Additional charges will be added)' };
+/* 0.59.17 (Ayden 2026-11-19: "we put bywater melamine as a finish instead of a door and drawer style, its 5 piece melamine
+   shaker that we would buy through bywater"). The Bywater melamine is a door and drawer front style now, with a door
+   template that uses it for doors, drawer fronts and false fronts. The 0.58.7 finish "Bywater Melamine" and its material
+   are taken out: wherever a job, room or cabinet picked that finish, it picks the Bywater door template instead and a
+   plain "Melamine" finish (3/4 Melamine) for its finished panels, once. */
+const BW_STYLE = { id: 'd-bw-mel', name: 'Bywater 5 piece melamine shaker', type: 'fivepiece', mat: 'm-mel34', stile: 3, rail: 3, pocketDepth: 0, tenon: 0.375, panelMat: 'm-mel34', panelType: 'flat',
+  source: 'buyout', bwBuy: true, bwEach: 20.17, bwSq: 8.718, bwFt: 1.775, bwPanelAdd: 23.93, bwSheetSq: +(BW_SHEET / 32).toFixed(3),
+  bwProduct: '5 Piece Melamine', bwWood: 'Non Stocked Color (Additional charges will be added)', bwFace: 'Vertical Grain' };
+const BW_TPL = { id: 'door-bw-mel', name: 'Bywater melamine shaker (buyout)', door: 'd-bw-mel', drawer: 'd-bw-mel', falseFront: 'd-bw-mel', minFrameHeight: 0, pull: 'hw-pull128', drawerPull: 'hw-pull128', pullFromEdge: 2, pullFromEnd: 3, drawerPullFromTop: 0 };
 function ensureBoughtDoors(s) {
-  if (!s || !Array.isArray(s.materials) || !Array.isArray(s.finishes) || s.bwMelSeed >= 4) return s;
-  // 0.58.24: the $60 placeholder sheet becomes the average Wilsonart 4x8 laminate sheet. A price Ayden typed stays.
-  const was = s.materials.find(m => m.id === BW_MEL.id);
-  if (was && s.bwMelSeed === 3 && +was.cost === 60 && +was.sheetW === 49 && +was.sheetL === 97) Object.assign(was, { cost: BW_SHEET, sheetW: 48, sheetL: 96 });
-  if (s.bwMelSeed === 3) { s.bwMelSeed = 4; return s; }
-  s.bwMelSeed = 4;
-  // A job that got an earlier draft of this material (slab, or stocked-color prices) takes the special order prices.
-  const had = s.materials.find(m => m.id === BW_MEL.id);
-  if (!had) s.materials.push({ ...BW_MEL });
-  else if (had.doorSpecial == null) Object.assign(had, { doorBuy: true, doorSpecial: true, doorEach: BW_MEL.doorEach, doorSq: BW_MEL.doorSq, doorFt: BW_MEL.doorFt, doorPanel: BW_MEL.doorPanel, bwProduct: BW_MEL.bwProduct, bwColor: BW_MEL.bwColor });
-  if (!s.finishes.some(f => f.id === 'fin-bw-mel')) s.finishes.push({ id: 'fin-bw-mel', name: 'Bywater Melamine', front: BW_MEL.id, panel: BW_MEL.id, sheet: BW_MEL.id, solid: BW_MEL.id });
+  if (!s || !Array.isArray(s.materials) || !Array.isArray(s.finishes) || !Array.isArray(s.doorStyles) || !Array.isArray(s.doorTemplates) || s.bwStyle) return s;
+  s.bwStyle = 1;
+  if (!s.doorStyles.some(d => d.id === BW_STYLE.id)) s.doorStyles.push(clone(BW_STYLE));
+  if (!s.doorTemplates.some(t => t.id === BW_TPL.id)) {
+    const t = clone(BW_TPL), t0 = s.doorTemplates[0] || {};
+    // Pulls the job has: the first template's, when the shop's 128 mm pull isn't in this job.
+    const hasHw = id => (s.hardware || []).some(h => h.id === id);
+    if (!hasHw(t.pull)) t.pull = t0.pull || ''; if (!hasHw(t.drawerPull)) t.drawerPull = t0.drawerPull || t.pull;
+    s.doorTemplates.push(t);
+  }
+  // The finish that goes with it is called Laminate (Ayden 2026-11-19); finished parts are cut from the 3/4 melamine.
+  let melId = (s.materials.find(m => m.id === 'm-mel34') || s.materials.find(m => !m.doorBuy && (m.kind || 'sheet') === 'sheet' && /melamine/i.test(m.name || '') && Math.abs(+m.thick - 0.75) < 0.04) || {}).id;
+  if (!melId) { s.materials.push(clone(MEL_CAB_MAT)); melId = MEL_CAB_MAT.id; }
+  let fin = s.finishes.find(f => f.id === 'fin-lam');
+  if (!fin) { fin = { id: 'fin-lam', name: 'Laminate', front: melId, panel: melId, sheet: melId, solid: melId }; s.finishes.push(fin); }
+  const bad = s.finishes.find(f => f.id === 'fin-bw-mel');
+  if (bad) {
+    const fix = o => { if (o && o.finish === bad.id) { o.finish = fin.id; o.doorT = BW_TPL.id; } };
+    fix((s.job || {}).defaults); (s.rooms || []).forEach(r => { fix(r.settings); (r.cabinets || []).forEach(fix); });
+    s.finishes.splice(s.finishes.indexOf(bad), 1);
+    // The bought-door material goes too, unless something is still cut from it.
+    const used = JSON.stringify(s.rooms || []).includes('"m-bw-mel"') || (s.finishes || []).some(f => Object.values(f).includes('m-bw-mel'));
+    const i = s.materials.findIndex(m => m.id === 'm-bw-mel'); if (i >= 0 && !used) s.materials.splice(i, 1);
+  }
   return s;
 }
 // Runs fn with another room open, so S.walls and S.cabinets point at it.
