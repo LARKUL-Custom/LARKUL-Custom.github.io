@@ -189,42 +189,46 @@ function printDrawings(pr, rooms, head) {
 /* ----- Notes sheet (Ayden 2026-11-19: right after the cover): the job's notes, then ruled lines to write on ----- */
 function printNotesPage(pr, rooms, head) {
   const notes = printNote(S.job.notes), lam = matAssumed() ? printLamByRoom(rooms) : '';
-  const lines = Array.from({ length: lam ? 24 : 40 }, () => '<i></i>').join('');
-  return `<section class="mp-page land mp-draw mp-notesp">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Notes')}
+  // A long laminate list (a bid job with many rooms) flows onto more sheets instead of running off the page and over
+  // the next one (Ayden 2026-11-19, Refuge: 19 rooms covered the Price summary).
+  const long = lam && rooms.length > 6, lines = Array.from({ length: long ? 10 : lam ? 24 : 40 }, () => '<i></i>').join('');
+  return `<section class="mp-page ${long ? 'mp-flow' : 'land'} mp-draw mp-notesp">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Notes')}
     <h3 class="mp-nh">Notes</h3>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>${lam ? `<table class="mp-spect mp-mut">${lam}</table>` : ''}` : ''}${notes ? `<div class="mp-nt">${esc(notes)}</div>` : ''}<div class="mp-lines">${lines}</div></section>`;
 }
 
 /* ----- Scope of work: what the job includes, room by room, from the drawing, with the shop's own notes ----- */
 const SCOPE_EST = 'This is an estimate only. The final price can vary or change with final measurements, selections, materials and site conditions.';
-function printScopeRows(room) {
+// One sentence for a room: "Build and install 8 base and 5 wall cabinets with Shaker doors, plus countertops and molding."
+function printScopeIdea(room, inst) {
   return withRoom(room, () => {
-    const rs = k => roomSet(k, room), nm = x => (x && x.name) || '';
-    const cabs = S.cabinets.filter(c => !c.noCount), rows = [];
-    const cats = CAT_FT.map(([cat, name]) => { const cs = cabs.filter(c => c.cat === cat); return cs.length ? `${cs.length} ${name.toLowerCase()} (${ftLen(cs.reduce((a, c) => a + c.w, 0) / 12)} ft)` : ''; }).filter(Boolean);
+    const cabs = S.cabinets.filter(c => !c.noCount), n = cat => cabs.filter(c => c.cat === cat).length;
+    const kinds = [['Base', 'base'], ['Wall', 'wall'], ['Tall', 'tall']].map(([c, w]) => n(c) ? `${n(c)} ${w}` : '').filter(Boolean);
     const other = cabs.filter(c => !CAT_FT.some(([cat]) => cat === c.cat)).length;
-    if (cats.length || other) rows.push(['Cabinets', esc([...cats, other ? `${other} other` : ''].filter(Boolean).join(', '))]);
-    const dt = doorTpl(rs('doorT')), fin = finishList().find(f => f.id === rs('finish')) || finishList()[0];
-    if (cabs.length) rows.push(['Doors and drawer fronts', esc([nm(dt), nm(fin)].filter(Boolean).join(', '))]);
-    const pull = hw(rs('pull') || (dt && dt.pull)); if (cabs.length) rows.push(['Hardware', esc([nm(hw(rs('hinge'))), nm(hw(rs('slide'))), nm(pull)].filter(Boolean).join(', '))]);
-    const tops = countertopRuns().filter(t => t.on);
-    if (tops.length) { const sq = tops.reduce((a, t) => a + (t.area ?? t.len * t.depth), 0) / 144; rows.push(['Countertops', esc(`${[...new Set(tops.map(t => (t.tpl && t.tpl.name) || t.name || 'Top'))].join(', ')}, about ${Math.round(sq)} sq ft`)]); }
-    const molds = moldingRuns(); if (molds.length) rows.push(['Molding', esc([...new Set(molds.map(m => m.m.name))].join(', ') + `, about ${ftLen(molds.reduce((a, m) => a + m.len, 0) / 12)} ft`)]);
-    const fx = fixtList().filter(f => !fixtHole(f)); if (fx.length) rows.push(['Appliances and sinks', esc(fx.map(f => fixtName(f)).join(', ')) + ' <span class="muted">(by others unless noted)</span>']);
-    return rows;
+    if (other) kinds.push(`${other} other`);
+    const list = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0] || '';
+    const dt = doorTpl(roomSet('doorT', room)), extra = [];
+    if (countertopRuns().some(t => t.on)) extra.push('countertops');
+    if (moldingRuns().length) extra.push('molding');
+    if ((room.bidItems || []).length) extra.push('the other items on the bid');
+    if (!cabs.length && !extra.length) return '';
+    const what = cabs.length ? `${list(kinds)} cabinet${cabs.length === 1 ? '' : 's'}${dt && dt.name ? ` with ${dt.name} doors` : ''}` : '';
+    return `${inst ? 'Build and install' : 'Build'} ${[what, list(extra)].filter(Boolean).join(', plus ')}.`;
   });
 }
 function printScopePage(pr, rooms, head) {
   const ps = typeof priceSheet === 'function' ? priceSheet() : null, who = ps && typeof jobInstaller === 'function' ? jobInstaller(ps) : null;
-  const cards = rooms.map(room => { const rows = printScopeRows(room); return rows.length ? `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table></div>` : ''; }).join('');
+  // Just the room and the general idea of the work, one line each (Ayden 2026-11-19); the details are on the room pages.
+  const ideas = rooms.map(room => [room, printScopeIdea(room, ps && roomInstaller(ps, room))]).filter(([, t]) => t);
+  const cards = ideas.length ? `<table class="mp-spect mp-scopet">${ideas.map(([r, t]) => `<tr><th>${esc(r.name)}</th><td>${esc(t)}</td></tr>`).join('')}</table>` : '';
   let price = '';
   let opts = [];
   if (pr.estimate && ps && typeof priceJob === 'function') { try { const q = priceJob(ps); price = money(q.total); opts = typeof whatIfPrintRows === 'function' ? whatIfPrintRows(ps, q) : []; } catch (_) { price = ''; } }
   // What-if options (Pricing › Quote): what the price would go to with each change, beside the estimated price.
   const optT = opts.length ? `<table class="mp-wi"><thead><tr><th>Options</th><th>Difference</th><th>New price</th></tr></thead><tbody>${opts.map(R => `<tr><td>${esc(R.name)}</td><td>${wiSigned(R.diff)}</td><td><b>${money(R.total)}</b></td></tr>`).join('')}</tbody></table>` : '';
   const inst = (ps && typeof anyInstaller === 'function' ? anyInstaller(ps) : who) ? 'Installation is included.' : 'Installation is not included.';
-  return `<section class="mp-page land mp-draw mp-scope">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Scope of work')}
+  return `<section class="mp-page ${ideas.length > 14 ? 'mp-flow' : 'land'} mp-draw mp-scope">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Scope of work')}
     ${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}
-    <div class="mp-specs">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
+    <h3 class="mp-nh">Scope of work</h3><div class="mp-specs mp-scopel">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
     <div class="mp-scopex"><b>${esc(inst)}</b>${S.job.scope ? `<div class="mp-scopen">${esc(S.job.scope)}</div>` : ''}</div>
     ${pr.estimate ? `<div class="mp-estimate">${price ? `<div class="mp-estp"><span>Estimated price</span><b>${price}</b></div>` : ''}${optT}<div>${SCOPE_EST}</div></div>` : ''}</section>`;
 }

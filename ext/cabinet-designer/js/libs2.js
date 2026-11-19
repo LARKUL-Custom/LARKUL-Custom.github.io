@@ -104,6 +104,8 @@ function mpPages(pr) {
   if (pr.items.includes('cover') && typeof printCover === 'function') out.push(printCover(pr, sc.rooms));
   else if (pr.items.includes('cover')) out.push(`<section class="mp-page mp-flow"><h1>${esc(title)}</h1><p><b>Customer</b> ${esc(S.job.customer || '')}</p>${(S.job.fields || []).map(f => `<p><b>${esc(f.k)}</b> ${esc(f.v ?? '')}</p>`).join('')}
     <p><b>Rooms</b> ${sc.rooms.map(r => esc(r.name)).join(', ')}</p><p><b>Cabinets</b> ${sc.cabs.length} · <b>Parts</b> ${sc.parts.reduce((a, p) => a + p.qty, 0)}</p>${typeof printNote === 'function' && printNote(S.job.notes) ? `<p><b>Notes</b> ${esc(printNote(S.job.notes))}</p>` : ''}<p class="muted">Printed ${new Date().toLocaleString()}</p></section>`);
+  // Scope of work right after the cover, before the Notes (Ayden 2026-11-19).
+  if (pr.items.includes('scope') && typeof printScopePage === 'function') out.push(printScopePage(pr, sc.rooms, head));
   if (pr.items.includes('notes') && typeof printNotesPage === 'function') out.push(printNotesPage(pr, sc.rooms, head));
   // Per room pricing: the whole job's price on its own page right after the Notes sheet (after the cover without Notes).
   const priceRoom = pr.items.includes('price') && pr.priceBy === 'room' && typeof printPricePages === 'function';
@@ -115,7 +117,6 @@ function mpPages(pr) {
     if (pr.items.includes('specs') && typeof printSpecSheet === 'function') out.push(printSpecSheet(pr, [room], head, 1, i === 0));
     if (typeof printDrawings === 'function') out.push(...printDrawings(pr, [room], head));
   });
-  if (pr.items.includes('scope') && typeof printScopePage === 'function') out.push(printScopePage(pr, sc.rooms, head));
   if (pr.items.includes('price') && typeof printPricePages === 'function') out.push(...printPricePages(pr, sc.rooms, head, priceRoom ? 'rooms' : undefined));
   if (pr.items.includes('cutlist')) out.push(`<section class="mp-page mp-flow"><h2>Cut list · ${esc(title)}</h2>${tbl(['Room', 'Cab', 'Part', 'Qty', 'Length', 'Width', 'Thick', 'Material', 'Edges'], sc.parts.map(p => `<tr><td>${esc(p.room)}</td><td>${esc(p.cab)}</td><td>${esc(p.report || p.name)}</td><td>${p.qty}</td><td>${fmtLen(p.L)}</td><td>${fmtLen(p.W)}</td><td>${fmtLen(p.T)}</td><td>${esc((mat(p.mat) || {}).name || '')}</td><td>${esc(p.edges || '')}</td></tr>`))}</section>`);
   if (pr.items.includes('hardware')) { const bom = {}; sc.cabs.forEach(({ c, room }) => withRoom(room, () => Object.entries(buildParts(c).bom || {}).forEach(([k, q]) => bom[k] = (bom[k] || 0) + q))); out.push(`<section class="mp-page mp-flow"><h2>Hardware · ${esc(title)}</h2>${tbl(['Item', 'Qty'], Object.entries(bom).sort().map(([k, q]) => `<tr><td>${esc(k)}</td><td>${q}</td></tr>`))}</section>`); }
