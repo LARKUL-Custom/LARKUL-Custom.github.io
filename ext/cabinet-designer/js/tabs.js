@@ -996,8 +996,9 @@ function moldPlanSVG(runs) {
   svg += S.cabinets.map(c => { const p = cabPoly(c); return p ? `<polygon class="ctp-cab${c.cat === 'Base' ? ' base' : ''}" points="${polyPts(p)}"/>` : ''; }).join('');
   runs.forEach((r, i) => {
     const w = wall(r.wall); if (!w) return;
-    const g = wg(w), f = w.thick / 2, d = f + (r.d || 0) + (r.m ? r.m.d : 0), col = moldTone(r.m);
-    const line = [...(r.retS ? [wallPt(w, g, r.side, r.start - (r.m ? r.m.d : 0), f)] : []), wallPt(w, g, r.side, r.start - (r.retS && r.m ? r.m.d : 0), d), wallPt(w, g, r.side, r.end + (r.retE && r.m ? r.m.d : 0), d), ...(r.retE ? [wallPt(w, g, r.side, r.end + (r.m ? r.m.d : 0), f)] : [])];
+    const g = wg(w), f = w.thick / 2, d = f + r.fz + r.m.d, col = moldTone(r.m);
+    // The molding's outside face, with its returns back to the wall (or to a shallower neighbor).
+    const line = [...(r.retS ? [wallPt(w, g, r.side, r.start - r.extS, f + r.backS)] : []), wallPt(w, g, r.side, r.start - r.extS, d), wallPt(w, g, r.side, r.end + r.extE, d), ...(r.retE ? [wallPt(w, g, r.side, r.end + r.extE, f + r.backE)] : [])];
     const mid = wallPt(w, g, r.side, (r.start + r.end) / 2, d + fs * 1.4);
     svg += `<polyline class="mdp-run${ui.moldRun === i ? ' on' : ''}" data-act="mold-run" data-id="${i}" points="${polyPts(line)}" style="--c:${col}" stroke-width="${fs * 0.45}"><title>${esc(r.m.name)} · ${fmtLen(r.len, 1)}</title></polyline>`;
     svg += `<g class="ctp-num" pointer-events="none"><circle cx="${mid.x}" cy="${mid.y}" r="${fs * 0.9}" style="fill:${col}"/><text x="${mid.x}" y="${mid.y}" font-size="${fs}" text-anchor="middle" dominant-baseline="central">${i + 1}</text></g>`;

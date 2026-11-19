@@ -1207,23 +1207,108 @@ function countertopRuns() {
 }
 
 /* ---------- Molding runs ---------- */
+// Auto runs follow the cabinets: a run breaks where the cabinet depth or top changes. Each end either dies into a
+// wall or a cabinet that covers it, turns back along the cabinet side to the wall (a return), turns back only as far
+// as a shallower neighbor's face (a short return), or meets the run on the other wall of an inside corner.
+// Every run carries: fz (front of the doors), extS / extE (how far the front piece goes past the run's ends),
+// backS / backE (where a return stops, out from the wall face), front, returns and len.
+const moldCabD = c => (angledCorner(c) ? cornerLeg(c) : c.d) + (c.outset || 0);
 function moldingRuns() {
-  const runs = runsBy(c => !!c.molding && !!molding(c.molding), c => c.molding);
+  const runs = runsBy(c => !!c.molding && !!molding(c.molding), c => c.molding + '@' + Math.round(moldCabD(c) * 16));
   runs.forEach(r => {
+    r.k = String(r.k).split('@')[0];
     const m = molding(r.k), w = wall(r.wall);
     r.m = m;
-    r.retS = !endBlocked(r, r.start, -1); r.retE = !endBlocked(r, r.end, 1);
     r.h = m.fill ? Math.max(0.5, Math.min(12, w.height - r.top)) : m.h;
     r.z = m.bottom ? r.bottom - r.h : r.top;
-    r.front = (r.end - r.start) + m.d * ((r.retS ? 1 : 0) + (r.retE ? 1 : 0));
-    r.returns = (r.retS ? r.d + m.d : 0) + (r.retE ? r.d + m.d : 0);
-    r.len = r.front + r.returns;
+    r.fz = r.d + 0.75;
+    // The heights a neighbor has to fill to stop this run: the molding itself plus the edge it sits on.
+    r.lo = m.bottom ? r.z : r.top - 0.01; r.hi = m.bottom ? r.bottom + 0.01 : r.z + r.h;
   });
+  runs.forEach(r => {
+    ['S', 'E'].forEach(e => {
+      const at = e === 'S' ? r.start : r.end, n = moldEnd(r, at, e === 'S' ? -1 : 1, runs);
+      r['ret' + e] = n.ret; r['back' + e] = n.back || 0; r['ext' + e] = n.ret ? r.m.d : 0;
+    });
+  });
+  moldCorners(runs);
+  runs.forEach(moldLens);
   (S.genMolds || []).forEach(g => {
     const m = molding(g.mold || roomSet('molding')); if (!m || !wall(g.wall)) return;
     const start = +g.off || 0, run = Math.max(0.25, +g.len || 0), d = +g.d || 0, retS = !!g.retS, retE = !!g.retE;
-    const front = run + m.d * (retS + retE), returns = (retS ? d + m.d : 0) + (retE ? d + m.d : 0);
-    runs.push({ generic: g.id, wall: g.wall, side: +g.side || 1, start, end: start + run, top: +g.z || 0, bottom: +g.z || 0, d, cabs: [], k: m.id, m, retS, retE, h: m.h, z: +g.z || 0, front, returns, len: front + returns });
+    const r = { generic: g.id, wall: g.wall, side: +g.side || 1, start, end: start + run, top: +g.z || 0, bottom: +g.z || 0, d, cabs: [], k: m.id, m, retS, retE, h: m.h, z: +g.z || 0,
+      fz: d + 0.75, backS: 0, backE: 0, extS: retS ? m.d : 0, extE: retE ? m.d : 0 };
+    moldLens(r); runs.push(r);
   });
   return runs;
+}
+function moldLens(r) {
+  const md = r.m.d;
+  r.front = (r.end - r.start) + r.extS + r.extE;
+  r.returns = (r.retS ? Math.max(0, r.fz - r.backS) + md : 0) + (r.retE ? Math.max(0, r.fz - r.backE) + md : 0);
+  r.len = r.front + r.returns;
+}
+// A run's outline in the plan: the front piece and its returns.
+function moldPlanPts(r) {
+  const w = wall(r.wall); if (!w) return null;
+  const g = wg(w), f = w.thick / 2, md = r.m.d, P = (a, b) => wallPt(w, g, r.side, a, f + b);
+  const a0 = r.start - r.extS, a1 = r.end + r.extE, fz = r.fz, fo = fz + md;
+  return [...(r.retS ? [P(a0, r.backS)] : [P(a0, fz)]), P(a0, fo), P(a1, fo), ...(r.retE ? [P(a1, r.backE), P(a1 - md, r.backE), P(a1 - md, fz)] : [P(a1, fz)]), ...(r.retS ? [P(a0 + md, fz), P(a0 + md, r.backS)] : [])];
+}
+// One end of an auto run. dir -1 is the start, 1 the end.
+function moldEnd(r, at, dir, runs) {
+  const w = wall(r.wall), L = wg(w).L, f = w.thick / 2, band = { wall: r.wall, side: r.side, top: r.hi, bottom: r.lo };
+  // A wall end stops it only where another wall joins (a wall that just ends leaves the cabinet side open).
+  if (at <= f + 0.5 && wallEndJoined(w, 'S')) return { ret: false };
+  if (at >= L - f - 0.5 && wallEndJoined(w, 'E')) return { ret: false };
+  if (capsOf(w).some(cp => cp.side === r.side && (Math.abs(cp.a0 - at) < 0.5 || Math.abs(cp.a1 - at) < 0.5) && cp.height > r.lo)) return { ret: false };
+  if (typeof fixtBlocksEnd === 'function' && fixtBlocksEnd(band, at, dir)) return { ret: false };
+  // The deepest cabinet right beside this end that reaches the molding's height.
+  let nd = -1;
+  S.cabinets.forEach(k => {
+    if (k.wall !== r.wall || k.side !== r.side || r.cabs.includes(k.id) || !(k.elev < r.hi && k.elev + k.h > r.lo)) return;
+    const fl = fillersOf(k), e = dir < 0 ? Math.max(k.off + k.w, ...fl.map(x => x.a1)) : Math.min(k.off, ...fl.map(x => x.a0));
+    if (Math.abs(e - at) < 0.5) nd = Math.max(nd, moldCabD(k));
+  });
+  if (nd < 0) return { ret: true, back: 0 };
+  if (nd >= r.d - 0.01) return { ret: false };
+  // A shallower neighbor: the return comes back to its doors, or to the face of its own molding.
+  const o = runs.find(q => q !== r && q.wall === r.wall && q.side === r.side && Math.abs((dir < 0 ? q.end : q.start) - at) < 0.5 && q.lo < r.hi && q.hi > r.lo);
+  return { ret: true, back: o ? o.fz + o.m.d : nd + 0.75 };
+}
+// Inside corners: where runs on two walls that meet come together, the longer one runs through to the other's back
+// face and the other stops against its front, so they never overlap or run over the other wall's cabinets.
+function moldCorners(runs) {
+  const X = (a, b) => a.x * b.y - a.y * b.x;
+  const meet = (p1, u1, p2, u2) => { const k = X(u1, u2); if (Math.abs(k) < 1e-9) return null; const t = X({ x: p2.x - p1.x, y: p2.y - p1.y }, u2) / k; return { x: p1.x + u1.x * t, y: p1.y + u1.y * t }; };
+  const F = r => { const w = wall(r.wall), g = wg(w), f = w.thick / 2; return { r, w, g, f, at: (a, b) => wallPt(w, g, r.side, a, f + b), along: q => (q.x - w.x1) * g.u.x + (q.y - w.y1) * g.u.y, out: q => ((q.x - w.x1) * g.n.x + (q.y - w.y1) * g.n.y) * r.side - f }; };
+  const fr = runs.filter(r => wall(r.wall)).map(F), used = new Set();
+  for (let i = 0; i < fr.length; i++) for (let j = i + 1; j < fr.length; j++) {
+    const A = fr[i], B = fr[j];
+    if (A.w.id === B.w.id || Math.abs(X(A.g.u, B.g.u)) < 0.25 || Math.abs(A.r.z - B.r.z) > 0.5) continue;
+    // Along each run: where the other run's back face and front face cross its molding.
+    const cross = (P, Q, dq) => { const p = meet(P.at(0, P.r.fz + P.r.m.d / 2), P.g.u, Q.at(0, dq), Q.g.u); return p && P.along(p); };
+    const aIn = cross(A, B, B.r.fz), aOut = cross(A, B, B.r.fz + B.r.m.d), bIn = cross(B, A, A.r.fz), bOut = cross(B, A, A.r.fz + A.r.m.d);
+    if ([aIn, aOut, bIn, bOut].some(v => v == null)) continue;
+    // Which end of each run is at the corner: it has to reach from about the other's front face back to its wall.
+    const endOf = (P, tIn, tOut, reach) => {
+      const lo = Math.min(tIn, tOut), hi = Math.max(tIn, tOut), dirOut = tOut > tIn ? 1 : -1;
+      const near = x => dirOut > 0 ? x >= lo - reach - 0.5 && x <= hi + 0.5 : x <= hi + reach + 0.5 && x >= lo - 0.5;
+      if (near(P.r.end) && P.r.start < lo - 0.5 && dirOut < 0) return 'E';
+      if (near(P.r.start) && P.r.end > hi + 0.5 && dirOut > 0) return 'S';
+      return null;
+    };
+    const eA = endOf(A, aIn, aOut, B.r.fz), eB = endOf(B, bIn, bOut, A.r.fz); if (!eA || !eB) continue;
+    if (used.has(A.r.cabs[0] + eA) || used.has(B.r.cabs[0] + eB)) continue;
+    // Both runs have to be in front of the other's wall.
+    const far = (P, e) => P.at(e === 'E' ? P.r.start : P.r.end, P.r.fz / 2);
+    if (A.out(far(B, eB)) < -0.5 || B.out(far(A, eA)) < -0.5) continue;
+    used.add(A.r.cabs[0] + eA); used.add(B.r.cabs[0] + eB);
+    // The run that goes further into the corner runs through; ties go to the longer run.
+    const into = (P, e, tIn) => e === 'E' ? P.r.end - tIn : tIn - P.r.start;
+    const dA = into(A, eA, aIn), dB = into(B, eB, bIn);
+    const aT = Math.abs(dA - dB) > 0.25 ? dA > dB : (A.r.end - A.r.start) >= (B.r.end - B.r.start);
+    const set = (P, e, t) => { P.r['ret' + e] = false; P.r['back' + e] = 0; P.r['ext' + e] = e === 'E' ? t - P.r.end : P.r.start - t; };
+    if (aT) { set(A, eA, aIn); set(B, eB, bOut); } else { set(B, eB, bIn); set(A, eA, aOut); }
+  }
 }

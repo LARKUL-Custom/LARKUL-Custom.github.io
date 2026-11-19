@@ -749,32 +749,35 @@ function buildRoomScene(v) {
   });
   if (L.molding) moldingRuns().forEach(r => {
     const w = wall(r.wall), m = r.m, mm = mat3(typeof moldLook === 'function' ? moldLook(r) : mat(m.mat));
-    const leftRet = r.side === 1 ? r.retS : r.retE, rightRet = r.side === 1 ? r.retE : r.retS;
+    // Left and right as seen facing the wall: the start is on the left on side 1.
+    const [lE, rE] = r.side === 1 ? ['S', 'E'] : ['E', 'S'];
+    const leftRet = r['ret' + lE], rightRet = r['ret' + rE], lExt = r['ext' + lE], rExt = r['ext' + rE], lBack = r['back' + lE] || 0, rBack = r['back' + rE] || 0;
     const a = (r.side === 1 ? r.start : r.end);
     const grp = wallGroup(w, r.side, a);
-    const fz = r.d + 0.75, run = r.end - r.start;
+    const fz = r.fz, run = r.end - r.start;
     const outl = moldProfile({ ...m, h: r.h });
     if (outl) {
       const shp = new THREE.Shape(outl.map(p => new THREE.Vector2(p.x, p.y)));
       const piece = (len, ry, x, z) => {
+        if (!(len > 0.01)) return;
         const geo = new THREE.ExtrudeGeometry(shp, { depth: len, bevelEnabled: false, curveSegments: 4 }), me = new THREE.Mesh(geo, mm);
         me.rotation.y = ry; me.position.set(x, r.z, z); grp.add(me);
         if (!R3) { const ol = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), edgeMat3()); ol.rotation.y = ry; ol.position.copy(me.position); grp.add(ol); }
       };
-      const x0 = leftRet ? -m.d : 0, x1 = run + (rightRet ? m.d : 0);
+      const x0 = -lExt, x1 = run + rExt;
       piece(x1 - x0, -Math.PI / 2, x1, fz);
-      if (leftRet) piece(fz, Math.PI, 0, fz);
-      if (rightRet) piece(fz, 0, run, 0);
+      if (leftRet) piece(fz - lBack, Math.PI, x0 + m.d, fz);
+      if (rightRet) piece(fz - rBack, 0, x1 - m.d, rBack);
       v.root.add(grp); return;
     }
     const steps = m.profile === 'flat' ? [[1, 1]] : m.profile === 'crown' ? [[0.45, 0.4], [0.55, 1]] : [[0.5, 0.55], [0.5, 1]];
     let y = r.z;
     steps.forEach(([hf, df]) => {
       const h = r.h * hf, d = m.d * df;
-      const x0 = leftRet ? -d : 0, x1 = run + (rightRet ? d : 0);
+      const x0 = leftRet ? -d : -lExt, x1 = run + (rightRet ? d : rExt);
       grp.add(box3(x1 - x0, h, d, mm, (x0 + x1) / 2, y + h / 2, fz + d / 2));
-      if (leftRet) grp.add(box3(d, h, fz, mm, -d / 2, y + h / 2, fz / 2));
-      if (rightRet) grp.add(box3(d, h, fz, mm, run + d / 2, y + h / 2, fz / 2));
+      if (leftRet && fz - lBack > 0.01) grp.add(box3(d, h, fz - lBack, mm, x0 + d / 2, y + h / 2, (fz + lBack) / 2));
+      if (rightRet && fz - rBack > 0.01) grp.add(box3(d, h, fz - rBack, mm, x1 - d / 2, y + h / 2, (fz + rBack) / 2));
       y += h;
     });
     v.root.add(grp);

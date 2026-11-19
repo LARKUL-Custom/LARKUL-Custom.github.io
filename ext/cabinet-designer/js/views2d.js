@@ -63,8 +63,7 @@ function renderPlan(pr) {
   if (ui.ghostBlocked && ui.mouse) s += `<text class="lbl dimtxt warntxt" x="${ui.mouse.x}" y="${ui.mouse.y - 14 * px}" font-size="${fs}" text-anchor="middle">No room here</text>`;
   // molding runs, drawn along the cabinet fronts or where they were placed
   moldingRuns().forEach(r => {
-    const w = wall(r.wall), g = wg(w), f = w.thick / 2 + r.d;
-    s += `<polygon class="mold-outline nss" points="${polyPts([wallPt(w, g, r.side, r.start, f), wallPt(w, g, r.side, r.end, f), wallPt(w, g, r.side, r.end, f + r.m.d), wallPt(w, g, r.side, r.start, f + r.m.d)])}"/>`;
+    const pts = moldPlanPts(r); if (pts) s += `<polygon class="mold-outline nss" points="${polyPts(pts)}"/>`;
   });
   // Countertop corners: click the joint to miter it or pick which top runs through.
   if (topOp() > 0 && typeof ctjPlanSVG === 'function' && !ui.drawWalls && !ui.placing && !ui.printing) s += ctjPlanSVG(px);
@@ -852,7 +851,7 @@ function renderElev(pr) {
     if (rn.tpl.backsplash > 0) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? rn.start : L - rn.end}" y="${-(rn.top + rn.thick + rn.tpl.backsplash)}" width="${rn.end - rn.start}" height="${rn.tpl.backsplash}" opacity=".75"/>`;
   });
   moldingRuns().filter(rn => rn.wall === w.id && rn.side === side).forEach(rn => {
-    const a = (side === 1 ? rn.start : L - rn.end) - (side === 1 ? (rn.retS ? rn.m.d : 0) : (rn.retE ? rn.m.d : 0)), m = typeof moldLook === 'function' ? moldLook(rn) : mat(rn.m.mat); mats.push(m && m.id);
+    const a = side === 1 ? rn.start - rn.extS : L - rn.end - rn.extE, m = typeof moldLook === 'function' ? moldLook(rn) : mat(rn.m.mat); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-mold')} x="${a}" y="${-(rn.z + rn.h)}" width="${rn.front}" height="${rn.h}"/>`;
     if (rn.m.profile !== 'flat') body += `<line class="ev-inner nss" x1="${a}" x2="${a + rn.front}" y1="${-(rn.z + rn.h * 0.45)}" y2="${-(rn.z + rn.h * 0.45)}"/>`;
   });
