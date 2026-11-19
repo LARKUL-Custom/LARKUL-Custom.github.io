@@ -1330,20 +1330,20 @@ document.addEventListener('click', e => {
     case 'exp-units': ui.exportUnits = id; renderExport(); break;
     case 'door-export': mutate(() => { S.doorExport = id; }); flash(`Buyout doors export for ${(DOOR_EXPORTS.find(x => x.v === id) || {}).l}`); break;
     case 'exp-download': {
-      const name = exportFileName(), ln = document.createElement('a'), u = URL.createObjectURL(new Blob([$('#exptext').value], { type: /\.csv$/.test(name) ? 'text/csv' : 'application/json' }));
+      const name = exportFileName(), ln = document.createElement('a'), u = URL.createObjectURL(new Blob([expFull || $('#exptext').value], { type: /\.csv$/.test(name) ? 'text/csv' : 'application/json' }));
       ln.href = u; ln.download = name; document.body.appendChild(ln); ln.click(); ln.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); break;
     }
     case 'copy': {
       const ta = $('#exptext'), note = $('#copynote');
-      const fallback = () => { ta.focus(); ta.select(); note.textContent = 'Selected. Press Ctrl+C (Cmd+C) to copy.'; };
-      try { navigator.clipboard.writeText(ta.value).then(() => { note.textContent = 'Copied'; }, fallback); } catch (_) { fallback(); }
+      const full = expFull || ta.value, fallback = () => { if (ta.value !== full) ta.value = full; ta.focus(); ta.select(); note.textContent = 'Selected. Press Ctrl+C (Cmd+C) to copy.'; };
+      try { navigator.clipboard.writeText(full).then(() => { note.textContent = 'Copied'; }, fallback); } catch (_) { fallback(); }
       break;
     }
     case 'save-files': {
       const job = S.job.name.replace(/[^\w -]/g, '').trim() || 'job', name = exportFileName();
       // The parts file goes next to the CIX files CNC Cutlist writes for the job.
       const folder = ui.exportFmt === 'cnc' ? `CNC/${job}` : 'Cabinet Designer';
-      hubSaveOver(new File([$('#exptext').value], name), folder).then(() => flash(`Saved to Files › ${folder.replace('/', ' › ')}`), err => flash('Could not save: ' + err.message));
+      hubSaveOver(new File([expFull || $('#exptext').value], name), folder).then(() => flash(`Saved to Files › ${folder.replace('/', ' › ')}`), err => flash('Could not save: ' + err.message));
       break;
     }
     case 'cnc-save': case 'cnc-download': {

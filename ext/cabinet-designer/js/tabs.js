@@ -1312,7 +1312,11 @@ function cncCard() {
 function cncSkippedNote() {
   const { skipped } = cncPartFile(true);
   if (!skipped.length) return '<div class="note">Every part and every machining operation is in the file.</div>';
-  return `<details class="note"><summary>${skipped.length} item${skipped.length > 1 ? 's' : ''} not in the file (the CNC can't cut ${skipped.length > 1 ? 'them' : 'it'} yet)</summary><ul>${skipped.map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>`;
+  // 0.58.28: the same reason is listed once with a count and the cabinets it is on (a big job had 8,832 lines here).
+  const g = new Map();
+  skipped.forEach(x => { const p = String(x).split(' · '), k = p.length > 2 ? p.slice(2).join(' · ') : x, w = p.length > 2 ? p.slice(0, 2).join(' · ') : ''; const e = g.get(k) || { n: 0, at: [] }; e.n++; if (w && e.at.length < 4 && !e.at.includes(w)) e.at.push(w); g.set(k, e); });
+  const li = [...g].map(([k, e]) => `<li>${e.n > 1 ? `<b>${e.n.toLocaleString()} ×</b> ` : ''}${esc(e.at.length && e.n === 1 ? e.at[0] + ' · ' + k : k)}${e.n > 1 && e.at.length ? ` <span class="muted">(${esc(e.at.join(', '))}${e.n > e.at.length ? '…' : ''})</span>` : ''}</li>`).join('');
+  return `<details class="note"><summary>${skipped.length} item${skipped.length > 1 ? 's' : ''} not in the file (the CNC can't cut ${skipped.length > 1 ? 'them' : 'it'} yet)</summary><ul>${li}</ul></details>`;
 }
 // Door and drawer front order: identical fronts across the whole job grouped into one line with a quantity.
 // A plain CSV for now; vendor order formats can be added once we have their files.
@@ -1447,8 +1451,13 @@ function renderExport() {
   if (ui.tab === 'pricing') return renderPricing();
   $('#tab-export').innerHTML = exportHTML(true);
 }
+// 0.58.28: the whole file is kept here for Copy, Download and Save; the page shows only its start. A big job's parts file
+// is 10+ MB, and putting all of it in the box took the browser 6-9 seconds to draw (Ayden 2026-11-19, Refuge Shelter).
+let expFull = '';
+const EXP_SHOW = 60000;
+const expPreview = txt => txt.length <= EXP_SHOW ? txt : txt.slice(0, txt.lastIndexOf('\n', EXP_SHOW) > 0 ? txt.lastIndexOf('\n', EXP_SHOW) : EXP_SHOW) + '\n…';
 function exportHTML(withHead) {
-  const txt = exportText(), bw = ui.exportFmt === 'buyout' && doorExportOf(S) === 'bywater';
+  const txt = expFull = exportText(), bw = ui.exportFmt === 'buyout' && doorExportOf(S) === 'bywater';
   return `${withHead ? '' : '<h3 class="ordh">Files to send</h3>'}<div class="pagehead"${withHead ? '' : ' hidden'}><div><h2>Order and export</h2><p>CNC Cutlist parts is the file CNC Cutlist opens to nest the job and write the Rover programs. It is always in millimeters. The other formats are a neutral job file, the cut list, labels and machining.</p></div></div>
   <div class="card cardbody">
     <div class="row-actions">
@@ -1459,7 +1468,7 @@ function exportHTML(withHead) {
     ${ui.exportFmt === 'cnc' ? cncSkippedNote() : ''}
     ${ui.exportFmt === 'buyout' ? buyoutExportBar() : ''}
     ${ui.exportFmt === 'doors' ? '<div class="note">Every door, drawer front and false front in the job, with identical ones grouped. Send this to your door supplier, or tell us their order format and we will add an export that matches it.</div>' : ''}
-    <textarea class="out" id="exptext" readonly spellcheck="false" aria-label="Export output">${esc(txt)}</textarea>
+    ${txt.length > EXP_SHOW ? `<div class="note">Showing the start of the file. Copy, Download and Save use the whole file (${txt.split('\n').length.toLocaleString()} lines).</div>` : ''}<textarea class="out" id="exptext" readonly spellcheck="false" aria-label="Export output">${esc(expPreview(txt))}</textarea>
   </div>
   ${inHub() ? (() => { const t = scheduleSummary().totals; return `<div class="card cardbody"><h3>Send to Scheduler</h3>
     <div class="note">Puts this job on the shop schedule: open Scheduler and press Add on the Jobs tab. It sends ${t.cabinets} cabinet${t.cabinets === 1 ? '' : 's'}, ${t.doors} door${t.doors === 1 ? '' : 's'}, ${t.drawerFronts} drawer front${t.drawerFronts === 1 ? '' : 's'}, ${t.fillers} filler${t.fillers === 1 ? '' : 's'} and ${t.panels} end panel${t.panels === 1 ? '' : 's'}, room by room. Send it again after changes to update the counts.</div>
