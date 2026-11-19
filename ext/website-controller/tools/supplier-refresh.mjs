@@ -8,6 +8,7 @@
    Run:  node extensions/website-controller/tools/supplier-refresh.mjs
    (GitHub runs it from .github/workflows/supplier-refresh.yml.) Needs Node 18+ (built-in fetch). */
 import { writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -128,6 +129,8 @@ async function main(){
       console.log(`Vent Covers Unlimited ${c}: ${list.length}`); items.push(...list);
     }
   }
+  // photos saved with the site (images/suppliers/<id>.jpg) win over the supplier's own link
+  for (const it of items) { if (it.img && existsSync(path.join(path.dirname(OUT), "images", "suppliers", it.id + ".jpg"))) { it.imgSrc = it.img; it.img = `images/suppliers/${it.id}.jpg`; } }
   if (items.length < 50) throw new Error(`Only ${items.length} items came back. Not saving, so the website keeps its last good list.`);
   await writeFile(OUT, JSON.stringify({ updated: new Date().toISOString().slice(0, 10), count: items.length, items }) + "\n");
   console.log(`Saved ${items.length} items to ${OUT}`);
