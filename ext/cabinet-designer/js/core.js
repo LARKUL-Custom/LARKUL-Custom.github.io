@@ -286,9 +286,9 @@ const CLIPTOP_MOZAIK = { kind: 'hinge', name: 'Blum CLIP top BLUMOTION 110° ful
   cupExtra: [{ dx: -22.5, dy: 9.5, dia: 8, depth: 13 }, { dx: 22.5, dy: 9.5, dia: 8, depth: 13 }],
   plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12.7 }, { dz: 16, y: 37, dia: 5, depth: 12.7 }], max2: 42, max3: 80, cost: 3.5, plateCost: 1 };
 // Hafele Axilo 78 square screw-in leg: centre 39.5 mm in from the toe skin, ends and back; four 5 mm marks per leg on
-// a 64 mm square, offset 13 mm toward the cabinet's middle; at most 34" apart; $4.50 each.
+// a 64 mm square, offset 13 mm toward the cabinet's middle; at most 34" apart; $2 each (Ayden 2026-11-19: pays $1.60, rounded up).
 const AXILO78_MOZAIK = { kind: 'leg', name: 'Hafele Axilo 78 square screw-in', feet: true, inToe: 5.3151, inFin: 2.3151, inUnfin: 2.3051, inBack: 4, maxSep: 34,
-  noBack: false, holeDia: 0.1969, holeDepth: 0.0394, width: 4.1339, depth: 3.1102, holesMM: [{ x: -19, y: 32 }, { x: 45, y: 32 }, { x: 45, y: -32 }, { x: -19, y: -32 }], cost: 4.5 };
+  noBack: false, holeDia: 0.1969, holeDepth: 0.0394, width: 4.1339, depth: 3.1102, holesMM: [{ x: -19, y: 32 }, { x: 45, y: 32 }, { x: 45, y: -32 }, { x: -19, y: -32 }], cost: 2 };
 // Older saves get the joint templates, real legs and the job's picks.
 function ensureJoinery(s) {
   if (!Array.isArray(s.hardware)) return s;
@@ -616,6 +616,8 @@ function ensureHwNames(s) {
     (s.materials || []).forEach(m => { if (m.id === 'm-dbx-mel14' && !+m.cost) m.cost = 30; });
     s.hwCost1119 = 1;
   }
+  // 0.59.6: cabinet legs are $2 each (Ayden pays $1.60), once per job where the old $4.50 starting price is still there.
+  if (!s.legCost2) { s.hardware.forEach(h => { if (h.kind === 'leg' && (h.cost == null || +h.cost === 4.5)) h.cost = 2; }); s.legCost2 = 1; }
   return s;
 }
 function migrate(s) {

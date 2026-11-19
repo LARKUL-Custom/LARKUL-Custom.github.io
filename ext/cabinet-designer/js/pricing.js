@@ -82,7 +82,7 @@ function defaultPriceSheet(name = 'Standard pricing') {
     if (h.cost != null && n === h.name) return +h.cost;
     if (h.plateCost != null && n === h.name + ' mounting plate') return +h.plateCost;
   } return null; };
-  const hwPrice = n => own(n) ?? (/slide/i.test(n) ? 32 : /plate/i.test(n) ? 1.5 : /hinge/i.test(n) ? 5.5 : /pin/i.test(n) ? 0.15 : /pull|knob/i.test(n) ? 7 : /\bleg\b/i.test(n) ? 2.5 : /clip/i.test(n) ? 0.5 : 2);
+  const hwPrice = n => own(n) ?? (/slide/i.test(n) ? 32 : /plate/i.test(n) ? 1.5 : /hinge/i.test(n) ? 5.5 : /pin/i.test(n) ? 0.15 : /pull|knob/i.test(n) ? 7 : /\bleg\b/i.test(n) ? 2 : /clip/i.test(n) ? 0.5 : 2);
   const hardware = {};
   if (S) allCabs().forEach(c => inRoomOf(c, () => Object.keys(buildParts(c).bom).forEach(k => { if (!(k in hardware)) hardware[k] = hwPrice(k); })));
   return {
@@ -208,6 +208,14 @@ function hwCosts1119(ps) {
   (S ? S.hardware : []).filter(h => h.kind === 'pull').forEach(h => { it[h.name] = 5; });
   if (ps.adders && ps.adders.perPull === undefined) ps.adders.perPull = 3;
   ps.hwCost1119 = 1; return true;
+}
+// 0.59.6 (Ayden 2026-11-19): every cabinet leg line is $2 each (he pays $1.60), once per sheet.
+function legCost2(ps) {
+  if (!ps || !ps.hardware || ps.legCost2) return false;
+  const it = ps.hardware.items || (ps.hardware.items = {});
+  (S ? S.hardware : []).filter(h => h.kind === 'leg').forEach(h => { it[h.name] = 2; });
+  Object.keys(it).forEach(k => { if (/\bleg\b/i.test(k)) it[k] = 2; });
+  ps.legCost2 = 1; return true;
 }
 async function loadPrices() {
   try { PRICES = inHub() ? ((await Hub.storage.get('priceSheets')) || []) : JSON.parse(localStorage.getItem(KEY + '.prices') || '[]'); } catch (_) { PRICES = []; }
@@ -366,6 +374,7 @@ function ensureLibPrices(ps) {
   // 0.58.8 (Ayden 2026-11-19: countertops aren't his main thing): every top is one price per square foot, $70 to start.
   if (ps && !ps.topSq) { ps.topSq = { rate: 70 }; savePrices(); }
   if (hwCosts1119(ps)) savePrices();
+  if (legCost2(ps)) savePrices();
   // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
   if (ps && ps.molds && !ps.cmold4 && S.moldings.some(m => m.id === 'mo-cmold')) { ps.molds['mo-cmold'] = 4; ps.cmold4 = 1; savePrices(); }
   // 0.57.0: concealed floating shelf brackets and in-wall blocking start at rough shop prices.
