@@ -13,11 +13,14 @@ function arcPts(cx, cy, r, a0, a1, seg = 12) {
   const out = []; for (let i = 0; i <= seg; i++) { const a = (a0 + (a1 - a0) * i / seg) * Math.PI / 180; out.push({ x: r3(cx + r * Math.cos(a)), y: r3(cy + r * Math.sin(a)) }); }
   return out;
 }
-// A through cutout (a sink hole) as a closed tool path the CNC follows, kept inside the line by the bit's radius.
-function cutoutPath(x, y, w, h, why) {
-  const tool = typeof peDefTool === 'function' ? peDefTool() : '3_8COMP', dia = r3(typeof peToolDia === 'function' ? peToolDia(tool) || 0.375 : 0.375), k = dia / 2;
-  const pts = [{ x: x + k, y: y + k }, { x: x + w - k, y: y + k }, { x: x + w - k, y: y + h - k }, { x: x + k, y: y + h - k }].map(q => ({ x: r3(q.x), y: r3(q.y) }));
-  return { type: 'path', pts, closed: true, side: 'center', depth: 0, through: true, tool, dia, face: 'top', why };
+// A sink's cutout (sinkCut in fixtures.js) as the tool path the CNC follows, on a part whose x runs along the wall from
+// ax and whose y runs back from its front edge (D deep). The bit stays inside the line, so round corners keep their
+// radius (a corner tighter than the bit comes out at the bit's radius). An apron sink's notch is open at the front edge.
+function sinkCutPath(k, ax, D, why, mirror, L) {
+  const tool = typeof peDefTool === 'function' ? peDefTool() : '3_8COMP', dia = r3(typeof peToolDia === 'function' ? peToolDia(tool) || 0.375 : 0.375), t = dia / 2;
+  const X = x => r3(mirror ? L - (x - ax) : x - ax), Y = y => r3(Math.max(0, D - y));
+  const pts = k.open ? apronNotchPts(k.x0 + t, k.y0 + t, k.x1 - t, k.y1, Math.max(0, k.r - t)) : roundRectPts(k.x0 + t, k.y0 + t, k.x1 - t, k.y1 - t, Math.max(0, k.r - t), k.oval);
+  return { type: 'path', pts: pts.map(q => ({ x: X(q.x), y: Y(q.y) })), closed: !k.open, side: 'center', depth: 0, through: true, tool, dia, face: 'top', why, sink: true };
 }
 const LAM_SQFT = 'Laminate (HPL), sq ft';
 const lamBom = (bom, sqin) => { if (sqin > 0) bom[LAM_SQFT] = r3((bom[LAM_SQFT] || 0) + Math.ceil(sqin / 144 * 10) / 10); };
@@ -107,8 +110,10 @@ const MADE = {
       if (top > 34.001) warn.push(`ADA: the top is at ${fmtLen(top, 1)}; it should be 34" at most.`);
       if (c.elev < 28.999) warn.push(`ADA: knee clearance under the apron is ${fmtLen(c.elev, 1)}; it should be 29" at least.`);
       const sk = mp.sink && fixtPreset(mp.sink);
-      const cut = sk ? cutoutPath((c.w - (sk.w - 1)) / 2, Math.max(2, (D - (sk.d - 1)) / 2 - 1), sk.w - 1, sk.d - 1, 'sink cutout (check the sink template)') : null;
-      const cw = sk ? sk.w - 1 : 0, chh = sk ? sk.d - 1 : 0;
+      // The sink centred on the top, cut the same way as a sink placed on a countertop.
+      const kk = sk ? sinkCut({ ...sk, lib: sk.id, off: (c.w - sk.w) / 2 }, { top: c.elev + H, depth: D, thick: topT }) : null;
+      const cut = kk ? sinkCutPath(kk, 0, D, `${sk.name} cutout ${fmtLen(kk.w, 1)} × ${fmtLen(kk.d, 1)}${kk.oval ? ' oval' : kk.r ? ', ' + fmtLen(kk.r, 1) + ' corners' : ''} (check the sink template)`) : null;
+      const cw = kk ? kk.w : 0, chh = kk ? kk.d : 0;
       if (cut && (cw > c.w - 4 || chh > D - 3)) warn.push('The sink cutout is too big for this top.');
       for (let k = 0; k < layers; k++) {
         const s = splitLen(c.w, cm);
@@ -234,17 +239,25 @@ function topCoreParts() {
   runs.forEach((r, i) => {
     const t = r.tpl, cm = mat(t.core) || cm0, layers = t.layers | 0, lbl = `Top ${i + 1}`, ptT = partTpl(roomSet('partT'));
     const part = (name, L, W, o = {}) => { const band = partBands(ptT, o.kind || 'topbot'); const p = { cab: lbl, cabId: 'top:' + room.id + ':' + r.key, name, kind: o.kind || 'topbot', mat: cm.id, L: r3(L), W: r3(W), T: cm.thick, qty: o.qty || 1, grain: !!cm.grain, band, edges: edgeSummary(o.kind || 'topbot', band), ops: o.ops || [], top: true }; if (o.note) p.note = o.note; out.push(p); return p; };
-    const x0 = r.start - r.ovS, sinks = (typeof fixtList === 'function' ? fixtList() : []).filter(f => fixtSink(f) && !f.apron && f.wall === r.wall && f.side === r.side && f.off + f.w / 2 > x0 && f.off + f.w / 2 < x0 + r.len);
+    // Every sink on the run, cut like it shows in the plan and 3D (sinkCut). Pieces are laid out from the run's start
+    // as seen from the front, so a top on the far side of its wall (side -1) runs the other way along the wall.
+    const x0 = r.start - r.ovS, sinks = runSinks(r);
     const s = splitLen(r.len, cm), notes = [];
     if (r.pts || r.shape) notes.push('corner joint: cut the end to the plan');
+    sinks.forEach(({ f, k }) => {
+      if (k.y0 < 1.5) notes.push(`${fixtName(f)} cutout is ${fmtLen(Math.max(0, k.y0), 1)} from the back edge`);
+      if (!k.open && k.front < 1.5) notes.push(`${fixtName(f)} cutout is ${fmtLen(k.front, 1)} from the front edge`);
+    });
     for (let k = 0; k < layers; k++) {
       for (let j = 0; j < s.n; j++) {
         const a = j * s.len, ops = [];
-        sinks.forEach(f => {
-          const cx0 = f.off - x0 + 0.5 - a, cw = f.w - 1, ch = Math.min(f.d - 1, r.depth - 4);
-          if (cx0 + cw <= 0 || cx0 >= s.len) return;
-          if (cx0 < 0 || cx0 + cw > s.len) { notes.push(`${fixtName(f)} crosses a seam; move the seam`); return; }
-          ops.push(cutoutPath(cx0, Math.max(1.5, (t.frontOverhang || 0) + 2.5), cw, ch, `${fixtName(f)} cutout (check the sink template)`));
+        sinks.forEach(({ f, k: kc }) => {
+          // Along the run from its start (left end seen from the front).
+          const lo = r.side === 1 ? kc.x0 - x0 : x0 + r.len - kc.x1, hi = lo + kc.w;
+          if (hi <= a || lo >= a + s.len) return;
+          if (lo < a || hi > a + s.len) { if (!notes.some(n => n.startsWith(fixtName(f) + ' crosses'))) notes.push(`${fixtName(f)} crosses a seam; move the seam`); return; }
+          const ax = r.side === 1 ? x0 + a : x0 + r.len - a - s.len;
+          ops.push(sinkCutPath(kc, ax, r.depth, `${fixtName(f)} cutout ${fmtLen(kc.w, 1)} × ${fmtLen(kc.d, 1)}${kc.oval ? ' oval' : kc.r ? ', ' + fmtLen(kc.r, 1) + ' corners' : ''} (check the sink template)`, r.side !== 1, s.len));
         });
         if (k === layers - 1 && t.edge && t.edge !== 'square') ops.push({ type: 'edge', profile: t.edge, face: 'front', why: (TOP_EDGES.find(e => e[0] === t.edge) || [0, t.edge])[1] + ' front edge' });
         part(`Countertop core${layers > 1 ? ', layer ' + (k + 1) : ''}${s.n > 1 ? `, piece ${j + 1} of ${s.n}` : ''}`, s.len, r.depth, { ops });

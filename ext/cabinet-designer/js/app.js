@@ -788,12 +788,17 @@ document.addEventListener('pointerup', e => {
   const d = ctxDown; ctxDown = null;
   if (!d || e.button !== 2 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5) return;
   if (ui.topEdit && ui.teCtxAt && Date.now() - ui.teCtxAt < 1500) return;
+  // A countertop corner in the plan: Mitered or which top runs through.
+  const cj = e.target.closest && e.target.closest('[data-ctj]'); if (cj && typeof ctjShowCtx === 'function') { ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); return; }
   const id = cabAt(e); if (id) { showCtx(id, e.clientX, e.clientY); return; }
   ui.ctxPt = e.target.closest && e.target.closest('#plan') ? toWorld(e) : null;
   const wa = wallAt(e); if (wa) showWallCtx(wa.wid, wa.a, e.clientX, e.clientY);
   else if (clip && ui.ctxPt) showPasteCtx(e.clientX, e.clientY);
 }, true);
 document.addEventListener('contextmenu', e => { if (e.target.closest('#plan,#elev,#room3d,#ctxmenu')) e.preventDefault(); });
+// Tops tab: right-click (or click) a corner of the tops for its joint.
+document.addEventListener('contextmenu', e => { const cj = e.target.closest && e.target.closest('.ctp-svg [data-ctj]'); if (!cj) return; e.preventDefault(); ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); });
+document.addEventListener('click', e => { const cj = e.target.closest && e.target.closest('.ctp-svg [data-ctj]'); if (!cj) return; e.stopPropagation(); ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); }, true);
 window.addEventListener('blur', hideCtx);
 // Touch screens: press and hold on a cabinet or wall for the same menu a right-click opens.
 let hold = null;
@@ -908,6 +913,7 @@ document.addEventListener('click', e => {
     case 'room-move': { const [rid, dir] = id.split(':'), i = S.rooms.findIndex(r => r.id === rid), j = i + +dir; if (i < 0 || j < 0 || j >= S.rooms.length) break; mutate(() => { const [r] = S.rooms.splice(i, 1); S.rooms.splice(j, 0, r); }); break; }
     case 'renumber': mutate(() => renumberRoom(curRoom())); flash('Cabinets renumbered in wall order'); break;
     case 'tops-auto': mutate(() => { curRoom().autoTops = true; Object.values(S.ctRuns).forEach(o => { delete o.off; }); }); flash(`Countertops built on ${countertopRuns().filter(r => !r.generic).length} runs`); break;
+    case 'tops-print': ui.mpPreset = 'pp-tops'; ui.cutRoom = 'all'; if (typeof printPicsClear === 'function') printPicsClear(); showMultiPrint(); break;
     case 'tops-auto-off': mutate(() => { curRoom().autoTops = false; }); flash('Automatic tops are off in this room'); break;
     case 'gtop-add': { const w = wall(ui.elevWall) || S.walls[0]; if (!w) { flash('Draw a wall first.'); break; } mutate(() => S.genTops.push({ id: uid('gt'), name: 'Top ' + (S.genTops.length + 1), wall: w.id, side: elevSide(w), off: 0, len: 36, depth: 25.5, z: 34.5 })); break; }
     case 'gtop-del': mutate(() => { S.genTops = S.genTops.filter(g => g.id !== id); }); break;

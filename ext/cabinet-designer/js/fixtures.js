@@ -102,10 +102,69 @@ const fixtName = f => f.name || fixtDef(f).name;
 const fixtInner = f => { const c = f.bare ? 0 : CASE; return [f.off + c, f.off + f.w - c, f.kind === 'door' || f.kind === 'opening' && !f.elev ? f.elev : f.elev + c, f.elev + f.h - c]; };
 const fixtSel = id => !!(ui.sel && ui.sel.type === 'fixt' && ui.sel.id === id);
 // A sink sits at the top of the countertop under it (36" when there is none).
-function fixtCounter(f) {
+function fixtCounter(f, runs) {
   const mid = f.off + f.w / 2;
-  const r = countertopRuns().find(x => x.on && x.wall === f.wall && x.side === f.side && mid >= x.start - x.ovS && mid <= x.end + x.ovE);
-  return r ? { top: r.top + r.thick, depth: r.depth, thick: r.thick } : { top: 36, depth: 25, thick: 1.5 };
+  const r = (runs || countertopRuns()).find(x => x.on && x.wall === f.wall && x.side === f.side && mid >= x.start - x.ovS && mid <= x.end + x.ovE);
+  return r ? { top: r.top + r.thick, depth: r.depth, thick: r.thick, run: r } : { top: 36, depth: 25, thick: 1.5 };
+}
+
+/* ---------- Sink cutouts ---------- */
+// How a sink goes in the top (0.59.0, Ayden 2026-11-19: better sink cutouts). Undermount: the rim is glued under the
+// top and the cutout follows the bowl (1" in from the sink's outside all round). Drop-in: the rim sits on the top and
+// the cutout is 1/2" inside it. Apron (farm house): the front shows, so the top is notched from its front edge back to
+// 1" short of the sink's back. Each can be changed on the sink (mount, cutout size, corner radius, oval, from the front).
+const SINK_MOUNTS = [['under', 'Undermount'], ['drop', 'Drop-in (rim on the top)'], ['apron', 'Apron front (farm house)']];
+function sinkMount(f) {
+  if (f.mount) return f.mount;
+  if (f.apron) return 'apron';
+  return /^sk-(di|bath)/.test(f.lib || '') || /drop.?in|top.?mount|self.?rim/i.test(f.name || '') ? 'drop' : 'under';
+}
+// The cutout in the top, in the wall's frame: x along the wall, y out from the wall face (the top's back edge is 0).
+// Same numbers drive the plan, the 3D hole and the CNC tool path, so they always agree.
+function sinkCut(f, ct) {
+  const c = ct || fixtCounter(f), m = sinkMount(f), D = c.depth;
+  const inset = m === 'drop' ? 0.5 : 1;
+  const oval = m !== 'apron' && (f.cutShape ? f.cutShape === 'oval' : /oval|round/i.test(f.name || '') || f.lib === 'sk-bath');
+  const w = Math.max(2, +f.cutW > 0 ? +f.cutW : f.w - 2 * inset), dRaw = m === 'apron' ? f.d - inset : f.d - 2 * inset, d = Math.max(2, +f.cutD > 0 ? +f.cutD : dRaw);
+  const zero = /^sk-zr/.test(f.lib || '') || /zero.?radius/i.test(f.name || '');
+  const rad = Math.max(0, Math.min(w / 2, d / 2, has(f, 'cutR') && f.cutR !== '' ? +f.cutR || 0 : m === 'apron' ? 1 : zero ? 0.375 : 1.5));
+  const x0 = r3(f.off + (f.w - w) / 2), x1 = r3(x0 + w);
+  if (m === 'apron') {
+    // Open at the front edge; the sink's apron lines up with the top's front.
+    return { mount: m, oval: false, w: r3(w), d: r3(d), r: rad, x0, x1, y0: r3(D - d), y1: D, front: 0, open: true, sy0: r3(D - f.d), sy1: D, depth: D, ct: c };
+  }
+  // From the front edge to the cutout: 3", the usual for kitchen tops (and on an island, from the edge you work at),
+  // unless that leaves under 2" behind it for the faucet; then the cutout is centred on the top.
+  const auto = D - 3 - d >= 2 ? 3 : Math.max(1, (D - d) / 2);
+  const front = r3(+f.cutFront > 0 ? +f.cutFront : auto), y1 = r3(D - front), y0 = r3(y1 - d), my = (y0 + y1) / 2;
+  return { mount: m, oval, w: r3(w), d: r3(d), r: oval ? 0 : rad, x0, x1, y0, y1, front, open: false, sy0: r3(my - f.d / 2), sy1: r3(my + f.d / 2), depth: D, ct: c };
+}
+// Outline points of a rounded rectangle (r corner radius) or an ellipse, counter-clockwise in x/y, seg points a corner.
+function roundRectPts(x0, y0, x1, y1, r, oval, seg = 8) {
+  const out = [];
+  if (oval) { const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, a = (x1 - x0) / 2, b = (y1 - y0) / 2; for (let i = 0; i < 48; i++) { const t = i / 48 * 2 * Math.PI; out.push({ x: cx + a * Math.cos(t), y: cy + b * Math.sin(t) }); } return out; }
+  r = Math.max(0, Math.min(r, (x1 - x0) / 2, (y1 - y0) / 2));
+  if (r < 0.01) return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+  [[x1 - r, y0 + r, -90], [x1 - r, y1 - r, 0], [x0 + r, y1 - r, 90], [x0 + r, y0 + r, 180]].forEach(([cx, cy, a0]) => {
+    for (let i = 0; i <= seg; i++) { const a = (a0 + 90 * i / seg) * Math.PI / 180; out.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }); }
+  });
+  return out;
+}
+// An apron sink's notch: open at y1 (the front edge), rounded at the two back corners.
+function apronNotchPts(x0, y0, x1, y1, r, seg = 8) {
+  r = Math.max(0, Math.min(r, (x1 - x0) / 2, y1 - y0));
+  const out = [{ x: x1, y: y1 }];
+  [[x1 - r, y0 + r, 0, -90], [x0 + r, y0 + r, -90, -180]].forEach(([cx, cy, a0, a1]) => { for (let i = 0; i <= seg; i++) { const a = (a0 + (a1 - a0) * i / seg) * Math.PI / 180; out.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }); } });
+  out.push({ x: x0, y: y1 });
+  return out;
+}
+// The cutout outline for a sink, in its wall's frame.
+function sinkCutPts(k) { return k.open ? apronNotchPts(k.x0, k.y0, k.x1, k.y1, k.r) : roundRectPts(k.x0, k.y0, k.x1, k.y1, k.r, k.oval); }
+// Sinks cut into a countertop run (r from countertopRuns), with their cutouts.
+function runSinks(r) {
+  const a = r.start - r.ovS, b = r.end + r.ovE;
+  return fixtList().filter(f => fixtSink(f) && f.wall === r.wall && f.side === r.side && f.off + f.w / 2 > a && f.off + f.w / 2 < b)
+    .map(f => ({ f, k: sinkCut(f, { top: r.top + r.thick, depth: r.depth, thick: r.thick, run: r }) }));
 }
 // The cabinet an apron (farm house) sink sits on, if any.
 function apronSinkOn(c) {
@@ -127,10 +186,30 @@ function fixtPoly(f, o) {
   const g = wg(w), s = o ? o.side : f.side, off = o ? o.off : f.off, h = w.thick / 2;
   if (fixtHole(f)) return [wallPt(w, g, s, off, -h), wallPt(w, g, s, off + f.w, -h), wallPt(w, g, s, off + f.w, h), wallPt(w, g, s, off, h)];
   let b0 = h, b1 = h + f.d;
-  if (fixtSink(f)) { const c = fixtCounter({ ...f, wall: w.id, side: s, off }), m = h + c.depth / 2 - 0.5; b0 = m - f.d / 2; b1 = m + f.d / 2; }
+  if (fixtSink(f)) { const k = sinkCut({ ...f, wall: w.id, side: s, off }); b0 = h + k.sy0; b1 = h + k.sy1; }
   return [wallPt(w, g, s, off, b0), wallPt(w, g, s, off + f.w, b0), wallPt(w, g, s, off + f.w, b1), wallPt(w, g, s, off, b1)];
 }
 function fixtHit(p) { return fixtList().filter(f => { const poly = fixtPoly(f); return poly && inPoly(p, poly); }).map(f => f.id); }
+
+// A top's outline in the plan with its sinks: apron sinks notch the front edge, the rest are holes.
+// { outline, holes, sinks } in plan points; used by the 3D top and the Tops page.
+function topWithSinks(r) {
+  const w = wall(r.wall); if (!w) return null;
+  const g = wg(w), f = w.thick / 2, P = q => wallPt(w, g, r.side, q.x, f + q.y);
+  const loc = p => ({ x: (p.x - w.x1) * g.u.x + (p.y - w.y1) * g.u.y, y: ((p.x - w.x1) * g.n.x + (p.y - w.y1) * g.n.y) * r.side - f });
+  let out = (r.poly || [wallPt(w, g, r.side, r.start - r.ovS, f), wallPt(w, g, r.side, r.end + r.ovE, f), wallPt(w, g, r.side, r.end + r.ovE, f + r.depth), wallPt(w, g, r.side, r.start - r.ovS, f + r.depth)]).map(loc);
+  const sinks = runSinks(r), holes = [];
+  sinks.forEach(({ k }) => {
+    const pts = sinkCutPts(k);
+    if (!k.open) { holes.push(pts.map(P)); return; }
+    // Put the notch into the front edge it opens on, in the order that edge runs.
+    const i = out.findIndex((a, j) => { const b = out[(j + 1) % out.length]; return Math.abs(a.y - k.y1) < 0.05 && Math.abs(b.y - k.y1) < 0.05 && Math.min(a.x, b.x) < k.x0 + 0.01 && Math.max(a.x, b.x) > k.x1 - 0.01; });
+    if (i < 0) { holes.push(roundRectPts(k.x0, k.y0, k.x1, k.y1 - 0.25, k.r, false).map(P)); return; }
+    const a = out[i], b = out[(i + 1) % out.length], ins = a.x < b.x ? [...pts].reverse() : pts;
+    out = [...out.slice(0, i + 1), ...ins, ...out.slice(i + 1)];
+  });
+  return { outline: out.map(P), holes, sinks };
+}
 
 /* ---------- Where it can go ---------- */
 // Spans along a wall side that a fixture (or a cabinet of this height and depth) runs into. Used by the cabinet layout too.
@@ -227,17 +306,20 @@ function fixtPlanOne(f, ghost) {
     s += `<polygon class="fx-hit" points="${q(f.off, f.off + f.w, -h - 2, h + 2)}"${id}/>`;
     return s;
   }
-  s += `<polygon class="${cls} nss" points="${polyPts(poly)}"${id}/>`;
   const at = (a, b) => P(f.off + a, h + b), ang = (() => { let a = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (a > 90 || a <= -90) a += 180; return a; })();
   if (fixtSink(f)) {
-    const c = fixtCounter(f), m = c.depth / 2 - 0.5, n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5, bw = (f.w - 1.5 - gap * (n - 1)) / n;
-    for (let i = 0; i < n; i++) {
-      const a0 = 0.75 + i * (bw + gap), q = [at(a0, m - f.d / 2 + 1.5), at(a0 + bw, m - f.d / 2 + 1.5), at(a0 + bw, m + f.d / 2 - 0.75), at(a0, m + f.d / 2 - 0.75)];
-      s += `<polygon class="fx-bowl nss" points="${polyPts(q)}"/>`;
-    }
-    const fc = at(f.w / 2, m - f.d / 2 - 1.25); s += `<circle class="fx-faucet nss" cx="${fc.x}" cy="${fc.y}" r="1.1"/>`;
+    // The sink's outside (solid when its rim sits on the top, dashed when it hangs under it), the cutout in the top
+    // with its real corners, and the bowls inside it.
+    const k = sinkCut(f), Q = pts => polyPts(pts.map(q => P(q.x, h + q.y))), under = k.mount !== 'drop';
+    const rim = roundRectPts(f.off, k.sy0, f.off + f.w, k.sy1, k.oval ? 0 : k.r + (k.mount === 'drop' ? 0.5 : 1), k.oval);
+    s += `<polygon class="${cls}${under ? ' fx-under' : ''} nss" points="${Q(rim)}"${id}/>`;
+    s += `<polygon class="fx-cut nss" points="${Q(sinkCutPts(k))}" pointer-events="none"/>`;
+    const n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5;
+    if (n > 1) { const bw = (k.w - gap * (n - 1)) / n; for (let i = 1; i < n; i++) { const x = k.x0 + i * bw + (i - 0.5) * gap, a = P(x, h + k.y0), b = P(x, h + k.y1); s += `<line class="fx-divide nss" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`; } }
+    const fc = at(f.w / 2, k.sy0 - 1.25); s += `<circle class="fx-faucet nss" cx="${fc.x}" cy="${fc.y}" r="1.1"/>`;
     return s;
   }
+  s += `<polygon class="${cls} nss" points="${polyPts(poly)}"${id}/>`;
   if (f.kind === 'range') [[0.27, 0.3], [0.73, 0.3], [0.27, 0.68], [0.73, 0.68]].forEach(([u, v]) => { const c = at(f.w * u, f.d * v); s += `<circle class="fx-burner nss" cx="${c.x}" cy="${c.y}" r="${Math.min(f.w, f.d) * 0.13}"/>`; });
   if (f.kind === 'washer' || f.kind === 'dryer') { const c = at(f.w / 2, f.d * 0.55); s += `<circle class="fx-burner nss" cx="${c.x}" cy="${c.y}" r="${Math.min(f.w, f.d) * 0.3}"/>`; }
   const fs = Math.min(13 * px, f.w * 0.3, f.d * 0.3), mid = at(f.w / 2, f.d / 2);
@@ -262,7 +344,7 @@ function fixtElevSVG(w, side, L, fs, holes) {
     if (fixtSink(f)) {
       // Under the countertop: dashed bowl; above it the faucet.
       const t = fixtCounter(f).top, cx = x + f.w / 2;
-      s += f.apron ? `<rect class="fixt fx-sink nss" x="${x}" y="${-t}" width="${f.w}" height="${f.h}"/>` : `<rect class="fx-bowl ev nss" x="${x + 0.75}" y="${-t}" width="${f.w - 1.5}" height="${f.h}"/>`;
+      s += f.apron ? `<rect class="fixt fx-sink nss" x="${x}" y="${-t}" width="${f.w}" height="${f.h}"/>` : (k => `<rect class="fx-bowl ev nss" x="${x + (f.w - k.w) / 2}" y="${-t}" width="${k.w}" height="${f.h}" rx="${Math.min(k.r, 2)}"/>`)(sinkCut(f));
       s += `<path class="fx-faucet ev nss" d="M${cx - 1} ${-t}V${-t - 11}Q${cx - 1} ${-t - 14} ${cx + 2} ${-t - 14}Q${cx + 5} ${-t - 14} ${cx + 5} ${-t - 11}V${-t - 9.5}"/>`;
       s += `<rect class="ev-hit" x="${x}" y="${-t - 14}" width="${f.w}" height="${14 + f.h}"/>`;
     } else {
@@ -319,6 +401,14 @@ function fixtWall3(w, g, wm, edges) {
   piece(at, L + t / 2, 0, H);
   return out;
 }
+// A flat piece (outline pts, holes) in a wall group's x/z, top at y, t thick (extruded down).
+function flatSlab3(pts, holes, y, t, material) {
+  const sh = new THREE.Shape(pts.map(p => new THREE.Vector2(p.x, p.y)));
+  holes.forEach(h => sh.holes.push(new THREE.Path(h.map(p => new THREE.Vector2(p.x, p.y)))));
+  const me = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.01, t), bevelEnabled: false, curveSegments: 1 }), material);
+  me.rotation.x = Math.PI / 2; me.position.y = y;
+  return me;
+}
 function fixt3d(v, selCol) {
   const metal = flat3('#c3c7cc'), white = flat3('#f3f3f1'), dark = flat3('#3b3f44'), glass = flat3('#a8cfe6', 0.35), wood = flat3('#d9c3a0'), trim = flat3('#ffffff');
   fixtList().forEach(f => {
@@ -345,22 +435,30 @@ function fixt3d(v, selCol) {
     }
     const grp = wallGroup(w, f.side, f.side === 1 ? f.off : f.off + f.w);
     if (fixtSink(f)) {
-      const c = fixtCounter(f), m = c.depth / 2 - 0.5;
-      // An imported sink model hangs from the countertop by its rim.
+      const c = fixtCounter(f), k = sinkCut(f, c), under = k.mount !== 'drop';
+      // Wall frame (x along, y out) to the group's x and z.
+      const lx = x => f.side === 1 ? x - f.off : f.off + f.w - x, L2 = pts => pts.map(q => ({ x: lx(q.x), y: q.y }));
+      // An imported sink model hangs from the countertop by its rim, lined up with the cutout.
       const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
-      if (mm) { mm.position.set(0, c.top - f.h + 0.2, m - f.d / 2); grp.add(mm); v.root.add(tag(grp)); return; }
-      const ap = (f.apron || fixtDef(f).apron) && S.cabinets.find(k => apronSinkOn(k) === f);
-      if (ap) {
-        // Apron sink: the front shows from the cabinet below up to the countertop, out at the countertop's front edge,
-        // and the rim reaches the apron (no strip of countertop in front of the bowl).
-        const z0 = m - f.d / 2, z1 = c.depth + 0.1, low = ap.elev + ap.h, ah = c.top - low;
-        grp.add(box3(f.w, 0.2, z1 - z0, hot || metal, f.w / 2, c.top + 0.1, (z0 + z1) / 2));
-        if (ah > 0.5) grp.add(box3(f.w, ah, 0.6, hot || metal, f.w / 2, low + ah / 2, z1 - 0.3));
-      } else grp.add(box3(f.w, 0.2, f.d, hot || metal, f.w / 2, c.top + 0.1, m));
-      const n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5, bw = (f.w - 1.5 - gap * (n - 1)) / n;
-      for (let i = 0; i < n; i++) grp.add(box3(bw, 0.1, f.d - 2.25, dark, 0.75 + i * (bw + gap) + bw / 2, c.top + 0.22, m + 0.4, false));
-      grp.add(box3(1.2, 13, 1.2, hot || metal, f.w / 2, c.top + 6.5, m - f.d / 2 - 1.25));
-      grp.add(box3(1, 1, 7, hot || metal, f.w / 2, c.top + 13, m - f.d / 2 + 2));
+      if (mm) { mm.position.set(0, c.top - f.h + 0.2, k.sy0); grp.add(mm); v.root.add(tag(grp)); return; }
+      const steel = hot || metal, wallT = 0.06, bowlTop = under ? c.top - c.thick : c.top;
+      // The bowl under the cutout: its walls (a thin ring the shape of the cutout) and its bottom.
+      const bowlPts = k.open ? roundRectPts(k.x0, k.y0, k.x1, k.y1 - 0.6, k.r, false) : sinkCutPts(k);
+      const grow = (pts, e) => { const cx = (k.x0 + k.x1) / 2, cy = (k.y0 + k.y1) / 2, sx = (k.x1 - k.x0) / 2, sy = (k.y1 - k.y0) / 2; return pts.map(q => ({ x: cx + (q.x - cx) * (sx + e) / sx, y: cy + (q.y - cy) * (sy + e) / sy })); };
+      const ap = k.mount === 'apron' && S.cabinets.find(q => apronSinkOn(q) === f);
+      const deep = Math.max(3, f.h - 0.5), low = ap ? Math.min(ap.elev + ap.h, c.top - deep) : c.top - deep;
+      grp.add(flatSlab3(L2(grow(bowlPts, wallT)), [L2(bowlPts)], bowlTop, bowlTop - low, steel));
+      grp.add(flatSlab3(L2(bowlPts), [], low + 0.1, 0.1, hot || dark));
+      // Bowls split by low dividers.
+      const n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5;
+      if (n > 1) { const bw = (k.w - gap * (n - 1)) / n; for (let i = 1; i < n; i++) { const x = k.x0 + i * bw + (i - 0.5) * gap; grp.add(box3(0.12, deep - 2, k.y1 - k.y0 - 0.8, steel, lx(x), low + (deep - 2) / 2, (k.y0 + k.y1) / 2, false)); } }
+      // A drop-in's rim lies on the top round the cutout.
+      if (k.mount === 'drop') grp.add(flatSlab3(L2(roundRectPts(f.off, k.sy0, f.off + f.w, k.sy1, k.oval ? 0 : k.r + 0.5, k.oval)), [L2(sinkCutPts(k))], c.top + 0.15, 0.15, steel));
+      // Apron sink: the front shows from the cabinet below up to the countertop, at the countertop's front edge.
+      if (ap) { const bot = ap.elev + ap.h, ah = c.top - bot; if (ah > 0.5) grp.add(box3(f.w, ah, 0.6, steel, f.w / 2, bot + ah / 2, k.y1 - 0.3)); }
+      const fy = Math.max(1.2, Math.min(k.sy0, k.y0 - 0.5) - 1.25);
+      grp.add(box3(1.2, 13, 1.2, steel, f.w / 2, c.top + 6.5, fy));
+      grp.add(box3(1, 1, 7, steel, f.w / 2, c.top + 13, fy + 3.25));
       v.root.add(tag(grp)); return;
     }
     const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
@@ -414,7 +512,19 @@ function fixtProps(f) {
     ${f.kind === 'door' ? fld('Door', R, 'swing', f.swing || 'L', 'select', { options: [{ v: 'L', l: 'LH, hinge on the left' }, { v: 'R', l: 'RH, hinge on the right' }, { v: 'both', l: 'Double door' }, { v: 'none', l: 'No door (open doorway)' }] }) : ''}
     ${fixtSink(f) ? fld('Bowls', R, 'bowls', f.bowls || 1, 'selnum', { options: [{ v: 1, l: 'Single bowl' }, { v: 2, l: 'Double bowl' }, { v: 3, l: 'Triple bowl' }] }) : ''}
     ${fixtSink(f) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-center" data-id="${id}">${icon('ends')}Center on the cabinet under it</button></div>` : ''}
-    ${fld('Name', R, 'name', f.name || '', 'text', { ph: d.name, wide: true })}</div>`;
+    ${fld('Name', R, 'name', f.name || '', 'text', { ph: d.name, wide: true })}</div>${fixtSink(f) ? sinkCutBox(f) : ''}`;
+}
+// The sink's cutout in the countertop: how it mounts and the hole's size, corners and place. The numbers shown are what
+// gets cut (plan, 3D and the CNC); typing one keeps it, Back to the sink's sizes clears them.
+function sinkCutBox(f) {
+  const R = 'fixt:' + f.id, k = sinkCut(f), own = ['mount', 'cutW', 'cutD', 'cutR', 'cutFront', 'cutShape'].some(x => has(f, x));
+  return `<div class="psec box">${secHead('plan', 'Countertop cutout', 'violet')}
+    ${fld('Mount', R, 'mount', k.mount, 'select', { options: SINK_MOUNTS.map(([v, l]) => ({ v, l })), wide: true })}
+    <div class="grid2">${fld('Cutout width', R, 'cutW', k.w, 'len')}${fld(k.open ? 'Back from the front edge' : 'Cutout front to back', R, 'cutD', k.d, 'len')}
+    ${k.open ? '' : fld('Shape', R, 'cutShape', k.oval ? 'oval' : 'round', 'select', { options: [{ v: 'round', l: 'Rounded corners' }, { v: 'oval', l: 'Oval' }] })}${k.oval ? '' : fld('Corner radius', R, 'cutR', k.r, 'len')}
+    ${k.open ? '' : fld('From the front edge', R, 'cutFront', k.front, 'len')}</div>
+    <div class="note">${k.mount === 'under' ? 'Rim glued under the top; the cutout follows the bowl.' : k.mount === 'drop' ? 'Rim sits on the top; the cutout is inside the rim.' : 'The apron shows at the front; the top is notched for it.'} Always check the sink's own template.</div>
+    ${own ? `<div class="row-actions"><button class="btn sm" data-act="fixt-cutreset" data-id="${f.id}">${icon('undo')}Back to the sink's sizes</button></div>` : ''}</div>`;
 }
 function fixtAct(a, id) {
   const f = fixtById(id);
@@ -429,6 +539,7 @@ function fixtAct(a, id) {
       if (off === null || (fixtFloor(f) && Math.abs(off - f.off) < 0.01)) { flash('There is no room for another one on this wall.'); return true; }
       n.off = r3(off); mutate(() => { S.fixtures.push(n); }); ui.sel = { type: 'fixt', id: n.id }; renderRoom(); return true;
     }
+    case 'fixt-cutreset': if (f) mutate(() => { ['mount', 'cutW', 'cutD', 'cutR', 'cutFront', 'cutShape'].forEach(x => { delete f[x]; }); const p = fixtPreset(f.lib); if (p) f.apron = p.apron; else delete f.apron; if (f.apron === undefined) delete f.apron; }); return true;
     case 'fixt-center': {
       if (!f) return true;
       const c = S.cabinets.filter(k => k.wall === f.wall && k.side === f.side && k.cat !== 'Wall').find(k => f.off + f.w / 2 >= k.off && f.off + f.w / 2 <= k.off + k.w);

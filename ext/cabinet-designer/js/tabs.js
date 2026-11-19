@@ -852,23 +852,108 @@ function topRunPoly(r) {
   const g = wg(w), f = w.thick / 2;
   return r.poly || [wallPt(w, g, r.side, r.start - r.ovS, f), wallPt(w, g, r.side, r.end + r.ovE, f), wallPt(w, g, r.side, r.end + r.ovE, f + r.depth), wallPt(w, g, r.side, r.start - r.ovS, f + r.depth)];
 }
-// The open room seen from above: walls, base cabinets faint, each top in its style's colour with its run number.
-function topsPlanSVG(runs) {
+// The open room seen from above: walls, base cabinets faint, each top in its style's colour with its run number,
+// the sink cutouts, the corner joints (right-click one to change it) and the sizes a countertop shop needs, drawn on
+// the tops: each top's length and depth, and each sink's centre from the top's left end with its cutout size.
+// o.print: drawn for paper (black lines, no clicks).
+function topsPlanSVG(runs, o = {}) {
   const walls = S.walls || [];
   if (!walls.length) return '<div class="note show">Draw the walls in the Room tab to see the tops here.</div>';
+  const shown = runs.filter(r => r.on && wall(r.wall));
   const pts = []; walls.forEach(w => pts.push({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }));
   const polys = runs.map(r => r.on ? topRunPoly(r) : null); polys.forEach(p => p && pts.push(...p));
-  const x0 = Math.min(...pts.map(p => p.x)) - 24, y0 = Math.min(...pts.map(p => p.y)) - 24, x1 = Math.max(...pts.map(p => p.x)) + 24, y1 = Math.max(...pts.map(p => p.y)) + 24;
-  const fs = Math.max(x1 - x0, y1 - y0) / 42;
+  const pad = 18, x0 = Math.min(...pts.map(p => p.x)) - pad, y0 = Math.min(...pts.map(p => p.y)) - pad, x1 = Math.max(...pts.map(p => p.x)) + pad, y1 = Math.max(...pts.map(p => p.y)) + pad;
+  const fs = Math.max(x1 - x0, y1 - y0) / (o.print ? 40 : 46), dfs = fs * 0.78;
   let svg = walls.map(w => `<line class="ctp-wall" x1="${w.x1}" y1="${w.y1}" x2="${w.x2}" y2="${w.y2}" stroke-width="${w.thick || 4.5}"/>`).join('');
   svg += S.cabinets.filter(c => c.cat !== 'Wall').map(c => { const p = cabPoly(c); return p ? `<polygon class="ctp-cab" points="${polyPts(p)}"/>` : ''; }).join('');
+  const P2 = q => `${r3(q.x)} ${r3(q.y)}`, ring = pts => 'M' + pts.map(P2).join('L') + 'Z';
+  let dims = '', labels = '';
   runs.forEach((r, i) => {
     const p = polys[i]; if (!p) return;
-    const col = r.generic ? '#64748b' : topTone(r.tpl), mx = p.reduce((a, q) => a + q.x, 0) / p.length, my = p.reduce((a, q) => a + q.y, 0) / p.length;
-    svg += `<polygon class="ctp-top${ui.topRun === r.key ? ' on' : ''}" data-act="top-run" data-id="${esc(r.key)}" points="${polyPts(p)}" style="--c:${col}"><title>${esc(r.generic ? r.name : r.tpl.name)} · ${fmtLen(r.len, 1)}</title></polygon>`;
-    svg += `<g class="ctp-num" pointer-events="none"><circle cx="${mx}" cy="${my}" r="${fs * 0.9}" style="fill:${col}"/><text x="${mx}" y="${my}" font-size="${fs}" text-anchor="middle" dominant-baseline="central">${i + 1}</text></g>`;
+    const ts = typeof topWithSinks === 'function' ? topWithSinks(r) : null;
+    const col = o.print ? '#d6d3d1' : r.generic ? '#64748b' : topTone(r.tpl);
+    const d = ts ? ring(ts.outline) + ts.holes.map(ring).join('') : ring(p);
+    svg += `<path class="ctp-top${ui.topRun === r.key && !o.print ? ' on' : ''}" fill-rule="evenodd"${o.print ? '' : ` data-act="top-run" data-id="${esc(r.key)}"`} d="${d}" style="--c:${col}"><title>${esc(r.generic ? r.name : r.tpl.name)} · ${fmtLen(r.len, 1)}</title></path>`;
+    // The wall's frame for this top: a along the wall, b out from the wall face.
+    const w = wall(r.wall), g = wg(w), f = w.thick / 2, P = (a, b) => wallPt(w, g, r.side, a, f + b);
+    // Text stays upright: turned to read from the bottom or the right of the page.
+    const up = a => { a = ((a % 360) + 360) % 360; if (a > 180) a -= 360; return a > 90 ? a - 180 : a <= -90 ? a + 180 : a; };
+    const ang = up(Math.atan2(g.u.y, g.u.x) * 180 / Math.PI);
+    const a0 = ctX0(r), a1 = ctX1(r), D = r.depth, left = r.side === 1 ? a0 : a1;
+    const txt = (q, t, size, cls = 'ctp-dt', rot = ang) => `<text class="${cls}" x="${r3(q.x)}" y="${r3(q.y)}" font-size="${r3(size)}" text-anchor="middle" dominant-baseline="central" transform="rotate(${r3(rot)} ${r3(q.x)} ${r3(q.y)})">${esc(t)}</text>`;
+    // A dimension along the wall at b, with extension lines back to bEdge.
+    const dimA = (aa, ab, b, bEdge, label) => {
+      if (Math.abs(ab - aa) < 0.5) return '';
+      const A = P(aa, b), B = P(ab, b), eA = P(aa, bEdge), eB = P(ab, bEdge), tk = dfs * 0.35, tA0 = P(aa - tk, b - tk), tA1 = P(aa + tk, b + tk), tB0 = P(ab - tk, b - tk), tB1 = P(ab + tk, b + tk);
+      const o2 = b < bEdge ? -1 : 1;
+      return `<g class="ctp-dl"><path d="M${P2(eA)}L${P2(P(aa, b + o2 * dfs * 0.4))}M${P2(eB)}L${P2(P(ab, b + o2 * dfs * 0.4))}M${P2(A)}L${P2(B)}M${P2(tA0)}L${P2(tA1)}M${P2(tB0)}L${P2(tB1)}"/>${txt(P((aa + ab) / 2, b + o2 * dfs * 0.95), label, dfs)}</g>`;
+    };
+    // Overall length, behind the wall, where no other top or cabinet gets in its way.
+    dims += dimA(a0, a1, -w.thick - dfs * 1.4, -w.thick - 0.3, fmtLen(r3(a1 - a0), 1)).replace(/class="ctp-dt"/, 'class="ctp-dt ctp-len"');
+    // Depth, across a free end (one that no corner joins), outside the top.
+    const jS = (r.joints || {}).S, jE = (r.joints || {}).E, endA = !jS ? a0 - dfs * 1.6 : !jE ? a1 + dfs * 1.6 : null;
+    if (endA !== null) {
+      const e = !jS ? a0 : a1, A = P(endA, 0), B = P(endA, D), tk = dfs * 0.35;
+      dims += `<g class="ctp-dl"><path d="M${P2(P(e, 0))}L${P2(P(endA + (endA < e ? -0.4 : 0.4) * dfs, 0))}M${P2(P(e, D))}L${P2(P(endA + (endA < e ? -0.4 : 0.4) * dfs, D))}M${P2(A)}L${P2(B)}M${P2(P(endA - tk, -tk))}L${P2(P(endA + tk, tk))}M${P2(P(endA - tk, D - tk))}L${P2(P(endA + tk, D + tk))}"/>${txt(P(endA + (endA < e ? -1 : 1) * dfs * 0.75, D / 2), fmtLen(r3(D), 1), dfs, 'ctp-dt', up(ang + 90))}</g>`;
+    }
+    // Sinks: centre line from the left end, the cutout's size and corners, and how far back from the front edge.
+    (ts ? ts.sinks : []).forEach(({ f: fx, k }) => {
+      const cx = (k.x0 + k.x1) / 2;
+      dims += dimA(left, cx, D + dfs * 1.7, D + 0.5, 'CL ' + fmtLen(r3(Math.abs(cx - left)), 1));
+      dims += `<path class="ctp-cl" d="M${P2(P(cx, k.y0 - 1.5))}L${P2(P(cx, D + dfs * 1.7))}"/>`;
+      // How far the cutout sits back from the front edge, as a small dimension beside it.
+      if (!k.open && k.front > 0.1) {
+        const sa = k.x1 + dfs * 0.9, tk = dfs * 0.3;
+        dims += `<g class="ctp-dl"><path d="M${P2(P(sa, k.y1))}L${P2(P(sa, D))}M${P2(P(k.x1, k.y1))}L${P2(P(sa + tk, k.y1))}M${P2(P(sa - tk, k.y1 - tk))}L${P2(P(sa + tk, k.y1 + tk))}M${P2(P(sa - tk, D - tk))}L${P2(P(sa + tk, D + tk))}"/>${txt(P(sa + dfs * 1.5, (k.y1 + D) / 2), fmtLen(k.front, 1), dfs * 0.8)}</g>`;
+      }
+      const lines = [`${fmtLen(k.w, 1)} × ${fmtLen(k.d, 1)}`, k.oval ? 'oval' : k.r > 0 ? `R ${fmtLen(k.r, 1)}` : 'square corners'];
+      // Lines read top to bottom on the page whichever way the wall runs.
+      const lf = Math.min(dfs * 0.9, (k.y1 - k.y0) / (lines.length + 0.8)), my = (k.y0 + Math.min(k.y1, D)) / 2;
+      const nb = { x: P(0, 1).x - P(0, 0).x, y: P(0, 1).y - P(0, 0).y }, rad = ang * Math.PI / 180, dn = -Math.sin(rad) * nb.x + Math.cos(rad) * nb.y >= 0 ? 1 : -1;
+      labels += lines.map((t, n) => txt(P(cx, my + dn * (n - (lines.length - 1) / 2) * lf * 1.15), t, lf, 'ctp-st')).join('');
+    });
+    const mx = p.reduce((a, q) => a + q.x, 0) / p.length, my = p.reduce((a, q) => a + q.y, 0) / p.length, sk = (ts && ts.sinks.length) ? ts.sinks[0].k : null;
+    // The run number sits clear of the sink.
+    const nAt = sk && Math.abs(((sk.x0 + sk.x1) / 2) - (a0 + a1) / 2) < sk.w ? P(Math.abs(sk.x0 - a0) > Math.abs(a1 - sk.x1) ? (a0 + sk.x0) / 2 : (sk.x1 + a1) / 2, D / 2) : { x: mx, y: my };
+    labels += `<g class="ctp-num" pointer-events="none"><circle cx="${r3(nAt.x)}" cy="${r3(nAt.y)}" r="${r3(fs * 0.9)}" style="fill:${o.print ? '#fff' : col}"/><text x="${r3(nAt.x)}" y="${r3(nAt.y)}" font-size="${r3(fs)}" text-anchor="middle" dominant-baseline="central">${i + 1}</text></g>`;
   });
-  return `<svg class="ctp-svg" viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" preserveAspectRatio="xMidYMid meet">${svg}</svg>`;
+  // Corners: the seam, and a dot to right-click (or click) for Mitered or which top runs through.
+  const corners = runs.corners || [];
+  corners.forEach(k => {
+    if (!k.seam) return;
+    const [a, b] = k.seam, m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, rr = fs * 0.75;
+    const tip = k.type === 'm' ? 'Mitered' : `${wallName(k.thru === k.A.r ? k.A.w : k.B.w)} top runs through`;
+    svg += `<line class="ctp-seam" x1="${r3(a.x)}" y1="${r3(a.y)}" x2="${r3(b.x)}" y2="${r3(b.y)}"/>`;
+    if (!o.print) labels += `<g class="ctj ctp-ctj" data-ctj="${esc(k.id)}"><title>${tip}. Right-click to change the corner.</title><line class="ctj-hit" x1="${r3(a.x)}" y1="${r3(a.y)}" x2="${r3(b.x)}" y2="${r3(b.y)}" stroke-width="${r3(rr * 1.6)}"/><circle class="ctj-dot" cx="${r3(m.x)}" cy="${r3(m.y)}" r="${r3(rr)}" stroke-width="${r3(rr * 0.2)}"/><path class="ctj-ico" stroke-width="${r3(rr * 0.22)}" d="${k.type === 'm' ? `M${r3(m.x - rr * 0.5)} ${r3(m.y + rr * 0.5)}L${r3(m.x + rr * 0.5)} ${r3(m.y - rr * 0.5)}` : `M${r3(m.x - rr * 0.5)} ${r3(m.y)}H${r3(m.x + rr * 0.5)}M${r3(m.x)} ${r3(m.y - rr * 0.5)}V${r3(m.y + rr * 0.5)}`}"/></g>`;
+    else labels += `<text class="ctp-st" x="${r3(m.x)}" y="${r3(m.y)}" font-size="${r3(dfs * 0.7)}" text-anchor="middle" dominant-baseline="central">${k.type === 'm' ? 'miter' : 'butt'}</text>`;
+  });
+  // Grow the frame to take in the dimensions.
+  const X0 = x0 - fs * 2, Y0 = y0 - fs * 2, W0 = x1 - x0 + fs * 4, H0 = y1 - y0 + fs * 4;
+  return `<svg class="ctp-svg${o.print ? ' ctp-print' : ''}" viewBox="${r3(X0)} ${r3(Y0)} ${r3(W0)} ${r3(H0)}" preserveAspectRatio="xMidYMid meet"${o.print ? ' role="img" aria-label="Countertop layout"' : ''}>${svg}<g class="ctp-dims" pointer-events="none">${dims}</g>${labels}</svg>`;
+}
+// What a countertop shop needs for each top, as table rows: size, style, edges, ends, corners and the sink cutouts.
+function topsSpecRows(runs) {
+  return runs.filter(r => r.on && wall(r.wall)).map(r => {
+    const i = runs.indexOf(r), t = r.tpl || {}, m = mat(t.mat) || {}, w = wall(r.wall), j = r.joints || {};
+    const lName = r.side === 1 ? 'S' : 'E', rName = r.side === 1 ? 'E' : 'S';
+    const endTxt = e => j[e] ? (j[e] === 'mitered' ? 'mitered corner' : j[e] === 'runs through' ? 'runs through the corner' : 'butts the other top') : r['block' + e] ? 'wall / tall cabinet' : `open, ${fmtLen(r['ov' + e] || 0, 1)} overhang, finished`;
+    const sinks = (typeof runSinks === 'function' ? runSinks(r) : []).map(({ f, k }) => {
+      const cx = (k.x0 + k.x1) / 2, left = r.side === 1 ? ctX0(r) : ctX1(r);
+      return `${esc(fixtName(f))}: ${{ under: 'undermount', drop: 'drop-in', apron: 'apron front' }[k.mount]}, cutout ${fmtLen(k.w, 1)} × ${fmtLen(k.d, 1)}${k.oval ? ' oval' : k.r ? `, R ${fmtLen(k.r, 1)} corners` : ''}, centre line ${fmtLen(r3(Math.abs(cx - left)), 1)} from the left end${k.open ? ', open at the front' : `, ${fmtLen(k.front, 1)} back from the front edge`}`;
+    }).join('<br>');
+    const edge = typeof TOP_EDGES !== 'undefined' && t.edge ? (TOP_EDGES.find(e => e[0] === t.edge) || [0, ''])[1] : '';
+    return `<tr><td><b>${i + 1}</b></td><td>${esc(wallName(w))}</td><td>${esc(r.generic ? r.name : t.name || '')}<br><span class="muted">${esc(m.name || '')}${t.thick ? ' · ' + fmtLen(r.thick) + ' thick' : ''}</span></td><td class="n">${fmtLen(r3(ctX1(r) - ctX0(r)), 1)}</td><td class="n">${fmtLen(r3(r.depth), 1)}</td>
+      <td>${edge ? esc(edge) + ' front' : 'Front'}${+t.backsplash > 0 ? `<br>${fmtLen(t.backsplash, 1)} backsplash` : ''}</td><td>Left: ${endTxt(lName)}<br>Right: ${endTxt(rName)}</td><td>${sinks || '<span class="muted">None</span>'}</td></tr>`;
+  }).join('');
+}
+// A printed page for the countertop shop: the room's tops with their sizes drawn on, and the list under it.
+function printTopsPage(room, head) {
+  return withRoom(room, () => {
+    const runs = countertopRuns(); if (!runs.some(r => r.on)) return '';
+    return `<section class="mp-page land mp-draw mp-tops">${head(room.name, 'Countertop layout')}${topsPlanSVG(runs, { print: true })}
+      <table class="t mp-t ctp-spec"><thead><tr><th>#</th><th>Wall</th><th>Top</th><th class="r">Length</th><th class="r">Depth</th><th>Front edge</th><th>Ends (seen from the front)</th><th>Sinks</th></tr></thead><tbody>${topsSpecRows(runs)}</tbody></table>
+      <div class="mp-note">Sizes in inches. Length is the top's longest edge; CL is the sink's centre line from the top's left end. Check every sink against its own template before cutting.</div></section>`;
+  });
 }
 // A countertop style drawn in section over a cabinet: thickness, front overhang and backsplash, with sizes.
 function topSectionSVG(t) {
@@ -906,7 +991,7 @@ function renderCountertops() {
     return `<tr class="${r.on ? '' : 'off'}${ui.topRun === r.key ? ' on' : ''}"><td><span class="ctx-num" style="background:${r.on ? col : 'var(--muted)'}">${i + 1}</span></td><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(cid => LBL[cid]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts, label: 'Style' })}</td><td class="n">${fmtLen(r.len, 1)}</td><td class="n">${fmtLen(r.depth, 1)}</td>
       <td style="width:84px">${ctl(R, 'ovS', r.ovS, 'len', { label: 'Start overhang' })}</td><td style="width:84px">${ctl(R, 'ovE', r.ovE, 'len', { label: 'End overhang' })}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td></tr>`;
   }).join('');
-  const runsBody = `<div class="psec box ctx-plan">${secHead('home', `${esc(room.name)} from above`, 'amber')}${topsPlanSVG(runs)}</div>
+  const runsBody = `<div class="psec box ctx-plan">${secHead('home', `${esc(room.name)} from above`, 'amber')}${topsPlanSVG(runs)}${(runs.corners || []).length ? '<div class="note help">Right-click a corner to miter the tops or pick which one runs through.</div>' : ''}</div>
     <div class="psec box">${secHead('ruler', 'Automatic runs', 'teal')}${auto ? '' : '<div class="note show">Automatic tops are off in this room. Auto build countertops on the right lays a top on every run of base cabinets.</div>'}
       ${autoRows ? `<div class="tscroll"><table class="t ctx-t"><thead><tr><th>#</th><th>Wall</th><th>Cabinets</th><th>Style</th><th class="r">Length</th><th class="r">Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${autoRows}</tbody></table></div>` : auto ? '<div class="note show">Place base cabinets to get countertop runs.</div>' : ''}</div>
     ${(S.genTops || []).length ? genTopsCard(topOpts) : ''}`;
@@ -919,7 +1004,7 @@ function renderCountertops() {
       <div class="psec box">${secHead('ruler', 'Size', 'teal')}<div class="grid2">${fld('Thickness', R, 'thick', t.thick, 'len')}${fld('Backsplash height', R, 'backsplash', t.backsplash, 'len')}${fld('Front overhang', R, 'frontOverhang', t.frontOverhang, 'len')}${fld('End overhang', R, 'endOverhang', t.endOverhang, 'len')}</div><div class="note help">Ends against a wall or a tall cabinet get no overhang; open ends get the end overhang.</div></div>${typeof topBuildBox === 'function' ? topBuildBox(t) : ''}</div></div>`;
   const b = (act, ic, l, x = '', bid = '') => `<button class="btn${x}" data-act="${act}"${bid ? ` data-id="${esc(bid)}"` : ''}>${icon(ic)}${l}</button>`;
   const acts = `<div class="prx-acts">${auto ? b('tops-auto', 'check', 'Rebuild tops', ' primary') + b('tops-auto-off', 'close', 'Turn off auto tops') : b('tops-auto', 'check', 'Auto build countertops', ' primary')}
-    ${b('gtop-add', 'plus', 'Add a top by hand')}${b('tab', 'home', 'Show in the room', '', 'room')}
+    ${b('tops-print', 'print', 'Print tops layout')}${b('gtop-add', 'plus', 'Add a top by hand')}${b('tab', 'home', 'Show in the room', '', 'room')}
     <span class="edx-sep"></span><div class="prx-acth">Styles</div>${b('top-add', 'plus', 'New style')}${b('lp-copy', 'copy', 'Copy this style', '', 'top')}${S.countertops.length > 1 ? b('top-del', 'trash', 'Delete this style', ' danger', t.id) : ''}</div>`;
   $('#tab-countertops').innerHTML = `<div class="prx ctx"><aside class="prx-side">${side}</aside>
     <section class="prx-main"><div class="prx-top"><h2>Countertops</h2>${tabs}</div><div class="prx-body">${view === 'styles' ? stylesBody : runsBody}</div></section>${acts}</div>`;

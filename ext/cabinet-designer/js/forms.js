@@ -186,6 +186,8 @@ document.addEventListener('change', e => {
     // An appliance or shape set a distance off either wall end, like a cabinet's From left / From right.
     // An appliance, window or doorway on a wall grows its width the same way a cabinet does (see qGrow).
     if (ref.startsWith('fixt:') && field === 'w' && v > 0 && o.wall && wall(o.wall) && typeof qGrow === 'function') { const px = xProxy(o); qGrow(px, v); o.off = px.off; o.w = v; return; }
+    // A sink's mount: apron front sinks also set the apron (the cabinet under it gets its apron build).
+    if (ref.startsWith('fixt:') && field === 'mount') { o.mount = v; if (v === 'apron') o.apron = true; else delete o.apron; return; }
     if (ref.startsWith('fixtpos:') || ref.startsWith('shppos:')) { const px = xProxy(o); setFromEnd(px, field, v); o.off = px.off; return; }
     if (ref.startsWith('cab:') && field === 'appl' && typeof setAppl === 'function') return setAppl(o, v);
     if (ref.startsWith('cabmp:') && typeof madeSync === 'function') { o[field] = v; madeSync(cab(ref.slice(6))); return; }

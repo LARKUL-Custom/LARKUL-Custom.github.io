@@ -1930,6 +1930,11 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .fx-knob{fill:var(--muted)}
 .fx-line{fill:none;stroke:var(--line-strong);stroke-width:1.2}
 .fx-bowl{fill:var(--panel);stroke:var(--ink);stroke-width:1.2}
+.fixt.fx-sink{fill:var(--panel)}
+.fixt.fx-sink.fx-under{fill:transparent;pointer-events:all;stroke:var(--ink);stroke-dasharray:3 2;stroke-width:1}
+.fixt.fx-sink.fx-under.sel{stroke:var(--sel);stroke-width:2.2}
+.fx-cut{fill:var(--sunk);stroke:var(--ink);stroke-width:1.4}
+.fx-divide{stroke:var(--ink);stroke-width:1}
 .fx-bowl.ev{fill:none;stroke:var(--muted);stroke-dasharray:4 3}
 .fx-faucet{fill:var(--line-strong);stroke:var(--ink);stroke-width:1}
 .fx-faucet.ev{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round}
@@ -3579,3 +3584,23 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .ib-size .ib-fin{grid-column:1 / -1}
 .ib-fin .seg{display:flex;width:100%}
 .ib-fin .seg button{flex:1 1 0;min-width:0;padding-inline:4px}
+
+/* 0.59.0 Tops tab and printed countertop layout: sizes drawn on the tops, sink cutouts, corner joints */
+.ctp-svg{height:min(60vh,620px)}
+.ctp-dl path{stroke:var(--ink);stroke-width:.35;fill:none}
+.ctp-dt{fill:var(--ink);font-family:var(--f-ui);font-weight:600;paint-order:stroke;stroke:var(--panel);stroke-width:.6px}
+.ctp-st{fill:var(--ink);font-family:var(--f-ui);font-weight:500}
+.ctp-cl{stroke:var(--ink);stroke-width:.25;stroke-dasharray:2 1;fill:none}
+.ctp-seam{stroke:var(--ink);stroke-width:.5;stroke-dasharray:1.5 1}
+.ctp-ctj .ctj-dot{fill:var(--accent);stroke:#fff}
+.ctp-ctj .ctj-ico{stroke:#fff;fill:none}
+.ctp-print{height:5.2in;max-height:none;background:#fff!important}
+.ctp-print .ctp-top{fill:#ebe9e6;fill-opacity:1;stroke:#111;stroke-width:.5}
+.ctp-print .ctp-cab{fill:none;stroke:#999;stroke-width:.25;stroke-dasharray:1 1}
+.ctp-print .ctp-dt{fill:#000;stroke:#fff}
+.ctp-print .ctp-dl path,.ctp-print .ctp-cl{stroke:#000}
+.ctp-print .ctp-num circle{fill:#fff!important;stroke:#000;stroke-width:.4}
+.ctp-print .ctp-num text{fill:#000!important}
+.mp-tops .ctp-spec{font-size:10px;margin-top:6px}
+.mp-tops .ctp-spec td{vertical-align:top}
+.mp-tops .mp-note{font-size:9px;color:#555;margin-top:4px}

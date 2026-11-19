@@ -170,8 +170,9 @@ function box3(w, h, d, material, x, y, z, edges = true) {
 }
 // Group whose local axes are: x from the viewer's left end, y up, z out from the wall face.
 // A countertop slab from its plan outline (corners can miter or cut it), thickness down from its top.
-function ctTop3(r, tm) {
-  const sh = new THREE.Shape(r.poly.map(p => new THREE.Vector2(p.x, p.y)));
+function ctTop3(r, tm, outline, holes) {
+  const sh = new THREE.Shape((outline || r.poly).map(p => new THREE.Vector2(p.x, p.y)));
+  (holes || []).forEach(h => sh.holes.push(new THREE.Path(h.map(p => new THREE.Vector2(p.x, p.y)))));
   // Realistic: a small eased edge all round (1/16"), the slab keeps its outline and thickness.
   const be = R3 && !BEVEL3.off && r.thick > 0.5 ? 0.0625 : 0;
   const g = new THREE.ExtrudeGeometry(sh, be ? { depth: r.thick - 2 * be, bevelEnabled: true, bevelThickness: be, bevelSize: be, bevelOffset: -be, bevelSegments: 2, curveSegments: 1 } : { depth: r.thick, bevelEnabled: false, curveSegments: 1 });
@@ -746,7 +747,10 @@ function buildRoomScene(v) {
   if (L.tops) countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), a = r.start - r.ovS, b = r.end + r.ovE;
     const grp = wallGroup(w, r.side, r.side === 1 ? a : b), tm = mat3(texLook(mat(r.tpl.mat), 'tops'));
-    if (r.poly) v.root.add(ctTop3(r, tm));
+    // A top with sinks gets the real cutouts through it (undermount and drop-in holes, apron notches).
+    const ts = typeof topWithSinks === 'function' ? topWithSinks(r) : null;
+    if (ts && ts.sinks.length) v.root.add(ctTop3(r, tm, ts.outline, ts.holes));
+    else if (r.poly) v.root.add(ctTop3(r, tm));
     else grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
     if (r.tpl.backsplash > 0) { const off = r.side === 1 ? r.ovS : r.ovE; grp.add(box3(r.end - r.start, r.tpl.backsplash, 0.75, tm, off + (r.end - r.start) / 2, r.top + r.thick + r.tpl.backsplash / 2, 0.375)); }
     v.root.add(grp);

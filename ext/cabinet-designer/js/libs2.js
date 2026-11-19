@@ -63,11 +63,13 @@ document.addEventListener('change', e => {
 });
 
 /* ----- L5: multi-print presets: one print of the pages you pick ----- */
-const MP_ITEMS = [['cover', 'Cover page'], ['specs', 'Job specs (door style, materials, hardware, color)'], ['plan', 'Floor plan (one per room)'], ['elev', 'Wall elevations with cabinet numbers'], ['3d', '3D views (saved views, or one per room)'], ['cutlist', 'Cut list'], ['hardware', 'Hardware list'], ['cabinets', 'Cabinet sheets (one per cabinet)'], ['ops', 'Machining per part'], ['recuts', 'Recut list']];
+const MP_ITEMS = [['cover', 'Cover page'], ['specs', 'Job specs (door style, materials, hardware, color)'], ['plan', 'Floor plan (one per room)'], ['elev', 'Wall elevations with cabinet numbers'], ['3d', '3D views (saved views, or one per room)'], ['tops', 'Countertop layout with sizes (for the countertop shop)'], ['cutlist', 'Cut list'], ['hardware', 'Hardware list'], ['cabinets', 'Cabinet sheets (one per cabinet)'], ['ops', 'Machining per part'], ['recuts', 'Recut list']];
 const PP_BUILD = { id: 'pp-build', name: 'Builder drawings', title: '{JOB}', items: ['cover', 'specs', 'plan', 'elev', '3d'] };
-let PRINT_PRESETS = [PP_BUILD, { id: 'pp-shop', name: 'Shop packet', title: '{JOB}', items: ['cover', 'cutlist', 'hardware', 'cabinets'] }, { id: 'pp-cut', name: 'Cut list only', title: '{JOB} cut list', items: ['cutlist'] }];
+// The countertop shop's sheet: each room's tops with their sizes and sink cutouts drawn on (Tops tab › Print tops layout).
+const PP_TOPS = { id: 'pp-tops', name: 'Countertop layout', title: '{JOB} countertops', items: ['tops'] };
+let PRINT_PRESETS = [PP_BUILD, PP_TOPS, { id: 'pp-shop', name: 'Shop packet', title: '{JOB}', items: ['cover', 'cutlist', 'hardware', 'cabinets'] }, { id: 'pp-cut', name: 'Cut list only', title: '{JOB} cut list', items: ['cutlist'] }];
 // Saved preset lists from before drawings could print get the builder preset added at the top.
-shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) PRINT_PRESETS = v.some(p => p.id === PP_BUILD.id) ? v : [{ ...PP_BUILD }, ...v]; });
+shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) { PRINT_PRESETS = v.some(p => p.id === PP_BUILD.id) ? v : [{ ...PP_BUILD }, ...v]; if (!PRINT_PRESETS.some(p => p.id === PP_TOPS.id)) PRINT_PRESETS.splice(1, 0, { ...PP_TOPS }); } });
 function mpPreset() { return PRINT_PRESETS.find(p => p.id === ui.mpPreset) || PRINT_PRESETS[0]; }
 function mpPages(pr) {
   const sc = cutScope(), title = fillVars(pr.title || '{JOB}', {}), out = [];

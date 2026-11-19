@@ -164,10 +164,11 @@ function printPicsClear() { Object.keys(printPics).forEach(k => delete printPics
 // All the drawing pages for the preset's picks, room by room (plan, then the walls, then 3D).
 function printDrawings(pr, rooms, head) {
   const want = k => pr.items.includes(k);
-  if (!want('plan') && !want('elev') && !want('3d')) return [];
+  if (!want('plan') && !want('elev') && !want('3d') && !want('tops')) return [];
   const out = [];
   rooms.forEach(room => {
     if (want('plan')) out.push(printPlanPage(room, head));
+    if (want('tops') && typeof printTopsPage === 'function') out.push(printTopsPage(room, head));
     if (want('elev')) printWallSides(room).forEach(ws => out.push(printElevPage(room, ws, head)));
     if (want('3d')) out.push(print3DPages(room, head));
   });
