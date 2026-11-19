@@ -201,7 +201,13 @@ function tplPic(k, id, lc) {
   if (k === 'faceFrame') { const t = (S.faceFrames || []).find(f => f.id === id); return t ? ffPic(t) : svg('<rect x="38" y="8" width="44" height="74" fill="#e8e1d2" stroke="#555"/><rect x="40" y="10" width="40" height="70" fill="none" stroke="#555" stroke-opacity=".4"/>'); }
   if (k === 'partT') return svg('<rect x="20" y="30" width="80" height="30" fill="#e8e1d2" stroke="#555"/><rect x="20" y="56" width="80" height="4" fill="var(--accent)"/><text x="60" y="80" text-anchor="middle" font-size="10" fill="currentColor">banded edge</text>');
   if (k === 'countertop') { const t = countertop(id), c = col(mat(t.mat)); return svg(`<path d="M10 40 L40 26 L112 26 L82 40 Z" fill="${c}" stroke="#555"/><path d="M10 40 L82 40 L82 48 L10 48 Z" fill="${c}" stroke="#555"/><path d="M82 40 L112 26 L112 34 L82 48 Z" fill="#000" fill-opacity=".15" stroke="#555"/>`); }
-  if (k === 'molding') { const m = S.moldings.find(x => x.id === id); return m ? svg(`<path d="M40 76 L40 60 C 52 58 58 46 60 34 C 62 22 72 16 84 14 L84 76 Z" fill="${col(mat(m.mat))}" stroke="#555"/>`) : svg('<text x="60" y="50" text-anchor="middle" font-size="11" fill="currentColor">None</text>'); }
+  if (k === 'molding') {
+    // The picked molding's own side profile on the corner of a cabinet top, scaled to fill the tile.
+    const m = S.moldings.find(x => x.id === id); if (!m) return svg('<text x="60" y="50" text-anchor="middle" font-size="11" fill="currentColor">None</text>');
+    const h = Math.max(0.25, +m.h || 0), d = Math.max(0.25, +m.d || 0), sc = Math.min(70 / h, 62 / d), x0 = 60 - (d * sc) / 2 + 6, y0 = m.bottom ? 10 : 80;
+    // A light rail hangs under the cabinet bottom, so it is drawn upside down below it.
+    return svg(`<rect x="${x0 - 46}" y="${m.bottom ? 1 : y0}" width="46" height="9" fill="#e8e1d2" stroke="#555"/><g transform="translate(${x0} ${y0}) scale(${r3(sc)} ${r3(m.bottom ? -sc : sc)})">${moldProfileShape(m, col(mat(m.mat)), r3(1.2 / sc))}</g>`);
+  }
   if (k === 'pull') { const p = id ? hw(id) : null, f = lc || (p && p.finish) || '#555'; return svg(`<rect x="26" y="40" width="68" height="7" rx="3.5" fill="${f}"/><rect x="34" y="46" width="5" height="10" fill="${f}"/><rect x="81" y="46" width="5" height="10" fill="${f}"/>${p ? '' : '<text x="60" y="76" text-anchor="middle" font-size="10" fill="currentColor">from door template</text>'}`); }
   if (k === 'slide') return svg('<rect x="12" y="34" width="96" height="9" rx="2" fill="#b7bcc4" stroke="#666"/><rect x="22" y="46" width="86" height="8" rx="2" fill="#d4d8de" stroke="#666"/><rect x="8" y="56" width="16" height="10" rx="2" fill="#e05252"/>');
   if (k === 'hinge') return svg('<circle cx="36" cy="46" r="15" fill="#c9ced6" stroke="#666"/><circle cx="36" cy="46" r="9" fill="#9aa1ab"/><rect x="48" y="40" width="44" height="12" rx="3" fill="#b7bcc4" stroke="#666"/><rect x="84" y="30" width="18" height="32" rx="2" fill="#d4d8de" stroke="#666"/>');

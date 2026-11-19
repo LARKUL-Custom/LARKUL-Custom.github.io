@@ -6,7 +6,7 @@ const NF0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const NF2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), NF1 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const money = v => '$' + NF2.format(Math.round(v * 100) / 100);
 // Inserts, doors and fronts, and materials are priced in their own libraries; the sheet keeps labor adders only.
-const PRICE_ADDERS = [['perDrawer', 'Each drawer (slides and labor; the box is priced below)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
+const PRICE_ADDERS = [['perDrawer', 'Each drawer, extra (box and labor are in the box price below; slides are hardware)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
@@ -91,7 +91,7 @@ function defaultPriceSheet(name = 'Standard pricing') {
     groupMarkup: { ...MZK.groupMarkup }, payments: MZK.payments.map(x => ({ ...x })),
     cab: { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } },
     products: {},
-    adders: { perDrawer: 35, perShelf: 12, perFiller: 25, perPull: 3 },
+    adders: { perDrawer: 0, perShelf: 12, perFiller: 25, perPull: 3 },
     panelAdd: { Base: 0, Wall: 0, Tall: 0 },
     doors: { on: true },
     materials: { on: false, waste: 15 },
@@ -182,6 +182,13 @@ function jobInstaller(ps, job = S.job) {
   if (job.noInstall || job.installer === 'none') return null;
   return INSTALLERS.find(i => i.id === job.installer) || INSTALLERS.find(i => i.id === (ps && ps.instBy)) || defInstaller();
 }
+// 0.59.14 (Ayden 2026-11-19: "choose installers per room or % of job"): a room can have its own installer (Quote, room header),
+// '' = the job's, 'none' = no installer in that room. Rooms with no pick price exactly as before.
+function roomInstaller(ps, r) {
+  const v = r && r.installer; if (!v) return jobInstaller(ps);
+  return v === 'none' ? null : INSTALLERS.find(i => i.id === v) || jobInstaller(ps);
+}
+const anyInstaller = ps => S.rooms.some(r => roomInstaller(ps, r));
 // Moves a sheet's old install prices to an installer with the same prices, or a new one, and takes them off the sheet.
 function takeInstall(ps) {
   if (!ps.install) return false;
@@ -385,6 +392,9 @@ function ensureLibPrices(ps) {
   // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
   if (ps && ps.molds && !ps.cmold4 && S.moldings.some(m => m.id === 'mo-cmold')) { ps.molds['mo-cmold'] = 4; ps.cmold4 = 1; savePrices(); }
   // 0.57.0: concealed floating shelf brackets and in-wall blocking start at rough shop prices.
+  // 0.59.15 (Ayden 2026-11-19): the drawer box price already has the box and its labor, and slides are hardware, so the old
+  // $35 Each drawer charge would count the labor twice. Sheets still on $35 go to $0 once; a different number is kept.
+  if (ps && ps.adders && !ps.dbxLabor) { if (+ps.adders.perDrawer === 35) ps.adders.perDrawer = 0; ps.dbxLabor = 1; savePrices(); }
   if (ps && ps.adders && (ps.adders.perBracket === undefined || ps.adders.perBlocking === undefined)) { if (ps.adders.perBracket === undefined) ps.adders.perBracket = 15; if (ps.adders.perBlocking === undefined) ps.adders.perBlocking = 35; savePrices(); }
   if (ps && !ps.panelAdd) {
     const was = +((ps.counts || {}).panels) || 0; ps.panelAdd = { Base: was, Wall: was, Tall: was };
@@ -406,24 +416,31 @@ function priceJob(ps) {
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));
     // Installation by the foot of each type, at the job's installer's prices, like Mozaik's per-length install rows.
     // A job can have No installer (the customer installs, or it's a pickup).
-    const who = jobInstaller(ps), inst = !who ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((who.rates || {})[cat]) || 0;
+    // An installer priced as a % of the job charges that % of the room (its cabinets and other lines) instead of per foot and price list.
+    const who = roomInstaller(ps, r), pctI = who && +who.pct > 0 ? +who.pct : 0, inst = !who || pctI ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((who.rates || {})[cat]) || 0;
       return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r, inst: true } : null; }).filter(Boolean);
     // The installer's price list, by what this room has (a per-job line goes on the job, not each room).
-    const list = who && (who.items || []).filter(it => +it.amount && it.per !== 'job' && instCount(it.per));
+    const list = who && !pctI && (who.items || []).filter(it => +it.amount && it.per !== 'job' && instCount(it.per));
     if (list && list.length) { const n = instCounts(cabs, all.filter(k => k.own)); list.forEach(it => { const q = n[it.per]; if (!q) return; const [, label, unit] = instCount(it.per);
       inst.push({ name: `Installation, ${(it.name || label).replace(/^./, ch => ch.toLowerCase())} (${INST_EST[it.per] ? 'est. ' : ''}${q} × ${money(+it.amount)}${unit === 'per 8 sq ft' ? ' per 8 sq ft' : ''})`, amount: q * +it.amount, inst: true }); }); }
-    const lines = [...own, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : []), ...inst, ...xs];
+    const pre = [...own, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : [])];
+    if (pctI) { const amt = (cabs.reduce((a, k) => a + k.total, 0) + pre.reduce((a, l) => a + l.amount, 0) + xs.reduce((a, l) => a + l.amount, 0)) * pctI / 100; if (amt) inst.push({ name: `Installation (${pctI}% of the room)`, amount: amt, inst: true }); }
+    if (who) inst.forEach(l => { l.instId = who.id; });
+    const lines = [...pre, ...inst, ...xs];
     const hw = {}; cabs.forEach(k => Object.entries(k.bom || {}).forEach(([n, x]) => { hw[n] = (hw[n] || 0) + x; }));
     return { r, cabs, lines, hw, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
   }));
   const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 })).concat(typeof jobLinePrices === 'function' ? jobLinePrices() : []);
-  // The installer's flat per-job charge, then their minimum: installation is topped up to it.
-  const who = jobInstaller(ps);
-  if (who) {
-    (who.items || []).filter(it => it.per === 'job' && +it.amount).forEach(it => jobLines.push({ name: `Installation, ${(it.name || 'per job').replace(/^./, ch => ch.toLowerCase())}`, amount: +it.amount, inst: true }));
-    const did = rooms.reduce((a, R) => a + R.lines.filter(l => l.inst).reduce((b, l) => b + l.amount, 0), 0) + jobLines.filter(l => l.inst).reduce((a, l) => a + l.amount, 0);
-    if (+who.min > did) jobLines.push({ name: `Installation minimum (${money(+who.min)} per job)`, amount: +who.min - did, inst: true });
-  }
+  // The installer's flat per-job charge, then their minimum: installation is topped up to it. With installers picked per room,
+  // each installer used gets their own per-job charge and minimum; with none picked it is the job's installer, as before.
+  const jw = jobInstaller(ps), perRoom = S.rooms.some(r => r.installer);
+  const used = !perRoom ? (jw ? [jw] : []) : [...new Set(rooms.map(R => roomInstaller(ps, R.r)).filter(Boolean))];
+  used.forEach(who => {
+    const tag = used.length > 1 ? `, ${who.name}` : '';
+    (who.items || []).filter(it => it.per === 'job' && +it.amount).forEach(it => jobLines.push({ name: `Installation, ${(it.name || 'per job').replace(/^./, ch => ch.toLowerCase())}${tag}`, amount: +it.amount, inst: true, instId: who.id }));
+    const did = rooms.reduce((a, R) => a + R.lines.filter(l => l.inst && (!perRoom || l.instId === who.id)).reduce((b, l) => b + l.amount, 0), 0) + jobLines.filter(l => l.inst && (!perRoom || l.instId === who.id)).reduce((a, l) => a + l.amount, 0);
+    if (+who.min > did) jobLines.push({ name: `Installation minimum${tag} (${money(+who.min)} per job)`, amount: +who.min - did, inst: true, instId: who.id });
+  });
   // Percent charges (fuel and delivery, commission) are taken on everything above them, before markup and tax.
   const base = rooms.reduce((a, r) => a + r.total, 0) + jobLines.reduce((a, k) => a + k.amount, 0);
   const pct = ps.extras.map((x, xi) => ({ x, xi })).filter(({ x }) => x.per === 'pct' && +x.amount).map(({ x, xi }) => ({ name: `${x.name} ${+x.amount}%`, amount: base * +x.amount / 100, xi }));
@@ -509,26 +526,27 @@ function installersCard(ps) {
   const cur = jobInstaller(ps), one = INSTALLERS.length < 2;
   const rows = INSTALLERS.map(i => { const R = 'inst:' + i.id, P = 'instp:' + i.id + ':rates';
     const open = ui.instOpen === i.id, nl = (i.items || []).length;
-    const list = !open ? '' : `<tr class="inst-list"><td colspan="7"><div class="inst-lb">
+    const list = !open ? '' : `<tr class="inst-list"><td colspan="8"><div class="inst-lb">
       <table class="t"><thead><tr><th>Charge for</th><th>Name on the quote</th><th class="r">Price</th><th></th></tr></thead><tbody>${(i.items || []).map((it, j) => { const L = `instp:${i.id}:items.${j}`;
         return `<tr><td>${ctl(L, 'per', it.per, 'select', { label: 'Charge for', options: INST_COUNTS.map(([v, l, u]) => ({ v, l: `${l}, ${u}` })) })}</td><td>${ctl(L, 'name', it.name || '', 'text', { label: 'Name on the quote' })}</td><td style="width:96px">${ctl(L, 'amount', it.amount ?? 0, 'num', { label: 'Price' })}</td><td><button class="btn sm" data-act="ps-inst-idel" data-id="${esc(i.id)}:${j}" aria-label="Remove">×</button></td></tr>`; }).join('') || '<tr><td colspan="4" class="muted">No price list. Per-foot prices only.</td></tr>'}</tbody></table>
       ${(i.items || []).some(it => INST_EST[it.per]) ? `<div class="note">Estimates, counted from the drawing: ${(i.items || []).filter(it => INST_EST[it.per]).map(it => `<b>${esc(instCount(it.per)[1].replace(' (estimate)', ''))}</b>: ${INST_EST[it.per]}`).join(' ')}</div>` : ''}
       <div class="row-actions"><button class="btn sm" data-act="ps-inst-iadd" data-id="${esc(i.id)}">${icon('plus')}Add a price</button><label class="f inst-min"><span>Minimum per job ($)</span>${ctl(R, 'min', i.min ?? 0, 'num', { label: 'Minimum per job' })}</label></div>
       <label class="f wide"><span>Notes (charges the program can't count)</span><textarea rows="5" data-obj="${esc(R)}" data-field="notes" data-type="text" aria-label="${esc(i.name)} notes">${esc(i.notes || '')}</textarea></label></div></td></tr>`;
     return `<tr><td>${ctl(R, 'name', i.name, 'text', { label: 'Installer name' })}</td>${CAT_FT.map(([k, l]) => `<td style="width:84px">${ctl(P, k, (i.rates || {})[k] ?? 0, 'num', { label: `${i.name} ${l} $/ft` })}</td>`).join('')}
+      <td style="width:84px">${ctl(R, 'pct', i.pct ?? '', 'num', { label: `${i.name} percent of the job`, blank: true, ph: '' })}</td>
       <td><button class="btn sm" data-act="ps-inst-open" data-id="${esc(i.id)}" aria-expanded="${open}">${icon('chevr', open ? 'rot90' : '')}${nl ? `Price list (${nl})` : 'Price list'}</button></td>
       <td>${i === defInstaller() ? '<span class="chip">Default</span>' : `<button class="btn sm" data-act="ps-inst-def" data-id="${esc(i.id)}">Make default</button>`}</td>
       <td>${one ? '' : `<button class="btn sm${ui.instConfirm === i.id ? ' danger' : ''}" data-act="ps-inst-del" data-id="${esc(i.id)}" aria-label="Delete ${esc(i.name)}">${ui.instConfirm === i.id ? 'Click again' : '×'}</button>`}</td></tr>${list}`; }).join('');
   return `<div class="psec box prx-sec wide" id="ps-install">${secHead('home', 'Installers', 'blue')}<div class="prx-h"><span class="note">Each installer's price per foot of cabinet width, and a price list for what the job has (boxes, doors, panels…). Shared by every price sheet. ${esc(S.job.name)} uses ${cur ? esc(cur.name) : 'no installer'}; pick on its Quote.</span><button class="btn sm" data-act="ps-inst-add">${icon('plus')}Add installer</button><button class="btn sm" data-act="ai-open" data-id="inst" title="Claude reads an installer's pricing guide (picture, PDF, link or text) and adds them">${icon('upload')}Import pricing guide</button></div>
-    <div class="tscroll"><table class="t"><thead><tr><th>Installer</th>${CAT_FT.map(([k]) => `<th class="r">${k} $/ft</th>`).join('')}<th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="note">A job that never picked an installer uses the default.</div></div>`;
+    <div class="tscroll"><table class="t"><thead><tr><th>Installer</th>${CAT_FT.map(([k]) => `<th class="r">${k} $/ft</th>`).join('')}<th class="r" title="Installation as a percent of each room's price, instead of per foot and the price list">% of job</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="note">A job that never picked an installer uses the default. Fill in % of job to charge installation as that percent of each room's price instead of per foot and the price list (the minimum still applies). Each room can have its own installer, picked in its header on the Quote.</div></div>`;
 }
 function toggleBtn(act, on, label, id) { return `<button class="btn toggle${on ? ' on' : ''}" data-act="${act}"${id ? ` data-id="${id}"` : ''} aria-pressed="${!!on}">${icon(on ? 'check' : 'plus')}${label}</button>`; }
 function priceQuote(ps, q = priceJob(ps)) {
   // Paint is inside each cabinet's price, so every room's total is what to quote for that room.
   const paintNote = R => R.sq.total ? `<span class="note">Includes ${sqft(R.sq.total)} sq ft paint${+paintOf(ps).rate ? `, ${money(R.cabs.reduce((a, k) => a + k.paint, 0))}` : ''}</span>` : '';
   // A room can fold to one line (name and total) so every room's price shows at a glance. Folding only hides the table.
-  const room = (R, i) => { const shut = roomShut(R.r); return `<div class="psec box prx-room${shut ? ' shut' : ''}" id="prx-room-${i}"><button class="sechead teal prx-fold" data-act="prx-fold" data-id="${esc(R.r.id)}" aria-expanded="${!shut}" title="${shut ? 'Show' : 'Hide'} this room's cabinets">${icon('chevr', shut ? '' : 'rot90')}<span>${esc(R.r.name)}</span>${shut ? `<span class="prx-n">${R.cabs.length} ${R.cabs.length === 1 ? 'cabinet' : 'cabinets'}</span>` : ''}</button><div class="prx-roomh">${shut ? '' : paintNote(R)}${!shut && R.lines.some(l => l.top) ? `<span class="prx-pct prx-roomtop">Tops $${ctl('room:' + R.r.id, 'topSq', R.r.topSq ?? '', 'num', { label: R.r.name + ' countertops dollars per square foot', blank: true, ph: topSqJob(ps) })}/sq ft</span>` : ''}<b class="money">${money(R.total)}</b></div>${shut ? '</div>' : `<div class="tscroll"><table class="t quote">
+  const room = (R, i) => { const shut = roomShut(R.r); return `<div class="psec box prx-room${shut ? ' shut' : ''}" id="prx-room-${i}"><button class="sechead teal prx-fold" data-act="prx-fold" data-id="${esc(R.r.id)}" aria-expanded="${!shut}" title="${shut ? 'Show' : 'Hide'} this room's cabinets">${icon('chevr', shut ? '' : 'rot90')}<span>${esc(R.r.name)}</span>${shut ? `<span class="prx-n">${R.cabs.length} ${R.cabs.length === 1 ? 'cabinet' : 'cabinets'}</span>` : ''}</button><div class="prx-roomh">${shut ? '' : paintNote(R)}${!shut && R.lines.some(l => l.top) ? `<span class="prx-pct prx-roomtop">Tops $${ctl('room:' + R.r.id, 'topSq', R.r.topSq ?? '', 'num', { label: R.r.name + ' countertops dollars per square foot', blank: true, ph: topSqJob(ps) })}/sq ft</span>` : ''}${INSTALLERS.length ? `<span class="prx-pct prx-roominst">Installer ${ctl('room:' + R.r.id, 'installer', R.r.installer || '', 'select', { label: R.r.name + ' installer', options: [{ v: '', l: `Same as the job${jobInstaller(ps) ? ` (${jobInstaller(ps).name})` : ' (none)'}` }, ...INSTALLERS.map(i => ({ v: i.id, l: i.name })), { v: 'none', l: 'No installer' }] })}</span>` : ''}<b class="money">${money(R.total)}</b></div>${shut ? '</div>' : `<div class="tscroll"><table class="t quote">
     <thead><tr><th>Cabinet</th><th>Size</th><th class="r">Cabinet</th>${ps.doors.on ? '<th class="r">Doors and fronts</th>' : ''}<th class="r">Drawers, shelves, inserts</th><th class="r">Panels, fillers</th>${ps.hardware.on ? '<th class="r">Hardware</th>' : ''}${ps.materials.on ? '<th class="r">Materials</th>' : ''}<th class="r">Paint sq ft</th><th class="r">Total</th></tr></thead>
     <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || (R.lines.some(l => l.own) ? '' : '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>')}
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
@@ -591,7 +609,7 @@ function priceEditor(ps) {
     ${prods.map(l => { const o = ps.products[l.id] || {}, ph = k => String(o.own ? 0 : ps.cab[l.cat][k]); return `<tr${o.own ? ' class="own"' : ''}><td>${esc(l.name)}</td><td><span class="catpill cat-${l.cat}">${l.cat}</span></td><td style="width:90px">${ctl(P('products.' + l.id), 'own', !!o.own, 'bool', { label: l.name + ' has its own price' })}</td><td style="width:110px">${num(P('products.' + l.id), 'base', o.base, { blank: true, ph: ph('base') })}</td><td style="width:110px">${num(P('products.' + l.id), 'perFt', o.perFt, { blank: true, ph: ph('perFt') })}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="cardbody"><div class="note">No product has its own price yet. Show all to set one.</div></div>'}</div>
   <div class="psec box prx-sec" id="ps-add">${secHead('shelf', 'Adders', 'blue')}<div class="prx-h"></div><div class="cardbody">${PRICE_ADDERS.map(([k, l]) => fld(l, P('adders'), k, ps.adders[k], 'num')).join('')}
     <div class="prx-dbx"><div class="eyebrow">Drawer box, each, by drawer material</div><table class="t"><tbody>${S.matTemplates.drawer.map(t => `<tr><td>${esc(t.name)}</td><td style="width:110px">${num(P('drawerBox'), t.id, (ps.drawerBox || {})[t.id], { blank: true, ph: String(dbxDefault(t)), label: t.name + ' box price' })}</td></tr>`).join('')}</tbody></table>
-    <div class="note">Added on top of Each drawer. Blank uses the shop price for that kind of box: melamine $28, Baltic birch or ply $70, solid wood $110.</div></div>
+    <div class="note">Box and labor for each drawer (slides are priced as hardware). Blank uses the shop price for that kind of box: melamine $28, Baltic birch or ply $70, solid wood $110.</div></div>
     <div class="note">Each insert has its own price in Libraries › Inserts.</div></div></div>
   <div class="psec box prx-sec" id="ps-panel">${secHead('box', 'Panels', 'teal')}<div class="prx-h"><span class="note">Each panel, by height</span></div><div class="cardbody">${PANEL_CATS.map(([k, l]) => fld(l, P('panelAdd'), k, (ps.panelAdd || {})[k] ?? 0, 'num')).join('')}
     <div class="note">Applied end panels get this on top of their door style's price. Loose panels drawn in the room get it on top of their material.</div></div></div>

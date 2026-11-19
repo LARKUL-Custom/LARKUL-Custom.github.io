@@ -1062,15 +1062,19 @@ function autoMoldBox(runs) {
 const MOLD_PROFILES = [{ v: 'crown', l: 'Crown' }, { v: 'cove', l: 'Cove' }, { v: 'flat', l: 'Flat / batten' }, { v: 'shape', l: 'Custom shape' }];
 const moldTone = m => TOP_TONES[(Math.max(0, S.moldings.indexOf(m)) + 3) % TOP_TONES.length];
 // The molding's side profile; dims adds its height and projection.
-function moldProfileSVG(m, dims) {
+// The profile itself, in inches with up as -y; the back of the molding sits at x 0 on the cabinet top (y 0).
+function moldProfileShape(m, col, sw) {
   const steps = m.profile === 'flat' ? [[1, 1]] : m.profile === 'crown' ? [[0.45, 0.4], [0.55, 1]] : [[0.5, 0.55], [0.5, 1]];
-  let y = 0; const outl = moldProfile(m), col = ((mat(m.mat) || {}).color) || '#e7e5e4';
-  const st = `fill="${esc(col)}" stroke="#334155" stroke-width="${dims ? 0.03 : 0.06}"`;
+  let y = 0; const outl = moldProfile(m);
+  const st = `fill="${esc(col)}" stroke="#334155" stroke-width="${sw}"`;
   // Stock profiles drawn with their curves: a sprung crown with an ogee face, a cove, a flat batten.
   const h = m.h, d = m.d, P = (x, yy) => `${r3(x)},${r3(-yy)}`;
   const stock = m.profile === 'crown' ? `M${P(0, 0)}L${P(d * 0.22, 0)}L${P(d * 0.22, h * 0.08)}C${P(d * 0.22, h * 0.45)} ${P(d * 0.95, h * 0.4)} ${P(d * 0.92, h * 0.86)}L${P(d, h * 0.9)}L${P(d, h)}L${P(d * 0.78, h)}Z`
     : m.profile === 'cove' ? `M${P(0, 0)}L${P(d * 0.18, 0)}Q${P(d * 0.22, h * 0.82)} ${P(d, h * 0.86)}L${P(d, h)}L${P(0, h)}Z` : '';
-  const prof = outl ? `<polygon ${st} points="${outl.map(p => `${r3(p.x)},${r3(-p.y)}`).join(' ')}"/>` : stock ? `<path ${st} d="${stock}"/>` : steps.map(([hf, df]) => { const r = `<rect ${st} x="0" y="${-(y + m.h * hf)}" width="${m.d * df}" height="${m.h * hf}"/>`; y += m.h * hf; return r; }).join('');
+  return outl ? `<polygon ${st} points="${outl.map(p => `${r3(p.x)},${r3(-p.y)}`).join(' ')}"/>` : stock ? `<path ${st} d="${stock}"/>` : steps.map(([hf, df]) => { const r = `<rect ${st} x="0" y="${-(y + m.h * hf)}" width="${m.d * df}" height="${m.h * hf}"/>`; y += m.h * hf; return r; }).join('');
+}
+function moldProfileSVG(m, dims) {
+  const prof = moldProfileShape(m, ((mat(m.mat) || {}).color) || '#e7e5e4', dims ? 0.03 : 0.06);
   const S_ = Math.max(m.d, m.h);
   if (!dims) return `<svg class="mold-mini" viewBox="${-S_ * 0.1} ${-m.h - S_ * 0.1} ${S_ * 1.2} ${S_ * 1.2}" aria-hidden="true">${prof}</svg>`;
   const u = S_ / 14, fs = u * 0.9;

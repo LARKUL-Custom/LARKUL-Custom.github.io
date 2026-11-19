@@ -220,7 +220,7 @@ function printScopePage(pr, rooms, head) {
   if (pr.estimate && ps && typeof priceJob === 'function') { try { const q = priceJob(ps); price = money(q.total); opts = typeof whatIfPrintRows === 'function' ? whatIfPrintRows(ps, q) : []; } catch (_) { price = ''; } }
   // What-if options (Pricing › Quote): what the price would go to with each change, beside the estimated price.
   const optT = opts.length ? `<table class="mp-wi"><thead><tr><th>Options</th><th>Difference</th><th>New price</th></tr></thead><tbody>${opts.map(R => `<tr><td>${esc(R.name)}</td><td>${wiSigned(R.diff)}</td><td><b>${money(R.total)}</b></td></tr>`).join('')}</tbody></table>` : '';
-  const inst = who ? 'Installation is included.' : 'Installation is not included.';
+  const inst = (ps && typeof anyInstaller === 'function' ? anyInstaller(ps) : who) ? 'Installation is included.' : 'Installation is not included.';
   return `<section class="mp-page land mp-draw mp-scope">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Scope of work')}
     <div class="mp-specs">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
     ${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}

@@ -3673,3 +3673,6 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .mp-wi th{font-size:7.5pt;color:#555;font-weight:600;text-align:left;padding:0 10px 2px 12px}
 .mp-wi td{padding:1px 10px 1px 12px;border-top:.5px solid #ccc;white-space:nowrap}
 .mp-wi td:nth-child(n+2),.mp-wi th:nth-child(n+2){text-align:right}
+/* 0.59.14 Installer per room, in the room header on Pricing › Quote */
+.prx-roomh .prx-roominst{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font:500 13px var(--f-ui);color:var(--t-2,inherit)}
+.prx .prx-roomh .prx-roominst select{width:auto!important;min-width:0!important;max-width:200px;min-height:24px;height:26px;padding:0 22px 0 6px;font:500 13px var(--f-ui)}
