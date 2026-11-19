@@ -950,12 +950,17 @@ const BW_MEL = { id: 'm-bw-mel', name: '3/4 Bywater Melamine (bought doors)', ki
    template that uses it for doors, drawer fronts and false fronts. The 0.58.7 finish "Bywater Melamine" and its material
    are taken out: wherever a job, room or cabinet picked that finish, it picks the Bywater door template instead and a
    plain "Melamine" finish (3/4 Melamine) for its finished panels, once. */
-const BW_STYLE = { id: 'd-bw-mel', name: 'Bywater 5 piece melamine shaker', type: 'fivepiece', mat: 'm-mel34', stile: 3, rail: 3, pocketDepth: 0, tenon: 0.375, panelMat: 'm-mel34', panelType: 'flat',
+const BW_STYLE = { id: 'd-bw-mel', name: '5 piece melamine shaker', type: 'fivepiece', mat: 'm-mel34', stile: 3, rail: 3, pocketDepth: 0, tenon: 0.375, panelMat: 'm-mel34', panelType: 'flat',
   source: 'buyout', bwBuy: true, bwEach: 20.17, bwSq: 8.718, bwFt: 1.775, bwPanelAdd: 23.93, bwSheetSq: +(BW_SHEET / 32).toFixed(3),
-  bwProduct: '5 Piece Melamine', bwWood: 'Non Stocked Color (Additional charges will be added)', bwFace: 'Vertical Grain' };
-const BW_TPL = { id: 'door-bw-mel', name: 'Bywater melamine shaker (buyout)', door: 'd-bw-mel', drawer: 'd-bw-mel', falseFront: 'd-bw-mel', minFrameHeight: 0, pull: 'hw-pull128', drawerPull: 'hw-pull128', pullFromEdge: 2, pullFromEnd: 3, drawerPullFromTop: 0 };
+  bwProduct: '5 Piece Melamine', bwWood: 'Non Stocked Color (Additional charges will be added)', bwFace: 'Vertical Grain',
+  libNote: 'Bywater melamine doors' };
+const BW_TPL = { id: 'door-bw-mel', name: '5 piece melamine shaker', door: 'd-bw-mel', drawer: 'd-bw-mel', falseFront: 'd-bw-mel', minFrameHeight: 0, pull: 'hw-pull128', drawerPull: 'hw-pull128', pullFromEdge: 2, pullFromEnd: 3, drawerPullFromTop: 0 };
 function ensureBoughtDoors(s) {
-  if (!s || !Array.isArray(s.materials) || !Array.isArray(s.finishes) || !Array.isArray(s.doorStyles) || !Array.isArray(s.doorTemplates) || s.bwStyle) return s;
+  if (!s || !Array.isArray(s.materials) || !Array.isArray(s.finishes) || !Array.isArray(s.doorStyles) || !Array.isArray(s.doorTemplates)) return s;
+  // 0.59.20 (Ayden 2026-11-19): the customer sees "5 piece melamine shaker", never "Bywater". Old names are renamed once.
+  s.doorStyles.forEach(d => { if (d.id === BW_STYLE.id && d.name === 'Bywater 5 piece melamine shaker') { d.name = BW_STYLE.name; if (!d.libNote) d.libNote = BW_STYLE.libNote; } });
+  s.doorTemplates.forEach(t => { if (t.id === BW_TPL.id && t.name === 'Bywater melamine shaker (buyout)') t.name = BW_TPL.name; });
+  if (s.bwStyle) return s;
   s.bwStyle = 1;
   if (!s.doorStyles.some(d => d.id === BW_STYLE.id)) s.doorStyles.push(clone(BW_STYLE));
   if (!s.doorTemplates.some(t => t.id === BW_TPL.id)) {

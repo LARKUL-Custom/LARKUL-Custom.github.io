@@ -597,6 +597,7 @@ function doorDesigner() {
     <div class="doorform">
       <div class="dsec">${secHead('tag', 'Style', 'violet')}
         ${fld('Name', R, 'name', d.name, 'text', { wide: true })}
+        ${fld('Notes', R, 'libNote', d.libNote || '', 'text', { wide: true, ph: 'Only seen here, never printed' })}
         ${fld('Category', R, 'cat', d.cat || '', 'select', { options: [{ v: '', l: `Automatic · ${(DOOR_CATS.find(c => c.v === doorCat({ ...d, cat: '' })) || {}).l}` }, ...DOOR_CATS], wide: true })}
         ${fld('Made by', R, 'source', d.source, 'select', { options: DOOR_SOURCES, wide: true })}
         ${fld('Construction', R, 'type', d.type, 'select', { options: DOOR_TYPES, wide: true })}

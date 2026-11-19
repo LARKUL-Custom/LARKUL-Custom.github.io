@@ -227,7 +227,6 @@ function printScopePage(pr, rooms, head) {
   const optT = opts.length ? `<table class="mp-wi"><thead><tr><th>Options</th><th>Difference</th><th>New price</th></tr></thead><tbody>${opts.map(R => `<tr><td>${esc(R.name)}</td><td>${wiSigned(R.diff)}</td><td><b>${money(R.total)}</b></td></tr>`).join('')}</tbody></table>` : '';
   const inst = (ps && typeof anyInstaller === 'function' ? anyInstaller(ps) : who) ? 'Installation is included.' : 'Installation is not included.';
   return `<section class="mp-page ${ideas.length > 14 ? 'mp-flow' : 'land'} mp-draw mp-scope">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Scope of work')}
-    ${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}
     <h3 class="mp-nh">Scope of work</h3><div class="mp-specs mp-scopel">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
     <div class="mp-scopex"><b>${esc(inst)}</b>${S.job.scope ? `<div class="mp-scopen">${esc(S.job.scope)}</div>` : ''}</div>
     ${pr.estimate ? `<div class="mp-estimate">${price ? `<div class="mp-estp"><span>Estimated price</span><b>${price}</b></div>` : ''}${optT}<div>${SCOPE_EST}</div></div>` : ''}</section>`;
@@ -282,7 +281,8 @@ function printMatUse(room) {
 // A job from a bid: cabinets placed from the takeoff, bid lines on a room, an import from Bid Reader, or a job in the Bids folder.
 const jobFromBid = () => (S.rooms || []).some(r => (r.cabinets || []).some(c => c.fromBid) || (r.bidItems || []).length)
   || /bid reader/i.test(S.job.notes || '') || (typeof jobs !== 'undefined' && /^Jobs\/Bids\//.test(jobs.path || ''));
-const matAssumed = () => S.job.matAssume ?? jobFromBid();
+// Bid jobs only, and only on the Notes sheet (Ayden 2026-11-19: no Print option for it, just put it in the notes).
+const matAssumed = () => jobFromBid();
 const MAT_ASSUMED = 'Laminate: the bid documents do not state which laminate goes in which room. The laminate listed for each room is our assumption. Please confirm each room before we order material.';
 // Notes on paper read like the shop wrote them: lines left by imports and the takeoff tools ("Imported from…", "From
 // Bid Reader", "(Claude: …)", "Seen 3× in plans; check qty") are left off (Ayden 2026-11-19).
@@ -307,7 +307,7 @@ function printSpecSheet(pr, rooms, head, all, first) {
     return `<div class="mp-spec"><h3>${esc(room.name)}</h3><table class="mp-spect">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v || '—'}</td></tr>`).join('')}</table>
       ${mu.length ? `<h4 class="mp-muh">Materials and where they go</h4><table class="mp-spect mp-mut">${mu.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v}</td></tr>`).join('')}</table>` : ''}${odd.length ? `<div class="mp-odd"><b>Different on these cabinets</b><br>${odd.join('<br>')}</div>` : ''}</div>`;
   }).join('');
-  return `<section class="mp-page land mp-draw">${head(all > 2 ? rooms.map(r => r.name).join(', ') : all > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Room settings')}<div class="mp-specs">${cards}</div>${matAssumed() ? `<div class="mp-assume">${MAT_ASSUMED}</div>` : ''}${first && printNote(S.job.notes) && !pr.items.includes('notes') ? `<div class="mp-notes"><b>Notes</b> ${esc(printNote(S.job.notes))}</div>` : ''}</section>`;
+  return `<section class="mp-page land mp-draw">${head(all > 2 ? rooms.map(r => r.name).join(', ') : all > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Room settings')}<div class="mp-specs">${cards}</div>${first && printNote(S.job.notes) && !pr.items.includes('notes') ? `<div class="mp-notes"><b>Notes</b> ${esc(printNote(S.job.notes))}</div>` : ''}</section>`;
 }
 
 /* ----- Price sheet (Ayden 2026-11-19): the customer's prices in Print, one page per room or one for the whole job.
