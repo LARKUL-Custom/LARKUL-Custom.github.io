@@ -123,47 +123,90 @@ function computeFronts(c, p) {
 /* ---------- Doors stop at what they hit ---------- */
 // How far a drawer slides out when its cabinet is opened.
 const drawerTravel = c => Math.max(4, Math.min(c.d - 3, 21)) * 0.85;
-let doorLimCache = {};
-function clearDoorLimits() { doorLimCache = {}; }
 const segHit = (a, b, c, d) => { const o = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x); return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0; };
-// The widest a door can swing (radians, up to 1.75) before it runs into a wall, a cabinet that sticks out past it,
-// or an open drawer at the same height. Plan geometry; heights only decide what is in the way.
-function doorLimit(c, f) {
-  if (f.face) return 1.75;
-  const key = c.id + ':' + f.row + ':' + f.idx; if (key in doorLimCache) return doorLimCache[key];
-  const MAX = 1.75, w = wall(c.wall); if (!w) return (doorLimCache[key] = MAX);
-  const g = wg(w), fb = w.thick / 2 + (c.outset || 0) + c.d + 0.75, z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1;
-  const P = (cc, ww, gg, x, b, f0) => wallPt(ww, gg, cc.side, cc.side === 1 ? cc.off + x : cc.off + cc.w - x, f0 + b);
-  const over = (a0, a1) => a0 < z1 - 0.25 && a1 > z0 + 0.25, obs = [];
-  S.cabinets.forEach(o => {
-    if (o.id === c.id) return;
-    const poly = cabPoly(o); if (poly && over(o.elev || 0, (o.elev || 0) + o.h)) obs.push(poly);
-  });
-  S.cabinets.forEach(o => {
-    if (!ui.open[o.id]) return;
-    const ow = wall(o.wall); if (!ow) return;
-    const og = wg(ow), of = ow.thick / 2 + (o.outset || 0) + o.d, tr = drawerTravel(o);
-    computeFronts(o).forEach(d => {
-      if (d.type !== 'drawer' || (o.id === c.id && d.row === f.row) || !over((o.elev || 0) + d.z0, (o.elev || 0) + d.z1)) return;
-      obs.push([P(o, ow, og, d.x0, 0, of), P(o, ow, og, d.x1, 0, of), P(o, ow, og, d.x1, tr, of), P(o, ow, og, d.x0, tr, of)]);
-    });
-  });
+// True when two plan polygons overlap: an edge crosses, or one sits inside the other.
+const polysHit = (A, B) => A.some(p => inPoly(p, B)) || B.some(p => inPoly(p, A)) || A.some((p, i) => B.some((q, j) => segHit(p, A[(i + 1) % A.length], q, B[(j + 1) % B.length])));
+const DOOR_MAX = 1.75, FRONT_T = 0.75;
+// Where a front sits in plan: P(x, b) is x across the cabinet from its left end, b out from the closed front face.
+function frontFrame(c) {
+  const w = wall(c.wall); if (!w) return null;
+  const g = wg(w), fb = w.thick / 2 + (c.outset || 0) + c.d + FRONT_T;
+  return { w, P: (x, b) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, fb + b) };
+}
+// A door open to angle a, in plan. It turns on its front hinge-side corner (an overlay hinge), so at 90° it stands
+// in front of its own cabinet side and two doors hinged next to each other both clear.
+function doorPoly(c, f, a, fr) {
+  const R = f.hinge === 'R', hx = R ? f.x1 : f.x0, fw = f.x1 - f.x0, dir = R ? -1 : 1, P = fr.P;
+  const at = (s, t) => P(hx + dir * (s * Math.cos(a) + t * Math.sin(a)), s * Math.sin(a) - t * Math.cos(a));
+  return [at(0, 0), at(fw, 0), at(fw, FRONT_T), at(0, FRONT_T)];
+}
+// A drawer pulled out by tr, in plan: the part that sticks out past the cabinet, front included.
+function drawerPoly(c, f, tr, fr) { const e = 0.05; return [fr.P(f.x0 + e, -FRONT_T + e), fr.P(f.x1 - e, -FRONT_T + e), fr.P(f.x1 - e, tr), fr.P(f.x0 + e, tr)]; }
+// Things a front of cabinet c between heights z0 and z1 can't go into: other cabinets, other walls, end caps.
+function fixedObstacles(c, z0, z1) {
+  const w = wall(c.wall), over = (a0, a1) => a0 < z1 - 0.25 && a1 > z0 + 0.25, obs = [];
+  S.cabinets.forEach(o => { if (o.id === c.id) return; const poly = cabPoly(o); if (poly && over(o.elev || 0, (o.elev || 0) + o.h)) obs.push(poly); });
   S.walls.forEach(ww => { if (ww !== w) { const gg = wg(ww), t = ww.thick / 2; obs.push([wallPt(ww, gg, 1, 0, -t), wallPt(ww, gg, 1, gg.L, -t), wallPt(ww, gg, 1, gg.L, t), wallPt(ww, gg, 1, 0, t)]); }
     // End caps are short walls too, on any wall, including the one this cabinet hangs on.
     capsOf(ww).forEach(cp => { if (cp.height === undefined || over(0, cp.height)) obs.push(capPoly(ww, cp)); }); });
-  const R = f.hinge === 'R', hx = R ? f.x1 : f.x0, fw = f.x1 - f.x0, dir = R ? -1 : 1, h = P(c, w, g, hx, 0, fb);
-  // The door's back face and its outer face (3/4" thick) both have to stay clear.
-  const T = 0.75, hits = a => [0, T].some(t => { const hh = P(c, w, g, hx + dir * t * Math.sin(a), -t * Math.cos(a), fb), e = P(c, w, g, hx + dir * (fw * Math.cos(a) + t * Math.sin(a)), fw * Math.sin(a) - t * Math.cos(a), fb); return obs.some(poly => inPoly(e, poly) || poly.some((q, i) => segHit(hh, e, q, poly[(i + 1) % poly.length]))); });
-  let lim = MAX;
-  for (let a = 0.04; a <= MAX + 1e-9; a += 0.02) if (hits(a)) { lim = Math.max(0, a - 0.06); break; }
-  // Two doors hinged on the same line, swinging away from each other (side-by-side cabinets),
-  // would cross past square, so each stops at 90°.
+  return obs;
+}
+// Two doors hinged on the same line, swinging away from each other (side-by-side cabinets), would cross past square,
+// so each stops at 90°.
+function pairCap(c, f) {
+  const R = f.hinge === 'R', hx = R ? f.x1 : f.x0, z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1, over = (a0, a1) => a0 < z1 - 0.25 && a1 > z0 + 0.25;
   const wx = (cc, x) => cc.side === 1 ? cc.off + x : cc.off + cc.w - x, lean = (cc, ff) => (ff.hinge === 'R' ? -1 : 1) * cc.side;
   const hxW = wx(c, hx), myLean = lean(c, f);
-  if (lim > Math.PI / 2 && S.cabinets.some(o => o.id !== c.id && o.wall === c.wall && o.side === c.side && Math.abs((o.outset || 0) + o.d - (c.outset || 0) - c.d) < 3
-    && computeFronts(o).some(d => d.type === 'door' && over((o.elev || 0) + d.z0, (o.elev || 0) + d.z1) && lean(o, d) === -myLean && Math.abs(wx(o, d.hinge === 'R' ? d.x1 : d.x0) - hxW) < 2.5))) lim = Math.PI / 2 - 0.02;
-  return (doorLimCache[key] = lim);
+  return S.cabinets.some(o => o.id !== c.id && o.wall === c.wall && o.side === c.side && Math.abs((o.outset || 0) + o.d - (c.outset || 0) - c.d) < 3
+    && computeFronts(o).some(d => d.type === 'door' && over((o.elev || 0) + d.z0, (o.elev || 0) + d.z1) && lean(o, d) === -myLean && Math.abs(wx(o, d.hinge === 'R' ? d.x1 : d.x0) - hxW) < 2.5)) ? Math.PI / 2 - 0.02 : DOOR_MAX;
 }
+// Opens one front as far as it goes before it meets a fixed obstacle or a front already placed.
+// Doors: the swing in radians. Drawers: how far out it slides.
+function openOne(c, f, placed, cap) {
+  const fr = frontFrame(c); if (!fr) return { v: f.type === 'door' ? DOOR_MAX : drawerTravel(c) };
+  const z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1;
+  const obs = fixedObstacles(c, z0, z1).concat(placed.filter(p => !(p.c.id === c.id && p.f === f) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25).map(p => p.poly));
+  const hit = poly => obs.some(o => polysHit(poly, o));
+  if (f.type === 'door') {
+    const max = Math.min(pairCap(c, f), cap || DOOR_MAX); let v = max;
+    for (let a = 0.04; a <= max + 1e-9; a += 0.02) if (hit(doorPoly(c, f, a, fr))) { v = Math.max(0, a - 0.06); break; }
+    return { v, poly: doorPoly(c, f, v, fr), z0, z1 };
+  }
+  const full = drawerTravel(c); let v = full;
+  if (hit(drawerPoly(c, f, full, fr))) { v = 0; for (let t = 0.25; t <= full; t += 0.25) { if (hit(drawerPoly(c, f, t, fr))) break; v = t; } }
+  return { v, poly: drawerPoly(c, f, v, fr), z0, z1 };
+}
+const frontKey3 = (c, f) => c.id + ':' + f.row + ':' + f.idx + ':' + f.type;
+let openCache = null;
+function clearDoorLimits() { openCache = null; }
+// Every open cabinet's doors and drawers, worked out together so none of them run into each other.
+// First every door goes to 90° at most and every drawer slides out, bigger fronts first: a smaller one that would hit
+// them opens only as far as it can. Then doors swing on past 90° where nothing is in the way.
+function openSolve() {
+  if (openCache) return openCache;
+  const items = [];
+  S.cabinets.forEach((c, ci) => { if (!ui.open[c.id]) return; computeFronts(c).forEach(f => { if (!f.face && (f.type === 'door' || f.type === 'drawer')) items.push({ c, f, ci, area: (f.x1 - f.x0) * (f.z1 - f.z0) }); }); });
+  items.sort((a, b) => b.area - a.area || a.ci - b.ci || a.f.row - b.f.row || a.f.idx - b.f.idx || (a.f.x0 - b.f.x0));
+  const placed = [], byKey = {}, SQUARE = Math.PI / 2 - 0.02;
+  items.forEach(it => { const r = openOne(it.c, it.f, placed, SQUARE); const p = { c: it.c, f: it.f, ...r }; if (r.poly) placed.push(p); byKey[frontKey3(it.c, it.f)] = p; });
+  placed.forEach(p => {
+    if (p.f.type !== 'door' || p.v < SQUARE - 1e-6) return;
+    const r = openOne(p.c, p.f, placed); if (r.v > p.v) Object.assign(p, r);
+  });
+  return (openCache = { placed, byKey });
+}
+// How far one front opens: looked up when its cabinet is open, else worked out as if it opened last (closing animation).
+function openAmount(c, f) {
+  if (f.face) return f.type === 'door' ? DOOR_MAX : drawerTravel(c);
+  const sol = openSolve(), k = frontKey3(c, f), hit = sol.byKey[k];
+  if (hit) return hit.v;
+  const r = openOne(c, f, sol.placed, Math.PI / 2 - 0.02); sol.byKey[k] = { c, f, ...r }; return r.v;
+}
+// The widest a door can swing (radians, up to 1.75) before it runs into a wall, a cabinet that sticks out past it,
+// or another open door or drawer.
+const doorLimit = (c, f) => openAmount(c, f);
+// How far a drawer slides out, after anything in its way.
+const frontTravel = (c, f) => openAmount(c, f);
 // Which door style a front uses, after the template's frame-height rule.
 // Top, middle and bottom drawer fronts can each have their own style on the door template. One drawer is the top one.
 function drawerSlotStyle(c, f, dt) {

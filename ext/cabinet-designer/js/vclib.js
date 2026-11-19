@@ -118,15 +118,16 @@ const VC_LIB_DEF = [
   ['Borders and frames', [['frame', 'Frame', 'rect', 0.5], ['frame-r', 'Rounded frame', 'rrect', 0.5], ['frame-n', 'Notched frame', 'notch', 0.5], ['frame-c', 'Clipped frame', 'chamfer', 0.5], ['frame-a', 'Arch frame', 'arch', 0.5], ['frame-g', 'Ogee frame', 'ogee', 0.5], ['frame-o', 'Oval frame', 'oval', 0.5], ['ring', 'Ring', 'circle', 0.5], ['frame-d', 'Double line frame', 'rect', 0.25, 1], ['frame-rd', 'Double rounded frame', 'rrect', 0.25, 1]]],
   ['Plaques and badges', [['rect', 'Rectangle', 'rect'], ['rrect', 'Rounded rectangle', 'rrect'], ['chamfer', 'Clipped corners', 'chamfer'], ['notch', 'Notched corners', 'notch'], ['arch', 'Arch top', 'arch'], ['ogee', 'Ogee top', 'ogee'], ['oval', 'Oval', 'oval'], ['circle', 'Circle', 'circle'], ['hex', 'Hexagon', 'hex'], ['oct', 'Octagon', 'oct'], ['shield', 'Shield', 'shield'], ['banner', 'Ribbon banner', 'banner']]],
   ['Ornaments', [['star', 'Star', 'star'], ['star6', 'Six point star', 'star', 0, 0, { points: 6, inner: 0.55 }], ['heart', 'Heart', 'heart'], ['diamond', 'Diamond', 'diamond'], ['lens', 'Divider', 'lens'], ['drop', 'Teardrop', 'drop'], ['leaf', 'Leaf', 'leaf'], ['arrow', 'Arrow', 'arrow'], ['cross', 'Cross', 'cross'], ['plus', 'Plus', 'plus']]],
+  ['3D shapes', [['3d-heart', 'Domed heart', 'heart', 0, 0, null, { profile: 'dome', h: 0.3 }], ['3d-star', 'Pointed star', 'star', 0, 0, null, { profile: 'point', h: 0.3 }], ['3d-pillow', 'Pillow plaque', 'rrect', 0, 0, null, { profile: 'dome', h: 0.25 }], ['3d-oval', 'Beveled oval', 'oval', 0, 0, null, { profile: 'angle', h: 0.2, ang: 30 }], ['3d-button', 'Button', 'circle', 0, 0, null, { profile: 'round', h: 0.2 }], ['3d-leaf', 'Leaf', 'leaf', 0, 0, null, { profile: 'point', h: 0.25 }], ['3d-drop', 'Raindrop', 'drop', 0, 0, null, { profile: 'dome', h: 0.3 }], ['3d-shield', 'Shield', 'shield', 0, 0, null, { profile: 'round', h: 0.2 }], ['3d-sun', 'Sun', 'sun', 0, 0, null, { profile: 'point', h: 0.25 }], ['3d-gear', 'Gear', 'gear', 0, 0, null, { profile: 'angle', h: 0.2, ang: 50 }], ['3d-frame', 'Molded frame', 'rrect', 0.75, 0, null, { profile: 'dome', h: 0.25 }], ['3d-ring', 'Molded ring', 'circle', 0.6, 0, null, { profile: 'dome', h: 0.2 }], ['3d-bead', 'Bead border', 'rrect', 0, 0, null, { profile: 'sweep', sec: 'round', sw: 0.5, h: 0.2 }], ['3d-ogee', 'Ogee border', 'rect', 0, 0, null, { profile: 'sweep', sec: 'ogee', sw: 0.75, h: 0.25 }]]],
   ['Icons', [['moon', 'Crescent moon', 'moon'], ['sun', 'Sun', 'sun'], ['bolt', 'Lightning bolt', 'bolt'], ['tree', 'Pine tree', 'tree'], ['mountains', 'Mountains', 'mountains'], ['house', 'House', 'house'], ['gear', 'Gear', 'gear']]],
 ];
 // Sizes a new shape starts at (inches): frames fit the board, the rest by kind.
 const VC_DEF_SIZE = { banner: [10, 2.5], lens: [8, 1], oval: [8, 5], rect: [10, 6], rrect: [10, 6], chamfer: [10, 6], notch: [10, 6], arch: [8, 8], ogee: [10, 7], shield: [5, 6], arrow: [6, 2.5], cross: [3, 4.5] };
 function vcLibDefaults() {
   const out = [];
-  VC_LIB_DEF.forEach(([group, list]) => list.forEach(([k, name, gen, frame, double, p]) => {
+  VC_LIB_DEF.forEach(([group, list]) => list.forEach(([k, name, gen, frame, double, p, d3]) => {
     const sz = VC_DEF_SIZE[gen] || [4, 4];
-    out.push({ id: 'vs-' + k, name, group, gen, p: p || {}, w: sz[0], h: sz[1], frame: frame || 0, double: double ? 1 : 0, mode: 'carve', builtin: 1 });
+    out.push({ id: 'vs-' + k, name, group, gen, p: p || {}, w: sz[0], h: sz[1], frame: frame || 0, double: double ? 1 : 0, mode: d3 ? '3d' : 'carve', ...(d3 ? { d3 } : {}), builtin: 1 });
   }));
   return out;
 }
@@ -144,7 +145,8 @@ const vcLibGroups = () => { const g = []; VC_LIB_DEF.forEach(([n]) => g.push(n))
 
 // What a library entry looks like on a sign: a recipe shape or a saved design, copied onto the sign.
 function vcFromLib(e, sz) {
-  const base = { id: uid('vi'), name: e.name, angle: 0, mode: e.mode || 'carve', lib: e.id };
+  const base = { id: uid('vi'), name: e.name, angle: 0, mode: e.mode || 'carve', lib: e.id, ...(e.mode === '3d' ? { d3: clone(e.d3 || {}) } : {}) };
+  if (e.mode === '3d' && typeof vc3EnsureBall === 'function') vc3EnsureBall();
   if (e.gen) {
     let w = +e.w || 4, h = +e.h || 4;
     if (+e.frame > 0) { const m = Math.max(0.25, Math.min(sz.L, sz.W) * 0.06); w = r3(sz.L - 2 * m); h = r3(sz.W - 2 * m); if (VC_GEN[e.gen].round) w = h = Math.min(w, h); }
@@ -320,7 +322,7 @@ function vcLibPreview(e) {
   if (it.mode === 'raise') b.items.unshift({ id: 'vcs-bg', kind: 'shape', shape: 'rect', w: L - 0.5, h: W - 0.5, x: L / 2, y: W / 2, mode: 'carve' });
   try { const r = vcBoardOps(b); vcDrawPreview(cv, b, r, false); } catch (err) { cv.width = 10; cv.height = 10; }
 }
-const VC_MODES = [['carve', 'Carve it in'], ['raise', 'Leave it raised'], ['line', 'Outline only (on the line)'], ['cut', 'Cut it out (through)']];
+const VC_MODES = [['carve', 'Carve it in'], ['raise', 'Leave it raised'], ['line', 'Outline only (on the line)'], ['cut', 'Cut it out (through)'], ['3d', '3D (raised, ball nose)']];
 const vcModeName = m => (VC_MODES.find(x => x[0] === (m || 'carve')) || VC_MODES[0])[1];
 
 async function vcLibImport(files) {
@@ -529,8 +531,8 @@ function vcJobParts() {
       ...(plan.clear.length && ct ? [{ tool: ct, label: 'Clear the flat areas', paths: vcLevels(ct, plan.flatDepth).flatMap(d => plan.clear.map(l => l.map(p => ({ x: p.x, y: p.y, z: -d })))) }] : []),
       ...(plan.v.length && vt ? [{ tool: vt, label: 'V-carve', paths: (() => { const lv = vcLevels(vt, plan.deep), out = []; lv.forEach((d, i) => { const prev = i ? lv[i - 1] : 0; plan.v.forEach(l => { if (i && !l.some(p => -p.z > prev + 1e-4)) return; out.push(l.map(p => ({ x: p.x, y: p.y, z: Math.max(p.z, -d) }))); }); }); return out; })() }] : []),
     ];
-    if (live.some(it => it.mode === '3d')) skipped.push(`Carve · ${name}: the 3D carving isn't in the parts file yet; run it from the sign's G-code (Carve › Save G-code)`);
-    if (plan && (plan.v.length || plan.clear.length)) skipped.push(`Carve · ${name}: the V-carving goes in the parts file for CNC Cutlist to cut; if your CNC Cutlist doesn't cut it yet, run it from the sign's G-code (Carve › Save G-code)`);
+    // 3D carving (roughing, then the ball nose finish) goes first, as on the sign's own G-code.
+    if (live.some(it => it.mode === '3d') && typeof vc3Ops === 'function') carveOps.unshift(...vc3Ops(b).ops);
     const outers = shapes.length ? shapes.filter(l => vcArea(l) > 0) : [[{ x: 0, y: 0 }, { x: +b.L || 24, y: 0 }, { x: +b.L || 24, y: +b.W || 12 }, { x: 0, y: +b.W || 12 }]];
     const holes = shapes.filter(l => vcArea(l) < 0);
     const bitR = Math.max(((cncTool(b.cutTool || vcCutTool()) || {}).dia || 0) / 25.4, 0.375) / 2 * 1.02;
@@ -546,7 +548,11 @@ function vcJobParts() {
       });
       lines.filter(l => l.every(q => !shapes.length || inO(q))).forEach(l => { if (vt) cncRoutes(ops, { type: 'route', face: 'top', tool: vt.id, path: l.map(P), engrave: true }, mm(-l[0].z)); });
       const label = shapes.length ? `${name}${outers.length > 1 ? ' ' + (oi + 1) : ''}` : name;
-      const carve = carveOps.map(c => ({ tool: c.tool.id, label: c.label, paths: c.paths.filter(l => !shapes.length || inO(l[0])).map(l => l.map(q => [...P(q), mm(-q.z)])) })).filter(c => c.paths.length);
+      // Each carve path is cut where it runs inside this part: a path that leaves the outline (a 3D raster over the
+      // whole board, say) is split there, and the bits outside are left off, so nothing is carved into the waste
+      // or a part next to it on the sheet.
+      const runs = l => { if (!shapes.length) return [l]; const out = []; let cur = []; l.forEach((q, i) => { const ok = inO(q) && (!i || !cur.length || inO({ x: (q.x + l[i - 1].x) / 2, y: (q.y + l[i - 1].y) / 2 })); if (!ok) { if (cur.length > 1) out.push(cur); cur = inO(q) ? [q] : []; return; } cur.push(q); }); if (cur.length > 1) out.push(cur); return out; };
+      const carve = carveOps.map(c => ({ tool: c.tool.id, label: c.label, paths: c.paths.flatMap(runs).map(l => l.map(q => [...P(q), Math.max(0, mm(-q.z))])) })).filter(c => c.paths.length);
       parts.push({ id: `C${bi + 1}-${oi + 1}`, name: label, cabinet: 'Carve', material: m.id, quantity: qty, outline: vcSoftTips(vcBitClose(o, bitR)).map(P).filter((q, i, A) => { const z = A[i ? i - 1 : A.length - 1]; return q[0] !== z[0] || q[1] !== z[1]; }), grain: m.grain ? 'x' : 'none', ops, ...(carve.length ? { carve } : {}) });
     });
   });

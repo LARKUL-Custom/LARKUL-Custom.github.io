@@ -3,8 +3,13 @@
    shapes combine into one model. The model's top touches the top of the board and the area around the shapes is
    lowered to its base, so a dome stands up out of a carved-down background, like Aspire.
 
-   it.d3 = { profile: 'dome' | 'round' | 'flat' | 'angle' | 'point', h: height (in), base: flat base under it (in),
-             combine: 'add' | 'sub' | 'merge' | 'low', ang: wall angle for 'angle' (degrees) }
+   it.d3 = { profile: 'dome' | 'round' | 'flat' | 'angle' | 'point' | 'sweep' | 'picture', h: height (in), base: flat
+             base under it (in), combine: 'add' | 'sub' | 'merge' | 'low', ang: wall angle for 'angle' (degrees),
+             sw: sweep width (in), sec: sweep cross-section 'round' | 'v' | 'cove' | 'ogee' | 'flat',
+             smooth: 0-10, fade: % of the height left at the far end (blank = no fade), fdir: fade toward (degrees),
+             tilt: degrees, tdir: rises toward (degrees), invert: picture dark = high }
+   A sweep runs the cross-section along the design's lines (its outlines and open lines), like a bead or a molding.
+   A 3D picture (it.gray = { w, h, d: base64 grey bytes }) is as high as it is light.
    b.r3ball (finish ball nose), b.r3step (finish stepover %, blank = the tool's), b.r3rough (roughing bit),
    b.r3area: '' (around the 3D shapes) | 'board' (the whole board).
 
@@ -13,10 +18,12 @@
    (drop-cutter), so it never cuts below the surface. Same sign, same settings, same G-code. */
 'use strict';
 
-const VC3_PROFILES = [['dome', 'Dome', 'Rounded all the way to the top, like a pillow.'], ['round', 'Round', 'Rounded edges, flat on top.'], ['flat', 'Flat', 'Straight walls up to a flat top.'], ['angle', 'Angled', 'Sloped walls (set the angle) up to a flat top.'], ['point', 'Point', 'Straight slopes up to a peak or ridge in the middle.']];
+const VC3_SECTIONS = [['round', 'Round', 'A half-round bead.'], ['v', 'V', 'A sharp ridge with straight sides.'], ['cove', 'Cove', 'Hollow sides up to a sharp ridge.'], ['ogee', 'Ogee', 'S-shaped sides, like a molding.'], ['flat', 'Flat', 'A flat band with straight walls.']];
+const VC3_DIRS = [[0, '→'], [180, '←'], [90, '↑'], [270, '↓']];
+const VC3_PROFILES = [['dome', 'Dome', 'Rounded all the way to the top, like a pillow.'], ['round', 'Round', 'Rounded edges, flat on top.'], ['flat', 'Flat', 'Straight walls up to a flat top.'], ['angle', 'Angled', 'Sloped walls (set the angle) up to a flat top.'], ['point', 'Point', 'Straight slopes up to a peak or ridge in the middle.'], ['sweep', 'Sweep', 'A bead or molding run along the design\'s lines (pick its width and cross-section).']];
 const VC3_COMBINE = [['add', 'Add', 'Stacks on top of what is under it.'], ['sub', 'Subtract', 'Carves into what is under it.'], ['merge', 'Merge', 'The higher one wins where they overlap.'], ['low', 'Low', 'The lower one wins where they overlap.']];
 const VC3_LEAVE = 0.01; // inches left on by the roughing for the finish pass
-const vc3d = it => ({ profile: 'dome', h: 0.25, base: 0, combine: 'add', ang: 45, ...(it.d3 || {}) });
+const vc3d = it => ({ profile: it.gray ? 'picture' : 'dome', h: 0.25, base: 0, combine: 'add', ang: 45, sw: 0.5, sec: 'round', smooth: it.gray ? 1 : 0, fade: '', fdir: 0, tilt: 0, tdir: 90, ...(it.d3 || {}) });
 const vc3Items = b => (b.items || []).filter(it => !it.off && it.mode === '3d');
 const vcBalls = () => CNC_LIB.tools.filter(t => t.type === 'ball');
 // The finish bit: the one picked, else the first ball nose, else none (the warning says to add one).
@@ -70,6 +77,85 @@ function vc3Height(o, d, D) {
   }
 }
 
+const vc3Sec = (sec, t) => sec === 'v' ? t : sec === 'cove' ? 1 - Math.sqrt(Math.max(0, 1 - t * t)) : sec === 'ogee' ? t * t * (3 - 2 * t) : sec === 'flat' ? 1 : Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t)));
+// Box blur (two passes each way) of the heights inside the mask; outside counts as 0, so edges soften too.
+function vc3Blur(v, mask, w, h, r) {
+  if (r < 1) return;
+  const t = new Float32Array(w * h), run = (src, dst, n, stride, count, step) => {
+    for (let c = 0; c < count; c++) { const b = c * step; let s = 0, m = 0; const at = q => src[b + q * stride];
+      for (let q = 0; q <= Math.min(r, n - 1); q++) { s += at(q); m++; }
+      for (let q = 0; q < n; q++) { dst[b + q * stride] = s / (2 * r + 1); const a = q + r + 1, z = q - r; if (a < n) s += at(a); if (z >= 0) s -= at(z); } }
+  };
+  for (let pass = 0; pass < 2; pass++) { run(v, t, w, 1, h, w); run(t, v, h, w, w, 1); }
+  for (let k = 0; k < w * h; k++) if (!mask[k]) v[k] = 0;
+}
+// One 3D design on the grid: the cells it covers (mask) and its height there (v), before it is combined.
+function vc3ItemField(it, res, nx, ny) {
+  const o = vc3d(it), g = vcItemGeo(it), sweep = o.profile === 'sweep' && !it.gray, half = Math.max(0.02, +o.sw || 0.5) / 2;
+  const lines = sweep ? [...g.loops.map(l => [...l, l[0]]), ...g.open] : [];
+  if (sweep ? !lines.length : !g.loops.length) return null;
+  const bx = vcBox(sweep ? lines : g.loops), m = sweep ? half : 0, pad = 2 + Math.ceil(m / res);
+  const i0 = Math.max(0, Math.floor(bx.x0 / res) - pad), j0 = Math.max(0, Math.floor(bx.y0 / res) - pad), i1 = Math.min(nx - 1, Math.ceil(bx.x1 / res) + pad), j1 = Math.min(ny - 1, Math.ceil(bx.y1 / res) + pad);
+  const w = i1 - i0 + 1, h = j1 - j0 + 1; if (w < 1 || h < 1) return null;
+  const mask = new Uint8Array(w * h), v = new Float32Array(w * h), H = Math.max(0, +o.h || 0);
+  if (sweep) {
+    // Distance from every cell to the nearest line; inside half the width it is the bead.
+    const off = new Uint8Array(w * h).fill(1);
+    lines.forEach(l => { for (let q = 1; q < l.length; q++) { const a = l[q - 1], c = l[q], n = Math.max(1, Math.ceil(Math.hypot(c.x - a.x, c.y - a.y) / (res / 2))); for (let s2 = 0; s2 <= n; s2++) { const x = a.x + (c.x - a.x) * s2 / n, y = a.y + (c.y - a.y) * s2 / n, i = Math.floor(x / res) - i0, j = Math.floor(y / res) - j0; if (i >= 0 && j >= 0 && i < w && j < h) off[j * w + i] = 0; } } });
+    const d = vc3Edt(off, w, h);
+    for (let k = 0; k < w * h; k++) { const dd = d[k] * res; if (dd <= half) { mask[k] = 1; v[k] = H * vc3Sec(o.sec, 1 - dd / half); } }
+  } else {
+    vc3Fill(g.loops, mask, w, h, res, i0 * res, j0 * res);
+    if (it.gray) {
+      // A picture: as high as it is light (or dark, inverted), sampled through the design's move, turn and mirror.
+      const G = vc3Gray(it), b = vcItemBase(it), a = (+it.angle || 0) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a), mx = it.flip ? -1 : 1, bw0 = b.bw / b.sx;
+      const one = vcBox(vcItemGeo({ ...it, copies: undefined }).loops), C = it.copies || {}, cx = one.w + (+C.gap || 0), cy = one.h + (+C.gap || 0);
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const k = j * w + i; if (!mask[k]) continue;
+        let x = (i + i0 + 0.5) * res, y = (j + j0 + 0.5) * res;
+        if (it.copies) { const ox = Math.max(0, Math.floor((x - one.x0) / cx)), oy = Math.max(0, Math.floor((y - one.y0) / cy)); x -= ox * cx; y -= oy * cy; }
+        const dx = x - (+it.x || 0), dy = y - (+it.y || 0), u = (dx * ca + dy * sa) / (b.sx * mx), vv = (-dx * sa + dy * ca) / b.sy;
+        const gv = vc3GrayAt(G, (u / bw0 + 0.5) * G.w - 0.5, (0.5 - vv) * G.h - 0.5) / 255;
+        v[k] = H * (o.invert ? 1 - gv : gv);
+      }
+    } else {
+      const dist = vc3Edt(mask, w, h); let D = 0;
+      for (let k = 0; k < w * h; k++) if (mask[k]) { const dd = Math.max(0.5, dist[k] - 0.5) * res; dist[k] = dd; if (dd > D) D = dd; }
+      for (let k = 0; k < w * h; k++) if (mask[k]) v[k] = vc3Height(o, dist[k], D);
+    }
+  }
+  // Smooth, fade, tilt, then the base.
+  const sm = Math.max(0, Math.min(10, +o.smooth || 0)); if (sm) vc3Blur(v, mask, w, h, Math.round(sm * 0.015 / res));
+  const proj = deg => { const c = Math.cos(deg * Math.PI / 180), s2 = Math.sin(deg * Math.PI / 180); let lo = Infinity, hi = -Infinity; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (mask[j * w + i]) { const p = (i + i0) * res * c + (j + j0) * res * s2; if (p < lo) lo = p; if (p > hi) hi = p; } return { c, s: s2, lo, span: Math.max(1e-6, hi - lo) }; };
+  if (o.fade !== '' && o.fade !== undefined && isFinite(+o.fade) && +o.fade < 100) { const P = proj(+o.fdir || 0), left = Math.max(0, +o.fade) / 100; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = j * w + i; if (!mask[k]) continue; const t = ((i + i0) * res * P.c + (j + j0) * res * P.s - P.lo) / P.span; v[k] *= 1 - (1 - left) * t; } }
+  if (+o.tilt > 0) { const P = proj(+o.tdir || 0), tn = Math.tan(Math.min(60, +o.tilt) * Math.PI / 180); for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = j * w + i; if (mask[k]) v[k] += ((i + i0) * res * P.c + (j + j0) * res * P.s - P.lo) * tn; } }
+  const base = +o.base || 0; if (base) for (let k = 0; k < w * h; k++) if (mask[k]) v[k] += base;
+  return { i0, j0, w, h, mask, v };
+}
+// 3D pictures keep a small grey copy (up to 360 pixels across) on the design, so the job carves the same later.
+const vc3GrayCache = new Map();
+function vc3Gray(it) {
+  const k = it.gray.d.length + ':' + it.gray.d.slice(0, 64) + it.gray.d.slice(-64); let G = vc3GrayCache.get(k);
+  if (!G) { const bin = atob(it.gray.d), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); G = { w: it.gray.w, h: it.gray.h, a }; vc3GrayCache.set(k, G); }
+  return G;
+}
+function vc3GrayAt(G, fx, fy) {
+  const x = Math.max(0, Math.min(G.w - 1, fx)), y = Math.max(0, Math.min(G.h - 1, fy)), i = Math.min(G.w - 2, Math.floor(x)), j = Math.min(G.h - 2, Math.floor(y)), u = x - i, v = y - j, a = G.a, w = G.w;
+  if (G.w < 2 || G.h < 2) return a[0] || 0;
+  return (a[j * w + i] * (1 - u) + a[j * w + i + 1] * u) * (1 - v) + (a[(j + 1) * w + i] * (1 - u) + a[(j + 1) * w + i + 1] * u) * v;
+}
+async function vc3Picture(f) {
+  let im; try { ({ im } = await vcLoadImage(f)); } catch (e) { flash(`Could not open ${f.name}: ${e.message}`); return; }
+  const k = Math.min(1, 360 / Math.max(im.naturalWidth || im.width, im.naturalHeight || im.height)), W = Math.max(2, Math.round((im.naturalWidth || im.width) * k)), Hh = Math.max(2, Math.round((im.naturalHeight || im.height) * k));
+  const [cv, c] = vcCanvas(W, Hh); c.fillStyle = '#000'; c.fillRect(0, 0, W, Hh); c.drawImage(im, 0, 0, W, Hh);
+  const px = c.getImageData(0, 0, W, Hh).data, g = new Uint8Array(W * Hh); for (let i = 0; i < W * Hh; i++) g[i] = Math.round(0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]);
+  let bin = ''; for (let i = 0; i < g.length; i += 8192) bin += String.fromCharCode.apply(null, g.subarray(i, i + 8192));
+  if (!vcBoard()) { const nb = vcNewBoard(); nb.items = []; mutate(() => { (S.job.carves = S.job.carves || []).push(nb); ui.vcBoard = nb.id; }); }
+  const sz = vcSize(vcBoard()), bw = W / Hh, h = r3(Math.min(sz.W * 0.7, sz.L * 0.7 / bw));
+  vc3EnsureBall();
+  vcAddItem({ id: uid('vi'), kind: 'art', src: 'gray', name: f.name.replace(/\.[^.]+$/, ''), loops: [[{ x: -bw / 2, y: -0.5 }, { x: bw / 2, y: -0.5 }, { x: bw / 2, y: 0.5 }, { x: -bw / 2, y: 0.5 }]], bw: r3(bw), bh: 1, h, angle: 0, mode: '3d', gray: { w: W, h: Hh, d: btoa(bin) }, d3: { profile: 'picture', h: 0.25, smooth: 1, combine: 'add' } });
+}
+
 // The model on the grid: Z (0 = top of the board, below is negative) and the area that gets machined.
 const vc3Cache = new Map();
 function vc3Field(b) {
@@ -79,17 +165,12 @@ function vc3Field(b) {
   const res = Math.max(0.008, Math.sqrt(sz.L * sz.W / 1.6e6)), nx = Math.max(2, Math.ceil(sz.L / res)), ny = Math.max(2, Math.ceil(sz.W / res));
   const M = new Float32Array(nx * ny), any = new Uint8Array(nx * ny);
   items.forEach(it => {
-    const loops = vcItemLoops(it); if (!loops.length) return;
-    const bx = vcBox(loops), pad = 2, i0 = Math.max(0, Math.floor(bx.x0 / res) - pad), j0 = Math.max(0, Math.floor(bx.y0 / res) - pad), i1 = Math.min(nx - 1, Math.ceil(bx.x1 / res) + pad), j1 = Math.min(ny - 1, Math.ceil(bx.y1 / res) + pad);
-    const w = i1 - i0 + 1, h = j1 - j0 + 1; if (w < 1 || h < 1) return;
-    const mask = new Uint8Array(w * h); vc3Fill(loops, mask, w, h, res, i0 * res, j0 * res);
-    const dist = vc3Edt(mask, w, h); let D = 0;
-    for (let k = 0; k < w * h; k++) if (mask[k]) { const d = Math.max(0.5, dist[k] - 0.5) * res; dist[k] = d; if (d > D) D = d; }
-    const o = vc3d(it), base = +o.base || 0;
+    const f = vc3ItemField(it, res, nx, ny); if (!f) return;
+    const { i0, j0, w, h, mask, v } = f, o = vc3d(it);
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
       const k = j * w + i; if (!mask[k]) continue;
-      const g = (j + j0) * nx + i + i0, v = vc3Height(o, dist[k], D) + base;
-      if (o.combine === 'sub') M[g] -= v; else if (o.combine === 'merge') M[g] = any[g] ? Math.max(M[g], v) : v; else if (o.combine === 'low') M[g] = any[g] ? Math.min(M[g], v) : v; else M[g] += v;
+      const g = (j + j0) * nx + i + i0, z = v[k];
+      if (o.combine === 'sub') M[g] -= z; else if (o.combine === 'merge') M[g] = any[g] ? Math.max(M[g], z) : z; else if (o.combine === 'low') M[g] = any[g] ? Math.min(M[g], z) : z; else M[g] += z;
       any[g] = 1;
     }
   });

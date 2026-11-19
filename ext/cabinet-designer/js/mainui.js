@@ -37,7 +37,7 @@ function itemBar(c) {
   // Push left, center, push right: small drawn arrows that say what they do (Mozaik's |<- T ->| buttons).
   const PUSH = {
     L: '<path d="M3 3v14M17 10H7m4-4-4 4 4 4"/>', R: '<path d="M17 3v14M3 10h10m-4-4 4 4-4 4"/>',
-    O: '<path d="M2 4v12M18 4v12M10 5v10M6 10H4m12 0h-2"/>', W: '<path d="M2 3v14M18 3v14M5 10h10m-7-3-3 3 3 3m4-6 3 3-3 3"/>'
+    O: '<path d="M2 4v12M18 4v12M10 5v10M6 10H4m12 0h-2"/>', U: '<path d="M3 3h14M10 17V7m-4 4 4-4 4 4"/>', W: '<path d="M2 3v14M18 3v14M5 10h10m-7-3-3 3 3 3m4-6 3 3-3 3"/>'
   };
   const ctr = (act, k, t) => `<button class="ib-ctr" data-act="${act}" data-id="${id || ''}" title="${t}" aria-label="${t}"${posOk ? '' : ' disabled'}><svg viewBox="0 0 20 20" aria-hidden="true">${PUSH[k]}</svg></button>`;
   let slide = '';
@@ -52,18 +52,18 @@ function itemBar(c) {
   if (!c) {
     const n = multiIds().length;
     return `<div class="itembar none ib-empty">
-    <div class="ib-hint">${n > 1 ? `<b>${n} items picked.</b> Edit them together in the side panel.` : S.cabinets.length ? '<b>Click a cabinet</b> to size and place it, or <b>drag a product</b> from the library onto the drawing.' : (S.walls.length ? '<b>Drag a product</b> from the library onto a wall to start.' : '<b>Draw the walls</b> first (W), then drag products from the library onto them.')}</div>
+    <div class="ib-hint">${n > 1 ? `<b>${n} items picked.</b> Edit them together in the side panel. <button class="btn sm" data-act="cab-shift-up" data-id="" title="Move every picked cabinet up to the ceiling, ${fmtLen(ceilGap())}&quot; below it">Shift all up</button>` : S.cabinets.length ? '<b>Click a cabinet</b> to size and place it, or <b>drag a product</b> from the library onto the drawing.' : (S.walls.length ? '<b>Drag a product</b> from the library onto a wall to start.' : '<b>Draw the walls</b> first (W), then drag products from the library onto them.')}</div>
     <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}</div>
   </div>`;
   }
   return `<div class="itembar">
     <div class="ib-pos">
-      ${pos('Left opening', 'cabgap:', 'L', c ? openGap(c, 'L') : 0)}<span class="ib-ctrs">${ctr('cab-push-L', 'L', 'Push it left, against its neighbour')}${ctr('cab-center-open', 'O', 'Center it in the opening')}${ctr('cab-push-R', 'R', 'Push it right, against its neighbour')}</span>${pos('Right opening', 'cabgap:', 'R', c ? openGap(c, 'R') : 0)}
+      ${pos('Left opening', 'cabgap:', 'L', c ? openGap(c, 'L') : 0)}<span class="ib-ctrs ib-ctrs-up"><span class="ib-uprow">${ctr('cab-shift-up', 'U', `Shift up to the ceiling line (${fmtLen(ceilGap())}&quot; off the ceiling, Off ceiling box under Size)`)}</span><span class="ib-lrrow">${ctr('cab-push-L', 'L', 'Push it left, against its neighbour')}${ctr('cab-center-open', 'O', 'Center it in the opening')}${ctr('cab-push-R', 'R', 'Push it right, against its neighbour')}</span></span>${pos('Right opening', 'cabgap:', 'R', c ? openGap(c, 'R') : 0)}
       ${pos('From left wall', 'cabpos:', 'L', c ? fromEnd(c, 'L') : 0)}<span class="ib-ctrs">${ctr('cab-center', 'W', 'Center it on the whole wall')}</span>${pos('From right wall', 'cabpos:', 'R', c ? fromEnd(c, 'R') : 0)}
       <div class="ib-slidewrap">${slide}</div>
     </div>
-    <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}<span class="ib-gap"></span>${sz('Depth', 'd')}${sz('Outset', 'outset')}</div>
-    <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}</div>
+    <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}${ceilCell()}${sz('Depth', 'd')}${sz('Outset', 'outset')}</div>
+    <div class="ib-togs">${tog('autoFillers', 'Fillers')}${tog('autoPanels', 'Panels')}</div>
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
       <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}${cornerBtn(c)}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
       : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
@@ -285,6 +285,17 @@ function keepOffCeiling(c) {
   if (c.elev > 0 && c.cat !== 'Tall') c.elev = r3(Math.max(0, max - c.h));
   if (c.elev + c.h > max + 0.001) c.h = r3(Math.max(6, max - c.elev));
   return true;
+}
+// Shift up: the cabinet's top goes up to the ceiling line (the room's "Cabinets off the ceiling" gap below the
+// ceiling, following a slope). Floor cabinets lift off the floor too. A cabinet too tall to fit stays on the floor.
+function shiftUp(c) {
+  const max = ceilMax(c); if (!isFinite(max)) return false;
+  const e = r3(Math.max(0, max - c.h)); if (Math.abs(e - (c.elev || 0)) < 0.001) return false;
+  c.elev = e; return true;
+}
+// Item bar cell under Width: the room's ceiling gap that Shift up (arrow above the push arrows) stops at.
+function ceilCell() {
+  return `<div class="ib-f ib-ceil"><span title="Room setting: cabinets stay this far below the ceiling (room for crown molding). Same as Room tab › Ceiling.">Off ceiling</span><div class="ib-ceilrow">${ctl('rceil', 'gap', ceilGap(), 'len', { label: 'Cabinets off the ceiling (room setting)' })}</div></div>`;
 }
 function keepAllOffCeiling() { (S.cabinets || []).forEach(keepOffCeiling); }
 // Bottom panel Room tab: the ceiling (height, slope, gap above the cabinets) and the walls.

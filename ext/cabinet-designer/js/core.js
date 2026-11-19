@@ -83,7 +83,7 @@ const PARAM_DEFS = [
 // Parameter groups, by what they are for.
 const PARAM_GROUPS = [['base', 'Legs and toe kick'], ['box', 'Cabinet construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
 const SHOP_PARAMS = {
-  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.8125, dadoDepth: 0.375, sinkApron: 7, grooveClear: 0.03125,
+  baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.8125, dadoDepth: 0.25, sinkApron: 7, grooveClear: 0.03125,
   shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
   frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'dovetail', dovetailPin: 0, drawerRails: 'on',
 };
@@ -569,6 +569,22 @@ function ensureMelBoxes(s) {
   MEL_BOX_TPLS.forEach(t => { if (!s.matTemplates.drawer.some(x => x.id === t.id)) s.matTemplates.drawer.push({ ...clone(t), sides, bottom }); });
   s.melBox = 1; return s;
 }
+// 0.58.10 (Ayden 2026-11-19): the shop's cabinet material is 3/4 Melamine, about $40 a sheet. Every job gets the material and a
+// "Melamine cabinet" material template once; new jobs start on it (blankJob). Saved jobs keep the cabinet material they had.
+const MEL_CAB_MAT = { id: 'm-mel34', name: '3/4 Melamine', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 40, color: '#f4f4f2', texture: null, procedural: null, texScale: 24, fin: 'pre' };
+const MEL_CAB_TPL = { id: 'mt-mel', name: 'Melamine cabinet', carcass: 'm-mel34', back: 'm-back', shelf: 'm-mel34', toeKick: 'm-mel34' };
+function ensureMelCab(s) {
+  if (!s || s.melCab || !Array.isArray(s.materials) || !s.matTemplates || !Array.isArray(s.matTemplates.cabinet)) return s;
+  if (!s.materials.some(x => x.id === MEL_CAB_MAT.id)) s.materials.push(clone(s.matGrouped ? { ...MEL_CAB_MAT, group: matGroupGuess(MEL_CAB_MAT) } : MEL_CAB_MAT));
+  if (!s.matTemplates.cabinet.some(x => x.id === MEL_CAB_TPL.id)) {
+    const t = clone(MEL_CAB_TPL), tp = s.matTemplates.cabinet[0] || {};
+    // The back panel comes from the job's own first template when it has no m-back.
+    if (!s.materials.some(x => x.id === t.back)) t.back = tp.back || t.carcass;
+    // At the end: the first template is the fallback for a blank pick, so saved jobs must not change.
+    s.matTemplates.cabinet.push(t);
+  }
+  s.melCab = 1; return s;
+}
 function migrate(s) {
   if (!s || typeof s !== 'object') return null;
   if (s.v === 2 && Array.isArray(s.cabinets)) {
@@ -611,6 +627,8 @@ function migrate(s) {
   if (!s.cup3) { (s.hardware || []).forEach(h => { if (h.id === 'hw-cliptop' && +h.cupEdgeMM === 5) h.cupEdgeMM = 3; }); s.cup3 = 1; }
   // 0.55.15: nailers on all cabinets (Ayden 2026-11-09). Jobs from before had 'none' only because it was the default,
   // so they switch to top and bottom, 4" wide like his Mozaik library. A room or cabinet set to None keeps it.
+  // 0.58.11 (Ayden 2026-11-18): back dados are 1/4" deep, not 3/8". Saved jobs on the old 3/8" default move to 1/4" once.
+  if (!s.dado14) { if (s.job && s.job.params && +s.job.params.dadoDepth === 0.375) s.job.params.dadoDepth = 0.25; s.dado14 = 1; }
   if (!s.nailers2) { if (s.job && s.job.params && (s.job.params.nailers || 'none') === 'none') { s.job.params.nailers = 'both'; if (+s.job.params.nailerWidth === 3.5 || !(+s.job.params.nailerWidth > 0)) s.job.params.nailerWidth = 4; } s.nailers2 = 1; }
   if (s.job && s.job.params) Object.entries(SHOP_PARAMS).forEach(([k, v]) => { if (!(k in s.job.params)) s.job.params[k] = v; });
   // Formulas and job variables came later.
@@ -627,6 +645,7 @@ function migrate(s) {
   if (typeof ensureBidLib === 'function') ensureBidLib(s);
   if (s.dollKit && typeof ensureDollKit === 'function') ensureDollKit(s);
   ensureMelBoxes(s);
+  ensureMelCab(s);
   // Jobs that already use the easy assembly test library get its current joint templates.
   if (Array.isArray(s.hardware) && s.hardware.some(h => h.id === 'jt-easy-u' || h.id === 'jt-easy-f')) ensureEasyJoints(s);
   // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.

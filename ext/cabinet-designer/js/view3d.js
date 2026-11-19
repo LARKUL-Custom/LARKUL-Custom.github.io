@@ -317,11 +317,13 @@ function cabinetMeshes(c, opts = {}) {
         const bl = blindCorner(c), fo = f.open && !bl, ox0 = fo ? f.open.x0 : f.n > 1 || bl ? f.x0 + 0.5 : t + 0.5, ox1 = fo ? f.open.x1 : f.n > 1 || bl ? f.x1 - 0.5 : W - t - 0.5, bd = Math.min(inD - 1, 21);
         trayBox(ox0 + 0.2, ox1 - 0.2, Math.max(f.z0, tk + t) + 0.5, Math.max(2.5, fh - 2.5), bd, D - ffThick(c) - bd, fg);
       }
-      fg.userData.open = { kind: 'drawer', travel: drawerTravel(c) };
+      fg.userData.open = { kind: 'drawer', f };
       host.add(fg);
     } else if (f.type === 'door') {
-      const hx = f.hinge === 'R' ? f.x1 : f.x0, pivot = new THREE.Group();
-      pivot.position.set(hx, 0, D); fg.position.set(-hx, 0, -D); pivot.add(fg);
+      // An overlay hinge turns the door about its front hinge-side corner, so at 90° it stands in front of the
+      // cabinet side instead of swinging out past it into the next door.
+      const hx = f.hinge === 'R' ? f.x1 : f.x0, pz = D + ft, pivot = new THREE.Group();
+      pivot.position.set(hx, 0, pz); fg.position.set(-hx, 0, -pz); pivot.add(fg);
       pivot.userData.open = { kind: 'door', sign: f.hinge === 'R' ? 1 : -1, f };
       host.add(pivot);
     } else host.add(fg);
@@ -411,11 +413,13 @@ function applyOpen(root, t) {
   root.traverse(o => {
     const op = o.userData.open; if (!op) return;
     if (op.kind === 'door') o.rotation.y = op.sign * ease(t) * doorSwing(o);
-    else o.position.z = ease(t) * op.travel;
+    else o.position.z = ease(t) * drawerOut(o);
   });
 }
 // A door opens as far as it can before it hits something (see doorLimit).
 function doorSwing(o) { const c = cab(o.userData.cabId), f = o.userData.open.f; return c && f ? doorLimit(c, f) : 1.75; }
+// A drawer slides out as far as it can; a bigger front in the way gets the room first (see openSolve).
+function drawerOut(o) { const c = cab(o.userData.cabId), f = o.userData.open.f; return c ? (f ? frontTravel(c, f) : drawerTravel(c)) : 0; }
 let openAnim = 0;
 function animateOpen() {
   if (openAnim) return;
@@ -428,7 +432,7 @@ function animateOpen() {
       if (Math.abs(goal - cur) < 1e-3) { openT[id] = goal; return; }
       openT[id] = cur + Math.sign(goal - cur) * Math.min(Math.abs(goal - cur), dt / 0.45); moving = true;
     });
-    viewers.forEach(v => { if (!v.ok) return; v.root.traverse(o => { if (o.userData.open && o.userData.cabId) { const t = openT[o.userData.cabId] || 0; if (o.userData.open.kind === 'door') o.rotation.y = o.userData.open.sign * ease(t) * doorSwing(o); else o.position.z = ease(t) * o.userData.open.travel; } }); v.requestRender(); });
+    viewers.forEach(v => { if (!v.ok) return; v.root.traverse(o => { if (o.userData.open && o.userData.cabId) { const t = openT[o.userData.cabId] || 0; if (o.userData.open.kind === 'door') o.rotation.y = o.userData.open.sign * ease(t) * doorSwing(o); else o.position.z = ease(t) * drawerOut(o); } }); v.requestRender(); });
     openAnim = moving ? requestAnimationFrame(step) : 0;
   };
   openAnim = requestAnimationFrame(step);
@@ -742,7 +746,7 @@ function buildRoomScene(v) {
     v.root.add(grp);
   });
   if (L.molding) moldingRuns().forEach(r => {
-    const w = wall(r.wall), m = r.m, mm = mat3(texLook(mat(m.mat), 'molding'));
+    const w = wall(r.wall), m = r.m, mm = mat3(typeof moldLook === 'function' ? moldLook(r) : mat(m.mat));
     const leftRet = r.side === 1 ? r.retS : r.retE, rightRet = r.side === 1 ? r.retE : r.retS;
     const a = (r.side === 1 ? r.start : r.end);
     const grp = wallGroup(w, r.side, a);

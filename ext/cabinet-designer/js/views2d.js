@@ -171,7 +171,7 @@ function planOpenSVG(c) {
       const sweep = (e0.x - h.x) * (e1.y - h.y) - (e0.y - h.y) * (e1.x - h.x) > 0 ? 1 : 0;
       s += `<path class="p-open nss" d="M${e0.x} ${e0.y}A${fw} ${fw} 0 0 ${sweep} ${e1.x} ${e1.y}"/><line class="p-open door nss" x1="${h.x}" y1="${h.y}" x2="${e1.x}" y2="${e1.y}"/>`;
     } else if (f.type === 'drawer') {
-      const tr = drawerTravel(c);
+      const tr = frontTravel(c, f);
       s += `<polygon class="p-open nss" points="${polyPts([P(f.x0, 0), P(f.x1, 0), P(f.x1, tr), P(f.x0, tr)])}"/>`;
     }
   });
@@ -852,7 +852,7 @@ function renderElev(pr) {
     if (rn.tpl.backsplash > 0) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? rn.start : L - rn.end}" y="${-(rn.top + rn.thick + rn.tpl.backsplash)}" width="${rn.end - rn.start}" height="${rn.tpl.backsplash}" opacity=".75"/>`;
   });
   moldingRuns().filter(rn => rn.wall === w.id && rn.side === side).forEach(rn => {
-    const a = (side === 1 ? rn.start : L - rn.end) - (side === 1 ? (rn.retS ? rn.m.d : 0) : (rn.retE ? rn.m.d : 0)), m = texLook(mat(rn.m.mat), 'molding'); mats.push(m && m.id);
+    const a = (side === 1 ? rn.start : L - rn.end) - (side === 1 ? (rn.retS ? rn.m.d : 0) : (rn.retE ? rn.m.d : 0)), m = typeof moldLook === 'function' ? moldLook(rn) : mat(rn.m.mat); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-mold')} x="${a}" y="${-(rn.z + rn.h)}" width="${rn.front}" height="${rn.h}"/>`;
     if (rn.m.profile !== 'flat') body += `<line class="ev-inner nss" x1="${a}" x2="${a + rn.front}" y1="${-(rn.z + rn.h * 0.45)}" y2="${-(rn.z + rn.h * 0.45)}"/>`;
   });

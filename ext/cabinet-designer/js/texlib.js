@@ -4,7 +4,8 @@ let TEXLIB = null, texLibLoading = null;
 function loadTexLib() {
   return texLibLoading || (texLibLoading = fetch('textures/index.json').then(r => (r.ok ? r.json() : [])).catch(() => []).then(l => (TEXLIB = Array.isArray(l) ? l : [])));
 }
-const TEX_CATS = [['Wood', 'Wood'], ['Paint', 'Paint and colors'], ['Tops', 'Countertops'], ['Backsplash', 'Backsplash']];
+// 0.58.21: sorted by tools/sort-textures.py (wood by species, paint by color family, melamine and metal on their own).
+const TEX_CATS = [['Wood', 'Wood'], ['Paint', 'Paint and colors'], ['Melamine', 'Melamine'], ['Tops', 'Countertops'], ['Backsplash', 'Backsplash'], ['Metal', 'Metal and glass']];
 const TEX_SHOW = 240;
 // A library path to a URL the page can load; names keep their spaces on disk.
 const texLibURL = p => 'textures/' + p.split('/').map(encodeURIComponent).join('/');
@@ -13,10 +14,12 @@ function texGuessCat(m) {
   if (!m) return 'Wood';
   const n = (m.name || '').toLowerCase();
   if (m.kind === 'top') return 'Tops';
+  if (/melamine|laminate|colourpyne/.test(n)) return 'Melamine';
   if (m.procedural || /oak|maple|birch|walnut|cherry|alder|hickory|\bash\b|ply|veneer|wood/.test(n)) return 'Wood';
   return /paint|mdf|melamine|white|black|grey|gray/.test(n) ? 'Paint' : 'Wood';
 }
 function texMatches(t, tp) {
+  if (t.h) return false; // an exact repeat of another photo
   if (tp.q) { const q = tp.q.toLowerCase(); return (t.n + ' ' + t.s + ' ' + t.c).toLowerCase().includes(q); }
   return t.c === tp.cat && (!tp.sub || t.s === tp.sub);
 }
@@ -34,7 +37,7 @@ function renderTexPick() {
   el.hidden = false;
   if (!TEXLIB) { el.innerHTML = `<div class="qe texlib" role="dialog" aria-modal="true"><div class="qe-head"><b>Texture library</b></div><div class="tx-empty muted">Loading textures…</div></div>`; loadTexLib().then(renderTexPick); return; }
   const m = tp.mat ? mat(tp.mat) : null;
-  const subs = [...new Set(TEXLIB.filter(t => t.c === tp.cat).map(t => t.s).filter(Boolean))].sort();
+  const subs = [...new Set(TEXLIB.filter(t => t.c === tp.cat && !t.h).map(t => t.s).filter(Boolean))].sort((a, b) => /^other/i.test(a) - /^other/i.test(b) || a.localeCompare(b));
   const hits = TEXLIB.map((t, i) => [t, i]).filter(([t]) => texMatches(t, tp));
   const cur = m && m.texture;
   const tiles = hits.slice(0, TEX_SHOW).map(([t, i]) => `<button class="tx-tile${cur === 'textures/' + t.p ? ' on' : ''}" data-act="tex-pick" data-id="${i}" title="${esc(t.n)}${t.s ? ' · ' + esc(t.s) : ''}">
@@ -45,7 +48,7 @@ function renderTexPick() {
     <div class="qe-head"><b id="tx-title">Texture library</b><span class="muted">${tp.surf ? 'for ' + esc(tp.surf === 'all' ? 'all fronts and ends' : ((TEX_SURF.find(([k]) => k === tp.surf) || [])[1] || '').toLowerCase()) : m ? 'for ' + esc(m.name) : 'pick one to add a new material'}</span>
       <button class="btn sm qe-x" data-act="tex-close" aria-label="Close the texture library">${icon('close')}</button></div>
     <div class="tx-bar">
-      <div class="seg" role="group" aria-label="Texture category">${TEX_CATS.map(([k, l]) => `<button data-act="tex-cat" data-id="${k}" aria-pressed="${!tp.q && tp.cat === k}">${l}<span class="tx-n">${TEXLIB.filter(t => t.c === k).length}</span></button>`).join('')}</div>
+      <div class="seg" role="group" aria-label="Texture category">${TEX_CATS.map(([k, l]) => `<button data-act="tex-cat" data-id="${k}" aria-pressed="${!tp.q && tp.cat === k}">${l}<span class="tx-n">${TEXLIB.filter(t => t.c === k && !t.h).length}</span></button>`).join('')}</div>
       <input id="texq" type="search" placeholder="Find a texture" value="${esc(tp.q)}" aria-label="Find a texture">
     </div>
     ${subs.length && !tp.q ? `<div class="tx-subs"><button data-act="tex-sub" data-id="" aria-pressed="${!tp.sub}">All</button>${subs.map(s => `<button data-act="tex-sub" data-id="${esc(s)}" aria-pressed="${tp.sub === s}">${esc(s)}</button>`).join('')}</div>` : ''}
@@ -60,12 +63,13 @@ function pickTexture(i) {
   const t = TEXLIB && TEXLIB[i], tp = ui.texPick; if (!t || !tp) return;
   const path = 'textures/' + t.p;
   // From the Textures tab: the photo becomes that surface's look, no material is added.
+  if (tp.quick) { const [k, rid] = tp.quick.split(':'); closeTexPick(); txqSet(k, rid, path); return; }
   if (tp.surf) { closeTexPick(); texSet(path); return; }
   if (tp.mat) {
-    mutate(() => { const m = mat(tp.mat); m.texture = path; if (t.col) m.color = t.col; if (typeof GRAIN_CATS !== 'undefined' && m.kind !== 'top') m.grain = GRAIN_CATS.includes(t.c); if (t.c === 'Tops' && (m.texScale || 24) < 36) m.texScale = 48; });
+    mutate(() => { const m = mat(tp.mat); m.texture = path; if (t.col) m.color = t.col; if (typeof GRAIN_CATS !== 'undefined' && m.kind !== 'top') m.grain = GRAIN_CATS.includes(t.c) || t.s === 'Woodgrain'; if (t.c === 'Tops' && (m.texScale || 24) < 36) m.texScale = 48; });
     renderTexPick(); return;
   }
-  const top = t.c === 'Tops', wood = t.c === 'Wood';
+  const top = t.c === 'Tops', wood = t.c === 'Wood' || t.s === 'Woodgrain';
   const m = { id: uid('m'), name: t.n, kind: top ? 'top' : 'sheet', thick: top ? 1.1875 : 0.75, sheetW: top ? 63 : 49, sheetL: top ? 120 : 97, grain: wood, cost: 0, color: t.col || '#d8cfc0', texture: path, procedural: null, texScale: top ? 48 : 24 };
   mutate(() => S.materials.push(m));
   closeTexPick(); flash(`Added ${t.n} to the material library`);

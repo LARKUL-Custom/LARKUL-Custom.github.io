@@ -3,7 +3,7 @@
    and press Add. Claude runs on this PC through the hub (server.js): your Claude plan by default, or an API key. */
 'use strict';
 const AI_API = '/api/ext/cabinet-designer/ai';
-const AI_LABELS = { mat: 'Materials', eb: 'Edge banding', doorT: 'Door templates', panel: 'Applied panels', top: 'Countertops', mold: 'Moldings', ptpl: 'Part templates', ff: 'Face frames' };
+const AI_LABELS = { inst: 'Installers', mat: 'Materials', eb: 'Edge banding', doorT: 'Door templates', panel: 'Applied panels', top: 'Countertops', mold: 'Moldings', ptpl: 'Part templates', ff: 'Face frames' };
 // What the fields mean, from the library pages' own labels. Claude also gets the library's own items as examples.
 const AI_GUIDES = {
   'hw-slide': `Drawer slide (kind "slide"). One item covers every length.
@@ -19,6 +19,14 @@ bomExtra: anything else to add to the hardware list (locking devices, brackets).
   'hw-joint': `Joint template (kind "joint"): confirmats, dowels and the like. Copy the example's structure exactly.`,
   'hw-other': `Other hardware (kind "other"), counted into the hardware list. perCabinet: how many per cabinet. cats: cabinet types it applies to (Base, Wall, Tall). cost US$ each.`,
   mat: `Material. kind "sheet" (sheet goods), "top" (countertop slabs) or as in the examples. thick: real thickness in inches (3/4 prefinished ply is often 0.71875). sheetW, sheetL: sheet size in inches. grain: true if the grain runs along the length. cost: US$ per sheet. color: hex colour close to the real look. texture null, procedural one of maple, birch, oak, walnut, stone or null. group: header it is listed under (Plywood, MDF, Melamine...).`,
+  // 0.58.13: an installer's pricing guide (Pricing › Installer › Import pricing guide).
+  inst: `Installer: someone who installs the shop's cabinets, with their own install prices. Usually one item per pricing guide.
+name: the installer's or company's name (from the guide; if none is given, use what the request says).
+rates: price per linear foot of cabinet width in US$, by cabinet type: Base (base and vanity cabinets), Wall (upper cabinets), Tall (tall, pantry and oven cabinets). Omit a type the guide does not price per foot.
+items: the installer's price list, one entry per charge the program can count: {"per": key, "amount": US$, "name": the guide's wording}. The keys are listed below.
+min: minimum labour charge per job in US$ (0 if none).
+notes: every other charge in the guide that none of those keys can count (scribing per edge, molding per cut, caulking, per-quote work, hourly rates), written out plainly with its price, so the shop can see it. List those in checks too, since they are not priced automatically. If a cabinet type has no price in the guide (for example tall cabinets), say so in checks.
+Convert per-metre prices to per-foot (1 ft = 0.3048 m). If the guide gives one per-foot price for all cabinets, put it on all three types.`,
   eb: `Edge band. Copy the example fields. thickMM and width are the band's thickness and width; code is the maker's part number; price is per roll when a roll length is given.`,
 };
 function aiLabel(key) { if (/^hw-/.test(key)) { const k = (HW_KINDS.find(x => x[0] === key.slice(3)) || [])[1]; return k ? 'Hardware: ' + k : 'Hardware'; } return AI_LABELS[key] || key; }
@@ -30,6 +38,8 @@ function aiAskBtn(key, iconOnly) {
 
 // The library itself, short: a few of its items as examples, and the ids of things the items can point at.
 function aiContext(key) {
+  if (key === 'inst') return [AI_GUIDES.inst, `Price list keys (per): ${INST_COUNTS.map(([k, l, u]) => `${k} = ${l}, ${u}`).join('; ')}.`, `Installers already in the list: ${INSTALLERS.map(i => i.name).join('; ') || 'none'}.`,
+    `Example item (copy its shape):\n${JSON.stringify(INSTALLERS.slice(0, 1).map(i => ({ name: i.name, rates: i.rates, items: [{ per: 'base', amount: 50, name: 'Bases, per box' }], min: 0, notes: '' })), null, 1)}`].join('\n\n');
   const r = libRef(key), arr = r[1](), mine = r[2] ? arr.filter(r[2]) : arr, cur = mine.find(x => x.id === (ui.pick || {})[key]);
   const ex = [...new Set([cur, ...mine].filter(Boolean))].slice(0, 3).map(x => JSON.parse(JSON.stringify(x, (k, v) => typeof v === 'string' && v.length > 600 ? undefined : v)));
   const ids = (label, list) => list && list.length ? `${label}: ${list.slice(0, 120).map(x => `${x.id} = ${x.name}`).join('; ')}` : '';
@@ -96,6 +106,7 @@ async function aiSend() {
 function aiAdd() {
   const a = aiState(); if (!a || !a.res) return;
   const list = a.res.items.filter((_, i) => a.res.pick[i]);
+  if (a.key === 'inst') { const n = instAddItems(list); if (!n) { a.err = 'Nothing was picked to add.'; renderAsk(); return; } ui.ai = null; renderAsk(); flash(`Added ${n === 1 ? list[0].name || 'the installer' : n + ' installers'}. Pick them in the Installer list.`); return; }
   const kind = /^hw-/.test(a.key) ? a.key.slice(3) : null;
   if (kind) list.forEach(x => { x.kind = kind; });
   if (kind === 'leg') list.forEach(x => { x.feet = true; });
@@ -136,8 +147,8 @@ function renderAsk() {
       ${r.sources.length ? `<div class="note ai-src"><b>Sources:</b> ${r.sources.map(s => /^https?:/.test(s) ? `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(s)}</a>` : esc(s)).join(' · ')}</div>` : ''}
       <div class="note">You can change anything after it's added, on the library page.</div></div>`;
   } else {
-    body = `<label class="f ai-f"><span>What should Claude add?</span><textarea id="ai-text" rows="4" placeholder="e.g. Add the Blum MOVENTO 760H slides, 15 to 21 inch, with the locking devices. Or: Add 3/4 Columbia PureBond walnut ply at $165 a sheet.">${esc(a.text)}</textarea></label>
-      <label class="f ai-f"><span>Links <span class="muted">(maker's page, spec or install sheet)</span></span><input id="ai-links" value="${esc(a.links)}" placeholder="https://..."></label>
+    body = `<label class="f ai-f"><span>What should Claude add?</span><textarea id="ai-text" rows="4" placeholder="${a.key === 'inst' ? 'e.g. Add this installer from his pricing guide. Name: Mike.' : 'e.g. Add the Blum MOVENTO 760H slides, 15 to 21 inch, with the locking devices. Or: Add 3/4 Columbia PureBond walnut ply at $165 a sheet.'}">${esc(a.text)}</textarea></label>
+      <label class="f ai-f"><span>Links <span class="muted">(${a.key === 'inst' ? 'their price list online' : "maker's page, spec or install sheet"})</span></span><input id="ai-links" value="${esc(a.links)}" placeholder="https://..."></label>
       <div class="ai-drop" data-ai-drop><span>${icon('camera')}Paste a screenshot here (Ctrl+V), drop pictures or PDFs, or</span><label class="btn sm">${icon('upload')}Pick files<input type="file" id="ai-files" accept="image/*,application/pdf" multiple hidden></label></div>
       ${a.files.length ? `<div class="ai-files">${a.files.map((f, i) => `<div class="ai-file">${/^image\//.test(f.type) ? `<img src="${f.url}" alt="">` : `<span class="ai-pdf">PDF</span>`}<span>${esc(f.name)}</span><button class="btn sm" data-act="ai-unfile" data-id="${i}" aria-label="Remove ${esc(f.name)}">${icon('close')}</button></div>`).join('')}</div>` : ''}
       ${a.busy ? `<div class="hwx-ok ai-busy"><span class="ai-spin"></span><span>Claude is reading it and writing the ${esc(aiLabel(a.key).toLowerCase())}… <span id="ai-secs">0s</span>. Spec sheets can take a couple of minutes.</span></div>` : ''}`;

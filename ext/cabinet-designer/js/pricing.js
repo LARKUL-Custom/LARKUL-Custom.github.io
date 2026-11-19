@@ -107,6 +107,72 @@ const priceSheet = () => PRICES.find(p => p.id === S.job.priceSheet) || PRICES[0
 // A job with no pick uses the installer its sheet's install prices moved to (ps.instBy), then the default.
 let INSTALLERS = [];
 const blankInstaller = (name, rates = { Base: 0, Wall: 0, Tall: 0 }) => ({ id: uid('inst'), name, rates: { ...rates } });
+// 0.58.18 (Ayden 2026-11-19, Saw Struck's sheet): an installer's price list, priced by what the job has. Each line is
+// a price for one thing the program can count; a minimum per job tops the installation up to it. Charges it can't count
+// (scribing, cuts of molding, caulking, per-quote work) stay in the installer's notes.
+const INST_COUNTS = [
+  ['base', 'Base cabinets', 'each'], ['wall', 'Wall cabinets up to 42 x 42', 'each'], ['wallBig', 'Wall cabinets over 42 x 42', 'each'],
+  ['tall', 'Tall cabinets', 'each'], ['hood', 'Hoods', 'each'], ['filler', 'Fillers', 'each'], ['panel', 'Base and wall end panels', 'each'],
+  ['panelTall', 'Tall end panels', 'each'], ['door', 'Doors (with hinges)', 'each'], ['drawer', 'Drawer fronts', 'each'],
+  ['pull', 'Pulls and knobs', 'each'], ['shelf', 'Floating shelves', 'each'], ['top8', 'Countertops', 'per 8 sq ft'], ['job', 'Per job', 'flat'],
+  // 0.58.20 (Ayden 2026-11-19: "guesstimate the caulking and everything else"): rough counts from the drawing, marked est. on the quote.
+  ['moldCut', 'Molding cuts (estimate)', 'per cut'], ['caulk', 'Caulking runs (estimate)', 'per cut'], ['scribe', 'Filler and panel scribing (estimate)', 'per edge'],
+  ['scribeTall', 'Tall end panel scribing (estimate)', 'per panel'], ['topScribe', 'Countertop scribing (estimate)', 'per 48" of edge'],
+];
+// How the estimates are counted (shown on Edit prices): each is a guess from what is drawn, to be checked on the job.
+const INST_EST = { moldCut: 'Each molding run: 2 cuts for the front piece and 2 for each return.', caulk: 'One per molding run (along the ceiling) and one per countertop run (along the wall).',
+  scribe: 'One edge per filler and per base or wall end panel.', scribeTall: 'One per tall end panel.', topScribe: 'Each countertop run: its length along the wall in 48" pieces.' };
+const instCount = k => INST_COUNTS.find(x => x[0] === k);
+// What one room has, counted for the installer's price list. cabs are the room's priced cabinets, own its own-price products.
+function instCounts(cabs, own) {
+  const n = Object.fromEntries(INST_COUNTS.map(([k]) => [k, 0]));
+  const isHood = c => { const l = c.libId && typeof libItem === 'function' && libItem(c.libId); return (l && typeof libGroup === 'function' && libGroup(l) === 'hood') || /\bhood/i.test(c.name || ''); };
+  cabs.filter(k => !k.c.noCount).forEach(({ c }) => {
+    if (isHood(c)) n.hood++; else if (c.cat === 'Tall') n.tall++; else if (c.cat === 'Wall') n[c.w > 42 || c.h > 42 ? 'wallBig' : 'wall']++; else n.base++;
+  });
+  cabs.forEach(({ c }) => {
+    n.filler += (typeof fillersOf === 'function' ? fillersOf(c).length : 0);
+    const b = buildParts(c); b.parts.forEach(pt => { if (pt.cabId === c.id && pt.kind === 'applied') n[c.cat === 'Tall' ? 'panelTall' : 'panel'] += pt.qty || 1; });
+    computeFronts(c).forEach(f => { if (f.type === 'door') n.door++; else if (f.type === 'drawer') n.drawer++; if (pullPlacement(c, f)) n.pull++; });
+  });
+  own.forEach(({ c }) => { const l = c.libId && typeof libItem === 'function' && libItem(c.libId); if (/floating|shelf|mantel/i.test(c.name || '') || (l && libGroup(l) === 'shelf')) n.shelf++; });
+  const tops = countertopRuns().filter(t => t.on), molds = moldingRuns();
+  n.top8 = tops.reduce((a, t) => a + Math.ceil(t.len * t.depth / 144 / 8 - 1e-9), 0);
+  n.moldCut = molds.reduce((a, m) => a + 2 + 2 * ((m.retS ? 1 : 0) + (m.retE ? 1 : 0)), 0);
+  n.caulk = molds.length + tops.length;
+  n.scribe = n.filler + n.panel; n.scribeTall = n.panelTall;
+  n.topScribe = tops.reduce((a, t) => a + Math.ceil(t.len / 48 - 1e-9), 0);
+  return n;
+}
+// Installers read from a pricing guide by Ask Claude: only the known fields are kept, as numbers.
+function instAddItems(list) {
+  const nums = o => Object.fromEntries(CAT_FT.map(([k]) => [k, Math.max(0, +((o || {})[k]) || 0)]));
+  const added = list.map(x => { const i = blankInstaller(String(x.name || 'New installer').trim() || 'New installer', nums(x.rates));
+    const items = (Array.isArray(x.items) ? x.items : []).filter(it => it && instCount(it.per) && +it.amount > 0)
+      .map(it => ({ per: it.per, amount: +it.amount, ...(it.name ? { name: String(it.name).trim() } : {}) }));
+    if (items.length) i.items = items; if (+x.min > 0) i.min = +x.min;
+    if (x.notes) i.notes = String(x.notes).trim(); return i; });
+  INSTALLERS.push(...added); savePrices(); if (typeof renderPricing === 'function') renderPricing(); return added.length;
+}
+const SAW_EST = [['moldCut', 25, 'Moldings, per cut'], ['caulk', 5, 'Caulking, per cut'], ['scribe', 15, 'Scribing fillers and panels, per edge'],
+  ['scribeTall', 25, 'Scribing tall end panels'], ['topScribe', 25, 'Scribing counter tops, per edge']];
+// Saw Struck (Curtis Perrin), from the pricing sheet Ayden sent 2026-11-19. Added once; after that it is the shop's to change.
+const SAW_STRUCK = { name: 'Saw Struck (Curtis Perrin)', rates: { Base: 0, Wall: 0, Tall: 0 }, min: 250,
+  items: [['base', 50, 'Bases, per box with toe skin'], ['wall', 50, 'Uppers, per box up to 42 x 42'], ['wallBig', 75, 'Large uppers, per box'], ['hood', 75, 'Hoods, per box'],
+    ['tall', 75, 'Tall cabinets, per box'], ['filler', 10, 'Fillers'], ['panel', 10, 'Base and wall panels'], ['panelTall', 25, 'Tall end panels'],
+    ['door', 4, 'Door and hinge install'], ['drawer', 8, 'Drawer front install'], ['pull', 5, 'Handles/knobs (standard)'], ['shelf', 50, 'Floating shelves (0-4 sq ft)'], ['top8', 25, 'Counter tops, per 0-8 sq ft'], ...SAW_EST]
+    .map(([per, amount, name]) => ({ per, amount, name })),
+  notes: `Estimated from the drawing (check on the job): molding cuts $25, caulking $5 per cut, scribing fillers and panels $15 per edge, tall end panels $25, countertops $25 per edge (48").
+Not priced, add by hand when the job has them: island panels $25 per panel (48" increments) plus $25 scribing; island build/bracing per quote; valance $25 per item (48") plus $25 scribing; scribe molding $10 per piece; columns $25 per column (48") plus $25 per edge scribing; cupped or specialty pulls per quote.
+Tall cabinets are not on the sheet: priced at $75 like large uppers. Check with Curtis.
+Phone (801) 319-8839, sawstruckcarpentry@gmail.com.` };
+function ensureSawStruck() {
+  // 0.58.20: Saw Struck's scribing, molding cuts and caulking go on his price list as estimates, once.
+  const had = INSTALLERS.find(i => i.seedSaw);
+  if (had) { if (had.sawEst) return false; had.items = had.items || []; SAW_EST.forEach(([per, amount, name]) => { if (!had.items.some(it => it.per === per)) had.items.push({ per, amount, name }); }); had.sawEst = 1; return true; }
+  const i = blankInstaller(SAW_STRUCK.name, SAW_STRUCK.rates); Object.assign(i, { items: SAW_STRUCK.items.map(x => ({ ...x })), min: SAW_STRUCK.min, notes: SAW_STRUCK.notes, seedSaw: 1, sawEst: 1 });
+  INSTALLERS.push(i); return true;
+}
 const sameRates = (a, b) => CAT_FT.every(([k]) => (+(a || {})[k] || 0) === (+(b || {})[k] || 0));
 const defInstaller = () => INSTALLERS.find(i => i.def) || INSTALLERS[0] || null;
 function jobInstaller(ps, job = S.job) {
@@ -132,6 +198,7 @@ async function loadPrices() {
   else if (PRICES.map(ensureMzk).some(Boolean)) changed = true;
   if (PRICES.map(takeInstall).some(Boolean)) changed = true;
   if (!INSTALLERS.length) { const r = blankInstaller('Richard', MZK.install); r.def = true; INSTALLERS.push(r); changed = true; }
+  if (ensureSawStruck()) changed = true;
   if (changed) savePrices();
 }
 let priceTimer = null;
@@ -297,11 +364,22 @@ function priceJob(ps) {
     // Installation by the foot of each type, at the job's installer's prices, like Mozaik's per-length install rows.
     // A job can have No installer (the customer installs, or it's a pickup).
     const who = jobInstaller(ps), inst = !who ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((who.rates || {})[cat]) || 0;
-      return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r } : null; }).filter(Boolean);
+      return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r, inst: true } : null; }).filter(Boolean);
+    // The installer's price list, by what this room has (a per-job line goes on the job, not each room).
+    const list = who && (who.items || []).filter(it => +it.amount && it.per !== 'job' && instCount(it.per));
+    if (list && list.length) { const n = instCounts(cabs, all.filter(k => k.own)); list.forEach(it => { const q = n[it.per]; if (!q) return; const [, label, unit] = instCount(it.per);
+      inst.push({ name: `Installation, ${(it.name || label).replace(/^./, ch => ch.toLowerCase())} (${INST_EST[it.per] ? 'est. ' : ''}${q} × ${money(+it.amount)}${unit === 'per 8 sq ft' ? ' per 8 sq ft' : ''})`, amount: q * +it.amount, inst: true }); }); }
     const lines = [...own, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : []), ...inst, ...xs];
     return { r, cabs, lines, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
   }));
   const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 })).concat(typeof jobLinePrices === 'function' ? jobLinePrices() : []);
+  // The installer's flat per-job charge, then their minimum: installation is topped up to it.
+  const who = jobInstaller(ps);
+  if (who) {
+    (who.items || []).filter(it => it.per === 'job' && +it.amount).forEach(it => jobLines.push({ name: `Installation, ${(it.name || 'per job').replace(/^./, ch => ch.toLowerCase())}`, amount: +it.amount, inst: true }));
+    const did = rooms.reduce((a, R) => a + R.lines.filter(l => l.inst).reduce((b, l) => b + l.amount, 0), 0) + jobLines.filter(l => l.inst).reduce((a, l) => a + l.amount, 0);
+    if (+who.min > did) jobLines.push({ name: `Installation minimum (${money(+who.min)} per job)`, amount: +who.min - did, inst: true });
+  }
   // Percent charges (fuel and delivery, commission) are taken on everything above them, before markup and tax.
   const base = rooms.reduce((a, r) => a + r.total, 0) + jobLines.reduce((a, k) => a + k.amount, 0);
   const pct = ps.extras.map((x, xi) => ({ x, xi })).filter(({ x }) => x.per === 'pct' && +x.amount).map(({ x, xi }) => ({ name: `${x.name} ${+x.amount}%`, amount: base * +x.amount / 100, xi }));
@@ -378,17 +456,27 @@ const PRICE_SECS = [['lib', 'Library prices', 'tag'], ['sheet', 'Markup and tax'
 // Quote's installer pick, down the right with the quote buttons.
 function installerPick(ps) {
   const cur = jobInstaller(ps), opt = (v, l) => `<option value="${esc(v)}"${(cur ? cur.id : 'none') === v ? ' selected' : ''}>${esc(l)}</option>`;
-  return `<label class="prx-inst"><span>Installer</span><select data-act-change="quote-inst" aria-label="Installer for this job">${INSTALLERS.map(i => opt(i.id, i.name)).join('')}${opt('none', 'No installer')}</select></label>`;
+  return `<label class="prx-inst"><span>Installer</span><select data-act-change="quote-inst" aria-label="Installer for this job">${INSTALLERS.map(i => opt(i.id, i.name)).join('')}${opt('none', 'No installer')}<optgroup label="──────────"><option value="__add">+ Add installer…</option><option value="__import">Import pricing guide…</option></optgroup></select></label>`;
 }
+// Scrolls to an installer's row on Edit prices and puts the cursor in its name.
+function instFocus(id) { setTimeout(() => { const n = document.querySelector(`[data-obj="inst:${id}"][data-field="name"]`); if (n) { n.scrollIntoView({ block: 'center' }); n.focus(); n.select(); } }, 60); }
 // Edit prices › Installers: every installer with their price per foot. Shared by all price sheets.
 function installersCard(ps) {
   const cur = jobInstaller(ps), one = INSTALLERS.length < 2;
   const rows = INSTALLERS.map(i => { const R = 'inst:' + i.id, P = 'instp:' + i.id + ':rates';
-    return `<tr><td>${ctl(R, 'name', i.name, 'text', { label: 'Installer name' })}</td>${CAT_FT.map(([k, l]) => `<td style="width:96px">${ctl(P, k, (i.rates || {})[k] ?? 0, 'num', { label: `${i.name} ${l} $/ft` })}</td>`).join('')}
+    const open = ui.instOpen === i.id, nl = (i.items || []).length;
+    const list = !open ? '' : `<tr class="inst-list"><td colspan="7"><div class="inst-lb">
+      <table class="t"><thead><tr><th>Charge for</th><th>Name on the quote</th><th class="r">Price</th><th></th></tr></thead><tbody>${(i.items || []).map((it, j) => { const L = `instp:${i.id}:items.${j}`;
+        return `<tr><td>${ctl(L, 'per', it.per, 'select', { label: 'Charge for', options: INST_COUNTS.map(([v, l, u]) => ({ v, l: `${l}, ${u}` })) })}</td><td>${ctl(L, 'name', it.name || '', 'text', { label: 'Name on the quote' })}</td><td style="width:96px">${ctl(L, 'amount', it.amount ?? 0, 'num', { label: 'Price' })}</td><td><button class="btn sm" data-act="ps-inst-idel" data-id="${esc(i.id)}:${j}" aria-label="Remove">×</button></td></tr>`; }).join('') || '<tr><td colspan="4" class="muted">No price list. Per-foot prices only.</td></tr>'}</tbody></table>
+      ${(i.items || []).some(it => INST_EST[it.per]) ? `<div class="note">Estimates, counted from the drawing: ${(i.items || []).filter(it => INST_EST[it.per]).map(it => `<b>${esc(instCount(it.per)[1].replace(' (estimate)', ''))}</b>: ${INST_EST[it.per]}`).join(' ')}</div>` : ''}
+      <div class="row-actions"><button class="btn sm" data-act="ps-inst-iadd" data-id="${esc(i.id)}">${icon('plus')}Add a price</button><label class="f inst-min"><span>Minimum per job ($)</span>${ctl(R, 'min', i.min ?? 0, 'num', { label: 'Minimum per job' })}</label></div>
+      <label class="f wide"><span>Notes (charges the program can't count)</span><textarea rows="5" data-obj="${esc(R)}" data-field="notes" data-type="text" aria-label="${esc(i.name)} notes">${esc(i.notes || '')}</textarea></label></div></td></tr>`;
+    return `<tr><td>${ctl(R, 'name', i.name, 'text', { label: 'Installer name' })}</td>${CAT_FT.map(([k, l]) => `<td style="width:84px">${ctl(P, k, (i.rates || {})[k] ?? 0, 'num', { label: `${i.name} ${l} $/ft` })}</td>`).join('')}
+      <td><button class="btn sm" data-act="ps-inst-open" data-id="${esc(i.id)}" aria-expanded="${open}">${icon('chevr', open ? 'rot90' : '')}${nl ? `Price list (${nl})` : 'Price list'}</button></td>
       <td>${i === defInstaller() ? '<span class="chip">Default</span>' : `<button class="btn sm" data-act="ps-inst-def" data-id="${esc(i.id)}">Make default</button>`}</td>
-      <td>${one ? '' : `<button class="btn sm${ui.instConfirm === i.id ? ' danger' : ''}" data-act="ps-inst-del" data-id="${esc(i.id)}" aria-label="Delete ${esc(i.name)}">${ui.instConfirm === i.id ? 'Click again' : '×'}</button>`}</td></tr>`; }).join('');
-  return `<div class="psec box prx-sec wide" id="ps-install">${secHead('home', 'Installers', 'blue')}<div class="prx-h"><span class="note">Each installer's price per foot of cabinet width. Shared by every price sheet. ${esc(S.job.name)} uses ${cur ? esc(cur.name) : 'no installer'}; pick on its Quote.</span><button class="btn sm" data-act="ps-inst-add">${icon('plus')}Add installer</button></div>
-    <div class="tscroll"><table class="t"><thead><tr><th>Installer</th>${CAT_FT.map(([, l]) => `<th class="r">${l} $/ft</th>`).join('')}<th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <td>${one ? '' : `<button class="btn sm${ui.instConfirm === i.id ? ' danger' : ''}" data-act="ps-inst-del" data-id="${esc(i.id)}" aria-label="Delete ${esc(i.name)}">${ui.instConfirm === i.id ? 'Click again' : '×'}</button>`}</td></tr>${list}`; }).join('');
+  return `<div class="psec box prx-sec wide" id="ps-install">${secHead('home', 'Installers', 'blue')}<div class="prx-h"><span class="note">Each installer's price per foot of cabinet width, and a price list for what the job has (boxes, doors, panels…). Shared by every price sheet. ${esc(S.job.name)} uses ${cur ? esc(cur.name) : 'no installer'}; pick on its Quote.</span><button class="btn sm" data-act="ps-inst-add">${icon('plus')}Add installer</button><button class="btn sm" data-act="ai-open" data-id="inst" title="Claude reads an installer's pricing guide (picture, PDF, link or text) and adds them">${icon('upload')}Import pricing guide</button></div>
+    <div class="tscroll"><table class="t"><thead><tr><th>Installer</th>${CAT_FT.map(([k]) => `<th class="r">${k} $/ft</th>`).join('')}<th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="note">A job that never picked an installer uses the default.</div></div>`;
 }
 function toggleBtn(act, on, label, id) { return `<button class="btn toggle${on ? ' on' : ''}" data-act="${act}"${id ? ` data-id="${id}"` : ''} aria-pressed="${!!on}">${icon(on ? 'check' : 'plus')}${label}</button>`; }
@@ -515,7 +603,10 @@ function priceAction(a, id) {
     case 'ps-paint': { const po = paintOf(ps); po[id] = !po[id]; break; }
     case 'ps-export': saveFile(new Blob([JSON.stringify({ cabinetDesignerPriceSheet: 1, sheet: ps }, null, 2)], { type: 'application/json' }), `${fileSafe(ps.name)} price sheet.json`, 'Cabinet Designer/Price sheets'); return;
     case 'quote-print': showQuoteSheet(); return;
-    case 'ps-inst-add': { const n = blankInstaller('New installer'); INSTALLERS.push(n); ui.instConfirm = null; break; }
+    case 'ps-inst-open': ui.instOpen = ui.instOpen === id ? null : id; renderPricing(); return;
+    case 'ps-inst-iadd': { const i = INSTALLERS.find(x => x.id === id); if (i) (i.items = i.items || []).push({ per: 'base', amount: 0 }); break; }
+    case 'ps-inst-idel': { const [iid, j] = id.split(':'), i = INSTALLERS.find(x => x.id === iid); if (i && i.items) i.items.splice(+j, 1); break; }
+    case 'ps-inst-add': { const n = blankInstaller('New installer'); INSTALLERS.push(n); ui.instConfirm = null; savePrices(); renderPricing(); instFocus(n.id); return; }
     // The default is what every job with no pick uses, so sheets stop pointing at the installer their old prices went to.
     case 'ps-inst-def': INSTALLERS.forEach(i => { if (i.id === id) i.def = true; else delete i.def; }); PRICES.forEach(p => { delete p.instBy; }); ui.instConfirm = null; break;
     case 'ps-inst-del': {
@@ -668,7 +759,11 @@ document.addEventListener('change', e => {
 // The job's installer: one pick, No installer included. Saved on the job, so it is in undo.
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-act-change="quote-inst"]'); if (!el) return;
-  const v = el.value; mutate(() => { delete S.job.noInstall; S.job.installer = v; });
+  const v = el.value;
+  // The two last options make an installer: a blank one to fill in, or one Claude reads from a pricing guide.
+  if (v === '__add') { const n = blankInstaller('New installer'); INSTALLERS.push(n); savePrices(); mutate(() => { delete S.job.noInstall; S.job.installer = n.id; }); ui.priceView = 'edit'; renderPricing(); instFocus(n.id); return; }
+  if (v === '__import') { renderPricing(); if (typeof openAsk === 'function') openAsk('inst'); return; }
+  mutate(() => { delete S.job.noInstall; S.job.installer = v; });
   const w = INSTALLERS.find(i => i.id === v); flash(w ? `${w.name} installs this job` : 'No installer on this job');
 });
 

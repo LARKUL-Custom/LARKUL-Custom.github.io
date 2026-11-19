@@ -3421,3 +3421,90 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .sunpick[hidden]{display:none}
 .sunpick input{width:84px;margin:0;accent-color:var(--accent)}
 .sunpick span{min-width:58px;font-variant-numeric:tabular-nums}
+/* Quick look on the Settings tiles (0.58.12): look only, same picks as the Textures tab */
+.tt-look{display:flex;align-items:center;gap:8px;width:100%;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--f-ui);cursor:pointer;text-align:left}
+.tt-look:hover,.tt-look[aria-expanded="true"]{border-color:var(--accent)}
+.tt-look .sw{width:18px;height:18px}
+.tt-look .sw.none{width:18px;height:18px}
+.tt-lk{color:var(--muted)}
+.tt-lv{margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%}
+.tt-look.set .tt-lv{color:var(--accent);font-weight:600}
+.txq{position:fixed;z-index:55;width:330px;max-width:calc(100vw - 16px);display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--panel);border:1px solid var(--line-strong);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);color:var(--ink)}
+.txq-h{display:flex;align-items:center;gap:8px}
+.txq-h b{font:600 14px var(--f-ui)}
+.txq-h .muted{font-size:12px}
+.txq-h .iconbtn{margin-left:auto}
+.txq>.btn{align-self:flex-start}
+.txq .swatches{gap:6px}
+.txq .accsw{width:26px;height:26px}
+.txq-used{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.txq-used .muted{font-size:12px;width:100%}
+.txq-row{display:flex;gap:8px;align-items:center}
+.txq-row select{flex:1;min-width:0}
+.txq .note{font-size:12px}
+/* 0.58.13: the item bar always fits the panel's width, also with the hub's side panel open (Ayden 2026-11-18:
+   "doesnt fit regularly and needs the slider at the bottom"). The bar goes by the panel's own width, not the
+   window's: a narrower panel gets the compact layout, and the boxes shrink before anything scrolls sideways. */
+@media (min-width: 961px){
+  .room .dock .dockbody{container:dockb / inline-size;overflow-x:hidden}
+  .room .dock .itembar:not(.ib-empty){min-width:0;max-width:100%}
+  .room .dock .itembar > .ib-pos, .room .dock .itembar > .ib-size, .room .dock .itembar > .ib-togs{flex:0 1 auto;min-width:0}
+  .room .dock .itembar .ib-pos{grid-template-columns:minmax(50px,calc(120 * var(--u))) auto minmax(50px,calc(120 * var(--u)))}
+  .room .dock .itembar .ib-size{grid-template-columns:repeat(3,minmax(50px,calc(110 * var(--u))))}
+  .room .dock .itembar .ib-f, .room .dock .itembar .ib-f input{min-width:0}
+  .room .dock .itembar .ib-f > span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .room .dock .itembar .ib-togs label{min-width:0}
+  .room .dock .itembar .ib-acts{flex:0 0 auto}
+}
+@container dockb (max-width: 1350px){
+  .itembar{--u:0.68px}
+  .itembar:not(.ib-empty){gap:6px!important}
+  .itembar .ib-acts{gap:6px}
+  .itembar .ib-acts .ib-edit{padding-inline:10px}
+  .itembar .ib-small{grid-auto-flow:row;grid-template-columns:repeat(2,minmax(52px,auto));grid-auto-columns:auto}
+  .itembar .ib-small button{flex-direction:row;gap:4px;padding:2px 4px;font-size:11.5px}
+}
+@container dockb (max-width: 700px){
+  .itembar .ib-togs .ib-tog > span{font-size:12px}
+}
+@media (min-width: 961px){
+  .room .dock .itembar > .ib-pos, .room .dock .itembar > .ib-size{min-width:auto}
+  .room .dock .itembar .ib-togs .ib-tog{width:auto;min-width:calc(120 * var(--u));gap:10px}
+}
+@container dockb (max-width: 1350px){
+  .itembar .ib-togs .ib-tog{min-width:0;height:28px}
+}
+@media (min-width: 961px){ .room .dock .itembar > .ib-togs{min-width:auto} }
+@container dockb (max-width: 780px){
+  .itembar .ib-acts{flex-direction:column;align-items:stretch}
+  .itembar .ib-acts .ib-edit{height:30px}
+}
+@container dockb (max-width: 780px){
+  .room .dock .itembar .ib-acts{flex-direction:column;align-items:stretch}
+}
+/* Narrower than everything at its smallest: wrap onto a second row (the panel grows to show it), never scroll sideways. */
+@container dockb (max-width: 700px){
+  .room .dock .itembar:not(.ib-empty){flex-wrap:wrap!important}
+}
+/* 0.58.15 Shift up: room ceiling gap box + up arrow in the item bar's Size group (cell under Width). */
+.itembar .ib-ceil .ib-ceilrow{display:flex;align-items:center;gap:4px;min-width:0}
+.itembar .ib-ceil .ib-ceilrow input{flex:1 1 auto;width:auto !important;min-width:0}
+.itembar .ib-ceil .ib-up{flex:0 0 auto;margin:0 !important}
+.itembar .ib-hint .btn{margin-left:6px;vertical-align:middle}
+.itembar .ib-ctrs.ib-ctrs-up{flex-direction:column;align-items:center;justify-content:flex-end;gap:2px}
+.itembar .ib-ctrs-up .ib-uprow,.itembar .ib-ctrs-up .ib-lrrow{display:flex;justify-content:center;gap:inherit}
+.itembar .ib-ctrs-up .ib-lrrow{gap:4px}
+.itembar .ib-ctrs-up .ib-uprow .ib-ctr{margin-bottom:0}
+/* Molding look (0.58.16): room Look and one per run, under the Molding tab */
+.ml-card{display:flex;flex-direction:column;gap:8px}
+.ml-runs{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line);padding-top:8px}
+.ml-row{display:flex;align-items:center;gap:10px}
+.ml-row>b{font:600 13px var(--f-ui)}
+.ml-row .tt-look{width:220px;flex:none;margin-left:auto}
+.ml-n{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ml-n .muted{font-size:12px}
+.inst-list>td{background:var(--sunk)}
+.inst-lb{display:flex;flex-direction:column;gap:10px;padding:6px 2px}
+.inst-lb .row-actions{display:flex;align-items:flex-end;gap:12px}
+.inst-min input{width:96px}
+.inst-lb textarea{width:100%;font:13px var(--f-ui);resize:vertical}

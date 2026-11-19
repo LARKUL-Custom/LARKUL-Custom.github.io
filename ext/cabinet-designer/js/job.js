@@ -149,8 +149,8 @@ const TPL_WALL = { wallThick: 'New wall thickness', wallHeight: 'Ceiling height'
 // Styles inside the picked door template, shown as their own tiles like Mozaik's base door, wall door and drawer fronts.
 const TPL_DT = { door: ['Base door'], wallDoor: ['Wall door', 'Same as base door'], drawerTop: ['Top drawer front', 'Same as mid drawer fronts'], drawer: ['Mid drawer fronts'], drawerBot: ['Bottom drawer front', 'Same as mid drawer fronts'], falseFront: ['False front'] };
 const dtKeys = ks => ks.filter(k => !k.startsWith('dt.'));
-function stylePic(id, drawer) {
-  const ds = doorStyle(id), c = (mat(ds.mat) || {}).color || '#d8d2c4';
+function stylePic(id, drawer, lc) {
+  const ds = doorStyle(id), c = lc || (mat(ds.mat) || {}).color || '#d8d2c4';
   return `<svg viewBox="0 0 120 90" aria-hidden="true">${drawer ? frontPic(ds, c, 14, 26, 92, 38, 24, 9.5) : frontPic(ds, c, 33, 5, 54, 80, 15, 22)}</svg>`;
 }
 // One front drawn with its depth: the field of a shaker sits low (shadow under the top rail and left stile, a light
@@ -183,11 +183,11 @@ function frontPic(ds, c, x, y, w, h, wd, ht) {
   return o + `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="none" stroke="#555"/>`;
 }
 // A small drawing for each tile, in the colors of what is picked.
-function tplPic(k, id) {
-  const col = m => (m && m.color) || '#d8d2c4', svg = b => `<svg viewBox="0 0 120 90" aria-hidden="true">${b}</svg>`;
+function tplPic(k, id, lc) {
+  const col = m => lc || (m && m.color) || '#d8d2c4', svg = b => `<svg viewBox="0 0 120 90" aria-hidden="true">${b}</svg>`;
   if (k === 'doorT') {
     const t = doorTpl(id), ds = doorStyle(t.door), c = col(mat(ds.mat)), p = hw(t.pull);
-    return svg(`${frontPic(ds, c, 33, 5, 54, 80, 15, 22)}<rect x="78" y="34" width="3" height="22" rx="1.5" fill="${(p && p.finish) || '#333'}"/>`);
+    return svg(`${frontPic(ds, c, 33, 5, 54, 80, 15, 22)}<rect x="78" y="34" width="3" height="22" rx="1.5" fill="${(typeof txqColor === 'function' && texPickOf('pulls') && pickColor(texPickOf('pulls'))) || (p && p.finish) || '#333'}"/>`);
   }
   if (k === 'cabMatT' || k === 'drawerMatT') {
     const t = k === 'cabMatT' ? cabMatT(id) : drawerMatT(id), c = col(mat(k === 'cabMatT' ? t.carcass : t.sides));
@@ -202,7 +202,7 @@ function tplPic(k, id) {
   if (k === 'partT') return svg('<rect x="20" y="30" width="80" height="30" fill="#e8e1d2" stroke="#555"/><rect x="20" y="56" width="80" height="4" fill="var(--accent)"/><text x="60" y="80" text-anchor="middle" font-size="10" fill="currentColor">banded edge</text>');
   if (k === 'countertop') { const t = countertop(id), c = col(mat(t.mat)); return svg(`<path d="M10 40 L40 26 L112 26 L82 40 Z" fill="${c}" stroke="#555"/><path d="M10 40 L82 40 L82 48 L10 48 Z" fill="${c}" stroke="#555"/><path d="M82 40 L112 26 L112 34 L82 48 Z" fill="#000" fill-opacity=".15" stroke="#555"/>`); }
   if (k === 'molding') { const m = S.moldings.find(x => x.id === id); return m ? svg(`<path d="M40 76 L40 60 C 52 58 58 46 60 34 C 62 22 72 16 84 14 L84 76 Z" fill="${col(mat(m.mat))}" stroke="#555"/>`) : svg('<text x="60" y="50" text-anchor="middle" font-size="11" fill="currentColor">None</text>'); }
-  if (k === 'pull') { const p = id ? hw(id) : null, f = (p && p.finish) || '#555'; return svg(`<rect x="26" y="40" width="68" height="7" rx="3.5" fill="${f}"/><rect x="34" y="46" width="5" height="10" fill="${f}"/><rect x="81" y="46" width="5" height="10" fill="${f}"/>${p ? '' : '<text x="60" y="76" text-anchor="middle" font-size="10" fill="currentColor">from door template</text>'}`); }
+  if (k === 'pull') { const p = id ? hw(id) : null, f = lc || (p && p.finish) || '#555'; return svg(`<rect x="26" y="40" width="68" height="7" rx="3.5" fill="${f}"/><rect x="34" y="46" width="5" height="10" fill="${f}"/><rect x="81" y="46" width="5" height="10" fill="${f}"/>${p ? '' : '<text x="60" y="76" text-anchor="middle" font-size="10" fill="currentColor">from door template</text>'}`); }
   if (k === 'slide') return svg('<rect x="12" y="34" width="96" height="9" rx="2" fill="#b7bcc4" stroke="#666"/><rect x="22" y="46" width="86" height="8" rx="2" fill="#d4d8de" stroke="#666"/><rect x="8" y="56" width="16" height="10" rx="2" fill="#e05252"/>');
   if (k === 'hinge') return svg('<circle cx="36" cy="46" r="15" fill="#c9ced6" stroke="#666"/><circle cx="36" cy="46" r="9" fill="#9aa1ab"/><rect x="48" y="40" width="44" height="12" rx="3" fill="#b7bcc4" stroke="#666"/><rect x="84" y="30" width="18" height="32" rx="2" fill="#d4d8de" stroke="#666"/>');
   if (k === 'shelfpin') return svg('<rect x="28" y="20" width="10" height="56" fill="#e8e1d2" stroke="#555"/><circle cx="33" cy="32" r="2" fill="#555"/><circle cx="33" cy="44" r="2" fill="#555"/><circle cx="33" cy="56" r="2" fill="#555"/><circle cx="33" cy="68" r="2" fill="#555"/><rect x="38" y="42" width="14" height="5" rx="2" fill="#9aa1ab"/><rect x="38" y="47" width="62" height="6" fill="#e8e1d2" stroke="#555"/>');
@@ -258,7 +258,7 @@ function renderTplTab() {
     if (k.startsWith('dt.')) {
       const f = k.slice(3), [label, blank] = TPL_DT[f], dt = doorTpl(scope ? roomSet('doorT', scope) : d.doorT), v = dt[f] || '';
       const eff = v || (f === 'wallDoor' ? dt.door : dt.drawer);
-      return `<div class="tpltile"><div class="tt-h">${label}</div><div class="tt-pic">${stylePic(eff, /drawer|false/i.test(f))}</div>${ctl('dtpl:' + dt.id, f, v, 'select', { options: [...(blank ? [{ v: '', l: blank }] : []), ...opts(S.doorStyles)], label })}
+      return `<div class="tpltile"><div class="tt-h">${label}</div><div class="tt-pic">${stylePic(eff, /drawer|false/i.test(f), typeof txqColor === 'function' ? txqColor('doorT', scope ? scope.id : '') : '')}</div>${ctl('dtpl:' + dt.id, f, v, 'select', { options: [...(blank ? [{ v: '', l: blank }] : []), ...opts(S.doorStyles)], label })}
         <div class="tt-f"><span class="tt-in">in ${esc(dt.name)}</span><button class="linkbtn" data-act="tab" data-id="doors">Door designer</button></div></div>`;
     }
     if (TPL_WALL[k]) {
@@ -267,11 +267,12 @@ function renderTplTab() {
     }
     const sd = SETTINGS.find(x => x.k === k), list = sd.list();
     const v = scope ? (scope.settings || {})[k] || '' : d[k] || '', eff = scope ? roomSet(k, scope) : d[k] || '';
-    const pic = k === 'pull' && !eff ? tplPic('pull', doorTpl(scope ? roomSet('doorT', scope) : d.doorT).pull) : tplPic(k, eff);
+    const lc = typeof txqColor === 'function' ? txqColor(k, scope ? scope.id : '') : '';
+    const pic = k === 'pull' && !eff ? tplPic('pull', doorTpl(scope ? roomSet('doorT', scope) : d.doorT).pull, lc) : tplPic(k, eff, lc);
     const qa = typeof qmOpt === 'function' ? qmOpt(k) : [];
     const sel = scope ? ctl('rset:' + scope.id, k, v, 'select', { options: [...setOpts(k, list), ...qa], label: sd.label + ' for ' + scope.name })
       : ctl('jobd', k, v, 'select', { options: [...(sd.blank ? [{ v: '', l: sd.blank }, ...list] : list), ...qa], label: sd.label });
-    return `<div class="tpltile${scope && v ? ' own' : ''}"><div class="tt-h">${sd.label.replace(' (edgebanding)', '')}</div><div class="tt-pic">${pic}</div>${sel}
+    return `<div class="tpltile${scope && v ? ' own' : ''}"><div class="tt-h">${sd.label.replace(' (edgebanding)', '')}</div><div class="tt-pic">${pic}</div>${sel}${typeof txqBtn === 'function' ? txqBtn(k, scope ? scope.id : '') : ''}
       <div class="tt-f">${scope && v ? '<span class="tt-own">This room</span>' : ''}<button class="linkbtn" data-act="tab" data-id="${sd.tab}">Edit library</button></div></div>`;
   };
   const lib = S.library.filter(l => l.cat !== 'Shape'), prevId = lib.some(l => l.id === ui.tplPrev) ? ui.tplPrev : (libItem('b-1d1dr') ? 'b-1d1dr' : (lib[0] || {}).id);

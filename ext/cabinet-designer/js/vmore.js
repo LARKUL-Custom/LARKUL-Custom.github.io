@@ -57,6 +57,9 @@ function vBuildExtras(c, parts, warn, p, x) {
       x.addB('Drawer face screw', 4);
     }
   });
+  // Ayden's dovetailer (Cantek JDT-75, 2026-11-18): pieces 7.87" to 59" long, up to 16.93" wide (the box height), 10 to 30 mm thick.
+  if (kind === 'dovetail') { const bad = [...sides, ...fronts, ...backs].filter(q => q && (q.L < 7.87 || q.L > 59 || q.W > 16.93 || q.T < 0.39 || q.T > 1.18));
+    if (bad.length) warn.push(`Dovetail drawer boxes: ${[...new Set(bad.map(q => `${q.name.toLowerCase()} ${fmtLen(q.L, 1)} x ${fmtLen(q.W, 1)}`))].join(', ')} won't fit the dovetailer (pieces 7 7/8" to 59" long, up to 16 15/16" tall, 3/8" to 1 3/16" thick). Use another drawer box joint on this cabinet.`); }
   if (kind === 'nofront' && sides.length) warn.push('Drawer boxes have no front: the drawer face screws to the bottom and the sides.');
 }
 
@@ -89,7 +92,7 @@ function ceilingBox(rm) {
     <label class="f"><span>Sloped</span>${ctl('rceil', 'slope', cl.slope || 'none', 'select', { label: 'Sloped ceiling', options: [{ v: 'none', l: 'Flat' }, { v: 'N', l: 'Low side at the top of the plan' }, { v: 'S', l: 'Low side at the bottom' }, { v: 'W', l: 'Low side at the left' }, { v: 'E', l: 'Low side at the right' }] })}</label>
     ${slope ? fld('Height at the low side', 'rceil', 'low', cl.low ?? 48, 'len') + fld('Slope runs this far in', 'rceil', 'run', cl.run ?? 60, 'len') : ''}
     ${fld('Cabinets off the ceiling', 'rceil', 'gap', cl.gap ?? 3, 'len')}</div>
-    <div class="note show">Uppers and talls always stay at least this far below the ceiling, also under a slope.</div>
+    <div class="note show">Uppers and talls always stay at least this far below the ceiling, also under a slope (room for crown molding). Shift up (the up arrow next to Off ceiling under a cabinet) moves a cabinet up to this line.</div>
     <div class="note">Shows in the 3D view (Layers › Ceiling).</div></div>`;
 }
 // The room outline when its walls close into a loop, else null.

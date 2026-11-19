@@ -577,9 +577,15 @@ const vcFoldState = () => { const f = ui.vcFold || (ui.vcFold = { board: false, 
 const vcFold = (k, title, body) => { const f = vcFoldState(), shut = !!f[k]; return `<div class="vc-sec"><button class="vc-sech" data-act="vc-fold" data-id="${k}" aria-expanded="${!shut}"><span aria-hidden="true">${shut ? '▸' : '▾'}</span>${title}</button>${shut ? '' : `<div class="vc-secb">${body}</div>`}</div>`; };
 // The 3D settings of a design: profile, how it combines with what is under it, height, base and angle.
 function vc3Form(it) {
-  const o = vc3d(it), seg = (act, list, cur, lbl) => `<div class="vc-wide vcx-modes"><span class="vc-lbl">${lbl}</span><div class="seg" role="group" aria-label="${lbl}">${list.map(([v, l, tip]) => `<button data-act="${act}" data-id="${v}" title="${esc(tip)}" aria-pressed="${cur === v}">${l}</button>`).join('')}</div><small class="muted">${esc((list.find(x => x[0] === cur) || list[0])[2])}</small></div>`;
-  return `${seg('vc-3p', VC3_PROFILES, o.profile, 'Profile')}${seg('vc-3c', VC3_COMBINE, o.combine, 'Combine')}
-    <div class="vc-row3 vc-wide">${vcIn('3D height', 'i.d3h', o.h)}${vcIn('Base', 'i.d3base', +o.base || '')}${o.profile === 'angle' ? vcNum('Angle°', 'i.d3ang', o.ang, ' min="5" max="89"') : '<span></span>'}</div>`;
+  const o = vc3d(it), seg = (act, list, cur, lbl, tipShow = true) => `<div class="vc-wide vcx-modes"><span class="vc-lbl">${lbl}</span><div class="seg" role="group" aria-label="${lbl}">${list.map(([v, l, tip]) => `<button data-act="${act}" data-id="${v}"${tip ? ` title="${esc(tip)}"` : ''} aria-pressed="${String(cur) === String(v)}">${l}</button>`).join('')}</div>${tipShow ? `<small class="muted">${esc((list.find(x => String(x[0]) === String(cur)) || list[0])[2] || '')}</small>` : ''}</div>`;
+  const dirs = VC3_DIRS.map(([v, l]) => [v, l, '']), fadeOn = o.fade !== '' && o.fade !== undefined && isFinite(+o.fade) && +o.fade < 100, shut = !vcFoldState().d3more;
+  const top = it.gray ? seg('vc-3inv', [['', 'Light is high', 'The light parts of the picture stand up.'], ['1', 'Dark is high', 'The dark parts of the picture stand up.']], o.invert ? '1' : '', 'Picture')
+    : seg('vc-3p', VC3_PROFILES, o.profile, 'Profile') + (o.profile === 'sweep' ? `${seg('vc-3s', VC3_SECTIONS, o.sec, 'Cross-section')}<div class="vc-row2 vc-wide">${vcIn('Sweep width', 'i.d3sw', o.sw)}<span></span></div>` : '');
+  return `${top}${seg('vc-3c', VC3_COMBINE, o.combine, 'Combine')}
+    <div class="vc-row3 vc-wide">${vcIn('3D height', 'i.d3h', o.h)}${vcIn('Base', 'i.d3base', +o.base || '')}${o.profile === 'angle' && !it.gray ? vcNum('Angle°', 'i.d3ang', o.ang, ' min="5" max="89"') : '<span></span>'}</div>
+    <button class="vc-sech vc-sub vc-wide" data-act="vc-fold" data-id="d3more" aria-expanded="${!shut}"><span aria-hidden="true">${shut ? '▸' : '▾'}</span>Smooth, fade and tilt</button>
+    ${shut ? '' : `<div class="vc-row3 vc-wide">${vcNum('Smooth (0-10)', 'i.d3smooth', +o.smooth || 0, ' min="0" max="10" step="1"')}${vcNum('Fade to % (100 = off)', 'i.d3fade', fadeOn ? +o.fade : 100, ' min="0" max="100" step="5"')}${vcNum('Tilt°', 'i.d3tilt', +o.tilt || 0, ' min="0" max="45" step="1"')}</div>
+      ${fadeOn ? seg('vc-3fd', dirs, +o.fdir || 0, 'Fades toward', false) : ''}${+o.tilt > 0 ? seg('vc-3td', dirs, +o.tdir || 0, 'Tilts up toward', false) : ''}`}`;
 }
 const vcItemName = it => it.kind === 'text' ? `“${String(it.text || '').split('\n')[0].slice(0, 24)}”` : it.name ? it.name : it.kind === 'shape' ? ((VC_GEN[it.shape] || {}).name || (VC_SHAPES.find(s => s[0] === it.shape) || [0, 'Shape'])[1]) : 'Picture';
 let vcLastImg = null; // the last opened picture, so the cut-off can change without opening it again
@@ -607,7 +613,7 @@ function renderCarve() {
     ${b.part ? `<div class="muted vc-small">${fmtLen(sz.L, 1)} × ${fmtLen(sz.W, 1)} × ${fmtLen(sz.T, 1)}, from the part. Cut the part out with the rest of the job; this carves it.</div>` : `<div class="vc-row3">${vcIn('Width', 'b.L', b.L)}${vcIn('Height', 'b.W', b.W)}${vcIn('Thickness', 'b.T', b.T)}</div>
     ${vcSel('Material', 'b.mat', b.mat || '', [{ v: '', l: 'Not picked' }, ...vcSheetMats().map(m => ({ v: m.id, l: `${m.name} (${fmtLen(m.thick, 1)})` }))])}
     ${b.mat ? `<button class="btn sm" data-act="vc-sheet">Use a whole sheet (${fmtLen(vcSheetOf(b).L, 1)} × ${fmtLen(vcSheetOf(b).W, 1)})</button>` : ''}
-    ${vcChk('Cut it with the job (sends to CNC Cutlist)', 'b.inJob', b.inJob)}${b.inJob ? `<div class="vc-row2">${vcNum('How many', 'b.qty', b.qty || 1, ' min="1" step="1"')}<span></span></div><div class="note help">${vcCutShapes(b).length ? 'Each Cut out design goes in the CNC parts file as its own part, nested on the sheets with the cabinets.' : 'The whole board goes in the CNC parts file as a part.'} Outline designs go along as engraving. V-carving and clearing stay in this sign's G-code.</div>${b.mat ? '' : '<div class="warnbox">Pick a material so it can be nested on the right sheets.</div>'}` : ''}`}`;
+    ${vcChk('Cut it with the job (sends to CNC Cutlist)', 'b.inJob', b.inJob)}${b.inJob ? `<div class="vc-row2">${vcNum('How many', 'b.qty', b.qty || 1, ' min="1" step="1"')}<span></span></div><div class="note help">${vcCutShapes(b).length ? 'Each Cut out design goes in the CNC parts file as its own part, nested on the sheets with the cabinets.' : 'The whole board goes in the CNC parts file as a part.'} Outline designs, V-carving, clearing and 3D carving go along too, and CNC Cutlist carves them before it cuts the part out (CNC Cutlist 0.2.18 or later).</div>${b.mat ? '' : '<div class="warnbox">Pick a material so it can be nested on the right sheets.</div>'}` : ''}`}`;
   const tp = `${vcSel('V-bit', 'b.vbit', b.vbit || (vb[0] || {}).id || '', vbOpts)}
     ${vcIn('Max depth (blank = as deep as the bit goes)', 'b.depth', +b.depth || '')}
     ${vcSel('Clear wide areas with', 'b.clear', b.clear || '', [{ v: '', l: 'Nothing (V-bit only)' }, ...st.map(t => ({ v: t.id, l: `${t.id} (${fmtLen(t.dia / 25.4, 1)})` }))])}
@@ -623,7 +629,7 @@ function renderCarve() {
     <div class="note">Feeds, spindle speed and tool numbers come from Libraries › CNC tools. These settings are kept for every job.</div>`;
   const kindIc = it => it.kind === 'text' ? 'edit' : it.kind === 'art' ? 'upload' : 'cube';
   const tool = (act, ic, l, s, on) => `<button class="vcx-tool${on ? ' on' : ''}" data-act="${act}"><span class="vcx-ic">${icon(ic)}</span><b>${l}</b><small>${s}</small></button>`;
-  const draw = `<div class="prx-navh">Draw</div><div class="vcx-tools">${tool('vc-addtext', 'edit', 'Text', 'Any font', false)}${tool('vc-pick', 'stack', 'Shapes', 'From the library', !!ui.vcPick)}${tool('vc-import', 'upload', 'Import', 'SVG or DXF', false)}${tool('vc-trace', 'camera', 'Trace', 'Picture to vector', false)}</div>${ui.vcPick ? vcPickerHTML() : ''}`;
+  const draw = `<div class="prx-navh">Draw</div><div class="vcx-tools">${tool('vc-addtext', 'edit', 'Text', 'Any font', false)}${tool('vc-pick', 'stack', 'Shapes', 'From the library', !!ui.vcPick)}${tool('vc-import', 'upload', 'Import', 'SVG or DXF', false)}${tool('vc-trace', 'camera', 'Trace', 'Picture to vector', false)}${tool('vc-3pic', 'cube', '3D picture', 'Light = high', false)}</div>${ui.vcPick ? vcPickerHTML() : ''}`;
   const modeTag = it => it.mode === '3d' ? '<i class="vcx-mode d3">3D</i>' : it.mode === 'raise' ? '<i class="vcx-mode raise">Raised</i>' : it.mode === 'line' ? '<i class="vcx-mode line">Outline</i>' : it.mode === 'cut' ? '<i class="vcx-mode cut">Cut out</i>' : '';
   const designs = `<div class="prx-navh">On this ${b.part ? 'part' : 'sign'}</div>
     <div class="cl-mats">${(b.items || []).map(it => `<button class="cl-mat vcx-item${it.id === ui.vcSel ? ' on' : ''}${it.off ? ' off' : ''}" data-act="vc-sel" data-id="${it.id}"><span class="vcx-ic k-${it.kind}">${icon(kindIc(it))}</span><span><b>${esc(vcItemName(it))}</b><small>${it.kind === 'text' ? esc(it.font || 'Arial') + ' · ' : ''}${fmtLen(+it.h || 0, 1)} high</small></span>${modeTag(it)}</button>`).join('') || '<div class="note show">Nothing on it yet. Add text, a shape or a logo.</div>'}</div>`;
@@ -660,7 +666,7 @@ function vcItemForm(it) {
       ${vcIn('Border width (blank = solid)', k + 'frame', +it.frame > 0 ? +it.frame : '')}${+it.frame > 0 ? vcChk('Double line', k + 'double', it.double) : ''}`}`;
   }
   const sz = vcItemSize(it), mode = it.mode || 'carve';
-  const modes = `<div class="vc-wide vcx-modes"><span class="vc-lbl">Carve it</span><div class="seg" role="group" aria-label="Carve it">${[['carve', 'Carve'], ['raise', 'Raised'], ['line', 'Outline'], ['3d', '3D'], ['cut', 'Cut out']].map(([v, l]) => `<button data-act="vc-mode" data-id="${v}" aria-pressed="${mode === v}">${l}</button>`).join('')}</div>
+  const modes = it.gray ? `<div class="vc-wide muted vc-small">A 3D picture: carved with the ball nose, as high as it is light.</div>${vc3Form(it)}` : `<div class="vc-wide vcx-modes"><span class="vc-lbl">Carve it</span><div class="seg" role="group" aria-label="Carve it">${[['carve', 'Carve'], ['raise', 'Raised'], ['line', 'Outline'], ['3d', '3D'], ['cut', 'Cut out']].map(([v, l]) => `<button data-act="vc-mode" data-id="${v}" aria-pressed="${mode === v}">${l}</button>`).join('')}</div>
     <small class="muted">${mode === '3d' ? 'A raised 3D shape, carved with a ball nose like Aspire. Pick its profile and height.' : mode === 'raise' ? 'The wood is left standing here and the shape it sits on is carved around it.' : mode === 'line' ? 'The V-bit follows the outline at one depth, like engraving.' : mode === 'cut' ? `Cut all the way through on the outline with ${esc((cncTool(vcBoard().cutTool || vcCutTool()) || {}).id || 'the cut-out bit')}, after the carving.` : 'Carved into the wood, sharp V walls.'}</small></div>${mode === 'line' ? vcIn('Outline depth', k + 'ldepth', vcLineDepth(it)) : ''}${mode === '3d' ? vc3Form(it) : ''}`;
   const posShut = !!vcFoldState().pos;
   return `<div class="vc-formhead"><b>${esc(vcItemName(it))}</b><span class="grow"></span><button class="btn sm pe-x" data-act="vc-desel" aria-label="Done" title="Done">×</button></div>
@@ -709,7 +715,7 @@ function vcSetVal(k, raw, t) {
   const b = vcBoard(); if (!b) return;
   const [o, f] = [k.slice(0, 1), k.slice(2)];
   if (o === 'm') { const M = CNC_LIB.machine; M[f] = f === 'gSafe' ? (+raw || 12.7) : String(raw).trim(); saveCncLib(); renderCarve(); return; }
-  const lenK = ['L', 'W', 'T', 'depth', 'h', 'w', 'x', 'y', 'r', 'band', 'frame', 'ldepth', 'arcr', 'p.r', 'p.rise', 'cgap', 'd3h', 'd3base'];
+  const lenK = ['L', 'W', 'T', 'depth', 'h', 'w', 'x', 'y', 'r', 'band', 'frame', 'ldepth', 'arcr', 'p.r', 'p.rise', 'cgap', 'd3h', 'd3base', 'd3sw'];
   const val = t.type === 'checkbox' ? t.checked : t.classList.contains('vc-raw') ? (t.type === 'number' || t.type === 'range' ? (isFinite(+raw) ? +raw : 0) : raw) : lenK.includes(f) ? (String(raw).trim() === '' ? '' : (ui.vcMM && /^-?\d*\.?\d+$/.test(String(raw).trim()) ? +raw / 25.4 : parseLen(raw))) : f === 'text' ? String(raw).replace(/\r/g, '') : String(raw).trim();
   if (lenK.includes(f) && val !== '' && !isFinite(val)) { flash('Type a size, like 2, 1 1/2 or 38mm.'); renderCarve(); return; }
   mutate(() => {
@@ -735,7 +741,14 @@ function vcSetVal(k, raw, t) {
       else if (f === 'cnx' || f === 'cny' || f === 'cgap') { const c = { nx: 1, ny: 1, gap: 0.5, ...(it.copies || {}) }; c[f.slice(1)] = f === 'cgap' ? (val === '' ? 0.5 : Math.max(0, r3(val))) : Math.max(1, Math.min(60, Math.round(+val) || 1)); if (c.nx * c.ny > 1) it.copies = c; else delete it.copies; }
       else if (f === 'arcdir') { const r = Math.abs(+it.arc) || r3(Math.max(2, vcItemSize(it).w * 0.9)); if (val) it.arc = val === 'up' ? r : -r; else delete it.arc; }
       else if (f === 'arcr') { if (val > 0) it.arc = (+it.arc < 0 ? -1 : 1) * r3(val); }
-      else if (f === 'd3h' || f === 'd3base' || f === 'd3ang') { const o = { ...vc3d(it) }, kk = f.slice(2); o[kk === 'h' ? 'h' : kk] = kk === 'ang' ? Math.max(5, Math.min(89, +val || 45)) : val === '' ? 0 : r3(Math.max(kk === 'base' ? -10 : 0, +val)); it.d3 = o; }
+      else if (/^d3/.test(f)) { const o = { ...vc3d(it) }, kk = f.slice(2), n = +val;
+        if (kk === 'ang') o.ang = Math.max(5, Math.min(89, n || 45));
+        else if (kk === 'smooth') o.smooth = Math.max(0, Math.min(10, Math.round(n) || 0));
+        else if (kk === 'fade') { if (val === '' || !(n < 100)) o.fade = ''; else o.fade = Math.max(0, Math.round(n)); }
+        else if (kk === 'tilt') o.tilt = Math.max(0, Math.min(45, n || 0));
+        else if (kk === 'sw') o.sw = val === '' ? 0.5 : r3(Math.max(0.02, n));
+        else o[kk] = val === '' ? 0 : r3(Math.max(kk === 'base' ? -10 : 0, n));
+        it.d3 = o; }
       else if (f === 'frame') { if (val > 0) it.frame = r3(val); else { delete it.frame; delete it.double; } }
       else if (f === 'shape') { it.shape = val; if (!VC_GEN[val] || !VC_GEN[val].r) { if (it.p) delete it.p.r; } }
       else it[f] = typeof val === 'number' ? r3(val) : val;
@@ -782,7 +795,8 @@ function vcAct(a, id) {
     case 'vc-trace': vcPickFile('image/*', vcTraceStart); return true;
     case 'vc-pick': ui.vcPick = !ui.vcPick; renderCarve(); return true;
     case 'vc-addtext': return vcAct('vc-add', 'text');
-    case 'vc-3p': case 'vc-3c': if (it) mutate(() => { it.d3 = { ...vc3d(it), [a === 'vc-3p' ? 'profile' : 'combine']: id }; }); return true;
+    case 'vc-3p': case 'vc-3c': case 'vc-3s': case 'vc-3fd': case 'vc-3td': case 'vc-3inv': if (it) mutate(() => { const k3 = { 'vc-3p': 'profile', 'vc-3c': 'combine', 'vc-3s': 'sec', 'vc-3fd': 'fdir', 'vc-3td': 'tdir', 'vc-3inv': 'invert' }[a]; it.d3 = { ...vc3d(it), [k3]: k3 === 'fdir' || k3 === 'tdir' ? +id : k3 === 'invert' ? id === '1' : id }; }); return true;
+    case 'vc-3pic': vcPickFile('image/*', vc3Picture); return true;
     case 'vc-mode': if (it && id === '3d') { vc3EnsureBall(); if (!it.d3) it.d3 = vc3d(it); }
       if (it) mutate(() => { it.mode = id === 'carve' ? undefined : id; if (it.mode === undefined) delete it.mode; if (id !== 'carve') b.merge = 1; }); return true;
     case 'vc-fill': if (it) { const sz = vcSize(b), one = { ...it, copies: undefined }, bx = vcBox(vcItemLoops(one).concat(vcItemGeo(one).open)), bitD = it.mode === 'cut' ? ((cncTool(b.cutTool || vcCutTool()) || {}).dia || 12.7) / 25.4 : 0, g = Math.max(it.copies ? +it.copies.gap || 0 : 0.5, bitD ? r3(bitD + 0.125) : 0), m = Math.max(0.5, r3(bitD + 0.25));
@@ -791,7 +805,7 @@ function vcAct(a, id) {
       mutate(() => { it.x = r3((+it.x || 0) - bx.x0 + m); it.y = r3((+it.y || 0) - bx.y0 + m); if (nx * ny > 1) it.copies = { nx, ny, gap: g }; else delete it.copies; }); flash(`${nx * ny} cop${nx * ny === 1 ? 'y' : 'ies'} fit`); } return true;
     case 'vc-sheet': if (b) { const s2 = vcSheetOf(b); mutate(() => { b.L = s2.L; b.W = s2.W; b.T = s2.T; }); } return true;
     case 'vc-merge': if (b) mutate(() => { b.merge = 1; }); return true;
-    case 'vc-tolib': if (it) { const e = it.kind === 'shape' && VC_GEN[it.shape] && it.shape !== 'border' ? { id: uid('vs'), name: vcItemName(it), group: 'My designs', gen: it.shape, p: clone(it.p || {}), w: +it.w || 4, h: +it.h || 4, frame: +it.frame || 0, double: it.double ? 1 : 0, mode: it.mode || 'carve' } : vcToLib(it); VC_LIB.items.push(e); vcLibSave(); flash(`Saved “${e.name}” to Libraries › V-carve shapes`); } return true;
+    case 'vc-tolib': if (it) { const e = it.kind === 'shape' && VC_GEN[it.shape] && it.shape !== 'border' ? { id: uid('vs'), name: vcItemName(it), group: 'My designs', gen: it.shape, p: clone(it.p || {}), w: +it.w || 4, h: +it.h || 4, frame: +it.frame || 0, double: it.double ? 1 : 0, mode: it.mode || 'carve' } : vcToLib(it); if (it.gray) { flash('3D pictures stay on the sign; save the picture itself instead.'); return true; } if (it.mode === '3d') e.d3 = clone(vc3d(it)); VC_LIB.items.push(e); vcLibSave(); flash(`Saved “${e.name}” to Libraries › V-carve shapes`); } return true;
     case 'vc-add': {
       if (!b) return true; const sz = vcSize(b);
       if (id === 'text') vcAddItem({ id: uid('vi'), kind: 'text', text: 'TEXT', font: 'Georgia', bold: true, h: r3(Math.max(0.25, Math.min(sz.W / 4, 3))), angle: 0 });

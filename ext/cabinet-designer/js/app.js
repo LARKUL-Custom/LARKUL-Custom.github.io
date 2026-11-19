@@ -583,7 +583,7 @@ function dockBody(k) {
   if (k === 'tops') return `${typeof topOpRow === 'function' ? topOpRow() : ''}${autoTopsCard(countertopRuns(), opts(S.countertops))}${genTopsCard(opts(S.countertops))}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="countertops">Countertop styles</button></div>`;
   if (k === 'lights') return lightsCard();
   if (k === 'tex') return texDock();
-  if (k === 'molding') return `<div class="card cardbody">${autoMoldBox(moldingRuns())}</div>${genMoldsCard()}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="moldings">Molding library and totals</button></div>`;
+  if (k === 'molding') return `<div class="card cardbody">${autoMoldBox(moldingRuns())}</div>${typeof moldLookCard === 'function' ? moldLookCard() : ''}${genMoldsCard()}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="moldings">Molding library and totals</button></div>`;
   if (k === 'room') return roomDockBody();
   if (k === 'item') { const x = multiIds().length < 2 && typeof xItem === 'function' && xItem(); return x ? itemBarX(x) : itemBar(multiIds().length < 2 ? c : null); }
   if (k === 'layout') {
@@ -1171,6 +1171,12 @@ document.addEventListener('click', e => {
       let made = []; mutate(() => { made = autofillWall(c); });
       flash(made.length ? `Added ${nCab(made.length)} like ${LBL[c.id] || 'this one'}` : 'No open space on this wall wide enough to fill');
       break;
+    }
+    case 'cab-shift-up': {
+      // Up to the ceiling line. Something above it in the way (an upper over a base): it stays where it was.
+      const ids = id ? [id] : multiIds(); let moved = 0, blocked = 0;
+      mutate(() => ids.forEach(cid => { const c = cab(cid); if (!c) return; const was = c.elev || 0, off = c.off; if (!shiftUp(c)) return; if (!settle(c) || Math.abs(c.off - off) > 0.001) { c.elev = was; c.off = off; blocked++; } else moved++; }));
+      flash(moved ? `Up to ${fmtLen(ceilGap())}" off the ceiling` + (blocked ? ` (${blocked} blocked by a cabinet above)` : '') : blocked ? 'A cabinet above is in the way' : 'It is already up at the ceiling line'); break;
     }
     case 'cab-push-L': case 'cab-push-R': {
       // Slide it until it touches its neighbour (or the wall) on that side, like Mozaik's clearance arrows.
