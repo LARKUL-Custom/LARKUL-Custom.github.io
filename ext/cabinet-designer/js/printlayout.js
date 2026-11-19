@@ -34,13 +34,13 @@ function plDefaultCover() {
   const e = (o) => ({ id: plId(), ...o }), O = '#d9731b', K = '#16202c', corner = (x, y, sx, sy) => [
     e({ type: 'rect', x: sx > 0 ? x : x - 0.9, y: sy > 0 ? y : y - 0.09, w: 0.9, h: 0.09, fill: O }),
     e({ type: 'rect', x: sx > 0 ? x : x - 0.09, y: sy > 0 ? y : y - 0.9, w: 0.09, h: 0.9, fill: O })];
-  return { id: 'pl-cover', v: 4, name: 'Cover with 3D', kind: 'cover', els: [
+  return { id: 'pl-cover', v: 5, name: 'Cover with 3D', kind: 'cover', els: [
     e({ type: 'rect', x: 0.3, y: 0.3, w: 10.4, h: 7.9, stroke: K, sw: 2.25 }),
     e({ type: 'rect', x: 0.42, y: 0.42, w: 10.16, h: 7.66, stroke: K, sw: 0.5 }),
     ...corner(0.3, 0.3, 1, 1), ...corner(10.7, 0.3, -1, 1), ...corner(0.3, 8.2, 1, -1), ...corner(10.7, 8.2, -1, -1),
-    e({ type: 'logo', x: 0.7, y: 0.65, w: 1.15, h: 1.15 }),
-    // The company name stands out under the logo (Ayden 2026-11-19: make LARKUL stand out more).
-    e({ type: 'text', x: 0.6, y: 1.8, w: 2.3, h: 0.36, text: '{COMPANY}', size: 17, bold: true, color: K }),
+    e({ type: 'logo', x: 0.98, y: 0.58, w: 1.1, h: 1.1 }),
+    // The company name stands out, centered right under the logo (Ayden 2026-11-19).
+    e({ type: 'text', x: 0.53, y: 1.7, w: 2.0, h: 0.34, text: '{COMPANY}', size: 17, bold: true, align: 'center', color: K }),
     e({ type: 'text', x: 2.4, y: 0.7, w: 6.2, h: 0.62, text: '{JOB}', size: 30, bold: true, align: 'center', color: K }),
     e({ type: 'text', x: 2.4, y: 1.34, w: 6.2, h: 0.32, text: '{CUSTOMER}', size: 13, align: 'center', color: '#4d5b70' }),
     e({ type: 'rect', x: 4.9, y: 1.76, w: 1.2, h: 0.05, fill: O }),
@@ -55,12 +55,13 @@ function plDefaultCover() {
 }
 function plDefaultBlock() {
   const e = (o) => ({ id: plId(), ...o }), lbl = (x, y, t) => e({ type: 'text', x, y, w: 2, h: 0.14, text: t, size: 5.5, color: '#666666', bold: true });
-  return { id: 'pl-block', v: 2, name: 'Title block', kind: 'block', h: 0.85, els: [
+  return { id: 'pl-block', v: 3, name: 'Title block', kind: 'block', h: 0.85, els: [
     e({ type: 'rect', x: 0, y: 0, w: PL_BLOCK_W, h: 0.85, stroke: '#111111', sw: 1 }),
-    e({ type: 'logo', x: 0.08, y: 0.08, w: 0.69, h: 0.69 }),
-    e({ type: 'line', x: 0.85, y: 0, w: 0, h: 0.85, stroke: '#111111', sw: 0.75 }),
-    e({ type: 'text', x: 0.95, y: 0.05, w: 2.62, h: 0.34, text: '{COMPANY}', size: 15, bold: true }),
-    e({ type: 'text', x: 0.95, y: 0.4, w: 2.62, h: 0.42, text: '{ADDRESS}\n{PHONE}', size: 7 }),
+    // Logo with the company name centered under it (Ayden 2026-11-19).
+    e({ type: 'logo', x: 0.6, y: 0.05, w: 0.5, h: 0.5 }),
+    e({ type: 'text', x: 0.05, y: 0.56, w: 1.6, h: 0.25, text: '{COMPANY}', size: 11, bold: true, align: 'center' }),
+    e({ type: 'line', x: 1.7, y: 0, w: 0, h: 0.85, stroke: '#111111', sw: 0.75 }),
+    e({ type: 'text', x: 1.8, y: 0.12, w: 1.78, h: 0.62, text: '{ADDRESS}\n{PHONE}', size: 7.5 }),
     e({ type: 'line', x: 3.65, y: 0, w: 0, h: 0.85, stroke: '#111111', sw: 0.75 }),
     lbl(3.75, 0.07, 'JOB'), e({ type: 'text', x: 3.75, y: 0.19, w: 2.2, h: 0.25, text: '{JOB}', size: 10, bold: true }),
     lbl(3.75, 0.47, 'CUSTOMER'), e({ type: 'text', x: 3.75, y: 0.59, w: 2.2, h: 0.22, text: '{CUSTOMER}', size: 8.5 }),
@@ -74,7 +75,7 @@ function plDefaultBlock() {
 }
 let PRINT_LAYOUTS = [plDefaultCover(), plDefaultBlock()];
 // A saved copy of the built-in cover or title block (not renamed) is swapped for the new one (covers you made or renamed are kept).
-shopLoad('printLayouts', v => { if (Array.isArray(v) && v.length) PRINT_LAYOUTS = v.map(l => l.id === 'pl-cover' && (l.v || 0) < 4 && l.name === 'Cover with 3D' ? plDefaultCover() : l.id === 'pl-block' && (l.v || 0) < 2 && l.name === 'Title block' ? plDefaultBlock() : l); });
+shopLoad('printLayouts', v => { if (Array.isArray(v) && v.length) PRINT_LAYOUTS = v.map(l => l.id === 'pl-cover' && (l.v || 0) < 5 && l.name === 'Cover with 3D' ? plDefaultCover() : l.id === 'pl-block' && (l.v || 0) < 3 && l.name === 'Title block' ? plDefaultBlock() : l); });
 function plSave() { shopSave('printLayouts', PRINT_LAYOUTS, 'print layouts'); }
 const plById = id => PRINT_LAYOUTS.find(l => l.id === id);
 // The preset's cover or title block ('none' for no title block), else the first of that kind.

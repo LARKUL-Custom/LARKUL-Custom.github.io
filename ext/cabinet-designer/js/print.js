@@ -308,7 +308,7 @@ function printSpecSheet(pr, rooms, head, all, first) {
 
 /* ----- Price sheet (Ayden 2026-11-19): the customer's prices in Print, one page per room or one for the whole job.
    Same numbers as Pricing › Quote (customer copy): markup spread over the rooms, job charges, tax and payments at the end. */
-function printPricePages(pr, rooms, head) {
+function printPricePages(pr, rooms, head, part) {
   const ps = typeof priceSheet === 'function' ? priceSheet() : null; if (!ps || typeof priceJob !== 'function') return [];
   let q; try { q = priceJob(ps); } catch (_) { return []; }
   const ids = new Set(rooms.map(r => r.id)), R = q.rooms.filter(x => ids.has(x.r.id)), whole = R.length === q.rooms.length;
@@ -328,10 +328,14 @@ function printPricePages(pr, rooms, head) {
       ${q.payments.length ? `<table class="t mp-t mp-ptot"><thead><tr><th>Payment schedule</th><th class="r">Amount</th></tr></thead><tbody>${q.payments.map(x => `<tr><td>${esc(x.name)} (${x.pct}%)</td><td class="r">${money(x.amount)}</td></tr>`).join('')}</tbody></table>` : ''}`
     : `<table class="t mp-t mp-ptot"><tbody><tr><td>${esc(R.map(x => x.r.name).join(', '))}</td><td class="r">${money(roomsSum)}</td></tr>${taxPart ? `<tr><td>Tax ${ps.tax}%</td><td class="r">${money(taxPart)}</td></tr>` : ''}<tr class="grand"><td>${pr.estimate ? 'Estimated total' : 'Total'} for these rooms</td><td class="r">${money(roomsSum + taxPart)}</td></tr></tbody></table>`;
   const page = (what, body) => `<section class="mp-page mp-flow mp-draw mp-pricep">${head(what.room, what.sheet)}${body}</section>`;
+  // Per room (Ayden 2026-11-19): one page per room at the end, plus a separate whole-job price page right after the
+  // Notes sheet (part 'summary'); part 'rooms' gives the room pages only.
   if (pr.priceBy === 'room') {
-    const out = R.map((x, i) => page({ room: x.r.name, sheet: 'Price' }, roomTbl(x) + (R.length === 1 ? totals + est : '')));
-    if (R.length > 1) out.push(page({ room: whole ? 'All rooms' : R.map(x => x.r.name).join(', '), sheet: 'Price summary' }, `<h3 class="mp-nh">Price summary</h3><table class="t mp-t mp-price"><tbody>${R.map(x => `<tr><td>${esc(x.r.name)}</td><td class="r">${mm(x.total)}</td></tr>`).join('')}</tbody></table>${totals}${est}`));
-    return out;
+    const sumPage = page({ room: whole ? 'All rooms' : R.map(x => x.r.name).join(', '), sheet: 'Price summary' }, `<h3 class="mp-nh">Price summary</h3><table class="t mp-t mp-price"><tbody>${R.map(x => `<tr><td>${esc(x.r.name)}</td><td class="r">${mm(x.total)}</td></tr>`).join('')}</tbody></table>${totals}${est}`);
+    if (part === 'summary') return [sumPage];
+    const out = R.map(x => page({ room: x.r.name, sheet: 'Price' }, roomTbl(x)));
+    return part === 'rooms' ? out : [sumPage, ...out];
   }
+  if (part === 'summary') return [];
   return [page({ room: whole ? 'All rooms' : R.map(x => x.r.name).join(', '), sheet: 'Price' }, R.map(roomTbl).join('') + totals + est)];
 }
