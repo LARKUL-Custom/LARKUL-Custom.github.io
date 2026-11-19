@@ -208,11 +208,15 @@ function cabinetMeshes(c, opts = {}) {
   if (hasCabShape(c)) cabShape3d(c, p, t, bt, tk, feet ? tk : 0, cmM, L3(bm, 'inside'), o => grp.add(o));
   if ((cabTopShape(c) || {}).edges && typeof edgeParts3d === 'function') { const dp = buildParts(c).parts.find(q => q.cabId === c.id && / door$/.test(q.name)); edgeParts3d(c, o => grp.add(o), t, feet ? tk : 0, { box: cmM, back: L3(bm, 'inside'), door: dp ? L3(mat(dp.mat), 'doors') : cmM }); }
   else {
-    [t / 2, W - t / 2].forEach(x => {
-      if (tk && !feet) grp.add(box3(t, tk, D - sb, cmM, x, tk / 2, (D - sb) / 2));
-      grp.add(box3(t, H - tk, D, cmM, x, tk + (H - tk) / 2, D / 2));
+    // 0.58.39: a finished end (and a finished-exterior wall cabinet's bottom) shows in the finish, as the cut list cuts it
+    // (same thickness only, like buildParts). It showed the cabinet material before, so an exposed side looked unfinished.
+    const fmE = mat(finishMat(c)), finOk = !!fmE && fmE.id !== cm.id && Math.abs(fmE.thick - t) <= 0.07, finM = finOk ? L3(fmE, 'finished') : cmM;
+    [[t / 2, 'L'], [W - t / 2, 'R']].forEach(([x, e]) => {
+      const sm3 = finOk && !c.finished && endFinished(c, e) ? finM : cmM;
+      if (tk && !feet) grp.add(box3(t, tk, D - sb, sm3, x, tk / 2, (D - sb) / 2));
+      grp.add(box3(t, H - tk, D, sm3, x, tk + (H - tk) / 2, D / 2));
     });
-    grp.add(box3(W - 2 * t, t, D, cmM, W / 2, tk + t / 2, D / 2));
+    grp.add(box3(W - 2 * t, t, D, finOk && c.cat === 'Wall' && typeof finExterior === 'function' && finExterior(c) ? finM : cmM, W / 2, tk + t / 2, D / 2));
     if ((c.construction || {}).top === 'stretchers') {
       const apH = sinkApronH(c, p), rsAt = rearStretcherAt(p, D, D - p.backInset - bt, bt);
       if (apH) grp.add(box3(W - 2 * t, apH, t, cmM, W / 2, H - apH / 2, D - t / 2));

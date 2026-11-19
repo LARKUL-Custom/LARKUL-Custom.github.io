@@ -227,12 +227,17 @@ function panelPieces(c, end) {
   // A finished exterior (laminate outside) is its own finished end; it gets no applied panel unless one is asked for.
   if (typeof finExterior === 'function' && finExterior(c)) return null;
   const ly = lay(); if (!ly.autoPanels) return null;
+  return exposedPieces(c, end);
+}
+// What of this end shows, whatever covers it (panel, finished end): null when nothing does, else panel pieces.
+function exposedPieces(c, end) {
+  const full = () => { const z0 = panelZ0(c); return [{ z0, z1: c.h, steps: [{ z0, z1: c.h, d0: 0 }] }]; };
   return inRoomOf(c, () => {
     if (!wall(c.wall)) return null;
     const dir = (end === 'L') === (c.side === 1) ? -1 : 1, n = nearestAt(c, dir);
     if (!n) return full();
     if (n.kind === 'wall' && fillersOf(c).some(f => f.end === end)) return null;
-    if (n.gap > Math.max(ly.panelReach, panelThick(c) + 0.01)) return applianceGap(c, dir, n) ? null : full();
+    if (n.gap > Math.max(lay().panelReach, panelThick(c) + 0.01)) return applianceGap(c, dir, n) ? null : full();
     return endExposed(c, end, dir);
   });
 }
@@ -308,12 +313,9 @@ function endFinished(c, end) {
   const o = end === 'L' ? c.endL : c.endR;
   if (o === 'fin') return true; if (o === 'unfin') return false;
   if (!c.wall || hasPanel(c, end)) return false;
-  return inRoomOf(c, () => {
-    if (!wall(c.wall)) return false;
-    const dir = (end === 'L') === (c.side === 1) ? -1 : 1, n = nearestAt(c, dir);
-    if (n && n.kind === 'wall' && fillersOf(c).some(f => f.end === end)) return false;
-    return !n || (n.gap > Math.max(lay().panelReach || 0, 0.5) && !applianceGap(c, dir, n));
-  });
+  // 0.58.39: any part of the end that shows makes it a finished end (a deeper upper's strip past its neighbour, the side
+  // above and below a floating shelf), the same test the automatic panels use. Before, only an end with nothing near it.
+  return !!exposedPieces(c, end);
 }
 // Moves cabinets that end at a wall so the gap matches the filler setting. from and to are layout settings.
 function refitFillers(from, to) {
