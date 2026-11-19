@@ -239,6 +239,14 @@ function matListHTML(use, sheetsOf) {
     <button class="mlx-foldall" data-act="mat-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${anyOpen ? 'Close all groups' : 'Open all groups'}</button>
     ${body || '<div class="note show">No materials match.</div>'}</div>`;
 }
+// 0.58.7: doors in this material are bought from Bywater (5 Piece Melamine). How Bywater prices them, and their order values.
+function boughtDoorFields(m, R) {
+  const on = !!m.doorBuy, f = (label, key, ph) => fld(label, R, key, m[key] || '', 'text', { wide: true, ph });
+  return `${cardHead('Bought doors', '')}<div class="cardbody"><div class="mlx-checks">${fld('Doors bought from Bywater', R, 'doorBuy', on, 'bool')}</div>
+    ${on ? `<div class="mlx-checks">${fld('Special order color (adds the sheet cost)', R, 'doorSpecial', !!m.doorSpecial, 'bool')}</div>${fld('Price per piece', R, 'doorEach', m.doorEach, 'num')}${fld('Per sq ft', R, 'doorSq', m.doorSq, 'num')}${fld('Per foot of edge', R, 'doorFt', m.doorFt, 'num')}${fld('Each extra panel', R, 'doorPanel', m.doorPanel, 'num')}
+    ${f('Bywater product', 'bwProduct', BW_MEL.bwProduct)}${fld('Bywater color', R, 'bwColor', m.bwColor || '', 'text', { wide: true, ph: 'Color name, goes in the Wood column', list: 'bw-mcolor' }) + `<datalist id="bw-mcolor">${BYWATER.wood.filter(v => /\d|White|Vicenza|Velvet/.test(v)).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`}
+    <div class="note">Fronts in this material are ordered from Bywater, not cut, and get no paint or edgebanding charge. The door style still gives the shape. Bywater 5 Piece Melamine (Nov 2026): special order $20.17 a piece + $8.72/sq ft + $1.78/ft of edge, plus the full sheets (Cost per sheet above, set it to Bywater's sheet price); stocked colors $19.97 + $11.27/sq ft + $3.83/ft. $23.93 per extra panel.</div>` : ''}</div>`;
+}
 function matDetailHTML(m, u, sheets, kinds) {
   const R = 'mat:' + m.id, tx = texURL(m), sheet = (m.kind || 'sheet') === 'sheet';
   const t = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${v}</b><span>${lb}</span></div>`;
@@ -252,6 +260,7 @@ function matDetailHTML(m, u, sheets, kinds) {
       ${cardHead('Size', '')}<div class="cardbody">${fld('Thickness', R, 'thick', m.thick, 'len')}${sheet || m.kind === 'top' ? fld('Sheet width', R, 'sheetW', m.sheetW, 'len') + fld('Sheet length', R, 'sheetL', m.sheetL, 'len') : ''}<div class="mlx-checks">${fld('Has grain', R, 'grain', m.grain, 'bool')}${fld('Takes the room finish', R, 'dynamic', !!m.dynamic, 'bool')}</div></div>
       ${cardHead('Look', '')}<div class="cardbody">${fld('Color', R, 'color', m.color, 'color')}${fld('Texture size', R, 'texScale', m.texScale || 24, 'len')}<div class="mlx-tex"><button class="btn sm" data-act="tex-lib" data-id="${m.id}">${icon('palette')}Texture library</button>${m.texture ? `<button class="btn sm" data-act="tex-clear" data-id="${m.id}">Clear texture</button>` : ''}</div></div>
       ${cardHead('Price and CNC', '')}<div class="cardbody">${fld(m.kind === 'top' ? 'Cost per top' : 'Cost per sheet', R, 'cost', m.cost, 'num')}${m.kind === 'top' ? '' : fld('Finishing', R, 'fin', matFin(m), 'select', { options: [{ v: 'paint', l: 'Painted or stained' }, { v: 'pre', l: 'Prefinished, edgebanding only' }], wide: true })}${sheet ? fld('CNC feed %', R, 'feedRate', m.feedRate || 100, 'num') : ''}</div>
+      ${sheet ? boughtDoorFields(m, R) : ''}
     </div><datalist id="matgroups">${[...new Set(S.materials.map(x => x.group).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('')}</datalist></div>`;
 }
 function renderMaterials() {
@@ -1350,7 +1359,7 @@ function buyoutOrderCSV(units) {
 // width before height in fractions, dropdown values copied letter for letter. Rows: doors, then 5-piece drawer fronts, then slabs.
 // One row per room, size and style; Cab # is "R2:202(2),204" (room, then each cabinet with its count when more than one).
 function bywaterStyle(ds, framed) {
-  const slab = !framed, pick = (k, d) => String(ds['bw' + k] || '').trim() || d;
+  const slab = !framed || !!ds.bought, pick = (k, d) => String(ds['bw' + k] || '').trim() || d;
   return { product: pick('Product', slab ? 'Hardwood Slab' : BYWATER.product[0]), folder: pick('Folder', BYWATER.folder[0]), wood: pick('Wood', BYWATER.wood[0]),
     face: pick('Face', slab ? 'Horizontal Grain' : BYWATER.face[0]),
     // Hardwood Slab has no panel or stile and rail fields, so those columns stay empty.

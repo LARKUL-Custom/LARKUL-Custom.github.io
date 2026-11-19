@@ -22,7 +22,8 @@ function paintCab(c, ps, b, fr) {
   const po = paintOf(ps), sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0 }, eb = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0 }, area = pt => pt.L * pt.W * pt.qty / 144;
   // Each surface goes to paint, or to edgebanding when its material is prefinished.
   const add = (k, v, matId) => { (prefin(matId) ? eb : sq)[k] += v; };
-  fr.forEach(f => { if (f.type !== 'open') add('fronts', (f.x1 - f.x0) * (f.z1 - f.z0) / 144 * (po.bothSides ? 2 : 1), frontStyle(c, f).ds.mat); });
+  // Bought fronts (Bywater melamine) come finished and edged: no paint, no edgebanding.
+  fr.forEach(f => { if (f.type === 'open') return; const { ds } = frontStyle(c, f); if (!ds.bought) add('fronts', (f.x1 - f.x0) * (f.z1 - f.z0) / 144 * (po.bothSides ? 2 : 1), ds.mat); });
   b.parts.forEach(pt => {
     if (pt.cabId !== c.id) return;
     if (pt.kind === 'applied') add('panels', area(pt), pt.mat);
@@ -162,7 +163,7 @@ function priceCab(c, ps) {
   if (ps.doors.on) fr.forEach(f => {
     if (f.type === 'open') return;
     const { ds } = frontStyle(c, f);
-    doors += priceFront(ds, (f.x1 - f.x0) * (f.z1 - f.z0) / 144, ps).total;
+    doors += priceFront(ds, (f.x1 - f.x0) * (f.z1 - f.z0) / 144, ps, f.x1 - f.x0, f.z1 - f.z0).total;
   });
   doors *= gMark(ps, 'doors');
   const ad = ps.adders, ins = c.inserts || [], p = effParams(c);
@@ -171,7 +172,7 @@ function priceCab(c, ps) {
   const extras = nDr * (+ad.perDrawer || 0) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied');
-  const ends = panelParts.reduce((a, pt) => a + pt.qty * ((ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps).total * gMark(ps, 'doors') : 0) + panelAdd(ps, c.cat)), 0) + fillersOf(c).length * (+ad.perFiller || 0);
+  const ends = panelParts.reduce((a, pt) => a + pt.qty * ((ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0) + panelAdd(ps, c.cat)), 0) + fillersOf(c).length * (+ad.perFiller || 0);
   let hardware = 0;
   if (ps.hardware.on) Object.entries(b.bom).forEach(([k, q]) => { hardware += q * (+ps.hardware.items[k] || 0); });
   hardware *= gMark(ps, 'hardware');
@@ -192,7 +193,18 @@ const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
 // One door or front: its size times the style's price per sq ft (from the door library, or this job's own) plus material.
 // 0.55.34 (Ayden 2026-11-11): the style's Minimum per front ($20 by default) is a floor under that whole price, so a tiny
 // front that would cost next to nothing costs the minimum. Before, the minimum replaced the labor and material went on top.
-function priceFront(ds, sq, ps) {
+function priceFront(ds, sq, ps, w, h) {
+  // A front bought in its material (Bywater 5 Piece Melamine): a price per piece, per sq ft and per foot around the edge,
+  // plus each panel past the first. Without the size, the front is taken as square.
+  const bm = ds.bought && boughtMat(ds.bought);
+  if (bm) {
+    if (!(w > 0 && h > 0)) w = h = Math.sqrt(sq * 144);
+    const fr = typeof doorMids === 'function' && ds.type !== 'slab' ? doorMids(ds, w, h) : { nR: 0, nS: 0 }, extra = (fr.nR + 1) * (fr.nS + 1) - 1;
+    const labor = (+bm.doorEach || 0) + sq * (+bm.doorSq || 0) + 2 * (w + h) / 12 * (+bm.doorFt || 0) + Math.max(0, extra) * (+bm.doorPanel || 0);
+    // Special order colors: Bywater adds the full sheets of that color, so the sheet's cost per sq ft (with waste) goes on top.
+    const material = bm.doorSpecial ? sq * matSqIn(bm, ps) * 144 : 0;
+    return { labor, material, total: labor + material };
+  }
   const material = sq * doorMatRate(ds, ps), total = Math.max(doorMin(ds), sq * doorRate(ds) + material);
   return { labor: total - material, material, total };
 }

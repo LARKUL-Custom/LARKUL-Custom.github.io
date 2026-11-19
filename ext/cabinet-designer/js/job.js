@@ -150,16 +150,44 @@ const TPL_WALL = { wallThick: 'New wall thickness', wallHeight: 'Ceiling height'
 const TPL_DT = { door: ['Base door'], wallDoor: ['Wall door', 'Same as base door'], drawerTop: ['Top drawer front', 'Same as mid drawer fronts'], drawer: ['Mid drawer fronts'], drawerBot: ['Bottom drawer front', 'Same as mid drawer fronts'], falseFront: ['False front'] };
 const dtKeys = ks => ks.filter(k => !k.startsWith('dt.'));
 function stylePic(id, drawer) {
-  const ds = doorStyle(id), c = (mat(ds.mat) || {}).color || '#d8d2c4', frame = ds.type !== 'slab';
-  const [x, y, w, h] = drawer ? [18, 26, 84, 38] : [34, 6, 52, 78], i = drawer ? 8 : 10;
-  return `<svg viewBox="0 0 120 90" aria-hidden="true"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1.5" fill="${c}" stroke="#555"/>${frame ? `<rect x="${x + i}" y="${y + i}" width="${w - 2 * i}" height="${h - 2 * i}" fill="none" stroke="#555" stroke-opacity=".55"/>` : ''}</svg>`;
+  const ds = doorStyle(id), c = (mat(ds.mat) || {}).color || '#d8d2c4';
+  return `<svg viewBox="0 0 120 90" aria-hidden="true">${drawer ? frontPic(ds, c, 14, 26, 92, 38, 24, 9.5) : frontPic(ds, c, 33, 5, 54, 80, 15, 22)}</svg>`;
+}
+// One front drawn with its depth: the field of a shaker sits low (shadow under the top rail and left stile, a light
+// edge along the bottom and right), a raised panel shows its four slopes light and dark, glass is pale blue. Light comes
+// from the upper left, like the 3D preview. Laid out from the style's own stiles, rails and mid rails at about wd x ht inches.
+function frontPic(ds, c, x, y, w, h, wd, ht) {
+  const framed = ds.type !== 'slab', lay = doorLayout(ds, wd, ht, framed), kx = w / wd, ky = h / ht;
+  const X = v => +(x + v * kx).toFixed(2), Y = v => +(y + h - v * ky).toFixed(2), poly = (pts, f) => `<path d="M${pts.map(p => p.join(' ')).join(' L')} Z" fill="${f}"/>`;
+  let o = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="${c}"/>`;
+  lay.fields.forEach(fl => {
+    const a = X(fl.x0), b = X(fl.x1), t = Y(fl.z1), u = Y(fl.z0), e = framed ? 1.6 : 0;
+    if (framed) {
+      if (fl.pt === 'glass') o += `<rect x="${a}" y="${t}" width="${b - a}" height="${u - t}" fill="#cfe1ea"/><path d="M${a + 3} ${u - 4} L${a + 10} ${t + 4}" stroke="#fff" stroke-opacity=".7" stroke-width="1.5"/>`;
+      else if (fl.pt === 'open') o += `<rect x="${a}" y="${t}" width="${b - a}" height="${u - t}" fill="#2b2b2b" fill-opacity=".55"/>`;
+      // Sunk field: the frame shades its top and left inside edge, the bottom and right edges catch the light.
+      o += poly([[a, t], [b, t], [b - e, t + e], [a + e, t + e], [a + e, u - e], [a, u]], 'rgba(0,0,0,.30)') + poly([[b, t], [b, u], [a, u], [a + e, u - e], [b - e, u - e], [b - e, t + e]], 'rgba(255,255,255,.75)');
+      if (fl.pt === 'raised') {
+        const r = Math.min((ds.raiseW || 1.75), (fl.x1 - fl.x0) / 2 - 0.5, (fl.z1 - fl.z0) / 2 - 0.5);
+        if (r > 0.2) { const A = a + e, B = b - e, T = t + e, U = u - e, ra = A + r * kx, rb = B - r * kx, rt = T + r * ky, ru = U - r * ky;
+          o += poly([[A, T], [B, T], [rb, rt], [ra, rt]], 'rgba(255,255,255,.55)') + poly([[A, T], [ra, rt], [ra, ru], [A, U]], 'rgba(255,255,255,.3)')
+            + poly([[A, U], [ra, ru], [rb, ru], [B, U]], 'rgba(0,0,0,.24)') + poly([[B, T], [B, U], [rb, ru], [rb, rt]], 'rgba(0,0,0,.14)')
+            + `<rect x="${ra}" y="${rt}" width="${+(rb - ra).toFixed(2)}" height="${+(ru - rt).toFixed(2)}" fill="none" stroke="#555" stroke-opacity=".35" stroke-width=".6"/>`; }
+      }
+    }
+    if (ds.design && ds.design !== 'none' && fl.pt !== 'glass' && fl.pt !== 'open' && typeof designLines === 'function')
+      designLines(ds, fl).forEach(l => { o += `<path d="M${X(l.x1)} ${Y(l.z1)} L${X(l.x2)} ${Y(l.z2)}" stroke="rgba(0,0,0,.35)" stroke-width=".9"/><path d="M${X(l.x1) + 0.9} ${Y(l.z1)} L${X(l.x2) + 0.9} ${Y(l.z2)}" stroke="rgba(255,255,255,.7)" stroke-width=".6"/>`; });
+  });
+  // The door's own edge: light along the top and left, a little shade along the bottom and right.
+  o += `<path d="M${x + 0.6} ${y + h - 0.6} V${y + 0.6} H${x + w - 0.6}" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="1.2"/><path d="M${x + w - 0.6} ${y + 0.6} V${y + h - 0.6} H${x + 0.6}" fill="none" stroke="#000" stroke-opacity=".18" stroke-width="1.2"/>`;
+  return o + `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="none" stroke="#555"/>`;
 }
 // A small drawing for each tile, in the colors of what is picked.
 function tplPic(k, id) {
   const col = m => (m && m.color) || '#d8d2c4', svg = b => `<svg viewBox="0 0 120 90" aria-hidden="true">${b}</svg>`;
   if (k === 'doorT') {
-    const t = doorTpl(id), ds = doorStyle(t.door), c = col(mat(ds.mat)), frame = ds.type !== 'slab', p = hw(t.pull);
-    return svg(`<rect x="34" y="6" width="52" height="78" rx="1.5" fill="${c}" stroke="#555" stroke-width="1"/>${frame ? `<rect x="44" y="16" width="32" height="58" fill="none" stroke="#555" stroke-opacity=".55" stroke-width="1"/>` : ''}<rect x="78" y="34" width="3" height="22" rx="1.5" fill="${(p && p.finish) || '#333'}"/>`);
+    const t = doorTpl(id), ds = doorStyle(t.door), c = col(mat(ds.mat)), p = hw(t.pull);
+    return svg(`${frontPic(ds, c, 33, 5, 54, 80, 15, 22)}<rect x="78" y="34" width="3" height="22" rx="1.5" fill="${(p && p.finish) || '#333'}"/>`);
   }
   if (k === 'cabMatT' || k === 'drawerMatT') {
     const t = k === 'cabMatT' ? cabMatT(id) : drawerMatT(id), c = col(mat(k === 'cabMatT' ? t.carcass : t.sides));
@@ -167,7 +195,7 @@ function tplPic(k, id) {
       ? svg(`<path d="M30 24 L60 12 L94 22 L94 74 L64 86 L30 76 Z" fill="${c}" stroke="#555"/><path d="M30 24 L64 34 L94 22 M64 34 L64 86" fill="none" stroke="#555"/><path d="M36 30 L60 37 L60 78 L36 71 Z" fill="#000" fill-opacity=".12"/>`)
       : svg(`<path d="M22 40 L58 28 L100 38 L100 62 L64 74 L22 64 Z" fill="${c}" stroke="#555"/><path d="M22 40 L64 50 L100 38 M64 50 L64 74" fill="none" stroke="#555"/><path d="M28 44 L60 52 L96 42" fill="none" stroke="#555" stroke-opacity=".4"/>`);
   }
-  if (k === 'panelDoor') { const ds = id ? doorStyle(id) : doorStyle(doorTpl(S.job.defaults.doorT).door), c = col(mat(ds.mat)); return svg(`<rect x="44" y="4" width="32" height="82" fill="${c}" stroke="#555"/>${ds.type !== 'slab' ? '<rect x="50" y="12" width="20" height="66" fill="none" stroke="#555" stroke-opacity=".55"/>' : ''}`); }
+  if (k === 'panelDoor') { const ds = id ? doorStyle(id) : doorStyle(doorTpl(S.job.defaults.doorT).door), c = col(mat(ds.mat)); return svg(frontPic(ds, c, 44, 4, 32, 82, 12, 30)); }
   if (k === 'finish') { const f = finishList().find(x => x.id === id) || finishList()[0], m = f && mat(f.front); return svg(`<rect x="20" y="10" width="38" height="72" rx="1.5" fill="${col(m)}" stroke="#555"/><rect x="62" y="10" width="38" height="72" rx="1.5" fill="${col(m)}" stroke="#555"/><rect x="28" y="20" width="22" height="52" fill="none" stroke="#555" stroke-opacity=".45"/><rect x="70" y="20" width="22" height="52" fill="none" stroke="#555" stroke-opacity=".45"/>`); }
   if (k === 'panelStyle') return svg('<rect x="44" y="4" width="32" height="82" fill="#e8e1d2" stroke="#555"/><path d="M76 10 h14 M76 80 h14" stroke="var(--accent)" stroke-width="2"/>');
   if (k === 'faceFrame') { const t = (S.faceFrames || []).find(f => f.id === id); return t ? ffPic(t) : svg('<rect x="38" y="8" width="44" height="74" fill="#e8e1d2" stroke="#555"/><rect x="40" y="10" width="40" height="70" fill="none" stroke="#555" stroke-opacity=".4"/>'); }
@@ -192,6 +220,18 @@ function tplSample(prevId) {
   if (l) Object.assign(c, newCab(S, l, null, 1, 0), { id: '_sample' });
   return c;
 }
+// Light for the settings preview: a low light from the upper left rakes across the fronts, so the frame of a
+// shaker throws a thin shadow into its panel and a raised panel's slopes turn light and dark. Look only.
+function tplLight(v, c) {
+  const r = v.renderer, sun = v.sun, sh = sun.shadow, R = Math.max(c.w, c.h, c.d) * 0.75 + 4;
+  if (!r.shadowMap.enabled) { r.shadowMap.enabled = true; [plain3, metal3, matCache3].forEach(m => Object.values(m).forEach(x => { if (x && x.isMaterial) x.needsUpdate = true; })); }
+  sun.castShadow = true; sun.intensity = 1.15; v.hemi.intensity = 0.5; v.hemi.groundColor.set(0x6f6a60); v.fill.intensity = 0.12;
+  sh.bias = -0.0004; sh.normalBias = 0.02; sh.radius = 1.5;
+  const ctr = new THREE.Vector3(0, c.h / 2, c.d / 2);
+  sun.target.position.copy(ctr); sun.position.copy(ctr).add(new THREE.Vector3(-0.72, 0.58, 0.38).normalize().multiplyScalar(R * 2));
+  const cam = sh.camera; cam.left = -R; cam.right = R; cam.top = R; cam.bottom = -R; cam.near = 1; cam.far = R * 4; cam.updateProjectionMatrix();
+  v.root.traverse(o => { if (o.isMesh && !o.material.transparent) { o.castShadow = !o.userData.noBounds; o.receiveShadow = true; } });
+}
 function mountTpl3D(keep) {
   const slot = $('#tpl3d-slot'); if (!slot) return;
   if (keep) slot.replaceWith(keep); else slot.id = 'tpl3d';
@@ -203,6 +243,7 @@ function mountTpl3D(keep) {
   v.setBackground(cssVar('--paper')); v.clear();
   withRoom(r0, () => { const c = tplSample(prevId), m = cabinetMeshes(c); m.position.x = -c.w / 2; v.root.add(m);
     const fl = new THREE.Mesh(new THREE.PlaneGeometry(c.w + 40, c.d + 40), flat3(cssVar('--floor3d'))); fl.rotation.x = -Math.PI / 2; fl.position.set(0, -0.02, c.d / 2); fl.userData.noBounds = true; v.root.add(fl);
+    tplLight(v, c);
     v.resize();
     // Frame it again when the cabinet or the size of the preview changes (the preview column is tall and narrow).
     const sz = host.clientWidth + 'x' + host.clientHeight;

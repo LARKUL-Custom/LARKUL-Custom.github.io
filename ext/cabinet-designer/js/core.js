@@ -197,9 +197,11 @@ const DOOR_EXPORTS = [{ v: 'bywater', l: 'Bywater' }, { v: 'form', l: 'Order for
 const doorExportOf = s => DOOR_EXPORTS.some(x => x.v === s.doorExport) ? s.doorExport : 'bywater';
 // Bywater's dropdown values, letter for letter (their import fails on anything else). First of each list is the shop standard.
 const BYWATER = {
-  product: ['Engineered Panel', 'Hardwood Slab'],
+  product: ['Engineered Panel', 'Hardwood Slab', '5 Piece Melamine'],
   folder: ['Left'],
-  wood: ['Oak White', 'Oak White (Rift)', 'Oak White (Qtr Sawn)', 'Oak White (Rustic)', 'Oak Red', 'Maple', 'Maple Soft (Paint Grade)', 'Alder', 'Black Walnut', 'Cherry', 'Hickory Calico', 'Poplar', 'Sapele'],
+  wood: ['Oak White', 'Oak White (Rift)', 'Oak White (Qtr Sawn)', 'Oak White (Rustic)', 'Oak Red', 'Maple', 'Maple Soft (Paint Grade)', 'Alder', 'Black Walnut', 'Cherry', 'Hickory Calico', 'Poplar', 'Sapele',
+    // Bywater's melamine colors (5 Piece Melamine), letter for letter from their order page 2026-11-18.
+    'Pearl White 043', 'Polar White', 'White', 'Drift Loud G92', 'Gregio Notte G86', 'Gregio Pine W29', 'Morning Fog 596', 'Natural Elm 574', 'Natural Rustik G88', 'Takase Teak 529', 'Midnight Run L39', 'Natural Halifax Oak H1180 ST37', 'Vicenza Oak', 'Fog Grey KMD722', 'Natural Maple KMD748', 'Willow Velvet', 'Non Stocked Color (Additional charges will be added)'],
   face: ['Vertical Grain', 'Horizontal Grain', 'V-Groove 2" Apart', '1/8" Square Groove 2" Apart'],
   profile: ['P4- 1/4" Flat Panel', 'P3- 3/8" Flat Panel', 'P2- 4 Step', 'P5- Scoop', 'P27- Ogee'],
   panel: ['1/4" Oak White Veneer', '1/4" MDF No Veneer', '3/8" MDF No Veneer', '3/4" HDM No Veneer', '1/4" Oak White (Rift) Veneer', '1/4" Maple Veneer'],
@@ -630,7 +632,7 @@ function migrate(s) {
   // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.
   if (!s.miniGone) { const used = s.rooms.some(r => (r.cabinets || []).some(c => c.libId === 'mini-ad')), L = !s.libSet || s.libSet === 'main' ? s.library : (s.libSets || {}).main;
     if (!used && Array.isArray(L)) { const i = L.findIndex(l => l.id === 'mini-ad'); if (i >= 0) L.splice(i, 1); } s.miniGone = 1; }
-  const out = attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))))));
+  const out = attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensureBoughtDoors(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s))))))))));
   // 0.57.3: bid shelves and products were placed from the wall's centerline end, half the corner wall's thickness inside it.
   if (!out.bidFace && typeof bidFaceFix === 'function') { const keep = S; S = out; try { bidFaceFix(out); } catch (_) {} finally { S = keep; } out.bidFace = 1; }
   return out;
@@ -857,7 +859,37 @@ const finishRole = (c, role) => { const f = finishOf(c); return f ? f[role] || f
 function withFinish(ds, c) {
   const f = S && Array.isArray(S.finishes) ? finishOf(c) : null; if (!f) return ds;
   const front = f.front || f.sheet, panel = ds.panelType === 'raised' ? front : f.panel || front;
-  return { ...ds, mat: front, panelMat: panel };
+  return boughtFronts({ ...ds, mat: front, panelMat: panel });
+}
+/* ---------- Bought fronts (0.58.7, Ayden 2026-11-18): a material whose doors come from the door maker ----------
+   Bywater 5 Piece Melamine: the shape comes from the door style as always, but a front in this material is ordered (Buyout:
+   no cut parts, on the Bywater CSV) and priced the way Bywater prices it, not by the style's labor rate. They come finished,
+   so they get no paint or edgebanding charge either. */
+const boughtMat = id => { const m = mat(id); return m && m.doorBuy ? m : null; };
+function boughtFronts(ds) {
+  const m = boughtMat(ds.mat); if (!m) return ds;
+  const bw = (k, v) => String(m[k] || '').trim() || v;
+  return { ...ds, source: 'buyout', bought: m.id, bwProduct: bw('bwProduct', BW_MEL.bwProduct), bwWood: bw('bwColor', ''), bwFace: bw('bwFace', 'Vertical Grain'), bwEdge: bw('bwEdge', ds.bwEdge) };
+}
+// Bywater's 5 Piece Melamine price, read from their order page (1/4" vertical grain melamine panel, 3" stiles and rails, 1 panel),
+// exact to the cent on 6-7 sizes from 12x6 to 36x36:
+//   Special order (Non Stocked Color), Ayden's pick 2026-11-19: $20.17 a piece + $8.718 per sq ft + $1.775 per foot of edge,
+//     plus Bywater bills the full sheets and banding of that color on top. That is the material's Cost per sheet, spread
+//     over each front's square feet with the sheet waste.
+//   Stocked colors (Pearl White 043 and the rest), 2026-11-18: $19.969 + $11.267/sq ft + $3.827/ft, nothing on top.
+// Each extra panel (2 wide or 2 high) about $23.93. Glass panels cost more.
+const BW_MEL_STOCK = { doorEach: 19.969, doorSq: 11.267, doorFt: 3.827 };
+const BW_MEL = { id: 'm-bw-mel', name: '3/4 Bywater Melamine (bought doors)', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 60, color: '#f4f4f2', texture: null, procedural: null, texScale: 24, fin: 'pre',
+  doorBuy: true, doorSpecial: true, doorEach: 20.17, doorSq: 8.718, doorFt: 1.775, doorPanel: 23.93, bwProduct: '5 Piece Melamine', bwColor: 'Non Stocked Color (Additional charges will be added)' };
+function ensureBoughtDoors(s) {
+  if (!s || !Array.isArray(s.materials) || !Array.isArray(s.finishes) || s.bwMelSeed >= 3) return s;
+  s.bwMelSeed = 3;
+  // A job that got an earlier draft of this material (slab, or stocked-color prices) takes the special order prices.
+  const had = s.materials.find(m => m.id === BW_MEL.id);
+  if (!had) s.materials.push({ ...BW_MEL });
+  else if (had.doorSpecial == null) Object.assign(had, { doorBuy: true, doorSpecial: true, doorEach: BW_MEL.doorEach, doorSq: BW_MEL.doorSq, doorFt: BW_MEL.doorFt, doorPanel: BW_MEL.doorPanel, bwProduct: BW_MEL.bwProduct, bwColor: BW_MEL.bwColor });
+  if (!s.finishes.some(f => f.id === 'fin-bw-mel')) s.finishes.push({ id: 'fin-bw-mel', name: 'Bywater Melamine', front: BW_MEL.id, panel: BW_MEL.id, sheet: BW_MEL.id, solid: BW_MEL.id });
+  return s;
 }
 // Runs fn with another room open, so S.walls and S.cabinets point at it.
 function withRoom(r, fn) { const prev = S.roomId; S.roomId = r.id; try { return fn(); } finally { S.roomId = prev; } }
