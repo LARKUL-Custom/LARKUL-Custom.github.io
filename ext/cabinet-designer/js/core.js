@@ -284,7 +284,7 @@ const LEG_DEF = { inToe: 3.9685, inFin: 2.1969, inUnfin: 1.4094, inBack: 3.9685,
 // full overlay, drilling two 8 mm dowels beside the cup; hinges 4" from the door ends, at most 36" apart.
 const CLIPTOP_MOZAIK = { kind: 'hinge', name: 'Blum CLIP top BLUMOTION 110° full overlay', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 3,
   cupExtra: [{ dx: -22.5, dy: 9.5, dia: 8, depth: 13 }, { dx: 22.5, dy: 9.5, dia: 8, depth: 13 }],
-  plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12.7 }, { dz: 16, y: 37, dia: 5, depth: 12.7 }], max2: 42, max3: 80, cost: 5, plateCost: 0 };
+  plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12.7 }, { dz: 16, y: 37, dia: 5, depth: 12.7 }], max2: 42, max3: 80, cost: 3.5, plateCost: 1 };
 // Hafele Axilo 78 square screw-in leg: centre 39.5 mm in from the toe skin, ends and back; four 5 mm marks per leg on
 // a 64 mm square, offset 13 mm toward the cabinet's middle; at most 34" apart; $4.50 each.
 const AXILO78_MOZAIK = { kind: 'leg', name: 'Hafele Axilo 78 square screw-in', feet: true, inToe: 5.3151, inFin: 2.3151, inUnfin: 2.3051, inBack: 4, maxSep: 34,
@@ -378,9 +378,9 @@ function seed() {
       { id: 'hw-cliptop', ...clone(CLIPTOP_MOZAIK) },
       { id: 'hw-inserta', kind: 'hinge', name: 'Blum Clip Top Inserta 110° (press-in dowels)', cupDiaMM: 35, cupDepthMM: 13, cupEdgeMM: 5,
         cupExtra: [{ dx: -22.5, dy: 9.5, dia: 8, depth: 11.5 }, { dx: 22.5, dy: 9.5, dia: 8, depth: 11.5 }], plateHoles: [{ dz: -16, y: 37, dia: 5, depth: 12 }, { dz: 16, y: 37, dia: 5, depth: 12 }], max2: 40, max3: 60 },
-      { id: 'hw-pull128', kind: 'pull', name: 'Bar pull 128 mm, matte black', ccMM: 128, lengthMM: 168, holeDiaMM: 5, finish: '#2b2b2b' },
-      { id: 'hw-pull96', kind: 'pull', name: 'Bar pull 96 mm, brass', ccMM: 96, lengthMM: 136, holeDiaMM: 5, finish: '#b08d4f' },
-      { id: 'hw-knob', kind: 'pull', name: 'Round knob 32 mm', ccMM: 0, lengthMM: 32, holeDiaMM: 5, finish: '#b08d4f' },
+      { id: 'hw-pull128', kind: 'pull', cost: 5, name: 'Bar pull 128 mm, matte black', ccMM: 128, lengthMM: 168, holeDiaMM: 5, finish: '#2b2b2b' },
+      { id: 'hw-pull96', kind: 'pull', cost: 5, name: 'Bar pull 96 mm, brass', ccMM: 96, lengthMM: 136, holeDiaMM: 5, finish: '#b08d4f' },
+      { id: 'hw-knob', kind: 'pull', cost: 5, name: 'Round knob 32 mm', ccMM: 0, lengthMM: 32, holeDiaMM: 5, finish: '#b08d4f' },
       { id: 'hw-pin5', kind: 'shelfpin', name: '5 mm shelf pin, System 32', pinDiaMM: 5, pinDepthMM: 10, pinSetbackMM: 37, pitchMM: 32 },
       { id: 'hw-leg', ...clone(AXILO78_MOZAIK) },
       ...defaultJoints(),
@@ -510,7 +510,8 @@ const TANDEM_563H = {
   minDepthMM: { 12: 328, 15: 404, 18: 480, 21: 557 },
   // Rear screw holes and prices from Ayden's Mozaik guide (Blum TANDEM 563H, 1/2" slides = 3/4 material), 0.42.2.
   holeSets: { 12: [37, 261], 15: [37, 261], 18: [37, 69, 261], 21: [37, 69, 261] },
-  prices: { 12: 24, 15: 25, 18: 26, 21: 27 },
+  // 0.59.4: Ayden's real costs per pair (2026-11-19): 15" $25, 18" $23, 21" $22. 12" not given, kept.
+  prices: { 12: 24, 15: 25, 18: 23, 21: 22 },
   sideThickMM: 16, widthDeductMM: 10, bottomRecessMM: 13, bottomClearMM: 14, topClearMM: 6, rearClearMM: 23,
   cabHoles: [{ ref: 'set', i: 1, y: 0, z: 24, dia: 5, depth: 12.7 }, { ref: 'set', i: 2, y: 0, z: 24, dia: 5, depth: 12.7 }, { ref: 'set', i: 3, y: 0, z: 24, dia: 5, depth: 12.7 }],
   boxOps: [{ part: 'side', type: 'hbore', edge: 'rear', x: 0, y: 11, inset: 7, dia: 6, depth: 10 }],
@@ -552,7 +553,7 @@ const DRAWER_BOX_TYPES = [
 const DRAWER_BOTTOM_CLEAR = 1 / 25.4;
 const MEL_BOX_MATS = [
   { id: 'm-dbx-mel34', name: '3/4 White Melamine', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 0, color: '#f4f4f2', texture: null, procedural: null, texScale: 24 },
-  { id: 'm-dbx-mel14', name: '1/4 White Melamine (drawer bottoms)', kind: 'sheet', thick: 0.25, sheetW: 49, sheetL: 97, grain: false, cost: 0, color: '#f4f4f2', texture: null, procedural: null, texScale: 24 },
+  { id: 'm-dbx-mel14', name: '1/4 White Melamine (drawer bottoms)', kind: 'sheet', thick: 0.25, sheetW: 49, sheetL: 97, grain: false, cost: 30, color: '#f4f4f2', texture: null, procedural: null, texScale: 24 },
 ];
 const MEL_BOX_TPLS = [
   { id: 'dt-mel34', name: '3/4 melamine boxes', sides: 'm-dbx-mel34', bottom: 'm-dbx-mel14', box: 'full' },
@@ -584,6 +585,38 @@ function ensureMelCab(s) {
     s.matTemplates.cabinet.push(t);
   }
   s.melCab = 1; return s;
+}
+// 0.59.4 (Ayden 2026-11-19: "2 sets of the same thing with a slightly different name"). Jobs saved before the Mozaik hardware
+// (0.43) still call the shop hinge and drawer guide by their old names, so the price sheet got each line twice. Same items
+// (same ids), so they take the Mozaik names, the guide its part numbers and locking devices line. Drilling is not touched.
+const HW_OLD_NAMES = { 'hw-cliptop': ['Blum Clip Top Blumotion 110° full overlay', () => CLIPTOP_MOZAIK.name], 'hw-563h': ['Blum Tandem 563H', () => TANDEM_563H.name] };
+const HW_OLD_BOM = { 'Blum locking device T51.1901 (pair)': () => TANDEM_563H.bomExtra };
+// An old hardware list name -> the name it has now (price sheet keys). Anything else comes back as it was.
+function hwKeyNow(k) {
+  const [cOld, cNew] = HW_OLD_NAMES['hw-cliptop'];
+  if (k === cOld || k.startsWith(cOld + ' ')) return cNew() + k.slice(cOld.length);
+  const m = /^Blum Tandem 563H (\d+)" \(pair\)$/.exec(k);
+  if (m) return slideBomName(TANDEM_563H, +m[1]);
+  return HW_OLD_BOM[k] ? HW_OLD_BOM[k]() : k;
+}
+function ensureHwNames(s) {
+  if (!s || !Array.isArray(s.hardware)) return s;
+  s.hardware.forEach(h => {
+    const o = HW_OLD_NAMES[h.id]; if (o && String(h.name || '').toLowerCase() === o[0].toLowerCase()) h.name = o[1]();
+    if (h.bomExtra && HW_OLD_BOM[h.bomExtra]) h.bomExtra = HW_OLD_BOM[h.bomExtra]();
+    if (h.id === 'hw-563h' && h.name === TANDEM_563H.name && !h.partNos) h.partNos = { ...TANDEM_563H.partNos };
+  });
+  // Ayden's real costs (2026-11-19), once per job, only where the old starting price is still there.
+  if (!s.hwCost1119) {
+    s.hardware.forEach(h => {
+      if (h.id === 'hw-cliptop' && h.name === CLIPTOP_MOZAIK.name) { if (h.cost == null || +h.cost === 5) h.cost = 3.5; if (h.plateCost == null || +h.plateCost === 0) h.plateCost = 1; }
+      if (h.id === 'hw-563h' && h.prices && +h.prices[18] === 26 && +h.prices[21] === 27) { h.prices[18] = 23; h.prices[21] = 22; }
+      if (h.kind === 'pull' && h.cost == null) h.cost = 5;
+    });
+    (s.materials || []).forEach(m => { if (m.id === 'm-dbx-mel14' && !+m.cost) m.cost = 30; });
+    s.hwCost1119 = 1;
+  }
+  return s;
 }
 function migrate(s) {
   if (!s || typeof s !== 'object') return null;
@@ -646,6 +679,7 @@ function migrate(s) {
   if (s.dollKit && typeof ensureDollKit === 'function') ensureDollKit(s);
   ensureMelBoxes(s);
   ensureMelCab(s);
+  ensureHwNames(s);
   // 0.58.25 (Ayden 2026-11-19): island back panels from a Mozaik import were cut from the first sheet material (plywood);
   // they are cut from the finish material now. Once per job.
   if (!s.finBack) { s.rooms.forEach(r => (r.shapes || []).forEach(x => { if (x.fromMozaik && /island back panel|panel back|back panel/i.test(x.name || '')) x.mat = 'finish'; })); s.finBack = 1; }

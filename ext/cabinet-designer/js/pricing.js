@@ -2,10 +2,11 @@
 'use strict';
 let PRICES = [];
 // 0.58.27: one number formatter kept, not a new one per number (toLocaleString with options builds one each call). Same text.
+const NF0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const NF2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), NF1 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const money = v => '$' + NF2.format(Math.round(v * 100) / 100);
 // Inserts, doors and fronts, and materials are priced in their own libraries; the sheet keeps labor adders only.
-const PRICE_ADDERS = [['perDrawer', 'Each drawer (box and slides labor)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
+const PRICE_ADDERS = [['perDrawer', 'Each drawer (box and slides labor)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
@@ -90,7 +91,7 @@ function defaultPriceSheet(name = 'Standard pricing') {
     groupMarkup: { ...MZK.groupMarkup }, payments: MZK.payments.map(x => ({ ...x })),
     cab: { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } },
     products: {},
-    adders: { perDrawer: 35, perShelf: 12, perFiller: 25 },
+    adders: { perDrawer: 35, perShelf: 12, perFiller: 25, perPull: 3 },
     panelAdd: { Base: 0, Wall: 0, Tall: 0 },
     doors: { on: true },
     materials: { on: false, waste: 15 },
@@ -188,6 +189,26 @@ function takeInstall(ps) {
   if (!ins) { ins = blankInstaller(INSTALLERS.length ? `Richard (${ps.name})` : 'Richard', ps.install); if (!INSTALLERS.length) ins.def = true; INSTALLERS.push(ins); }
   ps.instBy = ins.id; delete ps.install; return true;
 }
+// 0.59.4 (Ayden 2026-11-19): hardware lines saved under an old name (see hwKeyNow in core.js) go into the line with the
+// name it has now. Where both were there the current line's price stands (in the shop's sheets both had the same price).
+function mergeHwKeys(ps) {
+  const it = ps && ps.hardware && ps.hardware.items; if (!it || typeof hwKeyNow !== 'function') return false;
+  let moved = false;
+  Object.keys(it).forEach(k => { const n = hwKeyNow(k); if (n === k) return; if (!(n in it)) it[n] = it[k]; delete it[k]; moved = true; });
+  return moved;
+}
+// Ayden's real hardware costs (2026-11-19), set once on each sheet: Blum hinge $3.50 and plate $1 each, 563H guides
+// 15" $25, 18" $23, 21" $22 a pair, T51.1901 locks $5 a pair, pulls and knobs $5 each plus $3 each to drill and put on.
+function hwCosts1119(ps) {
+  if (!ps || !ps.hardware || ps.hwCost1119) return false;
+  const it = ps.hardware.items || (ps.hardware.items = {}), T = TANDEM_563H, H = CLIPTOP_MOZAIK.name;
+  it[H] = 3.5; it[H + ' mounting plate'] = 1; if (H + ' face frame mounting plate' in it) it[H + ' face frame mounting plate'] = 1;
+  [[15, 25], [18, 23], [21, 22]].forEach(([L, v]) => { it[slideBomName(T, L)] = v; });
+  it[T.bomExtra] = 5;
+  (S ? S.hardware : []).filter(h => h.kind === 'pull').forEach(h => { it[h.name] = 5; });
+  if (ps.adders && ps.adders.perPull === undefined) ps.adders.perPull = 3;
+  ps.hwCost1119 = 1; return true;
+}
 async function loadPrices() {
   try { PRICES = inHub() ? ((await Hub.storage.get('priceSheets')) || []) : JSON.parse(localStorage.getItem(KEY + '.prices') || '[]'); } catch (_) { PRICES = []; }
   if (PRICES.value) PRICES = PRICES.value;
@@ -199,6 +220,7 @@ async function loadPrices() {
   if (!PRICES.length) { PRICES.push(defaultPriceSheet()); changed = true; }
   else if (PRICES.map(ensureMzk).some(Boolean)) changed = true;
   if (PRICES.map(takeInstall).some(Boolean)) changed = true;
+  if (PRICES.map(mergeHwKeys).some(Boolean)) changed = true;
   if (!INSTALLERS.length) { const r = blankInstaller('Richard', MZK.install); r.def = true; INSTALLERS.push(r); changed = true; }
   if (ensureSawStruck()) changed = true;
   if (changed) savePrices();
@@ -238,7 +260,9 @@ function priceCab(c, ps) {
   const ad = ps.adders, ins = c.inserts || [], p = effParams(c);
   const nDr = fr.filter(f => f.type === 'drawer').length;
   // Each insert has its own price in the insert library (a lazy susan is not a tray divider).
-  const extras = nDr * (+ad.perDrawer || 0) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
+  // Pulls and knobs: what the hardware list counts of the job's pull hardware, at the sheet's drilling charge each.
+  const pullNames = new Set(S.hardware.filter(h => h.kind === 'pull').map(h => h.name)), nPull = Object.entries(b.bom).reduce((a, [k, q]) => a + (pullNames.has(k) ? q : 0), 0);
+  const extras = nPull * (+ad.perPull || 0) + nDr * (+ad.perDrawer || 0) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied');
   const ends = panelParts.reduce((a, pt) => a + pt.qty * ((ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0) + panelAdd(ps, c.cat)), 0) + fillersOf(c).length * (+ad.perFiller || 0);
@@ -256,7 +280,7 @@ function priceCab(c, ps) {
   const sq = paintCab(c, ps, b, fr), paint = sq.total * (+paintOf(ps).rate || 0), banding = sq.eb * (+paintOf(ps).ebRate || 0);
   // Per-cabinet extras from its Price tab: price per foot and per square foot of face, then an upcharge on the lot.
   const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = box + doors + extras + ends + hardware + materials + paint + banding + custom, upcharge = base * (+c.pxUp || 0) / 100;
-  return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge };
+  return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom };
 }
 const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
 // One door or front: its size times the style's price per sq ft (from the door library, or this job's own) plus material.
@@ -341,6 +365,7 @@ function ensureLibPrices(ps) {
   }
   // 0.58.8 (Ayden 2026-11-19: countertops aren't his main thing): every top is one price per square foot, $70 to start.
   if (ps && !ps.topSq) { ps.topSq = { rate: 70 }; savePrices(); }
+  if (hwCosts1119(ps)) savePrices();
   // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
   if (ps && ps.molds && !ps.cmold4 && S.moldings.some(m => m.id === 'mo-cmold')) { ps.molds['mo-cmold'] = 4; ps.cmold4 = 1; savePrices(); }
   // 0.57.0: concealed floating shelf brackets and in-wall blocking start at rough shop prices.
@@ -372,7 +397,8 @@ function priceJob(ps) {
     if (list && list.length) { const n = instCounts(cabs, all.filter(k => k.own)); list.forEach(it => { const q = n[it.per]; if (!q) return; const [, label, unit] = instCount(it.per);
       inst.push({ name: `Installation, ${(it.name || label).replace(/^./, ch => ch.toLowerCase())} (${INST_EST[it.per] ? 'est. ' : ''}${q} × ${money(+it.amount)}${unit === 'per 8 sq ft' ? ' per 8 sq ft' : ''})`, amount: q * +it.amount, inst: true }); }); }
     const lines = [...own, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : []), ...inst, ...xs];
-    return { r, cabs, lines, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
+    const hw = {}; cabs.forEach(k => Object.entries(k.bom || {}).forEach(([n, x]) => { hw[n] = (hw[n] || 0) + x; }));
+    return { r, cabs, lines, hw, sq: addSq(cabs.map(k => k.sq)), total: cabs.reduce((a, k) => a + k.total, 0) + lines.reduce((a, k) => a + k.amount, 0) };
   }));
   const jobLines = ps.extras.filter(x => x.per === 'job').map(x => ({ name: x.name, amount: +x.amount || 0 })).concat(typeof jobLinePrices === 'function' ? jobLinePrices() : []);
   // The installer's flat per-job charge, then their minimum: installation is topped up to it.
@@ -445,7 +471,7 @@ function priceSide(ps, q, view) {
     <tr class="grand"><td>Total</td><td class="n">${money(q.total)}</td></tr>${(ps.payments || []).map((x, i) => { const p = q.payments.find(y => y.pi === i);
       return `<tr class="pay"><td>${esc(x.name)} ${pin(`pshp:${ps.id}:payments.${i}`, 'pct', x.pct, x.name + ' percent')}</td><td class="n">${money(p ? p.amount : 0)}</td></tr>`; }).join('')}</tbody></table>`;
   const jump = view === 'edit' ? `<nav class="prx-nav"><div class="prx-navh">Jump to</div>${PRICE_SECS.map(([k, l, ic]) => `<a href="#ps-${k}" data-act="prx-jump" data-id="${k}">${icon(ic)}${l}</a>`).join('')}</nav>`
-    : view === 'quote' ? `<nav class="prx-nav"><div class="prx-navh">Rooms</div>${q.rooms.map((R, i) => `<a href="#prx-room-${i}" data-act="prx-jump" data-id="room-${i}">${icon('home')}<span>${esc(R.r.name)}</span><b>${money(R.total)}</b></a>`).join('')}<a href="#prx-room-paint" data-act="prx-jump" data-id="room-paint">${icon('palette')}<span>Paint</span><b>${sqft(q.sq.total)} sq ft</b></a></nav>` : '';
+    : view === 'quote' ? `<nav class="prx-nav"><div class="prx-navh">Rooms</div>${q.rooms.map((R, i) => `<a href="#prx-room-${i}" data-act="prx-jump" data-id="room-${i}">${icon('home')}<span>${esc(R.r.name)}</span><b>${money(R.total)}</b></a>`).join('')}<a href="#prx-room-hw" data-act="prx-jump" data-id="room-hw">${icon('tag')}<span>Hardware</span><b>${NF0.format(q.rooms.reduce((a, R) => a + Object.values(R.hw || {}).reduce((b, x) => b + x, 0), 0))} pcs</b></a><a href="#prx-room-paint" data-act="prx-jump" data-id="room-paint">${icon('palette')}<span>Paint</span><b>${sqft(q.sq.total)} sq ft</b></a></nav>` : '';
   return `<div class="prx-grand"><span>Total for ${esc(S.job.name)}</span><b>${money(q.total)}</b><small>${nCab} cabinets · ${sqft(q.sq.total)} sq ft paint</small></div>
     <div class="prx-fts">${tiles}</div>${tot}${jump}`;
 }
@@ -492,7 +518,7 @@ function priceQuote(ps, q = priceJob(ps)) {
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
   const anyOpen = q.rooms.some(R => !roomShut(R.r));
   const fold = q.rooms.length > 1 ? `<button class="btn" data-act="prx-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${icon('chevr', anyOpen ? '' : 'rot90')}${anyOpen ? 'Collapse all rooms' : 'Expand all rooms'}</button>` : '';
-  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${paintCard(ps, q)}`;
+  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${hardwareCard(ps, q)}${paintCard(ps, q)}`;
 }
 // Which rooms are folded on Pricing › Quote, per job, kept on this computer. Only the view; prices are untouched.
 const PRX_FOLD_KEY = () => KEY + '.prxfold';
@@ -501,6 +527,25 @@ const roomFoldKey = r => (S.job.id || S.job.name || '') + '/' + r.id;
 function roomShut(r) { return !!prxFold()[roomFoldKey(r)]; }
 function setRoomShut(r, on) { const f = prxFold(), k = roomFoldKey(r); if (on) f[k] = 1; else delete f[k]; try { localStorage.setItem(PRX_FOLD_KEY(), JSON.stringify(f)); } catch (_) {} }
 // Paint total for the job, with switches for which surfaces count.
+// 0.59.4 (Ayden 2026-11-19): how many hinges, guides and every other piece of hardware, per room and for the whole job,
+// with the sheet's price each. Grouped like the hardware library (hinges, drawer guides, pulls, the rest).
+function hardwareCard(ps, q) {
+  const tot = {}; q.rooms.forEach(R => Object.entries(R.hw || {}).forEach(([n, x]) => { tot[n] = (tot[n] || 0) + x; }));
+  const names = Object.keys(tot); if (!names.length) return '';
+  const kindOf = n => { const h = S.hardware.find(x => n === x.name || n.startsWith(x.name + ' ') || n === x.bomExtra); return h ? h.kind : ''; };
+  const ORDER = [['hinge', 'Hinges and plates'], ['slide', 'Drawer guides and locks'], ['pull', 'Pulls and knobs'], ['', 'Other hardware']];
+  const grp = n => { const k = kindOf(n); return ORDER.findIndex(([g]) => g === k) >= 0 ? k : ''; };
+  const many = q.rooms.length > 1, each = n => +((ps.hardware || {}).items || {})[n] || 0, on = ps.hardware && ps.hardware.on;
+  const cnt = v => v ? NF0.format(Math.round(v * 100) / 100) : '–';
+  const head = `<tr><th>Hardware</th>${many ? q.rooms.map(R => `<th class="r">${esc(R.r.name)}</th>`).join('') : ''}<th class="r">Job total</th>${on ? '<th class="r">Each</th><th class="r">Cost</th>' : ''}</tr>`;
+  const body = ORDER.map(([g, label]) => { const ns = names.filter(n => grp(n) === g).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); if (!ns.length) return '';
+    // A group's heading has its cost only: hinges and plates (or guides and locks) added together is not a useful count.
+    return `<tr class="prx-hwg"><td><b>${label}</b></td>${many ? q.rooms.map(() => '<td></td>').join('') : ''}<td></td>${on ? `<td></td><td class="n"><b>${money(ns.reduce((a, n) => a + tot[n] * each(n), 0))}</b></td>` : ''}</tr>`
+      + ns.map(n => `<tr><td>${esc(n)}</td>${many ? q.rooms.map(R => `<td class="n">${cnt((R.hw || {})[n])}</td>`).join('') : ''}<td class="n">${cnt(tot[n])}</td>${on ? `<td class="n">${money(each(n))}</td><td class="n">${money(tot[n] * each(n))}</td>` : ''}</tr>`).join(''); }).join('');
+  return `<div class="psec box hwcard" id="prx-room-hw">${secHead('tag', 'Hardware', 'teal')}<div><div class="tscroll"><table class="t">
+    <thead>${head}</thead><tbody>${body}</tbody></table></div>
+    <div class="note">Counted from every cabinet's hardware list. Cost is before the hardware markup; prices each are set in Edit prices › Hardware.</div></div></div>`;
+}
 function paintCard(ps, q) {
   const po = paintOf(ps);
   return `<div class="psec box paintcard" id="prx-room-paint">${secHead('palette', `Paint · ${sqft(q.sq.total)} sq ft`, 'violet')}<div>
@@ -594,7 +639,7 @@ function priceAction(a, id) {
     case 'price-view': ui.priceView = id; break;
     case 'prx-fold': { const r = S.rooms.find(x => x.id === id); if (r) setRoomShut(r, !roomShut(r)); renderPricing(); return; }
     case 'prx-fold-all': S.rooms.forEach(r => setRoomShut(r, id === 'shut')); renderPricing(); return;
-    case 'prx-jump': { if (id.startsWith('room-') && id !== 'room-paint') { const R = S.rooms[+id.slice(5)]; if (R && roomShut(R)) { setRoomShut(R, false); renderPricing(); } } const el = document.getElementById((id.startsWith('room-') ? 'prx-' : 'ps-') + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    case 'prx-jump': { if (id.startsWith('room-') && id !== 'room-paint' && id !== 'room-hw') { const R = S.rooms[+id.slice(5)]; if (R && roomShut(R)) { setRoomShut(R, false); renderPricing(); } } const el = document.getElementById((id.startsWith('room-') ? 'prx-' : 'ps-') + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     case 'ps-new': { const n = defaultPriceSheet('New price sheet'); PRICES.push(n); S.job.priceSheet = n.id; save(); ui.priceView = 'edit'; break; }
     case 'ps-dup': { const n = { ...clone(ps), id: uid('ps'), name: ps.name + ' copy' }; PRICES.push(n); S.job.priceSheet = n.id; save(); break; }
     case 'ps-del': if (!ui.psConfirm) { ui.psConfirm = true; renderPricing(); return; } ui.psConfirm = false; PRICES = PRICES.filter(p => p !== ps); S.job.priceSheet = PRICES[0].id; save(); break;
