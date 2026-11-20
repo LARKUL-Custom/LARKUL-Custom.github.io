@@ -196,6 +196,8 @@ function printNotesPage(pr, rooms, head) {
 
 /* ----- Scope of work: what the job includes, room by room, from the drawing, with the shop's own notes ----- */
 const SCOPE_EST = 'This is an estimate only. The final price can vary or change with final measurements, selections, materials and site conditions.';
+// The estimate notice as its own section on the price pages (Ayden 2026-11-20: bigger, its own part of the pricing).
+const printEstSec = () => `<div class="mp-estsec"><b>This is an estimate</b><div>${SCOPE_EST}</div></div>`;
 // One sentence for a room: "Build and install 8 base and 5 wall cabinets with Shaker doors, plus a slat wall, countertops and molding."
 // Products that aren't cabinets (slat walls, desks, floating shelves, anything priced on its own or left out of the
 // cabinet counts) and the bid's own rows are named, so nothing priced goes unmentioned (Ayden 2026-11-19: slat wall).
@@ -233,7 +235,7 @@ function printScopePage(pr, rooms, head) {
   return `<section class="mp-page ${ideas.length > 14 ? 'mp-flow' : 'land'} mp-draw mp-scope">${head(rooms.length > 1 ? 'All rooms' : (rooms[0] || {}).name || '', 'Scope of work')}
     <h3 class="mp-nh">Scope of work</h3><div class="mp-specs mp-scopel">${cards || '<div class="muted">Nothing drawn yet.</div>'}</div>
     <div class="mp-scopex"><b>${esc(inst)}</b>${S.job.scope ? `<div class="mp-scopen">${esc(S.job.scope)}</div>` : ''}</div>
-    ${pr.estimate ? `<div class="mp-estimate">${price ? `<div class="mp-estp"><span>Estimated price</span><b>${price}</b></div>` : ''}${optT}<div>${SCOPE_EST}</div></div>` : ''}</section>`;
+    ${pr.estimate ? `<div class="mp-estimate">${price ? `<div class="mp-estp"><span>Estimated price</span><b>${price}</b></div>` : ''}${optT}</div>${printEstSec()}` : ''}</section>`;
 }
 
 /* ----- Job specs: what the job is made of, room by room (door style, finish, cabinet material, hardware, color) ----- */
@@ -316,7 +318,7 @@ function printPricePages(pr, rooms, head, part) {
   let q; try { q = priceJob(ps); } catch (_) { return []; }
   const ids = new Set(rooms.map(r => r.id)), R = q.rooms.filter(x => ids.has(x.r.id)), whole = R.length === q.rooms.length;
   const jl = q.jobLines.reduce((a, l) => a + (+l.amount || 0), 0), base = q.sub - jl, f = base > 0 ? (q.sub + q.markup) / base : 1, mm = v => money(v * f);
-  const est = pr.estimate ? `<div class="mp-estimate"><div>${SCOPE_EST}</div></div>` : '';
+  const est = pr.estimate ? printEstSec() : '';
   const roomTbl = x => `<h3 class="mp-nh">${esc(x.r.name)}</h3><table class="t mp-t mp-price"><thead><tr><th>#</th><th>Cabinet</th><th>Size (W × H × D)</th><th class="r">Price</th></tr></thead><tbody>
     ${x.cabs.map(k => `<tr><td>${esc(k.label || '')}</td><td>${esc(k.c.name)}</td><td>${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="r">${mm(k.total)}</td></tr>`).join('') || '<tr><td colspan="4">No cabinets</td></tr>'}
     ${x.lines.map(l => `<tr><td></td><td colspan="2">${esc(lineName(l.name))}</td><td class="r">${mm(l.amount)}</td></tr>`).join('')}</tbody>

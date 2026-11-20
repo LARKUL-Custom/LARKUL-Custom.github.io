@@ -3690,3 +3690,7 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .mp-bar .f>select,.mp-bar .f>input{width:auto;max-width:100%}
 .mp-bar .mp-scopef{flex-direction:column;align-items:stretch;width:100%}
 .mp-bar,.mp-barrow,.mp-items{max-width:100%;min-width:0}
+/* 0.59.31: the estimate notice is its own section, big and plain (Ayden 2026-11-20). */
+.mp-estsec{flex:none;margin-top:12px;border:2px solid #111;border-left:8px solid #d9731b;padding:10px 14px;color:#111;break-inside:avoid;page-break-inside:avoid}
+.mp-estsec b{display:block;font-size:15pt;margin-bottom:3px}
+.mp-estsec div{font-size:12pt;line-height:1.35}
