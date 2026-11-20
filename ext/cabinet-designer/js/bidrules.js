@@ -25,8 +25,10 @@ function bidRules(rooms, tk, done) {
     bidToe(tk, done);
     bidShelves(rooms, done);
     if (!done.exact && typeof isCornerFiller === 'function') {
-      done.cornerFill = bidCornerFillers(rooms);
+      done.cornerChecks = [];
+      done.cornerFill = bidCornerFillers(rooms, done.cornerChecks);
       if (done.cornerFill) done.options.push(`${done.cornerFill} corner filler${done.cornerFill === 1 ? '' : 's'} in the empty corner${done.cornerFill === 1 ? '' : 's'}`);
+      if (done.cornerChecks.length) done.options.push(`${done.cornerChecks.length} corner${done.cornerChecks.length === 1 ? '' : 's'} to check in the job notes`);
     }
     if (!done.exact && lay().autoPanels !== false) {
       done.cornerOff = bidCornerPanels(rooms);
@@ -158,16 +160,21 @@ function bidFinishLook(tk, done) {
 // the other, its notch's fillers reaching out to the cabinets' faces. It stands with its back right in the corner, so it
 // goes on the wall whose corner is on its right as you face it. Its top carries the countertops over the corner
 // (runsBy and cornerBridges in build.js). Up to 12" of filler on each side; a gap wider than that is left as drawn.
-function bidCornerFillers(rooms) {
-  let n = 0;
+// 0.60.9 (Ayden's corner-and-countertop-rules.md, 2026-11-20): what it can't fill goes in checks for the job notes: a
+// gap wider than 12" a side (left as drawn), base runs stopped right at the cabinet depth (no room for a filler, the
+// doors and pulls can hit), and uppers that leave a corner empty (only bases get a corner filler for now).
+function bidCornerFillers(rooms, checks) {
+  let n = 0; checks = checks || [];
   rooms.forEach(rm => withRoom(rm, () => {
     const lib = (S.library || []).find(l => l.moz === MOZ_CF) || (() => { const d = mozDef(MOZ_CF); return d && { id: MOZ_CF, name: d.name, cat: 'Base', w: 27, h: 34.5, d: 27, elev: 0, moz: MOZ_CF, rows: [], params: {}, construction: { toeKick: false, top: 'full' } }; })();
     if (!lib) return;
-    const bases = S.cabinets.filter(c => c.cat === 'Base' && (c.elev || 0) < 1 && !c.moz && !c.made && !isFloatShelf(c) && wall(c.wall) && !(wall(c.wall).island || wall(c.wall).hidden));
+    const onWall = c => !c.moz && !c.made && !isFloatShelf(c) && wall(c.wall) && !(wall(c.wall).island || wall(c.wall).hidden);
+    const bases = S.cabinets.filter(c => c.cat === 'Base' && (c.elev || 0) < 1 && onWall(c)), uppers = S.cabinets.filter(c => c.cat === 'Wall' && onWall(c));
     const walls = S.walls.filter(w => !w.island && !w.hidden);
     const face = (w, side) => { const g = wg(w); return { w, g, side, p: wallPt(w, g, side, 0, w.thick / 2), n: { x: g.n.x * side, y: g.n.y * side } }; };
     const dot = (a, b) => a.x * b.x + a.y * b.y;
-    for (let i = 0; i < walls.length; i++) for (let j = i + 1; j < walls.length; j++) [1, -1].forEach(sA => [1, -1].forEach(sB => {
+    const nm = (A, B) => `${rm.name}, the corner of ${wallName(A.w)} and ${wallName(B.w)}`, f1 = v => (t => /["']/.test(t) ? t : t + '"')(fmtLen(Math.max(0, r3(v))));
+    const scan = (bases, up) => { for (let i = 0; i < walls.length; i++) for (let j = i + 1; j < walls.length; j++) [1, -1].forEach(sA => [1, -1].forEach(sB => {
       const A = face(walls[i], sA), B = face(walls[j], sB);
       const onA = bases.filter(c => c.wall === A.w.id && c.side === sA), onB = bases.filter(c => c.wall === B.w.id && c.side === sB);
       if (!onA.length || !onB.length || Math.abs(dot(A.g.u, B.g.u)) > 0.1) return;
@@ -181,7 +188,10 @@ function bidCornerFillers(rooms) {
       const nA = near(onA, aP, eA), nB = near(onB, bP, eB); if (!nA || !nB) return;
       const dA = nA.c.d + (nA.c.outset || 0), dB = nB.c.d + (nB.c.outset || 0);
       const xA = nA.gap - dB, xB = nB.gap - dA;
-      if (xA < -0.25 || xB < -0.25 || Math.max(xA, xB) < 0.5 || xA > 12 || xB > 12) return;
+      if (xA < -0.25 || xB < -0.25) return;
+      if (up) { if (Math.max(xA, xB) >= 0.5) checks.push(`${nm(A, B)}: the uppers stop ${f1(nA.gap)} and ${f1(nB.gap)} from the corner and leave it empty (no corner filler on uppers yet), check it`); return; }
+      if (Math.max(xA, xB) < 0.5) { checks.push(`${nm(A, B)}: the base runs stop right at the cabinet depth, so there is no room for a corner filler and the doors or pulls can hit; the usual is 27" from the corner (a 3" filler each side), check it`); return; }
+      if (xA > 12 || xB > 12) { checks.push(`${nm(A, B)}: the empty corner needs ${f1(xA)} and ${f1(xB)} of filler, more than 12" a side, so it is left as drawn, check it`); return; }
       // It stands on the wall whose corner is on its right: the high end on side 1, the low end on side -1.
       const ownA = (eA < 0) === (sA === 1), own = ownA ? { F: A, at: aP, e: eA, nb: nA, gap: nA.gap, x: Math.max(0, xA) } : { F: B, at: bP, e: eB, nb: nB, gap: nB.gap, x: Math.max(0, xB) };
       const oth = ownA ? { nb: nB, gap: nB.gap, x: Math.max(0, xB) } : { nb: nA, gap: nA.gap, x: Math.max(0, xA) };
@@ -193,7 +203,8 @@ function bidCornerFillers(rooms) {
       const poly = cabPoly(c);
       if (!poly || S.cabinets.some(k => vOverlap(k, c) && cabPoly(k) && bidPolyDepth(poly, cabPoly(k)) > 0.1)) return;
       S.cabinets.push(c); n++;
-    }));
+    })); };
+    scan(bases, false); scan(uppers, true);
   }));
   return n;
 }

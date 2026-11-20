@@ -365,6 +365,7 @@ async function importMozaik(files, opts = {}) {
   if (!rooms.length) { flash('Nothing in that job to bring in.'); return null; }
   s.rooms = rooms; s.roomId = rooms[0].id; s.job.notes = `Imported from ${opts.from || 'Mozaik'} ${new Date().toLocaleDateString()}`;
   if (added && added.overlaps && typeof bidOverlapNote === 'function') s.job.notes += '\n' + bidOverlapNote(added.overlaps);
+  if (added && added.cornerChecks && added.cornerChecks.length) s.job.notes += '\nCorners to check:\n' + added.cornerChecks.join('\n');
   const folder = opts.folder || jobs.view || 'My jobs', p = freePath(folder, s.job.name);
   s.job.name = jobNameOf(p);
   ['status', 'stageAt', 'was', 'tag'].forEach(k => delete s.job[k]);
