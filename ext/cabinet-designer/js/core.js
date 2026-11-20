@@ -55,6 +55,8 @@ const PARAM_DEFS = [
   // 0.57.0 (bids): laminate outside, melamine inside. Exposed ends are cut from the Finish material, no applied panel, and a
   // wall cabinet's bottom is finished. Blank keeps applied end panels. Not in SHOP_PARAMS, so old jobs export the same.
   { k: 'exterior', g: 'box', label: 'Exposed ends and wall cabinet bottoms', type: 'select', options: [{ v: '', l: 'Applied end panels' }, { v: 'finish', l: 'Finished (Finish material outside, cabinet material inside)' }] },
+  // 0.59.34 (Ayden 2026-11-20): the shop laminates a wall cabinet's bottom by hand; the cut stays the cabinet material. Priced only.
+  { k: 'lamBottom', g: 'box', label: 'Laminated bottom (laminate put on in the shop)', type: 'select', cats: ['Wall'], options: [{ v: '', l: 'No' }, { v: 'on', l: 'Laminate the bottom' }] },
   { k: 'abovePanel', g: 'box', label: 'Panel above tall cabinets less than 18" below the ceiling', type: 'select', cats: ['Tall'], options: [{ v: '', l: 'Leave off' }, { v: 'on', l: 'Add (Finish material)' }] },
   { k: 'nailers', g: 'box', label: 'Nailers (hanging strips at the back)', type: 'select', options: [{ v: 'both', l: 'Top and bottom' }, { v: 'top', l: 'Top only' }, { v: 'bottom', l: 'Bottom only' }, { v: 'none', l: 'None' }] },
   { k: 'nailerWidth', g: 'box', label: 'Nailer width', type: 'len' },

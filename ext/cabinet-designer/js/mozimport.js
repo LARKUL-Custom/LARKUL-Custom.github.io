@@ -339,6 +339,14 @@ async function importMozaik(files, opts = {}) {
   await flushJob();
   const first = files[0].name.replace(/\.[^.]+$/, '').replace(/ - Cabinet Designer$/, '');
   const s = blankJob(safeName(data.jobName || (tk && tk.job) || first) || 'Mozaik job', '');
+  // 0.59.34 (Ayden 2026-11-20: "unless we import a bid, i want him to follow the bid exactly"): Bid Reader says how to
+  // draw it (takeoff "draw"). 'exact' = only what the bid shows: no automatic end panels, fillers, fridge panels or shelf
+  // supports (the switches stay in the item bar to turn on). 'larkul' (and older Bid Reader) = the shop's rules.
+  if (tk) {
+    s.job.bidDraw = tk.draw === 'exact' ? 'exact' : 'larkul';
+    if (s.job.bidDraw === 'exact') s.job.layout = { ...(s.job.layout || {}), autoPanels: false, autoFillers: false, fridgePanels: false };
+    s.bidSupp = 1; s.fridgeP = 1;
+  }
   const prev = S; S = s; attachRoom(S);
   let rooms, added = null;
   try { rooms = mozRooms(data); if (tk) added = bidTakeoffAdd(rooms, tk); } finally { S = prev; }

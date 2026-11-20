@@ -6,7 +6,7 @@ const NF0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const NF2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), NF1 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const money = v => '$' + NF2.format(Math.round(v * 100) / 100);
 // Inserts, doors and fronts, and materials are priced in their own libraries; the sheet keeps labor adders only.
-const PRICE_ADDERS = [['perDrawer', 'Each drawer, extra (box and labor are in the box price below; slides are hardware)'], ['perShelf', 'Each adjustable shelf'], ['perFiller', 'Each filler, on top of its material (cutting to fit)'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
+const PRICE_ADDERS = [['perDrawer', 'Each drawer, extra (box and labor are in the box price below; slides are hardware)'], ['perShelf', 'Each adjustable shelf'], ['perLamBottom', 'Each laminated wall cabinet bottom, labor'], ['lamSq', 'Laminate for laminated bottoms, $ per sq ft (waste added)'], ['perFiller', 'Each filler, on top of its material (cutting to fit)'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
@@ -315,6 +315,14 @@ function fillerPrice(c, b, ps) {
   const matAmt = parts.reduce((a, pt) => { const m = mat(pt.mat); return a + (m ? pt.L * pt.W * (pt.qty || 1) * matSqIn(m, ps) : 0); }, 0);
   return matAmt + n * (+ps.adders.perFiller || 0);
 }
+// 0.59.34 (Ayden 2026-11-20: "finished bottoms on the uppers... laminate the bottoms during the process... charge for the laminate
+// paper cost plus labor"): a wall cabinet set to Laminated bottom (Settings › Construction, or the cabinet) pays the laminate
+// for its bottom by the sq ft, with the sheet's waste, plus labor each. The bottom is still cut from the cabinet material.
+// A cabinet with a finished exterior already has its bottom cut from the Finish material, so it is not charged again.
+function lamBottomOf(c) {
+  if (c.cat !== 'Wall' || c.moz || c.made || effParams(c).lamBottom !== 'on' || (typeof finExterior === 'function' && finExterior(c))) return 0;
+  const b = buildParts(c).parts.find(pt => pt.cabId === c.id && pt.name === 'Bottom'); return b ? b.L * b.W * (b.qty || 1) / 144 : 0;
+}
 const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
 // One door or front: its size times the style's price per sq ft (from the door library, or this job's own) plus material.
 // 0.55.34 (Ayden 2026-11-11): the style's Minimum per front ($20 by default) is a floor under that whole price, so a tiny
@@ -412,6 +420,8 @@ function ensureLibPrices(ps) {
   // 0.59.15 (Ayden 2026-11-19): the drawer box price already has the box and its labor, and slides are hardware, so the old
   // $35 Each drawer charge would count the labor twice. Sheets still on $35 go to $0 once; a different number is kept.
   if (ps && ps.adders && !ps.dbxLabor) { if (+ps.adders.perDrawer === 35) ps.adders.perDrawer = 0; ps.dbxLabor = 1; savePrices(); }
+  // 0.59.34: laminated wall cabinet bottoms start at $25 labor each and the Wilsonart average, $5.33 a sq ft.
+  if (ps && ps.adders && ps.adders.perLamBottom === undefined) { ps.adders.perLamBottom = 25; if (ps.adders.lamSq === undefined) ps.adders.lamSq = 5.33; savePrices(); }
   if (ps && ps.adders && (ps.adders.perBracket === undefined || ps.adders.perBlocking === undefined)) { if (ps.adders.perBracket === undefined) ps.adders.perBracket = 15; if (ps.adders.perBlocking === undefined) ps.adders.perBlocking = 35; savePrices(); }
   if (ps && !ps.panelAdd) {
     const was = +((ps.counts || {}).panels) || 0; ps.panelAdd = { Base: was, Wall: was, Tall: was };
@@ -444,7 +454,9 @@ function priceJob(ps) {
     const list = who && !pctI && (who.items || []).filter(it => +it.amount && it.per !== 'job' && instCount(it.per));
     if (list && list.length) { const n = instCounts(cabs, all.filter(k => k.own)); list.forEach(it => { const q = n[it.per]; if (!q) return; const [, label, unit] = instCount(it.per);
       inst.push({ name: `Installation, ${(it.name || label).replace(/^./, ch => ch.toLowerCase())} (${INST_EST[it.per] ? 'est. ' : ''}${q} × ${money(+it.amount)}${unit === 'per 8 sq ft' ? ' per 8 sq ft' : ''})`, amount: q * +it.amount, inst: true }); }); }
-    const pre = [...own, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : [])];
+    const lb = cabs.map(k => lamBottomOf(k.c)).filter(Boolean), ad = ps.adders || {}, lbRate = (+ad.lamSq || 0) * (1 + (+((ps.materials || {}).waste) || 0) / 100);
+    const lamB = lb.length ? [{ name: `Laminated wall cabinet bottoms (${lb.length} × ${money(+ad.perLamBottom || 0)} labor, ${sqft(lb.reduce((a, x) => a + x, 0))} sq ft laminate)`, amount: lb.length * (+ad.perLamBottom || 0) + lb.reduce((a, x) => a + x, 0) * lbRate }] : [];
+    const pre = [...own, ...lamB, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : [])];
     if (pctI) { const amt = (cabs.reduce((a, k) => a + k.total, 0) + pre.reduce((a, l) => a + l.amount, 0) + xs.reduce((a, l) => a + l.amount, 0)) * pctI / 100; if (amt) inst.push({ name: `Installation (${pctI}% of the room)`, amount: amt, inst: true }); }
     if (who) inst.forEach(l => { l.instId = who.id; });
     const lines = [...pre, ...inst, ...xs];

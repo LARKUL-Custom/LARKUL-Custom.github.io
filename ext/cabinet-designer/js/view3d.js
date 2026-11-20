@@ -217,7 +217,7 @@ function cabinetMeshes(c, opts = {}) {
       if (tk && !feet) grp.add(box3(t, tk, D - sb, sm3, x, tk / 2, (D - sb) / 2));
       grp.add(box3(t, H - tk, D, sm3, x, tk + (H - tk) / 2, D / 2));
     });
-    grp.add(box3(W - 2 * t, t, D, finOk && c.cat === 'Wall' && typeof finExterior === 'function' && finExterior(c) ? finM : cmM, W / 2, tk + t / 2, D / 2));
+    grp.add(box3(W - 2 * t, t, D, finOk && c.cat === 'Wall' && ((typeof finExterior === 'function' && finExterior(c)) || effParams(c).lamBottom === 'on') ? finM : cmM, W / 2, tk + t / 2, D / 2));
     if ((c.construction || {}).top === 'stretchers') {
       const apH = sinkApronH(c, p), rsAt = rearStretcherAt(p, D, D - p.backInset - bt, bt);
       if (apH) grp.add(box3(W - 2 * t, apH, t, cmM, W / 2, H - apH / 2, D - t / 2));
