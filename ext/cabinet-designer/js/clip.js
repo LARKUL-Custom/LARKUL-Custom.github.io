@@ -1,5 +1,5 @@
 /* ---------- Copy and paste ---------- */
-// Ctrl+C copies the selected cabinet or shape, Ctrl+X cuts it, Ctrl+V pastes it (at the pointer in the plan,
+// Ctrl+C copies the selected cabinet or shape, Ctrl+X cuts it, Ctrl+V pastes it (at the pointer in the plan or elevation,
 // next to the original, or on the first wall with room in another room), Ctrl+D duplicates it.
 let clip = null;
 const clipName = () => !clip ? '' : clip.type === 'cab' ? 'the cabinet' : clip.type === 'cabs' ? `the ${clip.items.length} cabinets` : 'the shape';
@@ -28,15 +28,50 @@ function pasteSpot(o, W, at, free) {
   if (at && at.wid) return free(at.wid, at.side, at.a - W / 2);
   // Next to the original when it is in this room, else the selected wall or the first wall with room.
   if (wall(o.wall)) { const g = free(o.wall, o.side, o.off + W); if (g) return g; }
-  for (const w of [wall(ui.elevWall), ...S.walls].filter(Boolean)) { const g = free(w.id, 1, 0) || free(w.id, -1, 0); if (g) return g; }
+  // The room side of a wall first, so a copy never lands on the back of a perimeter wall while there is room inside.
+  for (const w of [wall(ui.elevWall), ...S.walls].filter(Boolean)) { const g = free(w.id, elevSide(w), 0); if (g) return g; }
+  for (const w of [wall(ui.elevWall), ...S.walls].filter(Boolean)) { const g = free(w.id, -elevSide(w), 0); if (g) return g; }
   return null;
 }
 function pasteCab(src, at) {
-  const free = (wid, side, want) => { const off = findFree(src, wid, side, want, null); return off === null ? null : { wall: wid, side, off: r3(off) }; };
-  const g = pasteSpot(src, src.w, at, free);
+  const g = pasteSpot(src, src.w, at, (wid, side, want) => pasteFit(src, wid, side, want));
   if (!g) { flash('There is no room for the copy there.'); return; }
   let nc; mutate(() => { nc = { ...clone(src), id: uid('c'), num: null, ...g }; S.cabinets.push(nc); ensureNums(); addCabStrips(nc.id, (clip && clip.lights) || []); });
   ui.sel = { type: 'cab', id: nc.id }; ui.elevWall = g.wall; renderRoom();
+}
+/* 0.59.29 (Ayden 2026-11-20): a pasted cabinet goes where it fits and settles at its normal height, not the
+   copy's odd one; he moves it up or down himself after. Bases and talls go to the floor (their library height),
+   uppers line their top up with the nearest upper on that wall (else the library height), and an upper with no
+   room there goes up to the ceiling line or back down to the standard height, whichever lands nearest. */
+const PASTE_SETTLE = { Base: 1, Wall: 1, Tall: 1 };
+function pasteElevs(src, wid, side, want) {
+  const cur = +src.elev || 0;
+  if (!PASTE_SETTLE[src.cat] || (typeof isFloatShelf === 'function' && isFloatShelf(src))) return [cur];
+  const l = src.libId ? libItem(src.libId) : null, libE = l && l.cat === src.cat && isFinite(+l.elev) ? +l.elev : null;
+  if (src.cat !== 'Wall') return [libE !== null ? libE : 0];
+  const h = +src.h || 0, probe = { ...src, wall: wid, side, off: want }, max = ceilMax(probe), top = isFinite(max) ? max : Infinity;
+  const fit = e => r3(Math.max(0, Math.min(e, top - h)));
+  // The nearest upper on this wall side: its top is the line the copy hangs from.
+  let near = null, nd = Infinity;
+  S.cabinets.forEach(k => {
+    if (k.wall !== wid || k.side !== side || k.cat !== 'Wall' || (typeof isFloatShelf === 'function' && isFloatShelf(k))) return;
+    const d = Math.max(0, k.off - (want + src.w), want - (k.off + k.w)); if (d < nd) { nd = d; near = k; }
+  });
+  const out = [];
+  if (near) out.push(fit(near.elev + near.h - h));
+  out.push(fit(libE !== null ? libE : cur));
+  if (isFinite(top)) out.push(fit(top - h));
+  return out.filter((e, i) => out.findIndex(x => Math.abs(x - e) < 0.01) === i);
+}
+// The spot nearest want along the wall at one of those heights. The first height is the normal one; another
+// only wins when it lands more than a foot closer.
+function pasteFit(src, wid, side, want) {
+  let best = null;
+  pasteElevs(src, wid, side, want).forEach((e, i) => {
+    const off = findFree({ ...src, elev: e }, wid, side, want, null); if (off === null) return;
+    const s = Math.abs(off - want) + (i ? 12 : 0); if (!best || s < best.s - 1e-9) best = { s, off, e };
+  });
+  return best && { wall: wid, side, off: r3(best.off), elev: best.e };
 }
 function pasteShape(src, at) {
   const W = shapeBox(src.pts).w;
@@ -46,14 +81,16 @@ function pasteShape(src, at) {
   ui.sel = { type: 'shape', id: ns.id }; ui.elevWall = g.wall; renderRoom();
 }
 // The plan point under the pointer, when the pointer is over the plan.
-let clipOverPlan = false;
-document.addEventListener('pointermove', e => { clipOverPlan = !!(e.target.closest && e.target.closest('#plan')); }, true);
+let clipOverPlan = false, clipOverElev = null;
+document.addEventListener('pointermove', e => { clipOverPlan = !!(e.target.closest && e.target.closest('#plan')); clipOverElev = e.target.closest && e.target.closest('#elev') ? { clientX: e.clientX, clientY: e.clientY } : null; }, true);
+// Ctrl+V over the elevation pastes at the pointer along that wall.
+function clipElevAt() { const wa = clipOverElev && typeof wallAt === 'function' ? wallAt(clipOverElev) : null, w = wa && wall(wa.wid); return w ? { wid: w.id, a: wa.a, side: elevSide(w) } : null; }
 document.addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || jobs.shown || ui.tab !== 'room' || ui.quick) return;
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select' || String(getSelection() || '')) return;
   const k = e.key.toLowerCase();
   if (k === 'c' || k === 'x') { if (clipCopy(k === 'x')) e.preventDefault(); }
-  else if (k === 'v') { e.preventDefault(); clipPaste(ui.viewMode === 'plan' && clipOverPlan && ui.mouse ? { p: ui.mouse } : null); }
+  else if (k === 'v') { e.preventDefault(); clipPaste(ui.viewMode === 'plan' && clipOverPlan && ui.mouse ? { p: ui.mouse } : clipElevAt()); }
   else if (k === 'd' && ui.sel && (ui.sel.type === 'cab' || ui.sel.type === 'shape')) { e.preventDefault(); const keep = clip; clip = { type: ui.sel.type, data: clone(ui.sel.type === 'cab' ? cab(ui.sel.id) : shapeById(ui.sel.id)) }; clipPaste(null); clip = keep; }
 });

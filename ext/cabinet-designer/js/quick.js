@@ -315,15 +315,24 @@ function qPasteMany(at) {
   else if (at && at.wid) { wid = at.wid; side = at.side; start = at.a - span / 2; }
   if (!wall(wid)) { const w = wall(ui.elevWall) || S.walls[0]; if (!w) { flash('Draw a wall first.'); return; } wid = w.id; side = elevSide(w); start = 0; }
   // Tries the spot asked for first, then every wall from its left end, 1" at a time.
-  const fits = (w2, sd, st) => items.every(it => { const nc = { ...it.data, id: '__probe', wall: w2, side: sd, off: r3(st + it.data.off - first.off) }, f = findFree(nc, w2, sd, nc.off, null); return f !== null && Math.abs(f - nc.off) < 0.01; });
+  // Each one settles at its normal height there (pasteElevs in clip.js), like a single paste.
+  const elevAt = (it, w2, sd, off) => pasteElevs(it.data, w2, sd, off)[0];
+  const fits = (w2, sd, st) => items.every(it => { const off = r3(st + it.data.off - first.off), nc = { ...it.data, id: '__probe', wall: w2, side: sd, off, elev: elevAt(it, w2, sd, off) }, f = findFree(nc, w2, sd, nc.off, null); return f !== null && Math.abs(f - nc.off) < 0.01; });
   const tries = [[wid, side, start]], explicit = !!at;
-  if (!explicit) S.walls.forEach(w => [elevSide(w), -elevSide(w)].forEach(sd => { const L = wg(w).L; for (let st = 0; st <= L - span + 1e-6; st += 1) tries.push([w.id, sd, st]); }));
+  // 0.59.29: then the nearest open spot along the originals' own wall, then the room side of every wall, then the backs.
+  if (!explicit) {
+    const sw = wall(wid);
+    if (sw) { const L = wg(sw).L, near = []; for (let st = 0; st <= L - span + 1e-6; st += 1) near.push(st); near.sort((a, b) => Math.abs(a - start) - Math.abs(b - start) || a - b).forEach(st => tries.push([wid, side, st])); }
+    [1, -1].forEach(k => S.walls.forEach(w => { const sd = k * elevSide(w), L = wg(w).L; for (let st = 0; st <= L - span + 1e-6; st += 1) tries.push([w.id, sd, st]); }));
+  }
   let spot = null;
   for (const [w2, sd, st0] of tries) { const L = wg(wall(w2)).L, st = Math.max(0, Math.min(st0, L - span)); if (span <= L && fits(w2, sd, st)) { spot = [w2, sd, st]; break; } }
   const made = []; const ok = !!spot;
+  // Heights are worked out before any copy goes in, so the copies don't line up with each other.
+  const els = ok ? items.map(it => elevAt(it, spot[0], spot[1], r3(spot[2] + it.data.off - first.off))) : [];
   if (ok) mutate(() => {
     const [w2, sd, st] = spot; wid = w2;
-    for (const it of items) { const nc = { ...clone(it.data), id: uid('c'), num: null, log: [], wall: w2, side: sd, off: r3(st + it.data.off - first.off) }; S.cabinets.push(nc); made.push(nc); addCabStrips(nc.id, it.lights || []); }
+    for (const [i, it] of items.entries()) { const off = r3(st + it.data.off - first.off), nc = { ...clone(it.data), id: uid('c'), num: null, log: [], wall: w2, side: sd, off, elev: els[i] }; S.cabinets.push(nc); made.push(nc); addCabStrips(nc.id, it.lights || []); }
     ensureNums();
   });
   if (!ok) { flash('There is no room for the whole group there. Paste on another wall, or at the pointer over open wall.'); return; }
