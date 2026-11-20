@@ -332,6 +332,11 @@ function priceCab(c, ps) {
   b.parts.forEach(pt => { const m = mat(pt.mat); if (!m || FRONT_KINDS.includes(pt.kind)) return; cMat += pt.L * pt.W * pt.qty * matSqIn(m, ps) + bandCost(pt) * pt.qty; });
   Object.entries(b.bom).forEach(([k, q]) => { cHw += q * (+ps.hardware.items[k] || 0); });
   const cIns = ins.reduce((a, it) => a + insertPrice(it), 0);
+  // 0.59.37: what the shop's labor estimate counts: parts, sheet area by material, doors, drawers, panels, fillers.
+  const bought = frontBought(c), lab = { parts: 0, area: {}, doors: 0, drawers: 0, panels: 0, fillers: fillersOf(c).length };
+  b.parts.forEach(pt => { if (pt.cabId != null && pt.cabId !== c.id) return; const q = pt.qty || 1; lab.parts += q; if (pt.kind === 'applied') lab.panels += q;
+    const m = mat(pt.mat); if (m && (m.kind || 'sheet') === 'sheet' && !(FRONT_KINDS.includes(pt.kind) && bought)) lab.area[m.id] = (lab.area[m.id] || 0) + pt.L * pt.W * q; });
+  fr.forEach(f => { if (f.type === 'door') lab.doors++; else if (f.type === 'drawer') lab.drawers++; });
   let materials = 0;
   if (ps.materials.on) b.parts.forEach(pt => {
     // Door parts are paid for by the door's own material cost.
@@ -343,7 +348,7 @@ function priceCab(c, ps) {
   const sq = paintCab(c, ps, b, fr), paint = sq.total * (+paintOf(ps).rate || 0), banding = sq.eb * (+paintOf(ps).ebRate || 0);
   // Per-cabinet extras from its Price tab: price per foot and per square foot of face, then an upcharge on the lot.
   const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = box + doors + extras + ends + hardware + materials + paint + banding + custom, upcharge = base * (+c.pxUp || 0) / 100;
-  return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom, cost: { mat: cMat, doors: cDoors, hw: cHw, ins: cIns } };
+  return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom, cost: { mat: cMat, doors: cDoors, hw: cHw, ins: cIns, lab } };
 }
 // Drawer box prices, each (Ayden 2026-11-19): 3/4 melamine about $25-30, 5/8 Baltic birch ply about $70, solid wood about $110.
 // Picked by the drawer material's name unless the price sheet has its own number for it (Edit prices › Adders).
@@ -367,6 +372,8 @@ function lamBottomOf(c) {
   const b = buildParts(c).parts.find(pt => pt.cabId === c.id && pt.name === 'Bottom'); return b ? b.L * b.W * (b.qty || 1) / 144 : 0;
 }
 const FRONT_KINDS = ['door', 'drawerFront', 'frame'];
+// A cabinet whose door template's doors are bought (Bywater...): its front parts are not cut in the shop.
+const frontBought = c => { const f0 = computeFronts(c).find(f => f.type !== 'open'), ds = f0 && frontStyle(c, f0).ds; return !!(ds && (ds.bought || ds.source === 'buyout')); };
 // One door or front: its size times the style's price per sq ft (from the door library, or this job's own) plus material.
 // 0.55.34 (Ayden 2026-11-11): the style's Minimum per front ($20 by default) is a floor under that whole price, so a tiny
 // front that would cost next to nothing costs the minimum. Before, the minimum replaced the labor and material went on top.
@@ -551,8 +558,8 @@ function quoteCSV(ps) {
 function renderPricing() {
   const ps = priceSheet(), view = ui.priceView || 'quote', q = priceJob(ps);
   const sheetPick = `<label class="prx-sheet"><span>Price sheet</span><select data-act-change="ps-pick" aria-label="Price sheet">${(() => { const fq = (ui.psFind || '').toLowerCase(), l = [...PRICES].sort((x, y) => String(x.name).localeCompare(String(y.name), undefined, { numeric: true })).filter(p => !fq || p === ps || String(p.name).toLowerCase().includes(fq)); return l.map(p => `<option value="${p.id}"${p.id === ps.id ? ' selected' : ''}>${esc(p.name)}</option>`).join(''); })()}</select></label>${PRICES.length > 5 ? `<input type="search" class="ps-find" value="${esc(ui.psFind || '')}" placeholder="Find a sheet" aria-label="Find a price sheet">` : ''}`;
-  const tabs = `<div class="setx-tabs prx-tabs" role="tablist">${[['quote', 'Quote', 'list'], ['edit', 'Edit prices', 'sliders'], ['order', 'Order', 'download']].map(([k, l, ic]) => `<button role="tab" data-act="price-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
-  const body = view === 'edit' ? priceEditor(ps) : view === 'order' ? `<div class="prx-order">${buyList()}</div>${exportHTML(false)}` : priceQuote(ps, q);
+  const tabs = `<div class="setx-tabs prx-tabs" role="tablist">${[['quote', 'Quote', 'list'], ['edit', 'Edit prices', 'sliders'], ['order', 'Order', 'download'], ...(typeof profitCard === 'function' ? [['profit', 'Profit', 'tag']] : [])].map(([k, l, ic]) => `<button role="tab" data-act="price-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
+  const body = view === 'profit' && typeof profitCard === 'function' ? profitCard(ps, q) : view === 'edit' ? priceEditor(ps) : view === 'order' ? `<div class="prx-order">${buyList()}</div>${exportHTML(false)}` : priceQuote(ps, q);
   const b = (act, ic, l, x = '') => `<button class="btn${x}" data-act="${act}">${icon(ic)}${l}</button>`;
   const acts = `<div class="prx-acts">
     ${b('quote-print', 'print', 'Print or save quote', ' primary')}
@@ -628,7 +635,7 @@ function priceQuote(ps, q = priceJob(ps)) {
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
   const anyOpen = q.rooms.some(R => !roomShut(R.r));
   const fold = q.rooms.length > 1 ? `<button class="btn" data-act="prx-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${icon('chevr', anyOpen ? '' : 'rot90')}${anyOpen ? 'Collapse all rooms' : 'Expand all rooms'}</button>` : '';
-  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${typeof whatIfCard === 'function' ? whatIfCard(ps, q) : ''}${typeof profitCard === 'function' ? profitCard(ps, q) : ''}${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${hardwareCard(ps, q)}${paintCard(ps, q)}`;
+  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${typeof whatIfCard === 'function' ? whatIfCard(ps, q) : ''}${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${hardwareCard(ps, q)}${paintCard(ps, q)}`;
 }
 // Which rooms are folded on Pricing › Quote, per job, kept on this computer. Only the view; prices are untouched.
 const PRX_FOLD_KEY = () => KEY + '.prxfold';
