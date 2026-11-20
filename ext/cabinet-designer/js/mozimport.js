@@ -268,6 +268,8 @@ function mozRooms(data) {
       if (isFiller(p) || isEndPanel(p)) { extras.push({ p, at }); return; }
       const cat = mozCat(p), lib = mozLib(p, cat), c = newCab(S, lib, at.wall, at.side, at.off);
       Object.assign(c, { name: p.name || lib.name, w: p.w, h: p.h, d: p.d, elev: p.elev, fromMozaik: true });
+      // From a Bid Reader row: its notes, and ADA (9" toe) when the row says so.
+      if (p.fromBid) { if (p.notes) c.notes = p.notes; if (p.ada && c.cat !== 'Wall') c.params = { ...(c.params || {}), ada: 'on' }; }
       // A base or tall cabinet hung off the floor (a floating vanity drawer) has no toe kick, legs or toe skin.
       if (p.elev > 0.5 && c.cat !== 'Wall' && c.construction && c.construction.toeKick) c.construction.toeKick = false;
       // Corner products keep their own fronts; Mozaik's name says which end goes in the corner.
@@ -286,7 +288,10 @@ function mozRooms(data) {
       // hi: the piece sits past the cabinet's far end along the wall. Which of those is the viewer's left or right
       // depends on the side of the wall.
       const near = (c, hi) => c.wall === at.wall && c.side === at.side && p.elev < c.elev + c.h - 0.5 && p.elev + p.h > c.elev + 0.5 && Math.abs(hi ? at.off - (c.off + c.w) : c.off - (at.off + p.w)) < 0.2;
-      const c = cabs.find(x => near(x, true)) || cabs.find(x => near(x, false));
+      let c = cabs.find(x => near(x, true)) || cabs.find(x => near(x, false));
+      // 0.60.0: a bid's panel standing well above the cabinet beside it (a full-height fridge panel next to a base) is its own
+      // panel, not that cabinet's end.
+      if (c && p.fromBid && isEndPanel(p) && p.h > c.h + 6) c = null;
       // 0.59.27: an end panel with no cabinet beside it (a fridge panel, a panel at the end of open shelves) stands on its own
       // as a Support Panel instead of being left out.
       const sp = !c && isEndPanel(p) && typeof libItem === 'function' && libItem('made-panel');
@@ -347,11 +352,19 @@ async function importMozaik(files, opts = {}) {
     if (s.job.bidDraw === 'exact') s.job.layout = { ...(s.job.layout || {}), autoPanels: false, autoFillers: false, fridgePanels: false };
     s.bidSupp = 1; s.fridgeP = 1;
   }
+  // The texture list, for showing the bid's finish (bidFinishLook).
+  if (tk && typeof loadTexLib === 'function') await loadTexLib().catch(() => {});
   const prev = S; S = s; attachRoom(S);
   let rooms, added = null;
-  try { rooms = mozRooms(data); if (tk) added = bidTakeoffAdd(rooms, tk); } finally { S = prev; }
+  try {
+    rooms = mozRooms(data);
+    if (tk) added = bidTakeoffAdd(rooms, tk);
+    // 0.60.0: and the way the chat takeoffs draw bids (tops by others at $0, finish look, corner panels, overlap check).
+    if (tk && typeof bidRules === 'function') added = bidRules(rooms, tk, added);
+  } finally { S = prev; }
   if (!rooms.length) { flash('Nothing in that job to bring in.'); return null; }
   s.rooms = rooms; s.roomId = rooms[0].id; s.job.notes = `Imported from ${opts.from || 'Mozaik'} ${new Date().toLocaleDateString()}`;
+  if (added && added.overlaps && typeof bidOverlapNote === 'function') s.job.notes += '\n' + bidOverlapNote(added.overlaps);
   const folder = opts.folder || jobs.view || 'My jobs', p = freePath(folder, s.job.name);
   s.job.name = jobNameOf(p);
   ['status', 'stageAt', 'was', 'tag'].forEach(k => delete s.job[k]);

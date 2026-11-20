@@ -36,17 +36,23 @@ const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => BID_SHELF(r) || 
 function bidWalls(walls) {
   const dir = a => { const r = a * Math.PI / 180; return [Math.round(Math.cos(r)), Math.round(Math.sin(r))]; };
   const out = walls.map(() => null), chain = walls.map((w, i) => i).filter(i => !walls[i].island);
-  let ang = chain.length > 1 ? 90 : 0, x = 0, y = chain.length > 1 ? -(+walls[chain[0]].len || 0) : 0;
-  chain.forEach(i => {
+  let ang = chain.length > 1 ? 90 : 0, x = 0, y = chain.length > 1 ? -(+walls[chain[0]].len || 0) : 0, maxX = 0;
+  chain.forEach((i, k) => {
+    // 0.60.0: a wall after an "end" starts a run of its own (a unit's bath after its kitchen), set 10' to the right of
+    // everything so far instead of chained on (they ran into each other).
+    if (k > 0 && walls[chain[k - 1]].turn === 'end') {
+      const rest = chain.slice(k), stop = rest.findIndex(j => walls[j].turn === 'end'), seg = stop < 0 ? rest : rest.slice(0, stop + 1);
+      ang = seg.length > 1 ? 90 : 0; x = maxX + 120; y = seg.length > 1 ? -(+walls[i].len || 0) : 0;
+    }
     const len = +walls[i].len || 0; out[i] = { len, x, y, ang };
-    const [ux, uy] = dir(ang); x += ux * len; y += uy * len;
+    const [ux, uy] = dir(ang); x += ux * len; y += uy * len; maxX = Math.max(maxX, x, out[i].x);
     ang = ((walls[i].turn === 'left' ? ang + 90 : ang - 90) + 360) % 360;
   });
   walls.forEach((w, i) => {
     if (!w.island) return;
     const len = +w.len || 0, f = out[(parseInt(w.faces) || 0) - 1] || out[chain[0]];
     if (!f) { out[i] = { len, x: 0, y: 0, ang: 0, hidden: true }; return; }
-    const [ux, uy] = dir(f.ang), [rx, ry] = dir(f.ang - 90), a = (+w.along || 0) + len, d = +w.distance || 48;
+    const [ux, uy] = dir(f.ang), [rx, ry] = dir(f.ang - 90), a = (+w.along || 0) + len, d = +w.distance || 90;
     out[i] = { len, x: f.x + ux * a + rx * d, y: f.y + uy * a + ry * d, ang: (f.ang + 180) % 360, hidden: true };
   });
   return out.filter(w => w && w.len > 0).map(w => ({ ...w, thick: w.hidden ? 0 : NaN, height: NaN }));
@@ -79,17 +85,23 @@ function bidNativeData(tk) {
     const walls = bidWalls(tw);
     if (+t.height > 0) walls.forEach(w => { w.height = +t.height; });
     const looseWall = loose.length ? walls.length : 0, cursor = {}, prods = [];
+    const upTop = +t.soffit > 0 ? +t.soffit : (+t.height > 0 ? +t.height : 96) - 3;
     mine.forEach(r => {
       let type = BID_CAB_TYPE[r.category];
       const text = [r.code, r.product, r.notes].filter(Boolean).join(' ');
-      if (!type) type = (+r.H || 0) >= 66 ? 3 : (+r.elev || 0) >= 40 ? 2 : 1;
+      // 0.60.0: a filler or panel with no height off the floor that butts an upper on its wall is an upper filler.
+      const noElev = !(r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0);
+      const butts = o => BID_CAB_TYPE[o.category] === 2 && String(o.wall) === String(r.wall) && o.x !== '' && o.x != null && r.x !== '' && r.x != null
+        && (Math.abs(+r.x - (+o.x + +o.W)) < 0.3 || Math.abs(+o.x - (+r.x + (+r.W || 0.75))) < 0.3);
+      if (!type) type = (+r.H || 0) >= 66 ? 3 : (+r.elev || 0) >= 40 ? 2 : noElev && (+r.H || 0) < 60 && mine.some(butts) ? 2 : 1;
       const [dw, dh, dd] = BID_DEF[type];
       let w = +r.W > 0 ? +r.W : dw, h = +r.H > 0 ? +r.H : dh, d = +r.D > 0 ? +r.D : dd;
       // 0.59.27: a panel is its thickness along the wall and its depth out from it; rows that give the depth as the width
       // (24 x 3/4) are turned round, and a panel with no width is 3/4" thick, so it doesn't push the run along 24".
       if (r.category === 'panel') { if (w > d && w > 6 && d <= 3) [w, d] = [d, w]; if (!(+r.W > 0)) w = 0.75; }
       const wi = parseInt(r.wall) > 0 && tw[parseInt(r.wall) - 1] ? parseInt(r.wall) : looseWall, back = +r.side === 2;
-      const elev = r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0 ? +r.elev : type === 2 ? Math.max(0, 84 - h) : 0;
+      // 0.60.0: uppers with no height given top out at the soffit, else 3" under the ceiling (LARKUL rule 1.5; was 84").
+      const elev = r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0 ? +r.elev : type === 2 ? Math.max(0, upTop - h) : 0;
       const key = wi + ':' + back + ':' + (type === 2 ? 'up' : 'low');
       const hasX = r.x !== '' && r.x != null && isFinite(+r.x);
       const name = r.product || r.code || r.category;
@@ -98,7 +110,8 @@ function bidNativeData(tk) {
         const x = hasX && k === 0 ? +r.x : (cursor[key] || 0);
         cursor[key] = Math.max(cursor[key] || 0, x + w);
         prods.push({ name, desc: [r.category, text].join(' '), w, h, d, x, y: NaN, elev, outset: 0, rot: 0, wall: wi, back,
-          type: type, sub, num: 0, inserts: [], fronts: [], fromBid: true });
+          type: type, sub, num: 0, inserts: [], fronts: [], fromBid: true,
+          notes: [r.code, r.material, r.notes].filter(Boolean).join(' · '), ada: /\bada\b/i.test(text) });
       }
     });
     return { name, walls, prods, appls: [], hwNames: {} };
@@ -185,7 +198,7 @@ function bidTakeoffRows(rooms, tk, items, done) {
     if (BID_SHELF(r)) done.noShelf += qty;
     // Millwork, countertops and shelves with nothing to draw them with: a line on the Quote to put a price on.
     (rm.bidItems = rm.bidItems || []).push({ id: uid('bi'), code: r.code || '', name: bidName(r), cat: r.category || '', qty,
-      size: bidSize(r), material: r.material || '', notes: r.notes || '', rate: '' });
+      size: bidSize(r), material: r.material || '', notes: r.notes || '', rate: '', ...(r.by ? { by: r.by } : {}) });
     done.priced++;
   });
   if (done.exact) return done;
@@ -258,7 +271,9 @@ function bidTakeoffNote(d) {
   if (d.fridge) bits.push(`${d.fridge} fridge panel${d.fridge === 1 ? '' : 's'} beside the fridges`);
   if (d.noShelf) bits.push(`${d.noShelf} shel${d.noShelf === 1 ? 'f' : 'ves'} put on the Quote because the library has no floating shelf`);
   const how = d.exact ? ' Drawn exactly as the bid: automatic end panels, fillers and fridge panels are off (switches in the item bar).' : '';
-  return (bits.length ? ' From the bid: ' + bits.join(', ') + '.' : '') + how;
+  // 0.60.0: the overlap check run on import (bidRules), listed in the job notes.
+  const ov = d.overlaps ? (d.overlaps.length ? ` Overlap check: ${d.overlaps.length} thing${d.overlaps.length === 1 ? '' : 's'} to fix, listed in Job › Notes.` : ' Overlap check: no overlaps.') : '';
+  return (bits.length ? ' From the bid: ' + bits.join(', ') + '.' : '') + how + ov;
 }
 
 /* ---------- Pricing the lines from the bid ---------- */
