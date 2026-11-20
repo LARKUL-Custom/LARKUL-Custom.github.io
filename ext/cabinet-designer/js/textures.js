@@ -43,6 +43,12 @@ function skinOf(p, m) {
 }
 // Material m as it should look on surface k of cabinet c.
 function texLook(m, k, c) { const p = texPickOf(k, c) || (k === 'toe' ? texPickOf('finished', c) : ''); return p ? skinOf(p, m) : m; }
+// Finished interior (c.finInt, Ayden 2026-11-20): the inside looks like the picked finish (with its Finished look pick),
+// the same way the cut list cuts it from the finish material. Look only.
+function inLook(m, k, c) {
+  if (c && c.finInt && typeof finishMat === 'function') { const f = mat(finishMat(c)); if (f) return texLook(f, 'finished', c); }
+  return texLook(m, k, c);
+}
 // A cabinet marked Finished shows its whole box as finished; otherwise the box is the inside.
 const boxKey = c => (c && c.finished ? 'finished' : 'inside');
 const frontKey = f => (f && (f.type === 'drawer' || f.type === 'false') ? 'drawers' : 'doors');

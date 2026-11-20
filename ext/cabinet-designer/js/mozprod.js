@@ -528,7 +528,7 @@ function mozMeshes(c, opts = {}) {
   r.parts.forEach((q, i) => {
     if (!(q.qty > 0) || q.outline.length < 3) return;
     const m0 = r.mats[i], T = q.group === 'metal' ? q.T : (m0 ? m0.thick * 25.4 : q.T);
-    const M = q.group === 'metal' ? (typeof metal3 === 'function' && R3 ? metal3('#8a9096') : flat3('#8a9096')) : mat3(texLook(m0, mozSurf(q, c), c), opts);
+    const M = q.group === 'metal' ? (typeof metal3 === 'function' && R3 ? metal3('#8a9096') : flat3('#8a9096')) : mat3((s => c.finInt && (s === 'inside' || s === boxKey(c)) ? inLook(m0, s, c) : texLook(m0, s, c))(mozSurf(q, c)), opts);
     const kf = q.group === 'metal' ? null : mozKerf(r, q, c.w * 25.4, D * 25.4);
     if (kf) {
       const g = mozKerfGeo(kf, D), Md = M.clone(); Md.side = THREE.DoubleSide;

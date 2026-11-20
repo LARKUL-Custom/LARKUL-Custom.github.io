@@ -98,6 +98,18 @@ const MADE = {
       pt.ext = { pts: out, thick: fm.thick };
     },
   },
+  // 0.59.27 (Ayden 2026-11-19: "the bid reader keeps putting shelves without panels and keeps missing panels"): a finished panel
+  // standing on its own, out from the wall, with no cabinet it belongs to. It holds up the open end of a stack of floating shelves
+  // (a shelf gable), stands beside a fridge, or is any panel from a bid with no box beside it. Cut from the Finish material,
+  // as wide as that sheet is thick. A panel beside a cabinet covers that cabinet's end, so the cabinet gets no automatic panel there.
+  panel: {
+    name: 'Support Panel', cat: 'Tall', w: 0.75, h: 84, d: 24, elev: 0, folder: 'Desks and Panels',
+    mp: {}, price: { base: 0, perFt: 0 }, fields: [],
+    build(c, mp, x) {
+      const pt = x.part('Support panel', x.fm, r3(c.h), r3(c.d), { kind: 'applied' }); pt.fin = true;
+      pt.pos = { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d };
+    },
+  },
   // 3. A laminate top on 2 layers of 3/4" core with a front apron, hung on Rakks EHV brackets, no cabinet under it.
   // ADA: knee clearance under the apron 29" at least, the top 34" at most.
   adatop: {
@@ -169,10 +181,17 @@ function madeSync(c) {
   const d = madeDef(c); if (!d) return;
   const mp = madeMp(c), cm = mat(cabMatT(cabSet(c, 'cabMatT')).carcass) || S.materials[0], fm = mat(finishMat(c)) || cm;
   if (c.made === 'slatwall') c.d = r3((mp.backer === 'off' ? 0 : fm.thick) + fm.thick);
-  if (c.made === 'privacy') c.w = r3(fm.thick);
+  if (c.made === 'privacy' || c.made === 'panel') c.w = r3(fm.thick);
 }
 // Own price when the price sheet has none for the product: these aren't priced like cabinets.
-function madePrice(c) { const d = madeDef(c); return d ? { own: true, ...d.price } : null; }
+// A support panel is priced like an applied slab end panel (0.59.21): its material by the square foot plus the sheet's charge
+// per panel for its height (Edit prices › Adders).
+function madePrice(c, ps) {
+  const d = madeDef(c); if (!d) return null;
+  if (c.made !== 'panel' || !ps || typeof matSqIn !== 'function') return { own: true, ...d.price };
+  const m = mat(finishMat(c)) || mat(cabMatT(cabSet(c, 'cabMatT')).carcass);
+  return { own: true, base: r3((m ? c.h * c.d * matSqIn(m, ps) : 0) + (typeof panelAdd === 'function' ? panelAdd(ps, c.h >= 60 ? 'Tall' : c.elev >= 30 ? 'Wall' : 'Base') : 0)), perFt: 0 };
+}
 
 /* ---------- Library ---------- */
 function madeLibItems() {
@@ -224,7 +243,7 @@ function madeBox(c) {
   const d = madeDef(c); if (!d) return '';
   const mp = madeMp(c), R = 'cabmp:' + c.id, notes = (buildParts(c).notes || []);
   const f = ([k, label, type, op]) => type === 'select' ? fld(label, R, k, mp[k] ?? '', 'select', { options: (typeof op === 'function' ? op() : op).map(([v, l]) => ({ v, l })) }) : fld(label, R, k, mp[k] ?? '', type);
-  return `<div class="psec box">${secHead('sliders', d.name, 'violet')}<div class="grid2">${d.fields.map(f).join('')}</div>${notes.length ? `<div class="note">${esc(notes.join('. '))}.</div>` : ''}</div>`;
+  return `<div class="psec box">${secHead('sliders', d.name, 'violet')}${d.fields.length ? `<div class="grid2">${d.fields.map(f).join('')}</div>` : `<div class="note">A finished panel standing on its own, cut from the Finish material. Size it on the Size tab: width is its thickness, depth how far it comes out from the wall.</div>`}${notes.length ? `<div class="note">${esc(notes.join('. '))}.</div>` : ''}</div>`;
 }
 
 /* ---------- Countertops built in the shop (13) ---------- */

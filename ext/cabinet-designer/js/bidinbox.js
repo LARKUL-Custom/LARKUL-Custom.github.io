@@ -84,7 +84,10 @@ function bidNativeData(tk) {
       const text = [r.code, r.product, r.notes].filter(Boolean).join(' ');
       if (!type) type = (+r.H || 0) >= 66 ? 3 : (+r.elev || 0) >= 40 ? 2 : 1;
       const [dw, dh, dd] = BID_DEF[type];
-      const w = +r.W > 0 ? +r.W : dw, h = +r.H > 0 ? +r.H : dh, d = +r.D > 0 ? +r.D : dd;
+      let w = +r.W > 0 ? +r.W : dw, h = +r.H > 0 ? +r.H : dh, d = +r.D > 0 ? +r.D : dd;
+      // 0.59.27: a panel is its thickness along the wall and its depth out from it; rows that give the depth as the width
+      // (24 x 3/4) are turned round, and a panel with no width is 3/4" thick, so it doesn't push the run along 24".
+      if (r.category === 'panel') { if (w > d && w > 6 && d <= 3) [w, d] = [d, w]; if (!(+r.W > 0)) w = 0.75; }
       const wi = parseInt(r.wall) > 0 && tw[parseInt(r.wall) - 1] ? parseInt(r.wall) : looseWall, back = +r.side === 2;
       const elev = r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0 ? +r.elev : type === 2 ? Math.max(0, 84 - h) : 0;
       const key = wi + ':' + back + ':' + (type === 2 ? 'up' : 'low');
@@ -116,7 +119,7 @@ const bidSize = r => ['W', 'H', 'D'].map(k => +r[k] > 0 ? fmtLen(+r[k]) : '').fi
 // Rooms the Mozaik job didn't have (only shelves or millwork in them) are made from the takeoff's walls.
 // Returns what it did, for the message after the import.
 function bidTakeoffAdd(rooms, tk) {
-  const done = { shelves: 0, priced: 0, unplaced: 0, noShelf: 0, rooms: 0, built: 0, lines: 0, sinks: 0, options: [] };
+  const done = { shelves: 0, priced: 0, unplaced: 0, noShelf: 0, rooms: 0, built: 0, lines: 0, sinks: 0, supports: 0, options: [] };
   const items = bidTakeoffItems(tk); if (!items.length) return done;
   // The new rooms stand in for the job's while this runs, so room lookups (neighbours, sinks, tops) find them.
   const keepRooms = S.rooms; S.rooms = rooms;
@@ -185,7 +188,60 @@ function bidTakeoffRows(rooms, tk, items, done) {
       size: bidSize(r), material: r.material || '', notes: r.notes || '', rate: '' });
     done.priced++;
   });
+  rooms.forEach(rm => { done.supports += bidShelfSupports(rm); });
   return done;
+}
+// 0.59.27 (Ayden 2026-11-19: "the bid reader keeps putting shelves without panels"): floating shelves stacked one over another
+// (a pantry niche, open shelving), or set over a base cabinet, need something at each end to stand against: a wall, a cabinet
+// as tall as the shelves, or a finished support panel. Each open end gets a Support Panel (madeprod.js) butted against the
+// shelves: from the floor when a cabinet stands under them (it covers that cabinet's end too), else from the lowest shelf,
+// up to the top shelf, or to the top of the uppers on that wall when they are within 6" above it; as deep as the deepest
+// shelf or the cabinet face under them. A single floating shelf on concealed brackets with nothing under it stands on its own.
+// Returns how many panels it added.
+// onlyBid: just shelves that came from a bid (the once-per-job fix for jobs imported before 0.59.27).
+function bidShelfSupports(rm, onlyBid) {
+  const lib = typeof libItem === 'function' && libItem('made-panel'); if (!lib || typeof isFloatShelf !== 'function') return 0;
+  return withRoom(rm, () => {
+    let added = 0;
+    const stacks = [];
+    S.cabinets.filter(c => isFloatShelf(c) && wall(c.wall) && (!onlyBid || c.fromBid)).forEach(c => {
+      let g = stacks.find(s => s.wall === c.wall && s.side === c.side && Math.abs(s.off - c.off) < 0.5 && Math.abs(s.w - c.w) < 0.5);
+      if (!g) stacks.push(g = { wall: c.wall, side: c.side, off: c.off, w: c.w, list: [] });
+      g.list.push(c);
+    });
+    stacks.forEach(g => {
+      const ids = new Set(g.list.map(c => c.id)), lo = Math.min(...g.list.map(c => c.elev)), hi = Math.max(...g.list.map(c => c.elev + c.h));
+      const sd = Math.max(...g.list.map(c => (c.outset || 0) + c.d));
+      const under = S.cabinets.filter(k => !ids.has(k.id) && k.wall === g.wall && k.side === g.side && !isFloatShelf(k) && !k.made
+        && k.elev + k.h <= lo + 0.01 && k.off < g.off + g.w - 0.01 && k.off + k.w > g.off + 0.01);
+      if (g.list.length < 2 && !under.length) return;
+      [-1, 1].forEach(dir => {
+        const edge = dir < 0 ? g.off : g.off + g.w;
+        // What touches this end, shelf by shelf: every shelf needs a wall or something standing beside it.
+        const near = g.list.map(c => obstacles(c.wall, c.side, c, c.id).filter(o => !ids.has(o.id)).map(o => ({ ...o, gap: dir < 0 ? edge - o.a1 : o.a0 - edge })).filter(o => o.gap > -0.01));
+        const held = near.every(list => list.some(o => o.gap <= 1.01 && (o.kind !== 'cab' || !isFloatShelf(cab(o.id) || {}))));
+        if (held) return;
+        // No room for a panel (something within a panel's thickness): leave it, it's as good as butted.
+        const t = (mat(finishMat(g.list[0])) || {}).thick || 0.75;
+        if (near.some(list => list.some(o => o.gap > 0.01 && o.gap < t - 0.01))) return;
+        // A cabinet under the shelves that runs on past this end: the panel stands on its countertop instead of the floor.
+        const past = under.filter(k => dir < 0 ? k.off < edge - 0.5 : k.off + k.w > edge + 0.5);
+        const tp = typeof countertop === 'function' ? countertop(roomSet('countertop')) || {} : {};
+        const z0 = !under.length ? lo : past.length ? Math.max(...past.map(k => k.elev + k.h + (k.cat === 'Base' && !k.noTop && rm.autoTops !== false ? +tp.thick || 0 : 0))) : 0;
+        const tops = S.cabinets.filter(k => k.wall === g.wall && k.side === g.side && k.cat === 'Wall' && !isFloatShelf(k) && k.elev + k.h > hi && k.elev + k.h <= hi + 6.01).map(k => k.elev + k.h);
+        const z1 = tops.length ? Math.max(...tops) : hi;
+        const d = Math.max(sd, ...under.filter(k => !past.includes(k)).map(k => faceOut(k)));
+        const c = newCab(S, lib, g.wall, g.side, edge);
+        Object.assign(c, { h: r3(z1 - z0), d: r3(d), elev: r3(z0), fromBid: true, notes: 'Support panel at the open end of the floating shelves (added on import)' });
+        if (typeof madeSync === 'function') madeSync(c);
+        if (dir < 0) c.off = r3(edge - c.w);
+        S.cabinets.push(c);
+        if (typeof conflicts === 'function' && conflicts(c)) { S.cabinets.pop(); return; }
+        added++;
+      });
+    });
+    return added;
+  });
 }
 function bidTakeoffNote(d) {
   if (!d) return '';
@@ -196,6 +252,7 @@ function bidTakeoffNote(d) {
   if (d.lines) bits.push(`${d.lines} window sill${d.lines === 1 ? '' : 's'} on Pricing › Quote › Job lines to price by the foot`);
   if (d.sinks) bits.push(`${d.sinks} sink${d.sinks === 1 ? '' : 's'} set on sink bases for the countertop cutouts`);
   if ((d.options || []).length) bits.push(d.options.join(', '));
+  if (d.supports) bits.push(`${d.supports} support panel${d.supports === 1 ? '' : 's'} at open ends of floating shelves`);
   if (d.noShelf) bits.push(`${d.noShelf} shel${d.noShelf === 1 ? 'f' : 'ves'} put on the Quote because the library has no floating shelf`);
   return bits.length ? ' From the bid: ' + bits.join(', ') + '.' : '';
 }

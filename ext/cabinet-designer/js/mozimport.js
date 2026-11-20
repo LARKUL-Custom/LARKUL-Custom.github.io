@@ -286,7 +286,18 @@ function mozRooms(data) {
       // hi: the piece sits past the cabinet's far end along the wall. Which of those is the viewer's left or right
       // depends on the side of the wall.
       const near = (c, hi) => c.wall === at.wall && c.side === at.side && p.elev < c.elev + c.h - 0.5 && p.elev + p.h > c.elev + 0.5 && Math.abs(hi ? at.off - (c.off + c.w) : c.off - (at.off + p.w)) < 0.2;
-      const c = cabs.find(x => near(x, true)) || cabs.find(x => near(x, false)); if (!c) { (data.skipped = data.skipped || []).push(p.name); return; }
+      const c = cabs.find(x => near(x, true)) || cabs.find(x => near(x, false));
+      // 0.59.27: an end panel with no cabinet beside it (a fridge panel, a panel at the end of open shelves) stands on its own
+      // as a Support Panel instead of being left out.
+      const sp = !c && isEndPanel(p) && typeof libItem === 'function' && libItem('made-panel');
+      if (sp) {
+        const k = newCab(S, sp, at.wall, at.side, at.off);
+        Object.assign(k, { name: p.name && !/^finished panel$/i.test(p.name) ? p.name : sp.name, h: p.h > 0 ? p.h : k.h, d: p.d > 3 ? p.d : p.w > 3 ? p.w : k.d, elev: p.elev || 0, fromMozaik: true });
+        if (typeof madeSync === 'function') madeSync(k);
+        if (p.num) k.num = p.num;
+        rm.cabinets.push(k); return;
+      }
+      if (!c) { (data.skipped = data.skipped || []).push(p.name); return; }
       const hi = near(c, true), end = (hi === (at.side === 1)) ? 'R' : 'L';
       const wl = rm.walls.find(w => w.id === at.wall), L = wl ? Math.hypot(wl.x2 - wl.x1, wl.y2 - wl.y1) : 0, ref = walls.find(w => w.id === at.wall);
       const toWall = ref && !ref.hidden && (hi ? at.off + p.w > L - 0.5 : at.off < 0.5 + ref.a0) && rm.walls.length > 1;

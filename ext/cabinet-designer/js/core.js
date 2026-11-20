@@ -693,6 +693,9 @@ function migrate(s) {
   const out = attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensureBoughtDoors(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s))))))))));
   // 0.57.3: bid shelves and products were placed from the wall's centerline end, half the corner wall's thickness inside it.
   if (!out.bidFace && typeof bidFaceFix === 'function') { const keep = S; S = out; try { bidFaceFix(out); } catch (_) {} finally { S = keep; } out.bidFace = 1; }
+  // 0.59.27 (Ayden 2026-11-19: "fix what he did"): jobs imported from a bid before this get the support panels at the open ends
+  // of their floating shelf stacks, once (Refuge Shelter: 14).
+  if (!out.bidSupp && typeof bidShelfSupports === 'function') { const keep = S; S = out; const rid = out.roomId; try { out.rooms.forEach(r => { if ((r.cabinets || []).some(c => c.fromBid)) bidShelfSupports(r, true); }); } catch (_) {} finally { out.roomId = rid; S = keep; } out.bidSupp = 1; }
   return out;
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }

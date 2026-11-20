@@ -203,11 +203,11 @@ function cabinetMeshes(c, opts = {}) {
   // A face frame takes its thickness off the front of the box.
   const W = c.w, H = c.h, D = c.d - ffThick(c), tk = hasToe(c) ? p.toeKickHeight : 0, sb = tk ? p.toeKickSetback : 0;
   // Textures: each surface wears its pick from the Textures tab (look only; cm and the rest still give sizes).
-  const L3 = (m, k) => M(texLook(m, k, c)), bk = boxKey(c), cmM = L3(cm, bk);
+  const L3 = (m, k) => M(texLook(m, k, c)), bk = boxKey(c), I3 = (m, k) => M(inLook(m, k, c)), cmM = I3(cm, bk);
   ffMeshes(c, p, m => L3(m, 'finished'), o => grp.add(o));
   const feet = onFeet(c, p);
-  if (hasCabShape(c)) cabShape3d(c, p, t, bt, tk, feet ? tk : 0, cmM, L3(bm, 'inside'), o => grp.add(o));
-  if ((cabTopShape(c) || {}).edges && typeof edgeParts3d === 'function') { const dp = buildParts(c).parts.find(q => q.cabId === c.id && / door$/.test(q.name)); edgeParts3d(c, o => grp.add(o), t, feet ? tk : 0, { box: cmM, back: L3(bm, 'inside'), door: dp ? L3(mat(dp.mat), 'doors') : cmM }); }
+  if (hasCabShape(c)) cabShape3d(c, p, t, bt, tk, feet ? tk : 0, cmM, I3(bm, 'inside'), o => grp.add(o));
+  if ((cabTopShape(c) || {}).edges && typeof edgeParts3d === 'function') { const dp = buildParts(c).parts.find(q => q.cabId === c.id && / door$/.test(q.name)); edgeParts3d(c, o => grp.add(o), t, feet ? tk : 0, { box: cmM, back: I3(bm, 'inside'), door: dp ? L3(mat(dp.mat), 'doors') : cmM }); }
   else {
     // 0.58.39: a finished end (and a finished-exterior wall cabinet's bottom) shows in the finish, as the cut list cuts it
     // (same thickness only, like buildParts). It showed the cabinet material before, so an exposed side looked unfinished.
@@ -224,13 +224,13 @@ function cabinetMeshes(c, opts = {}) {
       else grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, D - p.stretcherWidth / 2));
       grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, rsAt ? p.stretcherWidth / 2 : p.stretcherWidth / 2 + p.backInset + bt));
     } else grp.add(box3(W - 2 * t, t, D, cmM, W / 2, H - t / 2, D / 2));
-    grp.add(box3(W - 2 * t, H - tk - 2 * t, bt, L3(bm, 'inside'), W / 2, tk + H / 2 - tk / 2, p.backInset + bt / 2, false));
+    grp.add(box3(W - 2 * t, H - tk - 2 * t, bt, I3(bm, 'inside'), W / 2, tk + H / 2 - tk / 2, p.backInset + bt / 2, false));
   }
   // Nailers (same spots as the cut list); 3D z runs from the back (0) to the front (D).
   if (!hasCabShape(c) && !(cabTopShape(c) || {}).edges) nailerSpots(c, p, { t, bt, D, backY: D - p.backInset - bt, zIn0: tk + t, zIn1: H - t })
     .forEach(n => grp.add(box3(W - 2 * t, n.z1 - n.z0, n.y1 - n.y0, cmM, W / 2, (n.z0 + n.z1) / 2, D - (n.y0 + n.y1) / 2)));
   // Drawer stretchers and fixed shelves between front rows (caseRails in build.js), where the cut list has them.
-  { const rl = caseRails(c, p, null, t), inD0 = D - p.backInset - bt, shM = L3(mat(mt.shelf) || cm, bk), bpO = blindPart(c, p, t), [sa, sb2] = bpO ? [bpO.o0, bpO.o1] : [t, W - t];
+  { const rl = caseRails(c, p, null, t), inD0 = D - p.backInset - bt, shM = I3(mat(mt.shelf) || cm, bk), bpO = blindPart(c, p, t), [sa, sb2] = bpO ? [bpO.o0, bpO.o1] : [t, W - t];
     rl.stretchers.forEach(q => grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, q.z, D - p.stretcherWidth / 2)));
     rl.shelves.forEach(q => grp.add(box3(sb2 - sa, t, Math.max(1, inD0 - 0.0625), shM, (sa + sb2) / 2, q.z, p.backInset + bt + Math.max(1, inD0 - 0.0625) / 2)));
     [...drawerPartitions(c, p, computeFronts(c, p), t, rl), ...blindPieces(c, p, t, rl)].forEach(q => grp.add(box3(t, q.z1 - q.z0, inD0 - 0.0625, cmM, q.x + t / 2, (q.z0 + q.z1) / 2, D - (inD0 - 0.0625) / 2))); }
@@ -258,7 +258,7 @@ function cabinetMeshes(c, opts = {}) {
   }
   if (c.addParts && c.addParts.length && typeof addedParts3d === 'function') addedParts3d(c, grp, M);
   const fronts = computeFronts(c, p), lay = interiorLayout(c, p, fronts);
-  const inD = D - p.backInset - bt, sm = L3(mat(mt.shelf) || cm, bk);
+  const inD = D - p.backInset - bt, sm = I3(mat(mt.shelf) || cm, bk);
   // shelves, split by a divider when there is one
   const bpS = blindPart(c, p, t), spans = bpS ? [[bpS.o0, bpS.o1]] : lay.divX !== null ? [[t, lay.divX - t / 2], [lay.divX + t / 2, W - t]] : [[t, W - t]];
   if (angledCorner(c)) shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => grp.add(cornerShelf3d(c, p, t, bt, z, sm)));

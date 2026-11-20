@@ -703,7 +703,7 @@ function frontsSVG(c, ex, by, opts = {}) {
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return mozFrontSVG(c, ex, by, opts);
   if (c.made && typeof madeDef === 'function' && madeDef(c)) return madeFrontSVG(c, ex, by, opts);
   const p = effParams(c), fr = computeFronts(c, p), tk = hasToe(c) ? p.toeKickHeight : 0;
-  const Y = z => by - z, cm = texLook(mat(cabMatT(cabSet(c, 'cabMatT')).carcass), boxKey(c), c);
+  const Y = z => by - z, cm = inLook(mat(cabMatT(cabSet(c, 'cabMatT')).carcass), boxKey(c), c);
   const mats = [];
   const fo = (c.shape || {}).front ? clipPoly(cabOutline(c, 'front'), 0, c.w, tk, c.h) : null;
   let s = fo ? `<polygon ${fillFor(cm, 'ev-box')} points="${fo.map(q => `${r3(ex + q.x)},${r3(Y(q.y))}`).join(' ')}"/>` : `<rect ${fillFor(cm, 'ev-box')} x="${ex}" y="${Y(c.h)}" width="${c.w}" height="${c.h - tk}"/>`;

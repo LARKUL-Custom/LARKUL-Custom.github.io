@@ -254,7 +254,7 @@ function savePrices() {
 // A product priced on its own (a floating shelf, a mantel): its row on the sheet's Products card is its whole price.
 // It isn't a cabinet: no doors, materials, hardware or paint, no installation, and it's left out of the cabinet counts.
 // Desks, slat walls and the other shop-built pieces (madeprod.js) are priced on their own from the start.
-const ownRule = (c, ps) => { const o = (ps.products || {})[c.libId]; return o && o.own ? o : !o && c.made && typeof madePrice === 'function' ? madePrice(c) : null; };
+const ownRule = (c, ps) => { const o = (ps.products || {})[c.libId]; return o && o.own ? o : !o && c.made && typeof madePrice === 'function' ? madePrice(c, ps) : null; };
 function priceCab(c, ps) {
   const own = ownRule(c, ps);
   if (own) {
