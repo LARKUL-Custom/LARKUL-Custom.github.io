@@ -113,8 +113,17 @@ function renderRail() {
 phoneQuery.addEventListener('change', () => { ui.libOpen = false; if (ui.tab === 'room') renderRoom(); });
 // Products tree, like Mozaik's: top groups, then folders inside each. Shapes live here too.
 const LIB_GROUPS = [['base', 'Base Cabinets'], ['wall', 'Wall Cabinets'], ['tall', 'Tall Cabinets'], ['filler', 'Fillers and Trim'], ['counter', 'Countertop Cabinets'], ['hood', 'Hoods'], ['shelf', 'Floating Shelves'], ['mantel', 'Fireplace Mantels'], ['special', 'Specialty']];
+// 0.60.6 (Ayden 2026-11-20): one Classification pick for a product (Base, Wall, Tall, Fillers, ..., Specialty).
+// Base, Wall and Tall also set how it is built (cat). Any other class asks once more which way it is built.
+const CLASS_CAT = { base: 'Base', wall: 'Wall', tall: 'Tall' };
+function classFields(ref, o) {
+  const g = libGroup(o), own = CLASS_CAT[g];
+  return fld('Classification', ref, 'group', g, 'select', { options: LIB_GROUPS.map(([v, l]) => ({ v, l: l.replace(/ Cabinets$/, ' cabinet') })) })
+    + (own ? '' : fld('Built as', ref, 'cat', o.cat, 'select', { options: [{ v: 'Base', l: 'Base cabinet' }, { v: 'Wall', l: 'Wall cabinet' }, { v: 'Tall', l: 'Tall cabinet' }] }));
+}
 function libGroup(l) {
-  if (l.group) return l.group;
+  // Shop-made products (desk, slat wall, privacy panel…) were saved as 'made', a group the lists never showed: they are Specialty.
+  if (l.group) return l.group === 'made' ? 'special' : l.group;
   if (l.cat === 'Wall') return /hood/i.test(l.name) ? 'hood' : 'wall';
   return l.cat === 'Tall' ? 'tall' : 'base';
 }
@@ -451,7 +460,8 @@ function qeFaceSVG(c, qr, maxH = 340, inside = false) {
   if (inside) {
     // Inside view: each opening is the space behind its fronts, side to side, numbered, and clicked on its own.
     const lay = interiorLayout(c, effParams(c), fr), x0 = lay.t, w = c.w - 2 * lay.t, r = Math.max(1.4, Math.max(c.w, c.h) / 34);
-    const zh = lay.zones.map(z => `<g class="qe-zone${z.row === qr ? ' on' : ''}"><rect class="qe-hit in" data-act="qe-row" data-id="${z.row}" x="${x0 + 0.3}" y="${-z[1] + 0.3}" width="${w - 0.6}" height="${z[1] - z[0] - 0.6}"><title>Opening ${z.row + 1}</title></rect><circle class="qe-num" cx="${x0 + r + 0.6}" cy="${-z[1] + r + 0.6}" r="${r}"/><text class="qe-numt" x="${x0 + r + 0.6}" y="${-z[1] + r + 0.6}" font-size="${r * 1.2}">${z.row + 1}</text></g>`).join('');
+    // Fillers, shelves and other Mozaik parts have no openings to click (no row, or too small to draw).
+    const zh = lay.zones.filter(z => z.row != null && w > 0.6 && z[1] - z[0] > 0.6).map(z => `<g class="qe-zone${z.row === qr ? ' on' : ''}"><rect class="qe-hit in" data-act="qe-row" data-id="${z.row}" x="${x0 + 0.3}" y="${-z[1] + 0.3}" width="${w - 0.6}" height="${z[1] - z[0] - 0.6}"><title>Opening ${z.row + 1}</title></rect><circle class="qe-num" cx="${x0 + r + 0.6}" cy="${-z[1] + r + 0.6}" r="${r}"/><text class="qe-numt" x="${x0 + r + 0.6}" y="${-z[1] + r + 0.6}" font-size="${r * 1.2}">${z.row + 1}</text></g>`).join('');
     return svg.replace(/<\/svg>$/, zh + '</svg>');
   }
   const hits = fr.map(f => { const [a, b] = frontEX(f); return b - a < 0.25 ? '' : `<rect class="qe-hit${f.row === qr ? ' on' : ''}" data-act="qe-row" data-id="${f.row}" x="${a}" y="${-f.z1}" width="${b - a}" height="${f.z1 - f.z0}"><title>Opening ${f.row + 1}</title></rect>`; }).join('');

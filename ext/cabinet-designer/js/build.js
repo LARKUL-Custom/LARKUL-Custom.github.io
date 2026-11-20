@@ -686,7 +686,12 @@ function buildParts(c) {
       // (drilled once that panel is made, in edgePlates). A bi-fold's second door hangs on the first, so no plates.
       const he = f.face && hk.plate ? cornerHingeEnd(f) : null, atSide = he && (Math.abs(he.x) < 0.05 ? 'L' : Math.abs(he.x - W) < 0.05 ? 'R' : '');
       if (he && !atSide && !ffr) hinges.forEach(hp => edgePlateAt.push({ p: { x: he.x, y: he.z }, z: f.z0 + hp, hg }));
-      if ((!f.face || atSide) && !ffr && hk.plate) hinges.forEach(hp => {
+      // A door in the middle of a row (4 doors across, no divider) hinges on nothing: no side can take its plates.
+      // (A blind corner door hinges on the blind inside panel, which takes the plates.)
+      const midHinge = !f.face && !ffr && hk.plate && (f.hinge === 'R' ? (bpC && bpC.side === 'R' ? bpC.x1 : W) - f.x1 : f.x0 - (bpC && bpC.side === 'L' ? bpC.x0 : 0)) > t + 0.5;
+      const mhMsg = `A door hinges in the middle of ${lbl} with no side to screw its hinge plates to. Change the door count, or hinge the door on a side.`;
+      if (midHinge && !warn.includes(mhMsg)) warn.push(mhMsg);
+      if ((!f.face || atSide) && !ffr && hk.plate && !midHinge) hinges.forEach(hp => {
         const z = f.z0 + hp, ops = (atSide || f.hinge) === 'L' ? leftOps : rightOps;
         hg.plateHoles.forEach(ph => ops.push({ type: 'bore', x: z + ph.dz * MM, y: ph.y * MM, dia: ph.dia * MM, depth: ph.depth * MM, face: 'inside', why: 'hinge plate' }));
         if (hg.plateHoles.length) { const ys = hg.plateHoles.map(ph => ph.y * MM), half = Math.max(25, ...hg.plateHoles.map(ph => Math.abs(ph.dz) + 10)) * MM;
@@ -1001,6 +1006,10 @@ function buildParts(c) {
         bot.ops.push({ type: 'bore', x: r3(x + dx - t), y: r3(y + dy), dia: +leg.holeDia, depth: Math.min(+leg.holeDepth, t - 0.0625), face: 'outside', why: leg.name, leg: true }); })));
       n = xs.length * ys.length;
     }
+    // A cabinet too small for its legs (a mini on feet): the screw holes would run off the bottom or into each other.
+    if (bot) { const lo = bot.ops.filter(o => o.leg), off = lo.some(o => o.x - o.dia / 2 < 0 || o.x + o.dia / 2 > bot.L || o.y - o.dia / 2 < 0 || o.y + o.dia / 2 > bot.W)
+        || lo.some((o, i) => lo.some((q, j) => j > i && Math.hypot(o.x - q.x, o.y - q.y) < (o.dia + q.dia) / 2 + 0.0625));
+      if (off) { bot.ops = bot.ops.filter(o => !o.leg); warn.push(`${lbl} is too small for its legs: their holes would run off the bottom or into each other, so none are drilled. Pick a different base.`); } }
     addB(leg ? leg.name : `Cabinet leveler leg ${fmtLen(tk, 1)}`, n); if (p.toeSkin !== 'off') addB('Toe skin clip', Math.ceil(n / 2));
   }
 
@@ -1036,7 +1045,7 @@ function buildParts(c) {
     if (zr) pairs = jtSpots(J, type, zr[0], zr[1], spots, t).map(z => ({ x: z, y: r3((pt.jy ?? backY - t / 2) - off), m: r3(zr[1] - z) }));
     // m runs along the panel's own edge, from its front (a rear stretcher starts well back of the cabinet front).
     else pairs = jtSpots(J, type, Math.max(a, off), b, spots, t).map(y => ({ x: fx, y: r3(y - off), m: r3(y - a) }));
-    jx.a = zr ? undefined : a; jx.b = zr ? undefined : b; jx.type = type; jx.side = sp; jx.off = off; jx.zs = bq ? [bq.z0, bq.z1] : [sh, H];
+    jx.a = zr ? undefined : a; jx.b = zr ? undefined : b; jx.zr = zr || undefined; jx.type = type; jx.side = sp; jx.off = off; jx.zs = bq ? [bq.z0, bq.z1] : [sh, H];
     jtFasten(J, fem, pt, end === 'L' ? 0 : r3(pt.L), end === 'L' ? 'W1' : 'W2', pairs, label, jx);
     sp.ops.push(...fem.map(bq ? o => { const q = { ...o, face: bpC.side === 'L' ? 'right' : 'left' }; ['x', 'x1', 'x2'].forEach(k => { if (typeof q[k] === 'number') q[k] = r3(q[k] - bq.z0); }); return q; } : down));
   });
@@ -1057,9 +1066,11 @@ function buildParts(c) {
     const top = mine('Top'), above = rsA ? [[rsA.pt, 1, 0, p.stretcherWidth]] : sh ? [[shelfPt(sh), 1, 0, pt.W]] : top ? [[top, 1, 0, pt.W]] : [[mine('Front stretcher'), 1, 0, p.stretcherWidth], [mine('Rear stretcher'), 1, rsA0, backY]];
     [...below, ...above].forEach(([host, atTop, a, b]) => {
       if (!host) return;
-      const fem = []; jx.a = a; jx.b = b; jx.type = 'divider'; jx.side = null; jx.off = 0;
+      const fem = []; jx.a = a; jx.b = b; jx.type = 'divider'; jx.side = null; jx.off = 0; jx.zr = undefined;
       jtFasten(J, fem, pt, atTop ? r3(pt.L) : 0, atTop ? 'W2' : 'W1', jtSpots(J, 'divider', a, Math.min(b, pt.W), spots, t).map(y => ({ x: r3(q.x + t / 2 - t), y: r3(y - a), m: y })), `${J.name} (${q.name.replace(/ \d+$| \((upper|lower)\)$/, '').toLowerCase()})`, jx);
-      host.ops.push(...fem);
+      // A partition standing on a drawer stretcher meets its top face; 'inside' is the stretcher's underside. Blind holes
+      // (dowels) have to start there, so the whole joint goes on the top face (a through hole is the same from either side).
+      host.ops.push(...jtShift(host, !atTop && rs && host === rs.pt && fem.some(o => o.type === 'bore' && !o.through) ? fem.map(o => ({ ...o, face: 'top' })) : fem));
     });
   });
   jtNailers(c, p, part, { cm, inW, zIn0, zIn1, t, bt, D, backY }).forEach(q => joinSides('nailer', q, null, q.jz));
@@ -1070,9 +1081,9 @@ function buildParts(c) {
     const J = hw(cabSet(c, 'jointU')), dv = parts.find(q => q.cabId === c.id && q.name === 'Vertical divider');
     if (J && J.kind === 'joint' && dv) ['Bottom', 'Top'].forEach((name, i) => {
       const pt = parts.find(q => q.cabId === c.id && q.name === name); if (!pt) return;
-      const fem = []; jx.a = 0; jx.b = dv.W; jx.type = 'divider'; jx.side = null; jx.off = 0;
+      const fem = []; jx.a = 0; jx.b = dv.W; jx.type = 'divider'; jx.side = null; jx.off = 0; jx.zr = undefined;
       jtFasten(J, fem, dv, i ? r3(dv.L) : 0, i ? 'W2' : 'W1', jtSpots(J, 'divider', 0, dv.W, spots, t).map(y => ({ x: lay.divX - t, y, m: y })), `${J.name} (divider)`, jx);
-      pt.ops.push(...fem);
+      pt.ops.push(...jtShift(pt, fem));
     });
   }
   const jtLateCtx = { jt: (type, pt, fx, zr) => joinSides(type, pt, fx, zr, 0, Math.min(backY, pt.W)), jFor, spread: spots, addB };
@@ -1114,9 +1125,16 @@ function buildParts(c) {
   if (c.addParts && c.addParts.length && typeof addedParts === 'function') addedParts(c, parts, warn, part, cm);
   const removed = (c.partEdits && typeof applyPartEdits === 'function') ? applyPartEdits(c, parts, warn, ptT) : [];
   // A Finished product (editor › Materials and hardware): the box parts you can see are cut from the finish material, when it is the same thickness.
+  // An angled corner or shaped cabinet can't make up for a sheet of another thickness, so it only swaps to the same thickness.
+  // Tab and slot parts (outlines with tabs sized from the sheet) can't either.
+  const exactT = angledCorner(c) || hasCabShape(c) || parts.some(q => q.cabId === c.id && q.outline && ['topbot', 'stretcher', 'rearStretcher'].includes(q.kind));
+  const swapOK = (fm, q) => Math.abs(fm.thick - q.T) <= (exactT ? 0.001 : 0.07);
+  // Cut from the finish sheet: edge holes stay in the middle of the part's own (measured) thickness.
+  const swapTo = (q, fm) => { const T0 = q.T; q.ops.forEach(o => { if ((o.type === 'hbore' || o.type === 'edgeslot') && Math.abs((o.inset ?? -1) - T0 / 2) < 0.002) o.inset = r3(fm.thick / 2); });
+    q.mat = fm.id; q.T = fm.thick; q.grain = !!fm.grain; q.fin = true; };
   if (c.finished) {
     const fm = mat(finishMat(c)); let off = 0;
-    if (fm && fm.id !== cm.id) parts.forEach(q => { if (q.cabId !== c.id || q.fin === false || q.mat !== cm.id || !['side', 'topbot', 'shelf', 'divider'].includes(q.kind)) return; if (Math.abs(fm.thick - q.T) <= 0.07) { q.mat = fm.id; q.T = fm.thick; q.grain = !!fm.grain; q.fin = true; } else off++; });
+    if (fm && fm.id !== cm.id) parts.forEach(q => { if (q.cabId !== c.id || q.fin === false || q.mat !== cm.id || !['side', 'topbot', 'shelf', 'divider'].includes(q.kind)) return; if (swapOK(fm, q)) swapTo(q, fm); else off++; });
     if (off) warn.push(`Finished: ${fm.name} is not the same thickness as ${cm.name}, so ${off} box part${off === 1 ? '' : 's'} stay in ${cm.name}.`);
   }
   // Finished ends (exposed sides) and finished interiors are cut from the finish's sheet material, like a Finished product.
@@ -1125,9 +1143,47 @@ function buildParts(c) {
       if (q.cabId !== c.id || q.fin === false || q.mat !== cm.id) return;
       const inside = c.finInt && ['side', 'topbot', 'shelf', 'divider', 'stretcher', 'rearStretcher'].includes(q.kind);
       if (!q.finEnd && !inside) return;
-      if (Math.abs(fm.thick - q.T) <= 0.07) { q.mat = fm.id; q.T = fm.thick; q.grain = !!fm.grain; q.fin = true; } else keep.add(q.name);
+      if (swapOK(fm, q)) swapTo(q, fm); else keep.add(q.name);
     });
     if (keep.size) warn.push(`${fm.name} is not the same thickness as ${cm.name}, so ${[...keep].join(', ')} stay${keep.size === 1 ? 's' : ''} in ${cm.name}.`); }
+  // The cabinet keeps its outside size (Ayden 2026-11-20). A side cut from a finish sheet a little thicker or thinner
+  // than the cabinet material moves its inside face, so the panels between the sides get that much shorter (or longer)
+  // at that end. Holes stay where they are in the cabinet: work measured from that end moves with it.
+  { const sd = n => parts.find(q => q.cabId === c.id && q.kind === 'side' && q.name.startsWith(n)), sL = sd('Left side'), sR = sd('Right side');
+    const dL = sL ? sL.T - t : 0, dR = sR ? sR.T - t : 0;
+    if ((Math.abs(dL) > 1e-4 || Math.abs(dR) > 1e-4) && !angledCorner(c) && !hasCabShape(c)) {
+      let odd = 0;
+      parts.forEach(q => {
+        if (q.cabId !== c.id) return;
+        if (q.kind === 'back') { if (q.W > inW - 0.5 && q.W < W - 0.01) q.W = r3(q.W - dL - dR); return; }
+        if (!['topbot', 'stretcher', 'rearStretcher', 'nailer', 'shelf'].includes(q.kind) || Math.abs(q.L - inW) > 0.6) return;
+        if (q.outline) { odd++; return; }
+        const adj = q.kind === 'shelf' && Math.abs(q.L - inW) > 0.02; // an adjustable shelf: just as much shorter
+        if (adj) { q.L = r3(q.L - dL - dR); return; }
+        if (Math.abs(dL) > 1e-4) jtLedgeGrow(q, 'W1', -dL);
+        if (Math.abs(dR) > 1e-4) jtLedgeGrow(q, 'W2', -dR);
+      });
+      if (odd) warn.push(`A finished side is a different thickness from ${cm.name}; ${odd} shaped part${odd === 1 ? ' was' : 's were'} left as drawn. Check the fit by hand.`);
+    } }
+  // Same up and down: a bottom from a thicker sheet stays flush with the sides' bottom edge and a top with their top edge,
+  // so the inside gets that much shorter. What stands between them (the back in its dados, a divider, drawer partitions,
+  // a blind corner's inside panel) gets shorter to match; a drawer stretcher or fixed shelf grows half each way.
+  if (!angledCorner(c) && !hasCabShape(c)) {
+    const mine = n => parts.find(q => q.cabId === c.id && q.name.startsWith(n)), dOf = q => q ? q.T - t : 0;
+    const bot = mine('Bottom'), topP = mine('Top') || mine('Front stretcher'), rear = mine('Rear stretcher') || mine('Top');
+    const endD = z => { if (Math.abs(z - zIn0) < 2e-3) return dOf(bot); if (Math.abs(z - zIn1) < 2e-3) return dOf(topP);
+      const s = rails.stretchers.find(q => Math.abs(q.z - t / 2 - z) < 2e-3 || Math.abs(q.z + t / 2 - z) < 2e-3); if (s) return dOf(s.pt) / 2;
+      const f = rails.shelves.find(q => Math.abs(q.z - t / 2 - z) < 2e-3 || Math.abs(q.z + t / 2 - z) < 2e-3); if (f) return dOf(mine(`Fixed shelf ${f.row + 1}`)) / 2;
+      return 0; };
+    const trim = (pt, d0, d1) => { if (!pt || pt.outline) return; if (Math.abs(d0) > 1e-4) jtLedgeGrow(pt, 'W1', -d0); if (Math.abs(d1) > 1e-4) jtLedgeGrow(pt, 'W2', -d1); };
+    if (Math.abs(dOf(bot)) > 1e-4 || Math.abs(dOf(topP)) > 1e-4 || rails.stretchers.some(q => Math.abs(dOf(q.pt)) > 1e-4) || Math.abs(dOf(rear)) > 1e-4) {
+      const bk = parts.find(q => q.cabId === c.id && q.kind === 'back' && q.name.startsWith('Back'));
+      if (bk && bk.L > zIn1 - zIn0 + 0.01 && bk.L < H - 0.01) bk.L = r3(bk.L - dOf(bot) - dOf(rear));
+      if (lay.divX !== null) trim(mine('Vertical divider'), endD(zIn0), endD(zIn1));
+      dParts.forEach(q => trim(parts.find(z => z.cabId === c.id && z.ops === q.ops && z.kind === 'divider'), endD(q.z0), endD(q.z1)));
+      bpPieces.forEach(q => trim(q.pt, endD(q.z0), endD(q.z1)));
+    }
+  }
   // A finished interior is called out on every part you see inside the box.
   if (c.finInt) parts.forEach(q => { if (q.cabId === c.id && ['side', 'topbot', 'back', 'shelf', 'divider', 'stretcher', 'rearStretcher'].includes(q.kind)) q.name += ' (finished inside)'; });
   return { parts, bom, warn, fronts, inD, inW, removed };
@@ -1153,7 +1209,9 @@ function runsBy(filter, keyOf, bridges) {
         return;
       }
       // A 45° or 90° corner is only its leg deep along its own wall; its return leg is covered from the other wall (cornerBridges).
-      const cd = angledCorner(c) ? cornerLeg(c) : c.d;
+      // 0.60.8: a corner filler in an empty corner is as deep as the cabinets on its own wall (the rest of it is behind the
+      // other wall's cabinets, carried by a bridge on that wall).
+      const cd = angledCorner(c) ? cornerLeg(c) : cfLeg(c, true) || c.d;
       const top = (typeof apronTop === 'function' && apronTop(c)) || c.elev + c.h, k = keyOf(c), fl = fillersOf(c), s0 = Math.min(c.off, ...fl.map(x => x.a0)), s1 = Math.max(c.off + c.w, ...fl.map(x => x.a1));
       if (cur && s0 <= cur.end + 0.25 && (cur.top === null || (Math.abs(top - cur.top) < 0.01 && cur.k === k))) {
         if (cur.top === null) { cur.top = top; cur.k = k; cur.bottom = c.elev; }
@@ -1163,6 +1221,15 @@ function runsBy(filter, keyOf, bridges) {
     });
   }));
   return runs.filter(r => r.cabs.length);
+}
+// Does this end of a top butt a wall (a wall the run's wall meets there, or a wall cap)? Open wall ends, cabinets and
+// appliances don't count.
+function ctWallEnd(r, e) {
+  const w = wall(r.wall); if (!w) return false;
+  const L = wg(w).L, at = e === 'S' ? r.start : r.end, f = w.thick / 2;
+  if (e === 'S' && at <= f + 0.5) return wallEndJoined(w, 'S');
+  if (e === 'E' && at >= L - f - 0.5) return wallEndJoined(w, 'E');
+  return capsOf(w).some(cp => cp.side === r.side && Math.abs((e === 'S' ? cp.a1 : cp.a0) - at) < 0.5 && cp.height > r.top + 0.01);
 }
 // Is a run end against a wall or another cabinet? "at" is the along-wall position of that end.
 function endBlocked(r, at, dir) {
@@ -1175,20 +1242,24 @@ function endBlocked(r, at, dir) {
 }
 // The return leg of each 45° or 90° base corner, as a span on the wall it comes out along, so the top on that wall
 // carries on over it to the corner (and the corner joint between the two tops is found like any other).
+// 0.60.8: a corner filler (Ayden's Mozaik one, in an empty corner) has the same: its depth along the other wall, as deep
+// as the cabinets there.
+const cfLeg = (c, own) => typeof isCornerFiller === 'function' && isCornerFiller(c) ? (n => own ? c.d - n[1] : c.w - n[0])(cfNotch(c)) : 0;
 function cornerBridges() {
   const out = [];
   S.cabinets.forEach(c => {
-    if (c.cat !== 'Base' || !angledCorner(c)) return;
+    if (c.cat !== 'Base' || !(angledCorner(c) || cfLeg(c))) return;
+    const leg = angledCorner(c) ? cornerLeg(c) : cfLeg(c);
     const poly = cabPoly(c); if (!poly) return;
     S.walls.forEach(w2 => {
       if (w2.id === c.wall) return;
       const g = wg(w2), f = w2.thick / 2;
       [1, -1].forEach(side => {
         const along = poly.map(q => (q.x - w2.x1) * g.u.x + (q.y - w2.y1) * g.u.y), out2 = poly.map(q => ((q.x - w2.x1) * g.n.x + (q.y - w2.y1) * g.n.y) * side);
-        const o0 = Math.min(...out2); if (o0 > f + 0.6 || o0 < -0.6 || Math.max(...out2) - f < cornerLeg(c) - 0.01) return;
+        const o0 = Math.min(...out2); if (o0 > f + 0.6 || o0 < -0.6 || Math.max(...out2) - f < leg - 0.01) return;
         const a0 = Math.min(...along), a1 = Math.max(...along);
         if (a0 < -0.5 || a1 > g.L + 0.5) return;
-        out.push({ bridge: true, corner: c.id, wall: w2.id, side, off: a0, w: a1 - a0, d: cornerLeg(c) + (c.outset || 0) });
+        out.push({ bridge: true, corner: c.id, wall: w2.id, side, off: a0, w: a1 - a0, d: leg + (c.outset || 0) });
       });
     });
   });
@@ -1228,6 +1299,10 @@ function countertopRuns() {
     r.bs = has(st, 'bs') && st.bs !== '' ? Math.max(0, +st.bs || 0) : island ? 0 : Math.max(0, +r.tpl.backsplash || 0);
     const j = r.joints || {}, wfH = r.top + r.thick;
     r.wfS = !!st.wfS && !j.S; r.wfE = !!st.wfE && !j.E;
+    // 0.60.8 (Ayden 2026-11-20: "if a countertop is against a wall give it backsplash on the left or right or whatever side
+    // touches"): an end that butts a wall (no corner joint, no waterfall) gets a side splash as tall as the backsplash.
+    // Right-click the end on the Tops tab to take it off (ssS / ssE false) or put one on.
+    ['S', 'E'].forEach(e => { r['ss' + e] = r.bs > 0 && !j[e] && !r['wf' + e] && (has(st, 'ss' + e) ? !!st['ss' + e] : ctWallEnd(r, e)); });
     r.area = r.len * r.depth + ((r.wfS ? 1 : 0) + (r.wfE ? 1 : 0)) * wfH * r.depth;
   });
   return runs;

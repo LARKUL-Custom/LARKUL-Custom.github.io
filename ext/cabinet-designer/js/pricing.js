@@ -44,6 +44,11 @@ function paintCab(c, ps, b, fr) {
   return sq;
 }
 const CAT_FT = [['Base', 'Base cabinets'], ['Wall', 'Wall cabinets'], ['Tall', 'Tall and pantry']];
+// 0.60.6 (Ayden 2026-11-20): installers also charge Specialty by the foot (hoods, slat walls, benches, floating shelves,
+// mantels, anything classified Specialty). An installer with no Specialty price installs them as Base/Wall/Tall, as before.
+const INST_FT = [...CAT_FT, ['Specialty', 'Specialty items']];
+const SPEC_GROUPS = ['special', 'hood', 'shelf', 'mantel'];
+const isSpecialty = c => { const l = c && c.libId && typeof libItem === 'function' && libItem(c.libId); return !!l && typeof libGroup === 'function' && SPEC_GROUPS.includes(libGroup(l)); };
 const ftLen = v => (Math.round(v * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const addSq = list => PAINT_PARTS.concat([['total'], ['eb']]).reduce((o, [k]) => (o[k] = list.reduce((a, x) => a + x[k], 0), o), {});
 // Set values copied from Ayden's Mozaik pricing sheet (Detailed Pricing.mzkprice), turned from metric to feet:
@@ -171,7 +176,7 @@ function instCounts(cabs, own) {
 }
 // Installers read from a pricing guide by Ask Claude: only the known fields are kept, as numbers.
 function instAddItems(list) {
-  const nums = o => Object.fromEntries(CAT_FT.map(([k]) => [k, Math.max(0, +((o || {})[k]) || 0)]));
+  const nums = o => Object.fromEntries(INST_FT.map(([k]) => [k, Math.max(0, +((o || {})[k]) || 0)]));
   const added = list.map(x => { const i = blankInstaller(String(x.name || 'New installer').trim() || 'New installer', nums(x.rates));
     const items = (Array.isArray(x.items) ? x.items : []).filter(it => it && instCount(it.per) && +it.amount > 0)
       .map(it => ({ per: it.per, amount: +it.amount, ...(it.name ? { name: String(it.name).trim() } : {}) }));
@@ -274,6 +279,8 @@ async function loadPrices() {
   if (PRICES.map(mergeHwKeys).some(Boolean)) changed = true;
   if (!INSTALLERS.length) { const r = blankInstaller('Richard', MZK.install); r.def = true; INSTALLERS.push(r); changed = true; }
   if (ensureSawStruck()) changed = true;
+  // 0.60.6 (Ayden 2026-11-20): Richard installs specialty items at $50 per foot. Set once; after that it is the shop's to change.
+  INSTALLERS.filter(i => /^Richard\b/.test(i.name || '') && !i.specFt).forEach(i => { i.rates = i.rates || {}; if (!(+i.rates.Specialty > 0)) i.rates.Specialty = 50; i.specFt = 1; changed = true; });
   if (changed) savePrices();
 }
 let priceTimer = null;
@@ -498,7 +505,10 @@ function priceJob(ps) {
     // Installation by the foot of each type, at the job's installer's prices, like Mozaik's per-length install rows.
     // A job can have No installer (the customer installs, or it's a pickup).
     // An installer priced as a % of the job charges that % of the room (its cabinets and other lines) instead of per foot and price list.
-    const who = roomInstaller(ps, r), pctI = who && +who.pct > 0 ? +who.pct : 0, inst = !who || pctI ? [] : CAT_FT.map(([cat, name]) => { const ft = cabs.filter(k => k.c.cat === cat && !k.c.noCount).reduce((a, k) => a + k.c.w, 0) / 12, r = +((who.rates || {})[cat]) || 0;
+    const who = roomInstaller(ps, r), pctI = who && +who.pct > 0 ? +who.pct : 0, specOn = !!who && +((who.rates || {}).Specialty) > 0;
+    // With a Specialty price, specialty products (own-price ones too, like floating shelves) go on that line instead of their type's.
+    const ftOf = cat => cat === 'Specialty' ? all.filter(k => !k.c.noCount && isSpecialty(k.c)) : cabs.filter(k => k.c.cat === cat && !k.c.noCount && !(specOn && isSpecialty(k.c)));
+    const inst = !who || pctI ? [] : INST_FT.map(([cat, name]) => { const ft = (cat === 'Specialty' && !specOn ? [] : ftOf(cat)).reduce((a, k) => a + k.c.w, 0) / 12, r = +((who.rates || {})[cat]) || 0;
       return ft && r ? { name: `Installation, ${name.toLowerCase()} (${ftLen(ft)} ft × ${money(r)})`, amount: ft * r, inst: true } : null; }).filter(Boolean);
     // The installer's price list, by what this room has (a per-job line goes on the job, not each room).
     const list = who && !pctI && (who.items || []).filter(it => +it.amount && it.per !== 'job' && instCount(it.per));
@@ -615,13 +625,13 @@ function installersCard(ps) {
       ${(i.items || []).some(it => INST_EST[it.per]) ? `<div class="note">Estimates, counted from the drawing: ${(i.items || []).filter(it => INST_EST[it.per]).map(it => `<b>${esc(instCount(it.per)[1].replace(' (estimate)', ''))}</b>: ${INST_EST[it.per]}`).join(' ')}</div>` : ''}
       <div class="row-actions"><button class="btn sm" data-act="ps-inst-iadd" data-id="${esc(i.id)}">${icon('plus')}Add a price</button><label class="f inst-min"><span>Minimum per job ($)</span>${ctl(R, 'min', i.min ?? 0, 'num', { label: 'Minimum per job' })}</label></div>
       <label class="f wide"><span>Notes (charges the program can't count)</span><textarea rows="5" data-obj="${esc(R)}" data-field="notes" data-type="text" aria-label="${esc(i.name)} notes">${esc(i.notes || '')}</textarea></label></div></td></tr>`;
-    return `<tr><td>${ctl(R, 'name', i.name, 'text', { label: 'Installer name' })}</td>${CAT_FT.map(([k, l]) => `<td style="width:84px">${ctl(P, k, (i.rates || {})[k] ?? 0, 'num', { label: `${i.name} ${l} $/ft` })}</td>`).join('')}
+    return `<tr><td>${ctl(R, 'name', i.name, 'text', { label: 'Installer name' })}</td>${INST_FT.map(([k, l]) => `<td style="width:84px">${ctl(P, k, (i.rates || {})[k] ?? 0, 'num', { label: `${i.name} ${l} $/ft` })}</td>`).join('')}
       <td style="width:84px">${ctl(R, 'pct', i.pct ?? '', 'num', { label: `${i.name} percent of the job`, blank: true, ph: '' })}</td>
       <td><button class="btn sm" data-act="ps-inst-open" data-id="${esc(i.id)}" aria-expanded="${open}">${icon('chevr', open ? 'rot90' : '')}${nl ? `Price list (${nl})` : 'Price list'}</button></td>
       <td>${i === defInstaller() ? '<span class="chip">Default</span>' : `<button class="btn sm" data-act="ps-inst-def" data-id="${esc(i.id)}">Make default</button>`}</td>
       <td>${one ? '' : `<button class="btn sm${ui.instConfirm === i.id ? ' danger' : ''}" data-act="ps-inst-del" data-id="${esc(i.id)}" aria-label="Delete ${esc(i.name)}">${ui.instConfirm === i.id ? 'Click again' : '×'}</button>`}</td></tr>${list}`; }).join('');
   return `<div class="psec box prx-sec wide" id="ps-install">${secHead('home', 'Installers', 'blue')}<div class="prx-h"><span class="note">Each installer's price per foot of cabinet width, and a price list for what the job has (boxes, doors, panels…). Shared by every price sheet. ${esc(S.job.name)} uses ${cur ? esc(cur.name) : 'no installer'}; pick on its Quote.</span><button class="btn sm" data-act="ps-inst-add">${icon('plus')}Add installer</button><button class="btn sm" data-act="ai-open" data-id="inst" title="Claude reads an installer's pricing guide (picture, PDF, link or text) and adds them">${icon('upload')}Import pricing guide</button></div>
-    <div class="tscroll"><table class="t"><thead><tr><th>Installer</th>${CAT_FT.map(([k]) => `<th class="r">${k} $/ft</th>`).join('')}<th class="r" title="Installation as a percent of each room's price, instead of per foot and the price list">% of job</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="tscroll"><table class="t"><thead><tr><th>Installer</th>${INST_FT.map(([k]) => `<th class="r">${k} $/ft</th>`).join('')}<th class="r" title="Installation as a percent of each room's price, instead of per foot and the price list">% of job</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="note">A job that never picked an installer uses the default. Fill in % of job to charge installation as that percent of each room's price instead of per foot and the price list (the minimum still applies). Each room can have its own installer, picked in its header on the Quote.</div></div>`;
 }
 function toggleBtn(act, on, label, id) { return `<button class="btn toggle${on ? ' on' : ''}" data-act="${act}"${id ? ` data-id="${id}"` : ''} aria-pressed="${!!on}">${icon(on ? 'check' : 'plus')}${label}</button>`; }

@@ -19,6 +19,11 @@ function fmtLen(x, q) {
   const s = f ? (whole ? whole + ' ' : '') + f + '/' + d : String(whole);
   return (neg ? '-' : '') + s + (q ? '"' : '');
 }
+// A sheet's thickness as measured (.725, .76): a 1/32 fraction when it is one, otherwise the decimal as typed.
+function fmtThick(x) {
+  if (x === '' || x === undefined || x === null || !isFinite(x)) return '';
+  return Math.abs(x * 32 - Math.round(x * 32)) > 1e-6 ? String(Math.round(x * 10000) / 10000).replace(/^0\./, '.') : fmtLen(x);
+}
 function parseLen(str) {
   if (typeof str === 'number') return str;
   str = String(str).trim().toLowerCase().replace(/["”]/g, '').trim();

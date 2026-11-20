@@ -140,7 +140,7 @@ function edgeJoin(c, parts, k) {
     const keep = { a: jx.a, b: jx.b, type: jx.type, side: jx.side, off: jx.off };
     [['Bottom', 'bottom', zIn0 - t / 2], ['Top', 'top', zIn1 + t / 2]].forEach(([name, type, z]) => {
       if (!parts.some(q => mine(q) && (q.name === name || q.name.startsWith(name + ' ')))) return;
-      jx.a = 0; jx.b = sp.L; jx.type = type; jx.side = null; jx.off = 0;
+      jx.a = 0; jx.b = sp.L; jx.type = type; jx.side = null; jx.off = 0; jx.zr = undefined;
       jtFasten(plain, fem, null, 0, 'W1', jtSpots(plain, type, 0, sp.L, spots, t).map(y => ({ x: r3(z - sh), y: r3(y), m: y })), `${J.name} (${name.toLowerCase()})`, jx);
     });
     pt.ops.push(...fem);
@@ -151,7 +151,7 @@ function edgeJoin(c, parts, k) {
       const Jp = { ...Js, fastener: ['tabslot', 'ledge', 'route'].includes(Js.fastener) ? 'holes' : Js.fastener }, f2 = [];
       // The side's y runs from its own front edge; the panel's middle is half its thickness in from the edge line.
       const inY = r3((c.d - (e.a.y + e.b.y) / 2) + t / 2 - (c.d - side.W));
-      jx.a = undefined; jx.b = undefined; jx.type = 'divider'; jx.side = null; jx.off = 0;
+      jx.a = undefined; jx.b = undefined; jx.type = 'divider'; jx.side = null; jx.off = 0; jx.zr = undefined;
       jtFasten(Jp, f2, null, 0, 'W1', jtSpots(Jp, 'divider', zIn0, zIn1, spots, t).map(z => ({ x: r3(z - sh), y: inY, m: z })), `${Js.name} (${pt.name.toLowerCase()})`, jx);
       side.ops.push(...f2);
     });

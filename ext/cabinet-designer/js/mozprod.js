@@ -327,6 +327,26 @@ function mozRot(ang, axes) {
 /* ----- In Cabinet Designer ----- */
 const mozDef = key => (typeof MOZ_LIB !== 'undefined' && key && MOZ_LIB.items.find(d => d.key === key)) || null;
 const isMoz = c => !!(c && c.moz && mozDef(c.moz));
+// 0.60.8: Ayden's Mozaik Corner Filler closes an empty inside corner (Ayden 2026-11-20: bids leave the corner empty, "it
+// needs a corner filler to fill the gap"). Mozaik saved it for one size only (27" x 27" with 3" fillers in its notch, the
+// fin ends 24" deep), so resized it grew its fillers to the width. Here it is worked out for the cabinet's own size and
+// notch: c.cfN = [along its width, along its depth] in inches, how far the notch's fillers reach out to the cabinets on
+// each wall (default 3" each, which gives Mozaik's own parts at 27" x 27").
+const MOZ_CF = 'moz-frost-corner-filler';
+const isCornerFiller = c => !!(c && c.moz === MOZ_CF);
+const cfNotch = c => { const n = Array.isArray(c.cfN) ? c.cfN : [3, 3]; return [Math.max(0, Math.min(c.w - 1, +n[0] || 0)), Math.max(0, Math.min(c.d - 1, +n[1] || 0))]; };
+function mozDefFor(c) {
+  const d = mozDef(c.moz); if (!d || !isCornerFiller(c) || d.parts.length !== 4) return d;
+  const W = c.w * 25.4, D = c.d * 25.4, [nx, ny] = cfNotch(c).map(v => v * 25.4), th = 18.9992, cp = JSON.parse(JSON.stringify(d));
+  const P = cp.parts, ht = [774.7, 'H-ToeH'];
+  cp.W = W; cp.D = D;
+  cp.top = [[nx, ny], [nx, 0], [W, 0], [W, D], [0, D], [0, ny]];
+  Object.assign(P[0], { x: nx + th, y: 0, w: [76.2, String(+ny.toFixed(4))], l: ht });
+  Object.assign(P[1], { x: nx, y: ny + th, w: [76.2, String(+nx.toFixed(4))], l: ht });
+  Object.assign(P[2], { x: 0, y: D - 6.35, w: [P[2].w[0], `${+(D - ny).toFixed(4)}-PanelizedEnd.th+TongueDado`] });
+  Object.assign(P[3], { x: nx, y: 0, w: [603.25, String(+(W - nx - 6.35).toFixed(4))], l: ht });
+  return cp;
+}
 // Part kinds for the cut list, from Mozaik's part types.
 const MOZ_KIND = { FEND: 'side', UEND: 'side', TOP: 'topbot', BOTTOM: 'topbot', STRETCHER: 'stretcher', NAILER: 'stretcher', CLEAT: 'stretcher', FRAMELESSRAIL: 'stretcher',
   UBACK: 'back', FBACK: 'back', PARTITION: 'divider', FIXEDSHELF: 'shelf', DOOR: 'door', DOORPANEL: 'door', DOORFRAME: 'frame', FRAME: 'frame', DRAWERSIDE: 'drawerBox', TOESKIN: 'toekick' };
@@ -345,8 +365,8 @@ function mozMatFor(c, q) {
 const mozCache = new Map();
 // The product worked out at this cabinet's size, in mm, with each part's material. Cached by everything it reads.
 function mozRun(c) {
-  const def = mozDef(c.moz); if (!def) return null;
-  const mats = def.parts.map(q => mozMatFor(c, q)), key = [c.moz, c.w, c.h, c.d, JSON.stringify(c.mozPrm || {}), c.mozFinR ? 'R' : '', mats.map(m => m && m.id + ':' + m.thick).join(',')].join('|');
+  const def = mozDefFor(c); if (!def) return null;
+  const mats = def.parts.map(q => mozMatFor(c, q)), key = [c.moz, c.w, c.h, c.d, JSON.stringify(c.mozPrm || {}), isCornerFiller(c) ? cfNotch(c).join('x') : '', c.mozFinR ? 'R' : '', mats.map(m => m && m.id + ':' + m.thick).join(',')].join('|');
   let r = mozCache.get(key); if (r) return r;
   const thByType = {}; def.parts.forEach((q, i) => { if (mats[i] && !(q.t in thByType)) thByType[q.t] = mats[i].thick * 25.4; });
   const prm = {}; Object.entries(c.mozPrm || {}).forEach(([k, v]) => { prm[k] = +v * 25.4; });
@@ -552,7 +572,7 @@ function mozMeshes(c, opts = {}) {
 // The plan footprint when Mozaik drew the product as more than a box (the corner filler's notch). Points near an edge
 // stay that far from it as the product is resized, so a 3" notch stays 3". x across from the left, y out from the wall.
 function mozTopShape(c) {
-  const d = c && c.moz && mozDef(c.moz), t = d && d.top; if (!t || t.length < 3) return null;
+  const d = c && c.moz && mozDefFor(c), t = d && d.top; if (!t || t.length < 3) return null;
   const W = d.W, D = d.D, rect = t.length === 4 && t.every(([x, y]) => (Math.abs(x) < 0.5 || Math.abs(x - W) < 0.5) && (Math.abs(y) < 0.5 || Math.abs(y - D) < 0.5));
   if (rect) return null;
   const k = (v, n, N) => (v <= n / 2 ? v : N - (n - v)) / 25.4, w = c.w * 25.4, dd = c.d * 25.4;

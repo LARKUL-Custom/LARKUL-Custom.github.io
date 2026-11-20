@@ -117,17 +117,22 @@ function cncPartFile(scoped) {
     // Fronts are drawn as seen from the front, so a door cut with its back (hinge cups) up came out mirrored too: on a
     // left hinged door the cups landed on the right edge, opposite the hinge plates, with the pull beside them (found by
     // the 2026-11-09 build check). The rest of the faces each part's drawing shows are in cncFlip.
-    if (cncFlip(p, top)) {
-      const fy = q => [q[0], r3(W - q[1])], n = outline.length;
-      outline = outline.map(fy).reverse(); edgeKeys = edgeKeys.map((_, k) => edgeKeys[k === n - 1 ? n - 1 : n - 2 - k]);
-      ops.forEach(o => { if (o.points) o.points = o.points.map(fy); if (o.path) o.path = o.path.map(fy); if (o.point) o.point = fy(o.point); if (o.direction) o.direction = [o.direction[0], -o.direction[1] || 0]; });
-    }
+    const fy = q => [q[0], r3(W - q[1])];
+    const flipped = (ol, ek, os) => { const n = ol.length; return { outline: ol.map(fy).reverse(), edgeKeys: ek.map((_, k) => ek[k === n - 1 ? n - 1 : n - 2 - k]),
+      ops: os.map(o => { const q = { ...o }; if (q.points) q.points = q.points.map(fy); if (q.path) q.path = q.path.map(fy); if (q.point) q.point = fy(q.point); if (q.direction) q.direction = [q.direction[0], -q.direction[1] || 0]; return q; }) }; };
+    // A pair of drawer or roll-out sides is one part cut twice. When its holes are not the same turned end for end (a ball
+    // bearing slide's screw holes near the front), both copies came out the same hand, so one side had its holes at the back
+    // (found by the 2026-11-20 assembly check). Such a pair goes to the CNC as a left and a right, one the mirror of the other.
+    const pair = cncHanded(p, ops, outline, L, W);
     const kind = partKind(p.kind), frontKey = Object.keys(kind.edges).find(k => /^front$/i.test(kind.edges[k]));
-    const frontEdge = frontKey ? edgeKeys.indexOf(frontKey) : -1;
     used.add(m.id);
-    parts.push({
-      id: `${ri + 1}-${c.label}-${pi + 1}`, name: p.name, cabinet: c.label, ...(c.category ? { cabinetType: String(c.category).toLowerCase() } : {}), material: m.id, quantity: p.qty,
-      outline, grain: m.grain ? 'x' : 'none', ...(frontEdge >= 0 ? { frontEdge } : {}), ...(group ? { panelGroup: group } : {}), ops,
+    (pair ? [[!cncFlip(p, top), ' (left)', '-L'], [cncFlip(p, top), ' (right)', '-R']] : [[cncFlip(p, top), '', '']]).forEach(([fl, nm, sfx]) => {
+      const v = fl ? flipped(outline, edgeKeys, ops) : { outline, edgeKeys, ops: pair ? ops.map(o => ({ ...o })) : ops };
+      const frontEdge = frontKey ? v.edgeKeys.indexOf(frontKey) : -1;
+      parts.push({
+        id: `${ri + 1}-${c.label}-${pi + 1}${sfx}`, name: p.name + nm, cabinet: c.label, ...(c.category ? { cabinetType: String(c.category).toLowerCase() } : {}), material: m.id, quantity: pair ? p.qty / 2 : p.qty,
+        outline: v.outline, grain: m.grain ? 'x' : 'none', ...(frontEdge >= 0 ? { frontEdge } : {}), ...(group ? { panelGroup: group } : {}), ops: v.ops,
+      });
     });
   })));
   // Custom shapes cut as their outline, with no machining.
@@ -171,8 +176,22 @@ function cncFlip(p, top) {
   if (k === 'topbot' && /^Bottom/.test(n)) return true;
   if (k === 'door' || k === 'drawerFront' || k === 'frame') return top === (/stile \(right\)$/.test(n) ? 'front' : 'back');
   if (k === 'applied') return top === (/\(L\)$/.test(n) ? 'hidden' : 'show');
-  if (k === 'divider' && /^Vertical divider/.test(n)) return top === 'left';
+  // Stands like a side, inside face to the right: the blind corner inside panel and drawer partitions too
+  // (a right-hand blind corner's panel is drilled on its left face, so it has to be cut mirror image).
+  if (k === 'divider' && /^(Vertical divider|Blind corner inside panel|Drawer partition)/.test(n)) return top === 'left';
   return false;
+}
+
+// Whether a pair of box sides (qty 2, cut from one drawing) needs a left and a right: its CNC cuts change when the part is
+// cut mirror image, i.e. they are not the same reflected end for end (x) or edge for edge (y) in the part's own frame.
+function cncHanded(p, ops, outline, L, W) {
+  if (p.kind !== 'drawerBox' || !(p.qty >= 2 && p.qty % 2 === 0) || !/^(Drawer side|Roll-out( tray| shelf)? side)/.test(p.name) || !ops.length) return false;
+  const r = v => Math.round(v * 100) / 100, pt = q => r(q[0]) + ',' + r(q[1]);
+  const key = (o, f) => [o.type, o.face, o.tool || '', o.diameter || '', o.depth, ...(o.points || []).map(q => pt(f(q))), ...(o.point ? [pt(f(o.point))] : []),
+    ...(o.path ? [o.path.map(q => pt(f(q))).sort().join(';')] : [])].join('|');
+  const set = f => [...ops.map(o => key(o, f)), ...outline.map(q => 'o' + pt(f(q)))].sort().join('\n');
+  const id = set(q => q), sx = set(q => [L - q[0], q[1]]), sy = set(q => [q[0], W - q[1]]);
+  return id !== sx && id !== sy;
 }
 
 // Centre paths for a straight groove cut with a bit of diameter `dia`: enough

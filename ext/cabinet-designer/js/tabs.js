@@ -96,7 +96,7 @@ function sampleCab(over = {}) {
 /* ---------- Library ---------- */
 function renderLibrary() {
   const sl = String(ui.libSel || '').startsWith('shape:') ? shapeLibItem(ui.libSel.slice(6)) : null;
-  const l = sl ? null : libItem(ui.libSel), cats = ['Base', 'Wall', 'Tall'], jp = S.job.params;
+  const l = sl ? null : libItem(ui.libSel), jp = S.job.params;
   const fake = l ? { ...newCab(S, l, null, 1, 0), id: '_lib' } : null;
   $('#tab-library').innerHTML = `<div class="pagehead"><div><h2>Products${(S.libSet || 'main') !== 'main' ? ` <span class="muted">· ${esc((PRODUCT_LIBS.find(x => x.id === S.libSet) || {}).name || '')}</span>` : ''}</h2></div>
     <div class="row-actions"><button class="btn primary" data-act="designer-new">${icon('plus')}Design a new cabinet</button></div></div>
@@ -109,7 +109,7 @@ function renderLibrary() {
         ${libStats(l, fake)}</div>
       <div class="card plx-props">${cardHead('Product', '')}<div class="cardbody">
           ${fld('Name', 'lib:' + l.id, 'name', l.name, 'text', { wide: true })}
-          ${fld('Category', 'lib:' + l.id, 'cat', l.cat, 'select', { options: cats })}${fld('Products group', 'lib:' + l.id, 'group', libGroup(l), 'select', { options: LIB_GROUPS.map(([v, t]) => ({ v, l: t })) })}
+          ${classFields('lib:' + l.id, l)}
           ${fld('Folder', 'lib:' + l.id, 'folder', l.folder || '', 'text', { wide: true, ph: libFolder({ ...l, folder: '' }) })}</div>
         ${cardHead('Size', '')}<div class="cardbody">${fld('Width', 'lib:' + l.id, 'w', l.w, 'len')}${fld('Height', 'lib:' + l.id, 'h', l.h, 'len')}${fld('Depth', 'lib:' + l.id, 'd', l.d, 'len')}${fld('Elevation', 'lib:' + l.id, 'elev', l.elev, 'len')}</div>
       </div></div>` : '<div class="card cardbody">No templates yet.</div>'}
@@ -154,7 +154,7 @@ function shapeLibCard(l) {
   return `<div class="card">${cardHead(esc(l.name), `<button class="btn sm" data-act="shape-pick" data-id="${l.id}" data-tab="room">Place in room</button><button class="btn sm" data-act="shape-lib-edit" data-id="${l.id}">Open in shape editor</button>${delBtn('shape-lib-del', l.id)}`)}
     <div class="cardbody"><div class="split2"><div class="stack">
       ${fld('Name', R, 'name', l.name, 'text', { wide: true })}
-      ${fld('Products group', R, 'group', shapeGroup(l), 'select', { options: LIB_GROUPS.map(([v, t]) => ({ v, l: t })), wide: true })}${fld('Folder', R, 'folder', l.folder || '', 'text', { ph: shapeFolder({ ...l, folder: '' }), wide: true })}
+      ${fld('Classification', R, 'group', shapeGroup(l), 'select', { options: LIB_GROUPS.map(([v, t]) => ({ v, l: t })), wide: true })}${fld('Folder', R, 'folder', l.folder || '', 'text', { ph: shapeFolder({ ...l, folder: '' }), wide: true })}
       ${fld('Material', R, 'mat', l.mat, 'select', { options: matOpts(), wide: true })}
       <div class="note">${fmtLen(b.w)} × ${fmtLen(b.h)}, ${l.plane === 'flat' ? 'lying flat' : 'standing upright'}. Change the outline in the shape editor.</div></div>
       <div class="preview pad"><svg viewBox="${-k * 0.08} ${-k * 0.08} ${k * 1.16} ${k * 1.16}" style="max-height:300px" aria-hidden="true"><polygon class="nss" style="fill:${esc((m && m.color) || '#d6b07c')};stroke:var(--ink);stroke-width:1.5px" points="${o.map(p => `${r3(p.x)},${r3(l.plane === 'flat' ? p.y : b.h - p.y)}`).join(' ')}"/></svg></div>
@@ -257,11 +257,11 @@ function matDetailHTML(m, u, sheets, kinds) {
   return `<div class="plx-main mlx-main">
     <div class="card plx-pic">${cardHead(esc(m.name), `${libRowBtns('mat', m.id)}<button class="btn sm danger" data-act="mat-del" data-id="${m.id}">${icon('trash')}Delete</button>`)}
       <div class="mlx-pv"><label class="mlx-sw" title="Click to upload a texture photo" style="background-color:${esc(m.color || '#ccc')}${tx ? `;background-image:url('${tx}')` : ''}"><input type="file" accept="image/*" data-tex="${m.id}" hidden><span class="mlx-up">${icon('upload')}Upload a photo</span></label>
-        <div class="mlx-cap"><b>${esc(m.name)}</b><span>${esc((kinds.find(k => k.v === (m.kind || 'sheet')) || {}).l || '')} · ${fmtLen(m.thick)} thick${sheet ? ` · ${fmtLen(m.sheetW)} × ${fmtLen(m.sheetL)} sheet` : ''}</span></div></div>
+        <div class="mlx-cap"><b>${esc(m.name)}</b><span>${esc((kinds.find(k => k.v === (m.kind || 'sheet')) || {}).l || '')} · ${fmtThick(m.thick)} thick${sheet ? ` · ${fmtLen(m.sheetW)} × ${fmtLen(m.sheetL)} sheet` : ''}</span></div></div>
       <div class="edx-stats plx-stats mlx-stats">${t('amber', 'list', u.count, 'Parts in this job')}${t('blue', 'cube', (u.area / 144).toFixed(1), 'Square feet')}${t('violet', 'stack', sheets, m.kind === 'top' ? 'Tops' : 'Sheets with waste')}${t('green', 'tag', '$' + Math.round(sheets * (m.cost || 0)).toLocaleString(), 'Cost in this job')}</div></div>
     <div class="card plx-props mlx-props">
       ${cardHead('Material', '')}<div class="cardbody">${fld('Name', R, 'name', m.name, 'text', { wide: true })}${fld('Group', R, 'group', m.group || '', 'text', { ph: 'No group', list: 'matgroups' })}${fld('Kind', R, 'kind', m.kind || 'sheet', 'select', { options: kinds })}</div>
-      ${cardHead('Size', '')}<div class="cardbody">${fld('Thickness', R, 'thick', m.thick, 'len')}${sheet || m.kind === 'top' ? fld('Sheet width', R, 'sheetW', m.sheetW, 'len') + fld('Sheet length', R, 'sheetL', m.sheetL, 'len') : ''}<div class="mlx-checks">${fld('Has grain', R, 'grain', m.grain, 'bool')}${fld('Takes the room finish', R, 'dynamic', !!m.dynamic, 'bool')}</div></div>
+      ${cardHead('Size', '')}<div class="cardbody">${fld('Thickness', R, 'thick', m.thick, 'len', { dec: true })}${sheet || m.kind === 'top' ? fld('Sheet width', R, 'sheetW', m.sheetW, 'len') + fld('Sheet length', R, 'sheetL', m.sheetL, 'len') : ''}<div class="mlx-checks">${fld('Has grain', R, 'grain', m.grain, 'bool')}${fld('Takes the room finish', R, 'dynamic', !!m.dynamic, 'bool')}</div></div>
       ${cardHead('Look', '')}<div class="cardbody">${fld('Color', R, 'color', m.color, 'color')}${fld('Texture size', R, 'texScale', m.texScale || 24, 'len')}<div class="mlx-tex"><button class="btn sm" data-act="tex-lib" data-id="${m.id}">${icon('palette')}Texture library</button>${m.texture ? `<button class="btn sm" data-act="tex-clear" data-id="${m.id}">Clear texture</button>` : ''}</div></div>
       ${cardHead('Price and CNC', '')}<div class="cardbody">${fld(m.kind === 'top' ? 'Cost per top' : 'Cost per sheet', R, 'cost', m.cost, 'num')}${m.kind === 'top' ? '' : fld('Finishing', R, 'fin', matFin(m), 'select', { options: [{ v: 'paint', l: 'Painted or stained' }, { v: 'pre', l: 'Prefinished, edgebanding only' }], wide: true })}${sheet ? fld('CNC feed %', R, 'feedRate', m.feedRate || 100, 'num') : ''}</div>
       ${sheet && m.doorBuy ? boughtDoorFields(m, R) : ''}
@@ -902,12 +902,13 @@ function topsPlanSVG(runs, o = {}) {
     }
     // Backsplash along the back and waterfall ends, drawn on the top; right-click the back or a free end to change them.
     if (r.bs > 0) { svg += `<path class="ctp-bs" d="M${P2(P(a0, 0))}L${P2(P(a1, 0))}L${P2(P(a1, Math.min(1.5, D / 4)))}L${P2(P(a0, Math.min(1.5, D / 4)))}Z"/>`; labels += txt(P((a0 + a1) / 2 + (a1 - a0) * 0.3, dfs * 0.9), `${fmtLen(r.bs, 1)} splash`, dfs * 0.7, 'ctp-st'); }
+    [['S', a0, a0 + Math.min(1.5, D / 4)], ['E', a1 - Math.min(1.5, D / 4), a1]].forEach(([e, u0, u1]) => { if (!r['ss' + e]) return; svg += `<path class="ctp-bs" d="M${P2(P(u0, 0))}L${P2(P(u1, 0))}L${P2(P(u1, D))}L${P2(P(u0, D))}Z"/>`; labels += txt(P(e === 'S' ? u1 + dfs * 0.9 : u0 - dfs * 0.9, D / 2), 'side splash', dfs * 0.7, 'ctp-st', up(ang + 90)); });
     [['S', a0, a0 + r.thick], ['E', a1 - r.thick, a1]].forEach(([e, u0, u1]) => { if (!r['wf' + e]) return; svg += `<path class="ctp-wf" d="M${P2(P(u0, 0))}L${P2(P(u1, 0))}L${P2(P(u1, D))}L${P2(P(u0, D))}Z"/>`; labels += txt(P(e === 'S' ? u1 + dfs * 0.9 : u0 - dfs * 0.9, D / 2), 'waterfall', dfs * 0.7, 'ctp-st', up(ang + 90)); });
     if (!o.print) {
       const hw = r3(dfs * 0.9), hit = (q0, q1, part, tip) => `<line class="ctp-edge" data-ctedge="${esc(r.key + '|' + part)}" x1="${r3(q0.x)}" y1="${r3(q0.y)}" x2="${r3(q1.x)}" y2="${r3(q1.y)}" stroke-width="${hw}"><title>${tip}</title></line>`;
       edges += hit(P(a0, 0), P(a1, 0), 'back', 'Right-click for the backsplash');
-      if (!jS) edges += hit(P(a0, 0), P(a0, D), 'S', 'Right-click to waterfall this end');
-      if (!jE) edges += hit(P(a1, 0), P(a1, D), 'E', 'Right-click to waterfall this end');
+      if (!jS) edges += hit(P(a0, 0), P(a0, D), 'S', 'Right-click for a side splash or waterfall on this end');
+      if (!jE) edges += hit(P(a1, 0), P(a1, D), 'E', 'Right-click for a side splash or waterfall on this end');
     }
     // Sinks: centre line from the left end, the cutout's size and corners, and how far back from the front edge.
     (ts ? ts.sinks : []).forEach(({ f: fx, k }) => {
@@ -949,7 +950,7 @@ function topsSpecRows(runs) {
   return runs.filter(r => r.on && wall(r.wall)).map(r => {
     const i = runs.indexOf(r), t = r.tpl || {}, m = mat(t.mat) || {}, w = wall(r.wall), j = r.joints || {};
     const lName = r.side === 1 ? 'S' : 'E', rName = r.side === 1 ? 'E' : 'S';
-    const endTxt = e => r['wf' + e] ? `waterfall to the floor (${fmtLen(r3(r.top + r.thick), 1)} tall)` : j[e] ? (j[e] === 'mitered' ? 'mitered corner' : j[e] === 'runs through' ? 'runs through the corner' : 'butts the other top') : r['block' + e] ? 'wall / tall cabinet' : `open, ${fmtLen(r['ov' + e] || 0, 1)} overhang, finished`;
+    const endTxt = e => r['wf' + e] ? `waterfall to the floor (${fmtLen(r3(r.top + r.thick), 1)} tall)` : j[e] ? (j[e] === 'mitered' ? 'mitered corner' : j[e] === 'runs through' ? 'runs through the corner' : 'butts the other top') : r['ss' + e] ? `against the wall, ${fmtLen(r.bs, 1)} side splash` : r['block' + e] ? 'wall / tall cabinet' : `open, ${fmtLen(r['ov' + e] || 0, 1)} overhang, finished`;
     const sinks = (typeof runSinks === 'function' ? runSinks(r) : []).map(({ f, k }) => {
       const cx = (k.x0 + k.x1) / 2, left = r.side === 1 ? ctX0(r) : ctX1(r);
       return `${esc(fixtName(f))}: ${{ under: 'undermount', drop: 'drop-in', apron: 'apron front' }[k.mount]}, cutout ${fmtLen(k.w, 1)} × ${fmtLen(k.d, 1)}${k.oval ? ' oval' : k.r ? `, R ${fmtLen(k.r, 1)} corners` : ''}, centre line ${fmtLen(r3(Math.abs(cx - left)), 1)} from the left end${k.open ? ', open at the front' : `, ${fmtLen(k.front, 1)} back from the front edge`}`;

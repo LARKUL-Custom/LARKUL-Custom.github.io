@@ -57,14 +57,20 @@ function jtFasten(J, fem, male, edgeX, edge, pairs, why, x) {
   if (k === 'ledge') return jtLedge(J, fem, male, edgeX, edge, pairs, why, x);
   if (k === 'tabslot') return jtTabJoin(J, fem, male, edgeX, edge, pairs, why, x);
   const bore = (q, dia, depth) => fem.push({ type: 'bore', x: r3(q.x), y: r3(q.y), dia, depth: +depth > 0 ? +depth : t, through: !(+depth > 0), face: 'inside', why });
-  const hb = (m, dia, depth, w) => male && male.ops.push({ type: 'hbore', edge, x: edgeX, y: r3(m), dia, depth, inset: r3(t / 2), why: w || why });
+  const hb = (m, dia, depth, w) => male && male.ops.push({ type: 'hbore', edge, x: edgeX, y: r3(m), dia, depth, inset: r3((male.T || t) / 2), why: w || why });
+  // A divider or partition stands between parts that are already in place, so it gets screws instead of a dado.
+  if (k === 'route' && x.type === 'divider') return jtFasten({ ...J, fastener: J.routeWith && J.routeWith !== 'none' ? J.routeWith : 'confirmat' }, fem, male, edgeX, edge, pairs, why, x);
   if (k === 'route') {
     if (!pairs.length) return;
     const d = +J.routeDepth > 0 ? +J.routeDepth : 0.25, xs = pairs.map(q => q.x), ys = pairs.map(q => q.y), mn = r3(Math.min(...ys)), mx = r3(Math.max(...ys));
     const along = Math.abs(Math.max(...xs) - Math.min(...xs)) > Math.abs(mx - mn);
     // A dado the full length of the joint, as wide as the panel that drops in.
-    fem.push(along ? { type: 'groove', x1: r3(Math.min(...xs)), y1: r3(pairs[0].y), x2: r3(Math.max(...xs)), y2: r3(pairs[0].y), width: r3(t + (x.gc || 0)), depth: d, face: 'inside', why }
-      : { type: 'groove', x1: r3(pairs[0].x), y1: x.a ?? mn, x2: r3(pairs[0].x), y2: x.b ?? mx, width: r3(t + (x.gc || 0)), depth: d, face: 'inside', why });
+    // It runs the panel's whole length (front to back for a bottom, its height for a nailer), not just between the screws,
+    // or the part of the panel past the last screw would hit the side.
+    const off = x.off || 0, ya = x.a ?? mn, yb = x.side && male && x.a != null ? Math.max(x.b ?? mx, x.a + male.W) : (x.b ?? mx);
+    const cap = v => x.side ? Math.min(x.side.W, v) : v;
+    fem.push(along ? { type: 'groove', x1: r3(x.zr ? x.zr[0] : Math.min(...xs)), y1: r3(pairs[0].y), x2: r3(x.zr ? x.zr[1] : Math.max(...xs)), y2: r3(pairs[0].y), width: r3(t + (x.gc || 0)), depth: d, face: 'inside', why }
+      : { type: 'groove', x1: r3(pairs[0].x), y1: r3(Math.max(0, ya - off)), x2: r3(pairs[0].x), y2: r3(cap(yb - off)), width: r3(t + (x.gc || 0)), depth: d, face: 'inside', why });
     if (male) jtGrow(male, edge, Math.max(0, d - (x.gc || 0)));
     return;
   }
@@ -73,14 +79,25 @@ function jtFasten(J, fem, male, edgeX, edge, pairs, why, x) {
     if (k === 'lamello') {
       const len = +J.lamLen > 0 ? +J.lamLen : 2.2, w = 0.157, dp = 0.39;
       fem.push({ type: 'pocket', x: r3(q.x - w / 2), y: r3(q.y - len / 2), w, h: len, depth: dp, face: 'inside', why });
-      if (male) male.ops.push({ type: 'edgeslot', edge, x: edgeX, y: r3(q.m), len, depth: dp, inset: r3(t / 2), why });
+      if (male) male.ops.push({ type: 'edgeslot', edge, x: edgeX, y: r3(q.m), len, depth: dp, inset: r3((male.T || t) / 2), why });
       x.addB('Lamello connector', 1); return;
     }
     if (k === 'combo') {
       const off = +J.comboOff > 0 ? +J.comboOff : 1.26, D = J.dowel || { dia: 0.315, depth: 0.5, mdepth: 1 };
       bore(q, F.dia || 0.1969, F.depth); hb(q.m, M.dia || 0.1969, M.depth || 1.75);
-      [-off, off].forEach(o => { bore({ x: q.x, y: q.y + o }, D.dia, D.depth); hb(q.m + o, D.dia, D.mdepth || 1, why + ' dowel'); });
-      x.addB(J.name, 1); x.addB('Dowel', 2); return;
+      // The dowels sit either side of the screw along the joint: down the side's depth for a bottom or top, up its height
+      // for a nailer or stretcher standing on edge. One that would leave the panel's edge or hit a neighbour is left off.
+      const p0 = pairs[0], p1 = pairs[pairs.length - 1], dm = p1.m - p0.m;
+      const along = pairs.length > 1 && Math.abs(p1.x - p0.x) > Math.abs(p1.y - p0.y), sg = pairs.length > 1 && dm ? Math.sign(((along ? p1.x - p0.x : p1.y - p0.y)) / dm) || 1 : 1;
+      const lim = male ? (edge === 'W1' || edge === 'W2' ? male.W : male.L) : Infinity, clear = 0.75;
+      let n = 0;
+      [-off, off].forEach(o => {
+        const m2 = q.m + o;
+        if (male && (m2 < 0.375 || m2 > lim - 0.375)) return;
+        if (pairs.some((r, j) => j !== i && (Math.abs(r.m - m2) < clear || Math.abs(r.m - off - m2) < clear || Math.abs(r.m + off - m2) < clear))) return;
+        bore(along ? { x: q.x + sg * o, y: q.y } : { x: q.x, y: q.y + sg * o }, D.dia, D.depth); hb(m2, D.dia, D.mdepth || 1, why + ' dowel'); n++;
+      });
+      x.addB(J.name, 1); if (n) x.addB('Dowel', n); return;
     }
     // Screws (0.55.21): the guide hole through the side like a confirmat; the edge pilot is left off when its size or depth is 0.
     if (k === 'screw') { bore(q, F.dia || 0.1969, F.depth); if (+M.dia > 0 && +M.depth > 0) hb(q.m, +M.dia, +M.depth); x.addB(J.name, 1); return; }
@@ -122,12 +139,19 @@ function jtLedge(J, fem, male, edgeX, edge, pairs, why, x) {
 // The panel gets longer at one end. Machining measured from that end moves with it; work that runs to an edge still does.
 function jtLedgeGrow(pt, edge, d) {
   const L0 = pt.L, L1 = r3(L0 + d), start = edge === 'W1';
+  if (start) pt.gx0 = r3((pt.gx0 || 0) + d);
   pt.ops.forEach(o => ['x', 'x1', 'x2'].forEach(k => {
     const v = o[k]; if (typeof v !== 'number') return;
     if (start) o[k] = Math.abs(v) < 1e-6 && (o.type === 'groove' || o.edge === 'W1') ? 0 : r3(v + d);
     else if (Math.abs(v - L0) < 1e-6) o[k] = L1;
   }));
   pt.L = L1;
+}
+// Work added to a panel after it grew at its start end (a divider fastened into a bottom that sits down in a rabbet)
+// was measured from where its end used to be, so it moves over by the growth too.
+function jtShift(pt, ops) {
+  const gx = pt.gx0 || 0, gy = pt.gy0 || 0; if (!gx && !gy) return ops;
+  return ops.map(o => { const q = { ...o }; if (gx) ['x', 'x1', 'x2'].forEach(k => { if (typeof q[k] === 'number') q[k] = r3(q[k] + gx); }); if (gy) ['y', 'y1', 'y2'].forEach(k => { if (typeof q[k] === 'number') q[k] = r3(q[k] + gy); }); return q; });
 }
 // The panel's outline with the front-corner ears cut off (CNC frame: origin bottom left, y up, front edge at y = W).
 // outlineEdges names the edge each outline segment starts, so CNC Cutlist still knows the front and the banded edges.
@@ -231,7 +255,10 @@ function jtTabSlot(c, parts, x) {
 }
 // A routed panel drops into the dado, so it gets longer by the dado depth on that end.
 function jtGrow(pt, edge, d) {
+  // Along its length: like a ledge, so a groove or edge work that ran to the old end runs to the new one.
+  if (edge === 'W1' || edge === 'W2') return jtLedgeGrow(pt, edge, d);
   const atStart = edge === 'W1' || edge === 'L1';
+  if (atStart) pt[edge === 'W1' ? 'gx0' : 'gy0'] = r3((pt[edge === 'W1' ? 'gx0' : 'gy0'] || 0) + d); // later work on it shifts too (jtShift)
   if (edge === 'W1' || edge === 'W2') {
     if (atStart) pt.ops.forEach(o => ['x', 'x1', 'x2'].forEach(k => { if (typeof o[k] === 'number') o[k] = r3(o[k] + d); }));
     pt.L = r3(pt.L + d);

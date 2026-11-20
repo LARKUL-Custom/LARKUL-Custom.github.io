@@ -853,6 +853,7 @@ function renderElev(pr) {
     const a = side === 1 ? ctX0(rn) : L - ctX1(rn), m = texLook(mat(rn.tpl.mat), 'tops'); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-top')} x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}"/>`;
     if (rn.bs > 0) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? rn.start : L - rn.end}" y="${-(rn.top + rn.thick + rn.bs)}" width="${rn.end - rn.start}" height="${rn.bs}" opacity=".75"/>`;
+    [['S', ctX0(rn)], ['E', ctX1(rn) - 0.75]].forEach(([e, x]) => { if (rn['ss' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - 0.75}" y="${-(rn.top + rn.thick + rn.bs)}" width="0.75" height="${rn.bs}"/>`; });
     // Waterfall ends: the top turns down to the floor.
     [['S', ctX0(rn)], ['E', ctX1(rn) - rn.thick]].forEach(([e, x]) => { if (rn['wf' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - rn.thick}" y="${-rn.top}" width="${rn.thick}" height="${rn.top}"/>`; });
   });
@@ -984,7 +985,7 @@ function initElev() {
     const rz = e.target.closest('[data-rz]');
     if (rz && rzShow()) {
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
-      const p = elevPoint(e); ui.edrag = { resize: true, key: rz.dataset.rz, id: ui.sel.id, sx: p.x, sy: p.y, snap: JSON.stringify(S), live: false };
+      const p = elevPoint(e); ui.edrag = { resize: true, key: rz.dataset.rz, id: ui.sel.id, sx: p.x, sy: p.y, cx: e.clientX, cy: e.clientY, snap: JSON.stringify(S), live: false };
       return;
     }
     const gf = e.target.closest('[data-fixt]');
@@ -993,7 +994,7 @@ function initElev() {
       select({ type: 'fixt', id: f.id });
       const p = elevPoint(e);
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
-      ui.edrag = { fixt: f.id, sx: p.x, sy: p.y, off: f.off, elev: f.elev, snap: JSON.stringify(S), live: false };
+      ui.edrag = { fixt: f.id, sx: p.x, sy: p.y, cx: e.clientX, cy: e.clientY, off: f.off, elev: f.elev, snap: JSON.stringify(S), live: false };
       return;
     }
     const gs = e.target.closest('[data-shape]');
@@ -1003,7 +1004,7 @@ function initElev() {
       select({ type: 'shape', id: s.id });
       const p = elevPoint(e);
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
-      ui.edrag = { shape: s.id, sx: p.x, sy: p.y, off: s.off, elev: s.elev, snap: JSON.stringify(S), live: false };
+      ui.edrag = { shape: s.id, sx: p.x, sy: p.y, cx: e.clientX, cy: e.clientY, off: s.off, elev: s.elev, snap: JSON.stringify(S), live: false };
       return;
     }
     const g = e.target.closest('[data-cab]');
@@ -1021,7 +1022,7 @@ function initElev() {
     select({ type: 'cab', id: c.id });
     const p = elevPoint(e);
     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
-    ui.edrag = { id: c.id, sx: p.x, sy: p.y, off: c.off, elev: c.elev, snap: JSON.stringify(S), live: false };
+    ui.edrag = { id: c.id, sx: p.x, sy: p.y, cx: e.clientX, cy: e.clientY, off: c.off, elev: c.elev, snap: JSON.stringify(S), live: false };
   });
   svg.addEventListener('pointerleave', () => { if (ui.placing && !dnd && (ui.ghost || ui.fixtGhost || ui.shapeGhost)) { ui.ghost = null; ui.ghostLib = null; ui.fixtGhost = null; ui.shapeGhost = null; renderElev(); } });
   svg.addEventListener('pointermove', e => {
@@ -1033,6 +1034,9 @@ function initElev() {
     const d = ui.edrag;
     if (!d && ui.placing && !dnd) { elevPlaceGhost(e); renderElev(); return; }
     if (!d) return;
+    // Picking a cabinet redraws the panels, which can move the drawing under the pointer: measure the drag from
+    // where the press was on screen, in today's drawing, so a cabinet never jumps on the first move.
+    if (d.cx !== undefined) { const p0 = elevPoint({ clientX: d.cx, clientY: d.cy }); d.sx = p0.x; d.sy = p0.y; }
     if (d.pan) {
       if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
       d.moved = true; if (!d.z) return;

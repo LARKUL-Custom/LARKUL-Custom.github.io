@@ -111,8 +111,10 @@ function texDock() {
   const lv = texLevel(), own = (lv.obj && lv.obj.tex) || {}, surfs = lv.s === 'cab' ? TEX_CAB : TEX_SURF.map(([k]) => k);
   const label = k => k === 'all' ? 'All fronts' : (TEX_SURF.find(([x]) => x === k) || [])[1];
   if (!ui.texSurf || (ui.texSurf !== 'all' && !surfs.includes(ui.texSurf))) ui.texSurf = 'all';
-  const shown = k => { const p = own[k] || texAbove(k, lv), b = texBase(k, lv.c); return { p, b, m: p ? skinOf(p, b) : b }; };
-  const where = k => own[k] ? `<span class="tx-src set">${lv.s === 'job' ? 'Job' : lv.s === 'room' ? 'Room' : 'Cabinet'}</span> ` : texAbove(k, lv) ? `<span class="tx-src">${lv.s === 'cab' && (curRoom().tex || {})[k] ? 'Room' : 'Job'}</span> ` : '';
+  // At Whole job, a room's own pick is what the open room shows, so the tile shows that (marked Room) until a job pick replaces it.
+  const rmOwn = k => lv.s === 'job' ? ((curRoom() || {}).tex || {})[k] || '' : '';
+  const shown = k => { const p = rmOwn(k) || own[k] || texAbove(k, lv), b = texBase(k, lv.c); return { p, b, m: p ? skinOf(p, b) : b }; };
+  const where = k => rmOwn(k) ? `<span class="tx-src">Room</span> ` : own[k] ? `<span class="tx-src set">${lv.s === 'job' ? 'Job' : lv.s === 'room' ? 'Room' : 'Cabinet'}</span> ` : texAbove(k, lv) ? `<span class="tx-src">${lv.s === 'cab' && (curRoom().tex || {})[k] ? 'Room' : 'Job'}</span> ` : '';
   const tile = k => {
     const keys = k === 'all' ? TEX_ALL : [k], sh = shown(keys[0]), same = keys.every(x => shown(x).p === sh.p);
     const sub = k === 'all' ? (same ? (sh.p ? texName(sh.p) : 'Their materials') : 'Mixed') : sh.p ? texName(sh.p) : (sh.b && sh.b.name) || '';
@@ -140,7 +142,21 @@ function texDock() {
 const cabLabel = c => (typeof LBL !== 'undefined' && LBL[c.id]) || c.name || '';
 function texSet(p) {
   const lv = texLevel(), keys = ui.texSurf === 'all' ? TEX_ALL : [ui.texSurf]; if (!lv.obj) return;
-  mutate(() => { const t = lv.obj.tex = { ...(lv.obj.tex || {}) }; keys.forEach(k => { if (p) t[k] = p; else delete t[k]; }); if (!Object.keys(t).length) delete lv.obj.tex; });
+  mutate(() => { const t = lv.obj.tex = { ...(lv.obj.tex || {}) }; keys.forEach(k => { if (p) t[k] = p; else delete t[k]; }); if (!Object.keys(t).length) delete lv.obj.tex; texClearBelow(lv.s, lv.obj, keys); });
+}
+// 0.60.1 (Ayden 2026-11-20, "this textures tab doesnt actually change the textures"): a pick for the whole job or a room
+// now reaches everything in it. Before, a room's or cabinet's own pick (e.g. one made with a Settings Look button for
+// "This room") stayed on top, so a Whole job pick changed nothing you could see. Picking at a level clears the same
+// surfaces below it: job -> rooms, cabinets, placed molding runs and panels; room -> its cabinets, runs and panels.
+function texClearBelow(s, obj, keys) {
+  const rooms = s === 'job' ? S.rooms : s === 'room' ? [obj] : [];
+  const drop = o => { if (!o || !o.tex) return; keys.forEach(k => delete o.tex[k]); if (!Object.keys(o.tex).length) delete o.tex; };
+  rooms.forEach(r => {
+    if (s === 'job') drop(r);
+    (r.cabinets || []).forEach(drop);
+    if (keys.includes('molding')) (r.genMolds || []).forEach(drop);
+    if (keys.includes('finished')) (r.shapes || []).forEach(drop);
+  });
 }
 function texAct(a, id) {
   switch (a) {
@@ -202,7 +218,7 @@ function txqSet(k, rid, p) {
   if (k === 'shape') { const s = shapeById(rid); if (!s) return; mutate(() => put2(s)); renderTxq(); return; }
   if (k === 'mrun') { const r = mrunFind(rid); if (!r) return; mutate(() => { if (r.generic) put((S.genMolds || []).find(g => g.id === r.generic) || {}); else r.cabs.forEach(id => { const c = cab(id); if (c) put(c); }); }); renderTxq(); return; }
   const keys = (TXQ_KEYS[k] || [[]])[0], o = txqObj(rid); if (!keys.length) return;
-  mutate(() => { const t = o.tex = { ...(o.tex || {}) }; keys.forEach(x => { if (p) t[x] = p; else delete t[x]; }); if (!Object.keys(t).length) delete o.tex; });
+  mutate(() => { const t = o.tex = { ...(o.tex || {}) }; keys.forEach(x => { if (p) t[x] = p; else delete t[x]; }); if (!Object.keys(t).length) delete o.tex; texClearBelow(o === S.job ? 'job' : 'room', o, keys); });
   renderTxq();
 }
 // The Look button under a tile's dropdown.

@@ -91,7 +91,7 @@ function ensureInteriorLib(s) {
 const intItem = id => (S.interiorLib || []).find(x => x.id === id);
 const intItemOf = it => (it && it.item && intItem(it.item)) || (S.interiorLib || []).find(x => x.kind === (it && it.type));
 const INT_PIC = {
-  shelf: '<rect x="6" y="6" width="28" height="28" class="ip-box"/><path d="M8 20h24" class="ip-wood"/><path d="M9 17v6M31 17v6" class="ip-pin"/>',
+  shelf: '<rect x="6" y="6" width="28" height="28" class="ip-box"/><path d="M8 19h24" class="ip-wood"/><path d="M7 20.8h3.6M29.4 20.8h3.6" class="ip-pin"/>',
   fixed: '<rect x="6" y="6" width="28" height="28" class="ip-box"/><path d="M6 20h28" class="ip-wood thick"/>',
   rollout: '<rect x="6" y="6" width="28" height="28" class="ip-box"/><path d="M9 24h22v6H9z" class="ip-fill"/><path d="M9 14h22v6H9z" class="ip-fill"/>',
   rotray: '<rect x="6" y="6" width="28" height="28" class="ip-box"/><path d="M9 26h22v4H9z" class="ip-fill"/>',

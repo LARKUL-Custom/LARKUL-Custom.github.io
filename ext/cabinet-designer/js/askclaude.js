@@ -22,7 +22,7 @@ bomExtra: anything else to add to the hardware list (locking devices, brackets).
   // 0.58.13: an installer's pricing guide (Pricing › Installer › Import pricing guide).
   inst: `Installer: someone who installs the shop's cabinets, with their own install prices. Usually one item per pricing guide.
 name: the installer's or company's name (from the guide; if none is given, use what the request says).
-rates: price per linear foot of cabinet width in US$, by cabinet type: Base (base and vanity cabinets), Wall (upper cabinets), Tall (tall, pantry and oven cabinets). Omit a type the guide does not price per foot.
+rates: price per linear foot of cabinet width in US$, by cabinet type: Base (base and vanity cabinets), Wall (upper cabinets), Tall (tall, pantry and oven cabinets), Specialty (hoods, slat walls, benches, floating shelves and other specialty items). Omit a type the guide does not price per foot.
 items: the installer's price list, one entry per charge the program can count: {"per": key, "amount": US$, "name": the guide's wording}. The keys are listed below.
 min: minimum labour charge per job in US$ (0 if none).
 Scribing, molding cuts, caulking and island panels have keys (the "estimate" ones are counted roughly from the drawing): use them, do not put them in notes. A tiered price ("0-4 sq ft", "48 inch increments") goes on the key with that unit.

@@ -118,7 +118,7 @@ function printCutaway(v) {
 function printFitAll(v, aspect) {
   const cb = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && m.userData.cabId) cb.expandByObject(m); });
   if (cb.isEmpty()) return;
-  v.lookBox(cb, { x: -1, y: 1.15, z: 1 });
+  v.lookBox(cb, typeof roomViewDir === 'function' ? roomViewDir(1.15, Math.SQRT2) : { x: -1, y: 1.15, z: 1 });
   v.root.updateMatrixWorld(true);
   if (v.beforeDraw) v.beforeDraw(); // the cutaway hides the walls in front for this camera
   const cam = v.cam; cam.updateMatrixWorld(true);

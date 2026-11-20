@@ -150,6 +150,9 @@ function blankJob(name, customer) {
   // New jobs start on the shop's 3/4 Melamine cabinet material (Ayden 2026-11-19).
   const out = migrate(JSON.parse(JSON.stringify(s)));
   if (out && out.matTemplates && out.matTemplates.cabinet.some(t => t.id === MEL_CAB_TPL.id)) out.job.defaults.cabMatT = MEL_CAB_TPL.id;
+  // 0.60.8: countertop corners are mitered unless one is set to run through (Ayden 2026-11-20: "mitered corner tops are
+  // standard"). New jobs only; saved jobs keep the tops they were priced with.
+  if (out && out.job) out.job.ctMiter = true;
   return out || d;
 }
 async function newJob(name, folder, customer) {

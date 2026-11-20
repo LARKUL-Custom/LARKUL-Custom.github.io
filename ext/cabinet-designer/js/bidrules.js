@@ -7,6 +7,8 @@
 //  - The finish named in the bid (species or melamine color, pulls) shows on the fronts, ends and toe in 3D. Look only.
 //  - LARKUL rules only: automatic end panels that would run into a cabinet on the next wall (a dead corner), or into
 //    another automatic panel, are turned off, so nothing is built that can't be seen or doesn't fit.
+//  - LARKUL rules only (0.60.8, Ayden 2026-11-20): an inside corner that both base runs stop short of (no corner cabinet,
+//    the corner left empty) gets his Mozaik Corner Filler sized to the gap, and the tops carry on over it to the corner.
 //  - The overlap check (boxes that run into each other, into a wall, past a wall's end or above the ceiling) runs on
 //    every room, and what it finds goes in the import message and the job notes.
 'use strict';
@@ -22,6 +24,10 @@ function bidRules(rooms, tk, done) {
     bidFinishLook(tk, done);
     bidToe(tk, done);
     bidShelves(rooms, done);
+    if (!done.exact && typeof isCornerFiller === 'function') {
+      done.cornerFill = bidCornerFillers(rooms);
+      if (done.cornerFill) done.options.push(`${done.cornerFill} corner filler${done.cornerFill === 1 ? '' : 's'} in the empty corner${done.cornerFill === 1 ? '' : 's'}`);
+    }
     if (!done.exact && lay().autoPanels !== false) {
       done.cornerOff = bidCornerPanels(rooms);
       if (done.cornerOff) done.options.push(`${done.cornerOff} automatic end panel${done.cornerOff === 1 ? '' : 's'} left off where ${done.cornerOff === 1 ? 'it' : 'they'} would run into a corner cabinet`);
@@ -144,6 +150,52 @@ function bidFinishLook(tk, done) {
   if (!Object.keys(tex).length) return;
   S.job.tex = { ...(S.job.tex || {}), ...tex };
   done.options.push(`${pick ? `the finish (${finish.slice(0, 60)}) shown in 3D` : ''}${pick && pc ? ' with ' : ''}${pc ? `${pick ? '' : 'pulls shown '}${pc === '#232427' ? 'black' : pc === '#b08d57' ? 'brass' : 'nickel'} pulls` : ''}`);
+}
+
+/* ---------- Empty corners ---------- */
+// Where the base runs on two walls meeting at an inside corner both stop short of it, leaving the corner square empty,
+// a Corner Filler (Ayden's Mozaik one) goes in the corner: as wide as the gap on its own wall and as deep as the gap on
+// the other, its notch's fillers reaching out to the cabinets' faces. It stands with its back right in the corner, so it
+// goes on the wall whose corner is on its right as you face it. Its top carries the countertops over the corner
+// (runsBy and cornerBridges in build.js). Up to 12" of filler on each side; a gap wider than that is left as drawn.
+function bidCornerFillers(rooms) {
+  let n = 0;
+  rooms.forEach(rm => withRoom(rm, () => {
+    const lib = (S.library || []).find(l => l.moz === MOZ_CF) || (() => { const d = mozDef(MOZ_CF); return d && { id: MOZ_CF, name: d.name, cat: 'Base', w: 27, h: 34.5, d: 27, elev: 0, moz: MOZ_CF, rows: [], params: {}, construction: { toeKick: false, top: 'full' } }; })();
+    if (!lib) return;
+    const bases = S.cabinets.filter(c => c.cat === 'Base' && (c.elev || 0) < 1 && !c.moz && !c.made && !isFloatShelf(c) && wall(c.wall) && !(wall(c.wall).island || wall(c.wall).hidden));
+    const walls = S.walls.filter(w => !w.island && !w.hidden);
+    const face = (w, side) => { const g = wg(w); return { w, g, side, p: wallPt(w, g, side, 0, w.thick / 2), n: { x: g.n.x * side, y: g.n.y * side } }; };
+    const dot = (a, b) => a.x * b.x + a.y * b.y;
+    for (let i = 0; i < walls.length; i++) for (let j = i + 1; j < walls.length; j++) [1, -1].forEach(sA => [1, -1].forEach(sB => {
+      const A = face(walls[i], sA), B = face(walls[j], sB);
+      const onA = bases.filter(c => c.wall === A.w.id && c.side === sA), onB = bases.filter(c => c.wall === B.w.id && c.side === sB);
+      if (!onA.length || !onB.length || Math.abs(dot(A.g.u, B.g.u)) > 0.1) return;
+      const P = ctjMeet(A.p, A.g.u, B.p, B.g.u); if (!P) return;
+      const aP = dot({ x: P.x - A.w.x1, y: P.y - A.w.y1 }, A.g.u), bP = dot({ x: P.x - B.w.x1, y: P.y - B.w.y1 }, B.g.u);
+      // The corner is at one end of each wall, and each wall's cabinets come out into the room toward the other's.
+      const end = (F, at) => at < F.w.thick + 1 ? 1 : at > F.g.L - F.w.thick - 1 ? -1 : 0, eA = end(A, aP), eB = end(B, bP);
+      if (!eA || !eB || dot({ x: A.g.u.x * eA, y: A.g.u.y * eA }, B.n) < 0.9 || dot({ x: B.g.u.x * eB, y: B.g.u.y * eB }, A.n) < 0.9) return;
+      // The cabinet nearest the corner on each wall, and the gap from the corner to it.
+      const near = (list, at, e) => list.map(c => ({ c, gap: e > 0 ? c.off - at : at - (c.off + c.w) })).filter(x => x.gap > -0.5).sort((a, b) => a.gap - b.gap)[0];
+      const nA = near(onA, aP, eA), nB = near(onB, bP, eB); if (!nA || !nB) return;
+      const dA = nA.c.d + (nA.c.outset || 0), dB = nB.c.d + (nB.c.outset || 0);
+      const xA = nA.gap - dB, xB = nB.gap - dA;
+      if (xA < -0.25 || xB < -0.25 || Math.max(xA, xB) < 0.5 || xA > 12 || xB > 12) return;
+      // It stands on the wall whose corner is on its right: the high end on side 1, the low end on side -1.
+      const ownA = (eA < 0) === (sA === 1), own = ownA ? { F: A, at: aP, e: eA, nb: nA, gap: nA.gap, x: Math.max(0, xA) } : { F: B, at: bP, e: eB, nb: nB, gap: nB.gap, x: Math.max(0, xB) };
+      const oth = ownA ? { nb: nB, gap: nB.gap, x: Math.max(0, xB) } : { nb: nA, gap: nA.gap, x: Math.max(0, xA) };
+      if ((own.e < 0) !== (own.F.side === 1)) return;
+      const W = r3(own.gap), D = r3(oth.gap);
+      const c = newCab(S, lib, own.F.w.id, own.F.side, r3(own.e < 0 ? own.at - W : own.at));
+      Object.assign(c, { w: W, d: D, h: own.nb.c.h, elev: own.nb.c.elev || 0, cfN: [r3(own.x), r3(oth.x)], fromBid: true, notes: 'Corner filler in the empty corner (added on import)' });
+      // Nothing else may be in the corner already (a corner cabinet, an appliance box).
+      const poly = cabPoly(c);
+      if (!poly || S.cabinets.some(k => vOverlap(k, c) && cabPoly(k) && bidPolyDepth(poly, cabPoly(k)) > 0.1)) return;
+      S.cabinets.push(c); n++;
+    }));
+  }));
+  return n;
 }
 
 /* ---------- Footprints, for the corner panels and the overlap check ---------- */

@@ -15,7 +15,8 @@ function ctl(o, f, val, type, x = {}) {
   if (type === 'bool') return `<input type="checkbox" ${base}${val ? ' checked' : ''} aria-label="${esc(x.label || f)}">`;
   if (type === 'color') return `<input type="color" ${base} value="${esc(val || '#cccccc')}" aria-label="${esc(x.label || f)}">`;
   let shown = val;
-  if (type === 'len') shown = fmtLen(val);
+  // x.dec (sheet thickness): a measured thickness like .725 or .76 shows as typed, not rounded to the nearest 1/32.
+  if (type === 'len') shown = x.dec ? fmtThick(val) : fmtLen(val);
   if (type === 'rowh') shown = val === '*' ? '*' : fmtLen(val);
   if (type === 'list') shown = (val || []).join(', ');
   const isNum = !['text', 'list'].includes(type);
@@ -189,6 +190,8 @@ document.addEventListener('change', e => {
     // A sink's mount: apron front sinks also set the apron (the cabinet under it gets its apron build).
     if (ref.startsWith('fixt:') && field === 'mount') { o.mount = v; if (v === 'apron') o.apron = true; else delete o.apron; return; }
     if (ref.startsWith('fixtpos:') || ref.startsWith('shppos:')) { const px = xProxy(o); setFromEnd(px, field, v); o.off = px.off; return; }
+    // Classification Base/Wall/Tall also sets how the product is built; other classes keep their Built as pick.
+    if ((ref === 'des' || ref.startsWith('lib:')) && field === 'group') { o.group = v; if (CLASS_CAT[v]) o.cat = CLASS_CAT[v]; return; }
     if (ref.startsWith('cab:') && field === 'appl' && typeof setAppl === 'function') return setAppl(o, v);
     if (ref.startsWith('cabmp:') && typeof madeSync === 'function') { o[field] = v; madeSync(cab(ref.slice(6))); return; }
     if (ref.startsWith('wall:') && field === 'len') return setWallLen(o, v);

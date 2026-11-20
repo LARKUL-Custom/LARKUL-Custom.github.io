@@ -53,10 +53,12 @@ function ctjApply(runs) {
     used.add(A.r.key + eA.end); used.add(B.r.key + eB.end);
     corners.push({ A, B, eA: eA.end, eB: eB.end, P0, P1, gapA: eA.gap, gapB: eB.gap });
   }
-  // The joint each corner uses: what was picked, or by default the top that already reaches the wall runs through.
+  // The joint each corner uses: what was picked, else mitered (jobs made from 0.60.8 on, S.job.ctMiter: Ayden 2026-11-20,
+  // "mitered corner tops are standard"), else on older jobs the top that already reaches the wall runs through.
   corners.forEach(k => {
     const vA = ctjStore(k.A.r)['j' + k.eA], vB = ctjStore(k.B.r)['j' + k.eB];
     let t = vA === 'm' || vB === 'm' ? 'm' : vA === 't' || vB === 'c' ? 'A' : vA === 'c' || vB === 't' ? 'B' : null;
+    if (!t && S.job && S.job.ctMiter) t = 'm';
     if (!t) t = Math.abs(k.gapA - k.gapB) > 0.25 ? (k.gapA < k.gapB ? 'A' : 'B') : (k.A.r.end - k.A.r.start >= k.B.r.end - k.B.r.start ? 'A' : 'B');
     k.type = t;
     k.id = `${k.A.r.key}~${k.eA}~${k.B.r.key}~${k.eB}`;
@@ -154,7 +156,8 @@ function ctjEdgeCtx(id, x, y) {
     h += b('bs=', r.island ? 'Island default (none)' : `Style's backsplash${def ? ` (${fmtLen(def)})` : ' (none)'}`, !own);
     h += `<label class="ctx-in"><span>Height</span><input type="text" class="num cte-bs" data-id="${esc(key)}" value="${esc(fmtLen(r.bs))}" aria-label="Backsplash height"></label>`;
   } else {
-    const on = !!r['wf' + part], side = (part === 'S') === (r.side === 1) ? 'left' : 'right';
+    const on = !!r['wf' + part], side = (part === 'S') === (r.side === 1) ? 'left' : 'right', ss = !!r['ss' + part];
+    if (r.bs > 0 && !on) h += b('ss' + part + '=' + (ss ? 0 : 1), ss ? `Take the side splash off the ${side} end` : `Side splash on the ${side} end`, false);
     h += b('wf' + part + '=' + (on ? 0 : 1), on ? `Take the waterfall off the ${side} end` : `Waterfall the ${side} end to the floor`, false);
   }
   m.innerHTML = h; m.hidden = false;
@@ -162,7 +165,7 @@ function ctjEdgeCtx(id, x, y) {
 }
 function ctjEdgeSet(key, k, v) {
   const r = countertopRuns().find(q => q.key === key); if (!r) return;
-  mutate(() => { const o = ctjStore(r, true); if (k === 'bs' && v === '') delete o.bs; else if (k === 'bs') o.bs = Math.max(0, +v || 0); else if (+v) o[k] = true; else delete o[k]; });
+  mutate(() => { const o = ctjStore(r, true); if (k === 'bs' && v === '') delete o.bs; else if (k === 'bs') o.bs = Math.max(0, +v || 0); else if (/^ss/.test(k)) o[k] = !!+v; else if (+v) o[k] = true; else delete o[k]; });
 }
 document.addEventListener('change', e => {
   const t = e.target; if (!t.classList || !t.classList.contains('cte-bs')) return;

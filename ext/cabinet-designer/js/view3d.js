@@ -753,6 +753,8 @@ function buildRoomScene(v) {
     else if (r.poly) v.root.add(ctTop3(r, tm));
     else grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
     if (r.bs > 0) { const off = r.side === 1 ? r.ovS : r.ovE; grp.add(box3(r.end - r.start, r.bs, 0.75, tm, off + (r.end - r.start) / 2, r.top + r.thick + r.bs / 2, 0.375)); }
+    // Side splashes where an end butts a wall (0.60.8), in front of the backsplash.
+    [['S', ctX0(r)], ['E', ctX1(r) - 0.75]].forEach(([e, x]) => { if (!r['ss' + e]) return; const lx = r.side === 1 ? x - a : b - x - 0.75, bd = r.bs > 0 ? 0.75 : 0; grp.add(box3(0.75, r.bs, r.depth - bd, tm, lx + 0.375, r.top + r.thick + r.bs / 2, bd + (r.depth - bd) / 2)); });
     // Waterfall ends: a panel the top's thickness from the floor up under the top, flush with its end.
     [['S', ctX0(r)], ['E', ctX1(r) - r.thick]].forEach(([e, x]) => { if (!r['wf' + e]) return; const lx = r.side === 1 ? x - a : b - x - r.thick; grp.add(box3(r.thick, r.top, r.depth, tm, lx + r.thick / 2, r.top / 2, r.depth / 2)); });
     v.root.add(grp);
@@ -793,7 +795,7 @@ function buildRoomScene(v) {
     v.root.add(grp);
   });
   addLights3d(v, R3, L.lights, L.ceiling);
-  if (!v.fitted) { v.fitted = true; v.look({ x: -0.6, y: 0.75, z: 1 }); }
+  if (!v.fitted) { v.fitted = true; v.look(roomViewDir(0.75)); }
   if (R3) {
     v.root.traverse(o => { if (o.isMesh && !o.material.transparent && !o.receiveShadow && o.userData.layer !== 'lights') { o.castShadow = true; o.receiveShadow = true; } });
     // Walls and the ceiling cast shadows too, so daylight only gets in through windows, doorways and open sides.
@@ -811,10 +813,23 @@ function roomImage() {
   finally { r.setPixelRatio(pr); r.setSize(w, h, false); ui.sel = keep; buildRoom3D(); }
   return url;
 }
+/* The room's 3D view looks at the fronts of the cabinets. It used to look from one fixed corner, so in a room whose
+   cabinets face the other way it opened behind the walls, looking at their backs. The look comes from the way the
+   cabinets face (an L kitchen gets the open corner), turned a little for a three-quarter view; an empty room or one
+   whose cabinets face every way (islands) keeps the old corner. */
+function roomViewDir(up, flat = Math.hypot(0.6, 1)) {
+  let fx = 0, fy = 0;
+  (S.cabinets || []).forEach(c => { const w = wall(c.wall); if (!w) return; const g = wg(w), k = (c.side || 1) * (c.w || 1); fx += g.n.x * k; fy += g.n.y * k; });
+  const L = Math.hypot(fx, fy), tot = (S.cabinets || []).reduce((a, c) => a + (c.w || 1), 0);
+  if (!L || L < tot * 0.25) return { x: -0.6 / Math.hypot(0.6, 1) * flat, y: up, z: 1 / Math.hypot(0.6, 1) * flat };
+  fx /= L; fy /= L;
+  const dx = fx - fy * 0.45, dy = fy + fx * 0.45, n = Math.hypot(dx, dy);
+  return { x: dx / n * flat, y: up, z: dy / n * flat };
+}
 function view3dPreset(v, k) {
   if (!v || !v.ok) return;
-  if (k === 'iso') { v.setMode('ortho'); v.look({ x: -1, y: 1.15, z: 1 }); }
-  else if (k === 'persp') { v.setMode('persp'); v.look({ x: -0.6, y: 0.75, z: 1 }); }
+  if (k === 'iso') { v.setMode('ortho'); v.look(typeof designerViewer !== 'undefined' && v === designerViewer ? { x: -1, y: 1.15, z: 1 } : roomViewDir(1.15, Math.SQRT2)); }
+  else if (k === 'persp') { v.setMode('persp'); v.look(typeof designerViewer !== 'undefined' && v === designerViewer ? { x: -0.6, y: 0.75, z: 1 } : roomViewDir(0.75)); }
   else if (k === 'top') v.look({ x: 0, y: 1, z: 0.001 });
   else if (k === 'fit') v.fit();
   else if (k === 'sel') {

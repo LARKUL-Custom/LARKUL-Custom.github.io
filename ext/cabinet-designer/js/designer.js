@@ -66,7 +66,7 @@ function renderDesigner() {
   ${ui.desTab === 'parts' ? `<div class="card cardbody des-parts">${b.warn.map(w => `<div class="warnbox">${esc(w)}</div>`).join('')}${edParts(c, b)}</div>` : `<div class="designer">
     <div class="card stack cardbody des-form">
       ${src ? `<div class="note">Editing a copy of <b>${esc(src.name)}</b>.</div>` : ''}
-      <div class="psec box"><div class="grid2">${fld('Name', 'des', 'name', d.name, 'text')}${fld('Category', 'des', 'cat', d.cat, 'select', { options: ['Base', 'Wall', 'Tall'] })}</div>
+      <div class="psec box"><div class="grid2">${fld('Name', 'des', 'name', d.name, 'text')}${classFields('des', d)}</div>
       <div class="grid3">${fld('Width', 'des', 'w', d.w, 'len')}${fld('Height', 'des', 'h', d.h, 'len')}${fld('Depth', 'des', 'd', d.d, 'len')}</div></div>
       ${qeOpening(c, qr)}
       ${desFold('box', 'Cabinet', `${fld('Elevation', 'des', 'elev', d.elev, 'len')}
