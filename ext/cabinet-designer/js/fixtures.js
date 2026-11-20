@@ -274,7 +274,7 @@ function fixtPlace(k, p) {
   const f = fixtNew(k); if (!f) return false;
   const at = fixtSpot(f, p, ui.px);
   if (!at) { flash(fixtFloor(f) ? 'There is no room for that there.' : 'Move closer to a wall.'); return false; }
-  mutate(() => { S.fixtures = S.fixtures || []; S.fixtures.push(Object.assign(f, at)); });
+  mutate(() => { S.fixtures = S.fixtures || []; S.fixtures.push(Object.assign(f, at)); if (typeof fridgePlaced === 'function') fridgePlaced(f); });
   ui.sel = { type: 'fixt', id: f.id }; ui.elevWall = f.wall; ui.fixtGhost = null;
   return true;
 }

@@ -702,7 +702,7 @@ function dndDrop() {
   ui.suppressClick = true; setTimeout(() => { ui.suppressClick = false; }, 0);
   // Let go over a drawing with nowhere for it to go: say so instead of dropping it without a word.
   const noRoom = () => { if (d.over) flash('There is no room for that there.'); };
-  if (d.kind === 'fixt') { const g = ui.fixtGhost; ui.fixtGhost = null; if (g) { mutate(() => { S.fixtures = S.fixtures || []; S.fixtures.push(g); }); ui.sel = { type: 'fixt', id: g.id }; ui.elevWall = g.wall; } else noRoom(); renderRoom(); return; }
+  if (d.kind === 'fixt') { const g = ui.fixtGhost; ui.fixtGhost = null; if (g) { mutate(() => { S.fixtures = S.fixtures || []; S.fixtures.push(g); if (typeof fridgePlaced === 'function') fridgePlaced(g); }); ui.sel = { type: 'fixt', id: g.id }; ui.elevWall = g.wall; } else noRoom(); renderRoom(); return; }
   if (d.kind === 'lib') { const g = ui.ghost; ui.ghost = null; ui.ghostLib = null; if (g) placeCabinet(d.val, g); else { noRoom(); renderRoom(); } return; }
   if (d.kind === 'shape') { const g = ui.shapeGhost; ui.shapeGhost = null; if (g) placeShape(d.val, null, g); else if (d.over === 'plan' || d.over === '3d') { if (!(d.p && placeShape(d.val, d.p))) renderRoom(); } else { noRoom(); renderRoom(); } return; }
   const target = ui.dropCab; ui.dropCab = null;

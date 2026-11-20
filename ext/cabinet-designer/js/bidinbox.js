@@ -119,7 +119,7 @@ const bidSize = r => ['W', 'H', 'D'].map(k => +r[k] > 0 ? fmtLen(+r[k]) : '').fi
 // Rooms the Mozaik job didn't have (only shelves or millwork in them) are made from the takeoff's walls.
 // Returns what it did, for the message after the import.
 function bidTakeoffAdd(rooms, tk) {
-  const done = { shelves: 0, priced: 0, unplaced: 0, noShelf: 0, rooms: 0, built: 0, lines: 0, sinks: 0, supports: 0, options: [] };
+  const done = { shelves: 0, priced: 0, unplaced: 0, noShelf: 0, rooms: 0, built: 0, lines: 0, sinks: 0, supports: 0, fridge: 0, options: [] };
   const items = bidTakeoffItems(tk); if (!items.length) return done;
   // The new rooms stand in for the job's while this runs, so room lookups (neighbours, sinks, tops) find them.
   const keepRooms = S.rooms; S.rooms = rooms;
@@ -189,6 +189,7 @@ function bidTakeoffRows(rooms, tk, items, done) {
     done.priced++;
   });
   rooms.forEach(rm => { done.supports += bidShelfSupports(rm); });
+  if (typeof addFridgePanels === 'function' && lay().fridgePanels) rooms.forEach(rm => { done.fridge += addFridgePanels(rm).added; });
   return done;
 }
 // 0.59.27 (Ayden 2026-11-19: "the bid reader keeps putting shelves without panels"): floating shelves stacked one over another
@@ -253,6 +254,7 @@ function bidTakeoffNote(d) {
   if (d.sinks) bits.push(`${d.sinks} sink${d.sinks === 1 ? '' : 's'} set on sink bases for the countertop cutouts`);
   if ((d.options || []).length) bits.push(d.options.join(', '));
   if (d.supports) bits.push(`${d.supports} support panel${d.supports === 1 ? '' : 's'} at open ends of floating shelves`);
+  if (d.fridge) bits.push(`${d.fridge} fridge panel${d.fridge === 1 ? '' : 's'} beside the fridges`);
   if (d.noShelf) bits.push(`${d.noShelf} shel${d.noShelf === 1 ? 'f' : 'ves'} put on the Quote because the library has no floating shelf`);
   return bits.length ? ' From the bid: ' + bits.join(', ') + '.' : '';
 }

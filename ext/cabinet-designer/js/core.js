@@ -696,6 +696,9 @@ function migrate(s) {
   // 0.59.27 (Ayden 2026-11-19: "fix what he did"): jobs imported from a bid before this get the support panels at the open ends
   // of their floating shelf stacks, once (Refuge Shelter: 14).
   if (!out.bidSupp && typeof bidShelfSupports === 'function') { const keep = S; S = out; const rid = out.roomId; try { out.rooms.forEach(r => { if ((r.cabinets || []).some(c => c.fromBid)) bidShelfSupports(r, true); }); } catch (_) {} finally { out.roomId = rid; S = keep; } out.bidSupp = 1; }
+  // 0.59.32 (Ayden 2026-11-20: full-height fridge panels "on by default for most jobs"): bid jobs get theirs once. Other saved
+  // jobs keep what they have; a fridge placed from now on brings its panels.
+  if (!out.fridgeP && typeof addFridgePanels === 'function') { const keep = S; S = out; const rid = out.roomId; try { if (lay().fridgePanels) out.rooms.forEach(r => { if ((r.cabinets || []).some(c => c.fromBid)) addFridgePanels(r); }); } catch (_) {} finally { out.roomId = rid; S = keep; } out.fridgeP = 1; }
   return out;
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }

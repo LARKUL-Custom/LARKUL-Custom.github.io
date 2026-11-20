@@ -196,6 +196,10 @@ document.addEventListener('change', e => {
     if (ref === 'layout') {
       const from = lay(); o[field] = v;
       if (['autoFillers', 'fillerW', 'fillerReach'].includes(field)) { const n = refitFillers(from, lay()); if (n) note = `Moved ${nCab(n)} to fit the fillers`; }
+      if (field === 'fridgePanels' && typeof addFridgePanels === 'function') {
+        if (v) { let a = 0, sk = 0; S.rooms.forEach(r => { const x = addFridgePanels(r); a += x.added; sk += x.skipped; }); note = a ? `Added ${a} fridge panel${a === 1 ? '' : 's'}${sk ? ` (${sk} side${sk === 1 ? '' : 's'} had no room)` : ''}` : 'No fridge sides need a panel'; }
+        else { const n = removeFridgePanels(); if (n) note = `Took out ${n} fridge panel${n === 1 ? '' : 's'}`; }
+      }
       return;
     }
     if (ref.startsWith('wcapx:') || ref.startsWith('wcap:')) {

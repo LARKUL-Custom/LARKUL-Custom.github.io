@@ -346,3 +346,84 @@ document.addEventListener('click', e => {
   if (b.dataset.act === 'jline-add') mutate(() => { addJobLine({ ...JOB_LINE_PRESETS[+b.dataset.id] }); });
   else mutate(() => { S.job.lines = jobLineList().filter(l => l.id !== b.dataset.id); });
 });
+
+/* ---------- Fridge panels (0.59.32) ---------- */
+// Ayden 2026-11-20: full-height panels on both sides of a fridge look better, so they go in by default (Layout › Automatic
+// fridge panels, per job). A fridge is a Refrigerator appliance on a wall, or (bid jobs) a deep upper with no floor cabinet
+// under it. Each side that has no wall, tall cabinet or panel beside it gets a Fridge Panel from the floor to the top of the
+// cabinet over the fridge. Cabinets butted against the opening slide out the panel's thickness. They are ordinary Support
+// Panels after that: delete one to leave that side bare, and turning the switch off takes them all out.
+function fridgeOpenings() {
+  const out = [], floorAt = (wl, sd, a0, a1) => S.cabinets.some(k => k.wall === wl && k.side === sd && k.elev < 1 && !k.made && !isFloatShelf(k) && k.off < a1 - 0.5 && k.off + k.w > a0 + 0.5);
+  const overs = (wl, sd, a0, a1) => S.cabinets.filter(k => k.wall === wl && k.side === sd && k.cat === 'Wall' && !k.moz && !k.made && !isFloatShelf(k) && k.elev >= 55 && k.off < a1 - 0.5 && k.off + k.w > a0 + 0.5);
+  const fxs = (typeof fixtList === 'function' ? fixtList() : S.fixtures || []).filter(f => f.wall && wall(f.wall));
+  fxs.filter(f => f.kind === 'fridge').forEach(f => {
+    const up = overs(f.wall, f.side, f.off, f.off + f.w);
+    const a0 = Math.min(f.off, ...up.map(k => k.off)), a1 = Math.max(f.off + f.w, ...up.map(k => k.off + k.w));
+    out.push({ wall: f.wall, side: f.side, a0, a1, up, fx: f });
+  });
+  // Bid jobs draw no fridge: the opening is the deep upper (20" or more) over open floor.
+  S.cabinets.filter(k => k.cat === 'Wall' && !k.moz && !k.made && !isFloatShelf(k) && k.d >= 20 && k.elev >= 55 && k.w >= 24 && k.w <= 48 && !/micro|hood/i.test(k.name || '')).forEach(k => {
+    const a0 = k.off, a1 = k.off + k.w;
+    if (floorAt(k.wall, k.side, a0, a1) || out.some(o => o.wall === k.wall && o.side === k.side && o.a0 < a1 - 0.5 && o.a1 > a0 + 0.5)) return;
+    if (fxs.some(f => f.wall === k.wall && f.off < a1 - 0.5 && f.off + f.w > a0 + 0.5 && f.kind !== 'fridge')) return;
+    out.push({ wall: k.wall, side: k.side, a0, a1, up: overs(k.wall, k.side, a0, a1) });
+  });
+  return out;
+}
+// Adds the fridge panels for one room (all its fridges, or only fx). Returns { added, skipped }.
+function addFridgePanels(rm, fx) {
+  const lib = typeof libItem === 'function' && libItem('made-panel'); if (!lib) return { added: 0, skipped: 0 };
+  return withRoom(rm, () => {
+    let added = 0, skipped = 0;
+    fridgeOpenings().filter(o => !fx || o.fx === fx).forEach(o => {
+      const tops = o.up.map(k => k.elev + k.h), uppers = S.cabinets.filter(k => k.wall === o.wall && k.side === o.side && k.cat === 'Wall' && !isFloatShelf(k)).map(k => k.elev + k.h);
+      const top = tops.length ? Math.max(...tops) : Math.max(84, o.fx ? o.fx.h : 0, ...uppers);
+      [-1, 1].forEach(dir => {
+        const edge = dir < 0 ? o.a0 : o.a1;
+        const c = newCab(S, lib, o.wall, o.side, edge);
+        Object.assign(c, { name: 'Fridge Panel', h: r3(top), elev: 0, autoFridge: true, notes: `Fridge panel, ${dir < 0 ? 'left' : 'right'} side` });
+        if (rm.cabinets.some(k => k.fromBid) && !o.fx) c.fromBid = true;
+        madeSync(c);
+        const t = c.w; c.off = r3(dir < 0 ? edge - t : edge);
+        // Depth: the cabinet over the fridge, or the floor cabinet beside it, with its door.
+        const side = S.cabinets.filter(k => k.wall === o.wall && k.side === o.side && k.elev < 1 && !k.made && (dir < 0 ? Math.abs(k.off + k.w - o.a0) < 1.5 : Math.abs(k.off - o.a1) < 1.5));
+        c.d = r3(Math.max(...o.up.map(k => faceOut(k)), ...side.map(k => faceOut(k)), 24.75));
+        const L = wg(wall(o.wall)).L; if (c.off < -0.01 || c.off + c.w > L + 0.01) return;
+        // What stands past this side, nearest first (gap from the opening's edge).
+        const near = obstacles(o.wall, o.side, c, c.id).map(b => ({ ...b, gap: dir < 0 ? edge - b.a1 : b.a0 - edge })).filter(b => b.gap > -0.01 && !(o.fx && b.id === o.fx.id));
+        // A wall, a tall cabinet or a panel already there: that side is covered.
+        if (near.some(b => b.gap <= 1.01 && (b.kind === 'wall' || (b.kind === 'cab' && (k => k && (k.made === 'panel' || k.made === 'privacy' || (k.h >= 70 && k.elev < 1)))(cab(b.id)))))) return;
+        const tight = near.filter(b => b.gap < t - 0.01);
+        if (tight.some(b => b.kind !== 'cab')) { skipped++; return; }
+        // Slide the cabinets in the way out by what the panel needs; put everything back if any of them can't go.
+        const was = S.cabinets.map(k => [k, k.off]);
+        const ok = [...new Set(tight.map(b => b.id))].every(id => { const k = cab(id); if (!k) return false; const gap = dir < 0 ? edge - (k.off + k.w) : k.off - edge; return gap >= t - 0.01 || shiftRun(k, dir * r3(t - gap)); });
+        S.cabinets.push(c);
+        if (!ok || conflicts(c)) {
+          S.cabinets.pop(); was.forEach(([k, v]) => { k.off = v; });
+          // No room that way (a wall or filler past the run): slide the cabinet over the fridge the other way instead.
+          const free = r3(dir < 0 ? Math.max(...tight.map(b => b.a1)) : Math.min(...tight.map(b => b.a0)));
+          const move = r3(dir < 0 ? free + t - edge : edge - (free - t));
+          const ok2 = o.up.length && move > 0 && o.up.every(k => shiftRun(k, -dir * move));
+          c.off = r3(dir < 0 ? free : free - t); S.cabinets.push(c);
+          if (!ok2 || conflicts(c)) { S.cabinets.pop(); was.forEach(([k, v]) => { k.off = v; }); skipped++; return; }
+          o.a0 = r3(o.a0 - dir * move); o.a1 = r3(o.a1 - dir * move);
+        }
+        added++;
+      });
+    });
+    return { added, skipped };
+  });
+}
+function removeFridgePanels() {
+  let n = 0;
+  (S.rooms || []).forEach(r => { const was = (r.cabinets || []).length; r.cabinets = (r.cabinets || []).filter(c => !c.autoFridge); n += was - r.cabinets.length; });
+  return n;
+}
+// A fridge just placed gets its panels when the job has them on.
+function fridgePlaced(f) {
+  if (!f || f.kind !== 'fridge' || !lay().fridgePanels) return;
+  const x = addFridgePanels(curRoom(), f);
+  if (x.added && typeof flash === 'function') setTimeout(() => flash(`Added ${x.added} fridge panel${x.added === 1 ? '' : 's'}. Turn them off in the item bar (Fridge panels).`), 0);
+}

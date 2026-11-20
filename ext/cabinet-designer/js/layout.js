@@ -2,7 +2,7 @@
 'use strict';
 
 /* ---------- Settings ---------- */
-const LAYOUT_DEFAULTS = { snapReach: 4, grid: 1, angleSnap: 45, autoFillers: true, fillerW: 1.5, fillerReach: 3, autoPanels: true, panelReach: 1, autoLights: true, fitOpenings: true, fitMin: 9, fitMax: 36 };
+const LAYOUT_DEFAULTS = { snapReach: 4, grid: 1, angleSnap: 45, autoFillers: true, fillerW: 1.5, fillerReach: 3, autoPanels: true, panelReach: 1, autoLights: true, fridgePanels: true, fitOpenings: true, fitMin: 9, fitMax: 36 };
 const LAYOUT_FIELDS = [
   { k: 'snapReach', label: 'Snap reach', type: 'len', note: 'Cabinets jump to walls, other cabinets and lined-up edges inside this distance.' },
   { k: 'grid', label: 'Wall grid', type: 'len', note: 'Wall ends and lengths round to this.' },
@@ -12,6 +12,7 @@ const LAYOUT_FIELDS = [
   { k: 'fillerReach', label: 'Fill gaps to a wall up to', type: 'len', note: 'Any gap to a wall this size or smaller is filled.' },
   { k: 'autoPanels', label: 'Automatic end panels', type: 'bool', note: 'Any cabinet end that shows gets an applied end panel: one with nothing next to it, the part of a deeper cabinet that sticks out past its neighbour, and the sides above and below a floating shelf or a shorter cabinet.' },
   { k: 'autoLights', label: 'Automatic ceiling lights', type: 'bool', note: 'A closed-in room with no ceiling lights drawn gets recessed pucks in Realistic, shown dashed in the plan. Placing any ceiling light turns them off.' },
+  { k: 'fridgePanels', label: 'Automatic fridge panels', type: 'bool', note: 'A fridge with no wall or tall cabinet beside it gets a full-height panel on each open side, floor to the top of the cabinet over it. Cabinets butted against it slide over to make room. Delete a panel to leave that side bare; turning this off takes them all out.' },
   { k: 'panelReach', label: 'Counts as next to something within', type: 'len' },
   { k: 'fitOpenings', label: 'Fit new cabinets to openings', type: 'bool', note: 'A cabinet dropped into a gap takes the width of the gap when it is inside the range below. It grows only between two cabinets; against a wall it only shrinks to fit.' },
   { k: 'fitMin', label: 'Narrowest fitted width', type: 'len' },

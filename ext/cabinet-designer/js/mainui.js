@@ -53,7 +53,7 @@ function itemBar(c) {
     const n = multiIds().length;
     return `<div class="itembar none ib-empty">
     <div class="ib-hint">${n > 1 ? `<b>${n} items picked.</b> Edit them together in the side panel. <button class="btn sm" data-act="cab-shift-up" data-id="" title="Move every picked cabinet up to the ceiling, ${fmtLen(ceilGap())}&quot; below it">Shift all up</button>` : S.cabinets.length ? '<b>Click a cabinet</b> to size and place it, or <b>drag a product</b> from the library onto the drawing.' : (S.walls.length ? '<b>Drag a product</b> from the library onto a wall to start.' : '<b>Draw the walls</b> first (W), then drag products from the library onto them.')}</div>
-    <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}${tog('autoLights', 'Automatic ceiling lights')}</div>
+    <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}${tog('fridgePanels', 'Automatic fridge panels')}${tog('autoLights', 'Automatic ceiling lights')}</div>
   </div>`;
   }
   return `<div class="itembar">
@@ -63,7 +63,7 @@ function itemBar(c) {
       <div class="ib-slidewrap">${slide}</div>
     </div>
     <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}${ceilCell()}${sz('Depth', 'd')}${sz('Outset', 'outset')}${finEndsCell(c)}</div>
-    <div class="ib-togs">${tog('autoFillers', 'Fillers')}${tog('autoPanels', 'Panels')}${tog('autoLights', 'Ceiling lights')}</div>
+    <div class="ib-togs">${tog('autoFillers', 'Fillers')}${tog('autoPanels', 'Panels')}${tog('fridgePanels', 'Fridge panels')}${tog('autoLights', 'Ceiling lights')}</div>
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
       <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}${cornerBtn(c)}${finIntBtn(c)}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
       : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
