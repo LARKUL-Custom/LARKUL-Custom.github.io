@@ -3694,3 +3694,12 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .mp-estsec{flex:none;margin-top:12px;border:2px solid #111;border-left:8px solid #d9731b;padding:10px 14px;color:#111;break-inside:avoid;page-break-inside:avoid}
 .mp-estsec b{display:block;font-size:15pt;margin-bottom:3px}
 .mp-estsec div{font-size:12pt;line-height:1.35}
+/* 0.59.35 Estimated profit card on Pricing › Quote (screen only) */
+.prx-profit .prx-pfgrid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,1.2fr);gap:16px;padding:8px 12px 12px}
+@media (max-width:900px){.prx-profit .prx-pfgrid{grid-template-columns:1fr}}
+.prx-profit .prx-pft{width:100%}.prx-profit .prx-pft .grand td{font-weight:700;border-top:1.5px solid var(--t-1,#111)}
+.prx-profit .prx-pfm{font-weight:600;color:var(--t-2,#555);margin-left:6px}
+.prx-profit .prx-pfin{display:flex;flex-direction:column;gap:6px;margin:10px 0 6px;font-size:13px}
+.prx-profit .prx-pfin label{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.prx-profit .prx-pct input{width:52px;min-height:24px;height:24px;padding:0 4px;text-align:right}
+.prx-profit .prx-pfr{width:100%}

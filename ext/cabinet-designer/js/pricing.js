@@ -265,11 +265,13 @@ function priceCab(c, ps) {
   const b = buildParts(c), fr = computeFronts(c), rule = { ...ps.cab[c.cat], ...(ps.products[c.libId] || {}) };
   const box = (+rule.base || 0) + (+rule.perFt || 0) * c.w / 12;
   ensureLibPrices(ps);
-  let doors = 0;
+  let doors = 0, cDoors = 0;
   if (ps.doors.on) fr.forEach(f => {
     if (f.type === 'open') return;
     const { ds } = frontStyle(c, f);
-    doors += priceFront(ds, (f.x1 - f.x0) * (f.z1 - f.z0) / 144, ps, f.x1 - f.x0, f.z1 - f.z0).total;
+    const pf = priceFront(ds, (f.x1 - f.x0) * (f.z1 - f.z0) / 144, ps, f.x1 - f.x0, f.z1 - f.z0); doors += pf.total;
+    // Estimated profit: a bought front costs what the door maker charges; a shop-made one its material.
+    cDoors += ds.bought ? pf.total : pf.material;
   });
   doors *= gMark(ps, 'doors');
   const ad = ps.adders, ins = c.inserts || [], p = effParams(c);
@@ -289,6 +291,11 @@ function priceCab(c, ps) {
   let hardware = 0;
   if (ps.hardware.on) Object.entries(b.bom).forEach(([k, q]) => { hardware += q * (+ps.hardware.items[k] || 0); });
   hardware *= gMark(ps, 'hardware');
+  // 0.59.35 Estimated profit (Pricing › Quote, never printed): what the cabinet costs the shop in sheet goods, banding and hardware.
+  let cMat = 0, cHw = 0;
+  b.parts.forEach(pt => { const m = mat(pt.mat); if (!m || FRONT_KINDS.includes(pt.kind)) return; cMat += pt.L * pt.W * pt.qty * matSqIn(m, ps) + bandCost(pt) * pt.qty; });
+  Object.entries(b.bom).forEach(([k, q]) => { cHw += q * (+ps.hardware.items[k] || 0); });
+  const cIns = ins.reduce((a, it) => a + insertPrice(it), 0);
   let materials = 0;
   if (ps.materials.on) b.parts.forEach(pt => {
     // Door parts are paid for by the door's own material cost.
@@ -300,7 +307,7 @@ function priceCab(c, ps) {
   const sq = paintCab(c, ps, b, fr), paint = sq.total * (+paintOf(ps).rate || 0), banding = sq.eb * (+paintOf(ps).ebRate || 0);
   // Per-cabinet extras from its Price tab: price per foot and per square foot of face, then an upcharge on the lot.
   const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = box + doors + extras + ends + hardware + materials + paint + banding + custom, upcharge = base * (+c.pxUp || 0) / 100;
-  return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom };
+  return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom, cost: { mat: cMat, doors: cDoors, hw: cHw, ins: cIns } };
 }
 // Drawer box prices, each (Ayden 2026-11-19): 3/4 melamine about $25-30, 5/8 Baltic birch ply about $70, solid wood about $110.
 // Picked by the drawer material's name unless the price sheet has its own number for it (Edit prices › Adders).
@@ -455,7 +462,7 @@ function priceJob(ps) {
     if (list && list.length) { const n = instCounts(cabs, all.filter(k => k.own)); list.forEach(it => { const q = n[it.per]; if (!q) return; const [, label, unit] = instCount(it.per);
       inst.push({ name: `Installation, ${(it.name || label).replace(/^./, ch => ch.toLowerCase())} (${INST_EST[it.per] ? 'est. ' : ''}${q} × ${money(+it.amount)}${unit === 'per 8 sq ft' ? ' per 8 sq ft' : ''})`, amount: q * +it.amount, inst: true }); }); }
     const lb = cabs.map(k => lamBottomOf(k.c)).filter(Boolean), ad = ps.adders || {}, lbRate = (+ad.lamSq || 0) * (1 + (+((ps.materials || {}).waste) || 0) / 100);
-    const lamB = lb.length ? [{ name: `Laminated wall cabinet bottoms (${lb.length} × ${money(+ad.perLamBottom || 0)} labor, ${sqft(lb.reduce((a, x) => a + x, 0))} sq ft laminate)`, amount: lb.length * (+ad.perLamBottom || 0) + lb.reduce((a, x) => a + x, 0) * lbRate }] : [];
+    const lamB = lb.length ? [{ name: `Laminated wall cabinet bottoms (${lb.length} × ${money(+ad.perLamBottom || 0)} labor, ${sqft(lb.reduce((a, x) => a + x, 0))} sq ft laminate)`, amount: lb.length * (+ad.perLamBottom || 0) + lb.reduce((a, x) => a + x, 0) * lbRate, cost: lb.reduce((a, x) => a + x, 0) * lbRate }] : [];
     const pre = [...own, ...lamB, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : [])];
     if (pctI) { const amt = (cabs.reduce((a, k) => a + k.total, 0) + pre.reduce((a, l) => a + l.amount, 0) + xs.reduce((a, l) => a + l.amount, 0)) * pctI / 100; if (amt) inst.push({ name: `Installation (${pctI}% of the room)`, amount: amt, inst: true }); }
     if (who) inst.forEach(l => { l.instId = who.id; });
@@ -585,7 +592,7 @@ function priceQuote(ps, q = priceJob(ps)) {
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
   const anyOpen = q.rooms.some(R => !roomShut(R.r));
   const fold = q.rooms.length > 1 ? `<button class="btn" data-act="prx-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${icon('chevr', anyOpen ? '' : 'rot90')}${anyOpen ? 'Collapse all rooms' : 'Expand all rooms'}</button>` : '';
-  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${typeof whatIfCard === 'function' ? whatIfCard(ps, q) : ''}${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${hardwareCard(ps, q)}${paintCard(ps, q)}`;
+  return `<div class="prx-qh"><div class="note help">Per foot is each type's cabinet total over its width in feet. Tops, molding, installation and extra charges are not in it.</div>${fold}</div>${typeof whatIfCard === 'function' ? whatIfCard(ps, q) : ''}${typeof profitCard === 'function' ? profitCard(ps, q) : ''}${q.rooms.map(room).join('')}${typeof bidQuoteCard === 'function' ? bidQuoteCard() : ''}${typeof jobLinesCard === 'function' ? jobLinesCard() : ''}${hardwareCard(ps, q)}${paintCard(ps, q)}`;
 }
 // Which rooms are folded on Pricing › Quote, per job, kept on this computer. Only the view; prices are untouched.
 const PRX_FOLD_KEY = () => KEY + '.prxfold';
