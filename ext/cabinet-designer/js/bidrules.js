@@ -20,6 +20,8 @@ function bidRules(rooms, tk, done) {
   try {
     bidTopsByOthers(rooms, tk, done);
     bidFinishLook(tk, done);
+    bidToe(tk, done);
+    bidShelves(rooms, done);
     if (!done.exact && lay().autoPanels !== false) {
       done.cornerOff = bidCornerPanels(rooms);
       if (done.cornerOff) done.options.push(`${done.cornerOff} automatic end panel${done.cornerOff === 1 ? '' : 's'} left off where ${done.cornerOff === 1 ? 'it' : 'they'} would run into a corner cabinet`);
@@ -99,6 +101,31 @@ function bidFinishPick(text) {
   const paint = typeof TEX_PAINTS !== 'undefined' ? TEX_PAINTS : [];
   const p = paint.find(([, n]) => words.has(n.toLowerCase())) || (/\bwhite\b/.test(t) ? paint.find(([, n]) => n === 'White') : /\bblack\b/.test(t) ? paint.find(([, n]) => n === 'Black') : /\bgr[ae]y\b/.test(t) ? paint.find(([, n]) => n === 'Grey') : null);
   return p ? p[0] : '';
+}
+// The finish schedule's toe height beats the shop default (miss #24): Bid Reader sends it as tk.toe.
+function bidToe(tk, done) {
+  const t = +tk.toe;
+  if (!(t >= 2 && t <= 6)) return;
+  S.job.params = { ...(S.job.params || {}), toeKickHeight: t };
+  done.options.push(`toe kick ${t}" from the finish schedule`);
+}
+// Shelves by box height (miss #25), unless the row says how many: uppers 36"+ get 2, 24-35" get 1, under 24" none;
+// talls 80"+ get 4; sink bases none; other door bases 1. Drawer-only boxes keep 0.
+function bidShelves(rooms, done) {
+  let n = 0;
+  for (const rm of rooms) for (const c of rm.cabinets || []) {
+    if (!c.fromMozaik || !c.libParams || c.libParams.shelfCount == null) continue;
+    const said = String(c.notes || '').match(/(\d+)\s*(?:adj(?:ustable)?\.?\s*)?shel(?:f|ves)\b/i);
+    const doors = (c.rows || []).some(r => r.type === 'door');
+    let want = c.libParams.shelfCount;
+    if (said) want = +said[1];
+    else if (!doors) want = 0;
+    else if (c.cat === 'Wall') want = c.h >= 36 ? 2 : c.h >= 24 ? 1 : 0;
+    else if (c.cat === 'Tall') want = c.h >= 80 ? 4 : c.h >= 60 ? 3 : 2;
+    else if (c.cat === 'Base') want = /sink/i.test(`${c.libId} ${c.name}`) ? 0 : 1;
+    if (want !== c.libParams.shelfCount) { c.libParams = { ...c.libParams, shelfCount: want }; n++; }
+  }
+  if (n) done.options.push(`shelf counts set by box height on ${n} cabinet${n === 1 ? '' : 's'}`);
 }
 function bidFinishLook(tk, done) {
   const rows = (tk.rows || []).filter(r => !['countertop', 'millwork', 'other'].includes(r.category));

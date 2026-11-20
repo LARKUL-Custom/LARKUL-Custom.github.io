@@ -33,6 +33,9 @@ const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => BID_SHELF(r) || 
 
 // Bid Reader's walls ({ len, turn } chained clockwise, islands free-standing) as Mozaik walls in inches, the
 // same layout Bid Reader writes into the Mozaik job, so a room that only has shelves still gets its walls.
+// The 9" ADA toe only when a row asks for it (Bid Reader 0.31.0, miss #23): an ADA row is 32.5" high with a normal toe.
+const ADA_TOE = /\bADA\s*toe|\b9\s*(?:"|in(?:ch)?\b)?\s*toe|\btoe(?:\s*kick)?\s*(?:of\s*|at\s*)?9\b/i;
+
 function bidWalls(walls) {
   const dir = a => { const r = a * Math.PI / 180; return [Math.round(Math.cos(r)), Math.round(Math.sin(r))]; };
   const out = walls.map(() => null), chain = walls.map((w, i) => i).filter(i => !walls[i].island);
@@ -111,7 +114,7 @@ function bidNativeData(tk) {
         cursor[key] = Math.max(cursor[key] || 0, x + w);
         prods.push({ name, desc: [r.category, text].join(' '), w, h, d, x, y: NaN, elev, outset: 0, rot: 0, wall: wi, back,
           type: type, sub, num: 0, inserts: [], fronts: [], fromBid: true,
-          notes: [r.code, r.material, r.notes].filter(Boolean).join(' · '), ada: /\bada\b/i.test(text) });
+          notes: [r.code, r.material, r.notes].filter(Boolean).join(' · '), ada: ADA_TOE.test(text) });
       }
     });
     return { name, walls, prods, appls: [], hwNames: {} };
