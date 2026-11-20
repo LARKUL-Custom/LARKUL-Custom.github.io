@@ -25,7 +25,8 @@ name: the installer's or company's name (from the guide; if none is given, use w
 rates: price per linear foot of cabinet width in US$, by cabinet type: Base (base and vanity cabinets), Wall (upper cabinets), Tall (tall, pantry and oven cabinets). Omit a type the guide does not price per foot.
 items: the installer's price list, one entry per charge the program can count: {"per": key, "amount": US$, "name": the guide's wording}. The keys are listed below.
 min: minimum labour charge per job in US$ (0 if none).
-notes: every other charge in the guide that none of those keys can count (scribing per edge, molding per cut, caulking, per-quote work, hourly rates), written out plainly with its price, so the shop can see it. List those in checks too, since they are not priced automatically. If a cabinet type has no price in the guide (for example tall cabinets), say so in checks.
+Scribing, molding cuts, caulking and island panels have keys (the "estimate" ones are counted roughly from the drawing): use them, do not put them in notes. A tiered price ("0-4 sq ft", "48 inch increments") goes on the key with that unit.
+notes: every other charge in the guide that none of those keys can count (valances, columns, scribe molding pieces, per-quote work, hourly rates), written out plainly with its price, so the shop can see it. List those in checks too, since they are not priced automatically. If a cabinet type has no price in the guide (for example tall cabinets), say so in checks.
 Convert per-metre prices to per-foot (1 ft = 0.3048 m). If the guide gives one per-foot price for all cabinets, put it on all three types.`,
   eb: `Edge band. Copy the example fields. thickMM and width are the band's thickness and width; code is the maker's part number; price is per roll when a roll length is given.`,
 };

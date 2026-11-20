@@ -117,33 +117,55 @@ const INST_COUNTS = [
   ['base', 'Base cabinets', 'each'], ['wall', 'Wall cabinets up to 42 x 42', 'each'], ['wallBig', 'Wall cabinets over 42 x 42', 'each'],
   ['tall', 'Tall cabinets', 'each'], ['hood', 'Hoods', 'each'], ['filler', 'Fillers', 'each'], ['panel', 'Base and wall end panels', 'each'],
   ['panelTall', 'Tall end panels', 'each'], ['door', 'Doors (with hinges)', 'each'], ['drawer', 'Drawer fronts', 'each'],
-  ['pull', 'Pulls and knobs', 'each'], ['shelf', 'Floating shelves', 'each'], ['top8', 'Countertops', 'per 8 sq ft'], ['job', 'Per job', 'flat'],
+  ['pull', 'Pulls and knobs', 'each'], ['shelf', 'Floating shelves', 'per 4 sq ft'], ['top8', 'Countertops', 'per 8 sq ft'], ['job', 'Per job', 'flat'],
+  // 0.59.36: island panels (island ends, island backs) by the 48" piece, like Saw Struck's sheet.
+  ['island', 'Island panels', 'per 48"'],
   // 0.58.20 (Ayden 2026-11-19: "guesstimate the caulking and everything else"): rough counts from the drawing, marked est. on the quote.
   ['moldCut', 'Molding cuts (estimate)', 'per cut'], ['caulk', 'Caulking runs (estimate)', 'per cut'], ['scribe', 'Filler and panel scribing (estimate)', 'per edge'],
   ['scribeTall', 'Tall end panel scribing (estimate)', 'per panel'], ['topScribe', 'Countertop scribing (estimate)', 'per 48" of edge'],
+  ['islandScribe', 'Island panel scribing (estimate)', 'per 48"'],
 ];
 // How the estimates are counted (shown on Edit prices): each is a guess from what is drawn, to be checked on the job.
 const INST_EST = { moldCut: 'Each molding run: 2 cuts for the front piece and 2 for each return.', caulk: 'One per molding run (along the ceiling) and one per countertop run (along the wall).',
-  scribe: 'One edge per filler and per base or wall end panel.', scribeTall: 'One per tall end panel.', topScribe: 'Each countertop run: its length along the wall in 48" pieces.' };
+  scribe: 'One edge per filler and per base or wall end panel.', scribeTall: 'One per tall end panel.', topScribe: 'Each countertop run: its length along the wall in 48" pieces.',
+  islandScribe: 'Each island panel, in 48" pieces (same as the island panel count).' };
 const instCount = k => INST_COUNTS.find(x => x[0] === k);
 // What one room has, counted for the installer's price list. cabs are the room's priced cabinets, own its own-price products.
+// 0.59.36 (Ayden 2026-11-20, Saw Struck's sheet checked line by line): shelves (floating, Sheppard bracket, mantels) and
+// Mozaik filler products are no longer counted as cabinet boxes; panels that are products (Island End Panel, applied
+// doors) or drawn as shapes (island back) are counted; shelves go by 4 sq ft pieces; false fronts are drawer fronts.
 function instCounts(cabs, own) {
   const n = Object.fromEntries(INST_COUNTS.map(([k]) => [k, 0]));
-  const isHood = c => { const l = c.libId && typeof libItem === 'function' && libItem(c.libId); return (l && typeof libGroup === 'function' && libGroup(l) === 'hood') || /\bhood/i.test(c.name || ''); };
+  const grp = c => { const l = c.libId && typeof libItem === 'function' && libItem(c.libId); return l && typeof libGroup === 'function' ? libGroup(l) : ''; };
+  const pieces = (len, per) => Math.max(1, Math.ceil(len / per - 1e-9));
+  const shelfN = c => pieces((c.w * c.d) / 144, 4);
+  const isIsland = (name, wl) => /island/i.test(name || '') || !!(wl && (wl.island || wl.hidden));
+  const wallOf = id => (id && typeof wall === 'function' ? wall(id) : null);
+  const panelOne = (name, wl, h, len) => { if (isIsland(name, wl)) n.island += pieces(len, 48); else n[h > 48 ? 'panelTall' : 'panel']++; };
   cabs.filter(k => !k.c.noCount).forEach(({ c }) => {
-    if (isHood(c)) n.hood++; else if (c.cat === 'Tall') n.tall++; else if (c.cat === 'Wall') n[c.w > 42 || c.h > 42 ? 'wallBig' : 'wall']++; else n.base++;
+    const g = grp(c);
+    if (g === 'hood' || /\bhood/i.test(c.name || '')) n.hood++;
+    else if (g === 'shelf' || g === 'mantel') n.shelf += shelfN(c);
+    else if (g === 'filler') n.filler++;
+    else if (c.cat === 'Tall') n.tall++; else if (c.cat === 'Wall') n[c.w > 42 || c.h > 42 ? 'wallBig' : 'wall']++; else n.base++;
   });
   cabs.forEach(({ c }) => {
     n.filler += (typeof fillersOf === 'function' ? fillersOf(c).length : 0);
     const b = buildParts(c); b.parts.forEach(pt => { if (pt.cabId === c.id && pt.kind === 'applied') n[c.cat === 'Tall' ? 'panelTall' : 'panel'] += pt.qty || 1; });
-    computeFronts(c).forEach(f => { if (f.type === 'door') n.door++; else if (f.type === 'drawer') n.drawer++; if (pullPlacement(c, f)) n.pull++; });
+    computeFronts(c).forEach(f => { if (f.type === 'door') n.door++; else if (f.type === 'drawer' || f.type === 'false') n.drawer++; if (pullPlacement(c, f)) n.pull++; });
   });
-  own.forEach(({ c }) => { const l = c.libId && typeof libItem === 'function' && libItem(c.libId); if (/floating|shelf|mantel/i.test(c.name || '') || (l && libGroup(l) === 'shelf')) n.shelf++; });
+  own.forEach(({ c }) => {
+    if (c.made === 'panel') { panelOne(c.name, wallOf(c.wall), c.h, c.d); return; }
+    const l = c.libId && typeof libItem === 'function' && libItem(c.libId);
+    if (/floating|shelf|mantel/i.test(c.name || '') || (l && ['shelf', 'mantel'].includes(libGroup(l)))) n.shelf += shelfN(c);
+  });
+  // Panels drawn as shapes (an island back, Mozaik end panels): by their size, island ones by the 48" piece.
+  (S.shapes || []).forEach(s => { if (s.plane && s.plane !== 'upright') return; const b = shapeBox(s.pts || []); panelOne(s.name, wallOf(s.wall), b.h, b.w); });
   const tops = countertopRuns().filter(t => t.on), molds = moldingRuns();
   n.top8 = tops.reduce((a, t) => a + Math.ceil((t.area ?? t.len * t.depth) / 144 / 8 - 1e-9), 0);
   n.moldCut = molds.reduce((a, m) => a + 2 + 2 * ((m.retS ? 1 : 0) + (m.retE ? 1 : 0)), 0);
   n.caulk = molds.length + tops.length;
-  n.scribe = n.filler + n.panel; n.scribeTall = n.panelTall;
+  n.scribe = n.filler + n.panel; n.scribeTall = n.panelTall; n.islandScribe = n.island;
   n.topScribe = tops.reduce((a, t) => a + Math.ceil(t.len / 48 - 1e-9), 0);
   return n;
 }
@@ -159,21 +181,35 @@ function instAddItems(list) {
 }
 const SAW_EST = [['moldCut', 25, 'Moldings, per cut'], ['caulk', 5, 'Caulking, per cut'], ['scribe', 15, 'Scribing fillers and panels, per edge'],
   ['scribeTall', 25, 'Scribing tall end panels'], ['topScribe', 25, 'Scribing counter tops, per edge']];
+// 0.59.36: the island panel lines from his sheet, which the first import left in the notes.
+const SAW_ISLAND = [['island', 25, 'Island panels (48" increments)'], ['islandScribe', 25, 'Scribing island panels (48" increments)']];
 // Saw Struck (Curtis Perrin), from the pricing sheet Ayden sent 2026-11-19. Added once; after that it is the shop's to change.
 const SAW_STRUCK = { name: 'Saw Struck (Curtis Perrin)', rates: { Base: 0, Wall: 0, Tall: 0 }, min: 250,
   items: [['base', 50, 'Bases, per box with toe skin'], ['wall', 50, 'Uppers, per box up to 42 x 42'], ['wallBig', 75, 'Large uppers, per box'], ['hood', 75, 'Hoods, per box'],
     ['tall', 75, 'Tall cabinets, per box'], ['filler', 10, 'Fillers'], ['panel', 10, 'Base and wall panels'], ['panelTall', 25, 'Tall end panels'],
-    ['door', 4, 'Door and hinge install'], ['drawer', 8, 'Drawer front install'], ['pull', 5, 'Handles/knobs (standard)'], ['shelf', 50, 'Floating shelves (0-4 sq ft)'], ['top8', 25, 'Counter tops, per 0-8 sq ft'], ...SAW_EST]
+    ['door', 4, 'Door and hinge install'], ['drawer', 8, 'Drawer front install'], ['pull', 5, 'Handles/knobs (standard)'], ['shelf', 50, 'Floating shelves, per 0-4 sq ft'], ['top8', 25, 'Counter tops, per 0-8 sq ft'], ...SAW_ISLAND, ...SAW_EST]
     .map(([per, amount, name]) => ({ per, amount, name })),
   notes: `Estimated from the drawing (check on the job): molding cuts $25, caulking $5 per cut, scribing fillers and panels $15 per edge, tall end panels $25, countertops $25 per edge (48").
-Not priced, add by hand when the job has them: island panels $25 per panel (48" increments) plus $25 scribing; island build/bracing per quote; valance $25 per item (48") plus $25 scribing; scribe molding $10 per piece; columns $25 per column (48") plus $25 per edge scribing; cupped or specialty pulls per quote.
+Not priced, add by hand when the job has them: island build/bracing per quote; valance $25 per item (48") plus $25 scribing; scribe molding $10 per piece; columns $25 per column (48") plus $25 per edge scribing; cupped or specialty pulls per quote.
 Tall cabinets are not on the sheet: priced at $75 like large uppers. Check with Curtis.
 Phone (801) 319-8839, sawstruckcarpentry@gmail.com.` };
 function ensureSawStruck() {
-  // 0.58.20: Saw Struck's scribing, molding cuts and caulking go on his price list as estimates, once.
   const had = INSTALLERS.find(i => i.seedSaw);
-  if (had) { if (had.sawEst) return false; had.items = had.items || []; SAW_EST.forEach(([per, amount, name]) => { if (!had.items.some(it => it.per === per)) had.items.push({ per, amount, name }); }); had.sawEst = 1; return true; }
-  const i = blankInstaller(SAW_STRUCK.name, SAW_STRUCK.rates); Object.assign(i, { items: SAW_STRUCK.items.map(x => ({ ...x })), min: SAW_STRUCK.min, notes: SAW_STRUCK.notes, seedSaw: 1, sawEst: 1 });
+  if (had) {
+    let ch = false; had.items = had.items || [];
+    const addAll = list => list.forEach(([per, amount, name]) => { if (!had.items.some(it => it.per === per)) had.items.push({ per, amount, name }); });
+    // 0.58.20: Saw Struck's scribing, molding cuts and caulking go on his price list as estimates, once.
+    if (!had.sawEst) { addAll(SAW_EST); had.sawEst = 1; ch = true; }
+    // 0.59.36: island panels and their scribing go on the list, shelves say per 0-4 sq ft, and the notes lose the island line.
+    if (!had.sawFix36) {
+      addAll(SAW_ISLAND);
+      had.items.forEach(it => { if (it.per === 'shelf' && it.name === 'Floating shelves (0-4 sq ft)') it.name = 'Floating shelves, per 0-4 sq ft'; });
+      if (had.notes) had.notes = had.notes.replace(' island panels $25 per panel (48" increments) plus $25 scribing;', '');
+      had.sawFix36 = 1; ch = true;
+    }
+    return ch;
+  }
+  const i = blankInstaller(SAW_STRUCK.name, SAW_STRUCK.rates); Object.assign(i, { items: SAW_STRUCK.items.map(x => ({ ...x })), min: SAW_STRUCK.min, notes: SAW_STRUCK.notes, seedSaw: 1, sawEst: 1, sawFix36: 1 });
   INSTALLERS.push(i); return true;
 }
 const sameRates = (a, b) => CAT_FT.every(([k]) => (+(a || {})[k] || 0) === (+(b || {})[k] || 0));
@@ -460,7 +496,7 @@ function priceJob(ps) {
     // The installer's price list, by what this room has (a per-job line goes on the job, not each room).
     const list = who && !pctI && (who.items || []).filter(it => +it.amount && it.per !== 'job' && instCount(it.per));
     if (list && list.length) { const n = instCounts(cabs, all.filter(k => k.own)); list.forEach(it => { const q = n[it.per]; if (!q) return; const [, label, unit] = instCount(it.per);
-      inst.push({ name: `Installation, ${(it.name || label).replace(/^./, ch => ch.toLowerCase())} (${INST_EST[it.per] ? 'est. ' : ''}${q} × ${money(+it.amount)}${unit === 'per 8 sq ft' ? ' per 8 sq ft' : ''})`, amount: q * +it.amount, inst: true }); }); }
+      inst.push({ name: `Installation, ${(it.name || label).replace(/^./, ch => ch.toLowerCase())} (${INST_EST[it.per] ? 'est. ' : ''}${q} × ${money(+it.amount)}${['per 8 sq ft', 'per 4 sq ft', 'per 48"'].includes(unit) ? ' ' + unit : ''})`, amount: q * +it.amount, inst: true }); }); }
     const lb = cabs.map(k => lamBottomOf(k.c)).filter(Boolean), ad = ps.adders || {}, lbRate = (+ad.lamSq || 0) * (1 + (+((ps.materials || {}).waste) || 0) / 100);
     const lamB = lb.length ? [{ name: `Laminated wall cabinet bottoms (${lb.length} × ${money(+ad.perLamBottom || 0)} labor, ${sqft(lb.reduce((a, x) => a + x, 0))} sq ft laminate)`, amount: lb.length * (+ad.perLamBottom || 0) + lb.reduce((a, x) => a + x, 0) * lbRate, cost: lb.reduce((a, x) => a + x, 0) * lbRate }] : [];
     const pre = [...own, ...lamB, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : [])];
