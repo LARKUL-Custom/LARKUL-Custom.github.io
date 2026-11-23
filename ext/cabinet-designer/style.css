@@ -2981,6 +2981,14 @@ main:has(#tab-countertops:not([hidden])){padding:0;background:var(--sunk)}
 .ctp-dim text{fill:#b45309;font-family:var(--f-ui);font-weight:700}
 .ctx-matrow{display:flex;align-items:flex-end;gap:10px}
 .ctx-matrow > :last-child{flex:1}
+.ctx-swbtn{padding:0;border:0;background:none;cursor:pointer;border-radius:6px;line-height:0}
+.ctx-swbtn:hover .sw,.ctx-swbtn:focus-visible .sw{outline:2px solid var(--accent,#2563eb);outline-offset:2px}
+.ctx-texrow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 12px;margin-top:10px}
+.ctx-texname{display:flex;flex-direction:column;min-width:0;flex:1 1 140px}
+.ctx-texname b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctx-texbtns{display:flex;gap:6px;flex-wrap:wrap}
+.ctx-texbtns label.btn{cursor:pointer}
+.ctx-texrow > :last-child{flex:1 1 100%}
 .ctx-props{display:flex;flex-direction:column;gap:14px}
 @media (max-width:1300px){.ctx-style-grid{grid-template-columns:1fr}}
 .ctx-style > span{display:flex;flex-direction:column;min-width:0}

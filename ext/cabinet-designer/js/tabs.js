@@ -987,6 +987,20 @@ function topSectionSVG(t) {
     ${dim(D + 3.2, -H, D + 3.2, 0, fmtLen(H), D + 3.8, -H / 2, 'start').replace('<text', '<text transform="rotate(90 ' + (D + 3.8) + ' ' + (-H / 2) + ')" ').replace('text-anchor="start"', 'text-anchor="middle"')}
   </svg>`;
 }
+// 0.61.1 (Ayden 2026-11-23): swap the top material's texture right on the Tops › Styles screen.
+// The texture belongs to the material, so every style using that material changes with it.
+function topTexName(m) {
+  if (!m || !m.texture) return m && m.procedural ? 'Built-in ' + m.procedural + ' look' : 'Plain color';
+  if (isLibTex(m.texture)) return decodeURIComponent(m.texture.split('/').pop()).replace(/\.[a-z0-9]+$/i, '');
+  return 'Uploaded photo';
+}
+function topTexRow(m) {
+  const others = S.countertops.filter(x => x.mat === m.id).length;
+  return `<div class="ctx-texrow"><div class="ctx-texname"><span class="muted">Texture</span><b>${esc(topTexName(m))}</b></div>
+    <div class="ctx-texbtns"><button class="btn sm" data-act="tex-lib" data-id="${esc(m.id)}">${icon('palette')}Swap texture</button><label class="btn sm" title="Use your own photo">${icon('upload')}Upload a photo<input type="file" accept="image/*" data-tex="${esc(m.id)}" hidden></label>${m.texture ? `<button class="btn sm" data-act="tex-clear" data-id="${esc(m.id)}">Clear</button>` : ''}</div>
+    ${fld('Texture size', 'mat:' + m.id, 'texScale', m.texScale || 24, 'len', { wide: true })}</div>
+    <div class="note help">The texture is part of the material${others > 1 ? `, so the ${others} styles using ${esc(m.name)} all change` : ''}. Texture size is how many inches one copy of the photo covers.</div>`;
+}
 function renderCountertops() {
   const runs = countertopRuns(), topOpts = opts(S.countertops), room = curRoom(), auto = room.autoTops !== false;
   const on = runs.filter(r => r.on), sq = on.reduce((a, r) => a + (r.area ?? r.len * r.depth) / 144, 0), lf = on.reduce((a, r) => a + r.len, 0) / 12;
@@ -1014,7 +1028,7 @@ function renderCountertops() {
   const tile = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${esc(String(v))}</b><span>${lb}</span></div>`;
   const stylesBody = `<div class="ctx-style-grid"><div class="psec box ctx-pic">${secHead('stack', esc(t.name), 'amber')}<div class="ctx-pv">${topSectionSVG(t)}</div>
       <div class="edx-stats">${tile('amber', 'ruler', fmtLen(t.thick), 'Thickness')}${tile('teal', 'ruler', fmtLen(t.frontOverhang), 'Front overhang')}${tile('violet', 'ruler', fmtLen(t.endOverhang), 'Open end overhang')}${tile('blue', 'home', n, 'Runs using it')}</div></div>
-    <div class="ctx-props"><div class="psec box">${secHead('edit', 'Style', 'amber')}${fld('Name', R, 'name', t.name, 'text', { wide: true })}<div class="ctx-matrow">${swatch(m, 30)}${fld('Material', R, 'mat', t.mat, 'select', { options: matOpts('top'), wide: true })}</div></div>
+    <div class="ctx-props"><div class="psec box">${secHead('edit', 'Style', 'amber')}${fld('Name', R, 'name', t.name, 'text', { wide: true })}<div class="ctx-matrow"><button class="ctx-swbtn" data-act="tex-lib" data-id="${esc(m.id || '')}" title="Swap this material's texture"${m.id ? '' : ' disabled'}>${swatch(m, 30)}</button>${fld('Material', R, 'mat', t.mat, 'select', { options: matOpts('top'), wide: true })}</div>${m.id ? topTexRow(m) : ''}</div>
       <div class="psec box">${secHead('ruler', 'Size', 'teal')}<div class="grid2">${fld('Thickness', R, 'thick', t.thick, 'len')}${fld('Backsplash height', R, 'backsplash', t.backsplash, 'len')}${fld('Front overhang', R, 'frontOverhang', t.frontOverhang, 'len')}${fld('End overhang', R, 'endOverhang', t.endOverhang, 'len')}</div><div class="note help">Ends against a wall or a tall cabinet get no overhang; open ends get the end overhang.</div></div>${typeof topBuildBox === 'function' ? topBuildBox(t) : ''}</div></div>`;
   const b = (act, ic, l, x = '', bid = '') => `<button class="btn${x}" data-act="${act}"${bid ? ` data-id="${esc(bid)}"` : ''}>${icon(ic)}${l}</button>`;
   const acts = `<div class="prx-acts">${auto ? b('tops-auto', 'check', 'Rebuild tops', ' primary') + b('tops-auto-off', 'close', 'Turn off auto tops') : b('tops-auto', 'check', 'Auto build countertops', ' primary')}

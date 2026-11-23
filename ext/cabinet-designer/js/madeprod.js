@@ -344,6 +344,17 @@ function ensureCmold(s) {
   if (!s.moldings.some(m => m.id === CMOLD.id)) s.moldings.push({ ...CMOLD, mat: (s.materials || []).some(m => m.id === 'm-mdf') ? 'm-mdf' : (s.moldings[0] || {}).mat });
   s.cmold = 1; return s;
 }
+// Ayden 2026-11-23: an end grain butcher block top. The texture (textures/Tops/Endgrain Butcherblock.jpg) is drawn by
+// tools/endgrain-texture.py, so it is the shop's own with no license strings. Added once per job (s.endgrain), so a
+// deleted one stays deleted. The quote prices every top by the square foot, so the material cost only shows in Libraries.
+const EG_MAT = { id: 'm-butcher-eg', name: 'Endgrain butcherblock', kind: 'top', thick: 1.75, sheetW: 25, sheetL: 120, grain: false, cost: 0, color: '#d7af7c', texture: 'textures/Tops/Endgrain Butcherblock.jpg', procedural: null, texScale: 24 };
+const EG_TOP = { id: 'top-butcher-eg', name: 'Endgrain butcherblock', mat: EG_MAT.id, thick: 1.75, frontOverhang: 1.25, endOverhang: 1, backsplash: 0 };
+function ensureEndgrainTop(s) {
+  if (!s || s.endgrain || !Array.isArray(s.materials) || !Array.isArray(s.countertops)) return s;
+  if (!s.materials.some(m => m.id === EG_MAT.id)) { const mb = s.materials.find(m => m.id === 'm-butcher'); s.materials.push({ ...EG_MAT, cost: mb ? mb.cost || 0 : 0 }); }
+  if (!s.countertops.some(t => t.id === EG_TOP.id)) s.countertops.push({ ...EG_TOP });
+  s.endgrain = 1; return s;
+}
 // The room's shop-built tops in the job export (and so the CNC parts file), as one entry after the cabinets.
 function topExportCab(partEx) {
   const ps = topCoreParts(); if (!ps.length) return [];
