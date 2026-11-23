@@ -185,6 +185,34 @@ function ctTop3(r, tm, outline, holes) {
   mesh.rotation.x = Math.PI / 2; mesh.position.y = r.top + r.thick;
   return mesh;
 }
+// 0.60.10 (Ayden 2026-11-22: "straight line through the countertop directly where the island back panel is"): tops on
+// both sides of one island line (or a thin island wall) are one slab in the shop, so 3D draws them as one piece: their
+// outlines joined across the line (and across the wall's thickness), with every sink hole kept. Only tops of the same
+// style, height and thickness that overlap along the line are joined. Look only: each run still counts and prices as before.
+function islandTops3(runs) {
+  const out = new Map(); if (typeof ClipperLib === 'undefined' || runs.length < 2) return out;
+  const isl = r => { const w = wall(r.wall); return !!(w && (w.island || w.hidden)); };
+  const same = (a, b) => a.wall === b.wall && a.side !== b.side && (a.tpl === b.tpl || (a.tpl && b.tpl && a.tpl.id === b.tpl.id)) && Math.abs(a.top - b.top) < 0.01 && Math.abs(a.thick - b.thick) < 0.01
+    && Math.min(a.end + a.ovE, b.end + b.ovE) - Math.max(a.start - a.ovS, b.start - b.ovS) > 1;
+  const list = runs.filter(isl), par = new Map(list.map(r => [r, r])), root = r => { while (par.get(r) !== r) r = par.get(r); return r; };
+  list.forEach((a, i) => list.slice(i + 1).forEach(b => { if (same(a, b)) par.set(root(a), root(b)); }));
+  const groups = new Map(); list.forEach(r => { const k = root(r); (groups.get(k) || groups.set(k, []).get(k)).push(r); });
+  const SC = 1000, toP = pts => pts.map(q => ({ X: Math.round(q.x * SC), Y: Math.round(q.y * SC) })), fromP = p => p.map(q => ({ x: q.X / SC, y: q.Y / SC }));
+  groups.forEach(g => {
+    if (g.length < 2 || new Set(g.map(r => r.side)).size < 2) return;
+    const w = wall(g[0].wall), gap = Math.round(((+w.thick || 0) / 2 + 0.02) * SC), holes = [], paths = [];
+    g.forEach(r => {
+      const ts = typeof topWithSinks === 'function' ? topWithSinks(r) : null;
+      const q = toP(ts ? ts.outline : r.poly); paths.push(ClipperLib.Clipper.Area(q) < 0 ? q.reverse() : q); if (ts) holes.push(...ts.holes);
+    });
+    const off = (src, d) => { const o = new ClipperLib.ClipperOffset(2, 0.25), res = new ClipperLib.Paths(); o.AddPaths(src, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon); o.Execute(res, d); return res; };
+    const joined = off(off(paths, gap), -gap).filter(p => Math.abs(ClipperLib.Clipper.Area(p)) > SC * SC);
+    if (joined.length !== 1) return;
+    const rec = { first: g[0], outline: fromP(ClipperLib.Clipper.CleanPolygon(joined[0], 0.01 * SC)), holes };
+    g.forEach(r => out.set(r, rec));
+  });
+  return out;
+}
 function wallGroup(w, side, leftAlong, out = 0) {
   const g = wg(w), xdir = side === 1 ? g.u : { x: -g.u.x, y: -g.u.y };
   const P = wallPt(w, g, side, leftAlong, w.thick / 2 + out);
@@ -744,12 +772,14 @@ function buildRoomScene(v) {
     if (g) v.root.add(g);
   });
   if (L.shapes) fixt3d(v, selCol);
-  if (L.tops) countertopRuns().filter(r => r.on).forEach(r => {
+  const topRuns = L.tops ? countertopRuns().filter(r => r.on) : [], islTops = islandTops3(topRuns);
+  topRuns.forEach(r => {
     const w = wall(r.wall), a = r.start - r.ovS, b = r.end + r.ovE;
     const grp = wallGroup(w, r.side, r.side === 1 ? a : b), tm = mat3(texLook(mat(r.tpl.mat), 'tops'));
     // A top with sinks gets the real cutouts through it (undermount and drop-in holes, apron notches).
-    const ts = typeof topWithSinks === 'function' ? topWithSinks(r) : null;
-    if (ts && ts.sinks.length) v.root.add(ctTop3(r, tm, ts.outline, ts.holes));
+    const ts = typeof topWithSinks === 'function' ? topWithSinks(r) : null, isl = islTops.get(r);
+    if (isl) { if (isl.first === r) v.root.add(ctTop3(r, tm, isl.outline, isl.holes)); }
+    else if (ts && ts.sinks.length) v.root.add(ctTop3(r, tm, ts.outline, ts.holes));
     else if (r.poly) v.root.add(ctTop3(r, tm));
     else grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
     if (r.bs > 0) { const off = r.side === 1 ? r.ovS : r.ovE; grp.add(box3(r.end - r.start, r.bs, 0.75, tm, off + (r.end - r.start) / 2, r.top + r.thick + r.bs / 2, 0.375)); }
