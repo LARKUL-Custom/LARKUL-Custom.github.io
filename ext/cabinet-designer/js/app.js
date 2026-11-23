@@ -721,7 +721,7 @@ function dndDrop() {
 }
 
 // Doors and drawers: true opens, false closes, undefined flips each one.
-const openable = c => computeFronts(c).some(f => f.type === 'door' || f.type === 'drawer');
+const openable = c => c.made === 'pocketdoors' || computeFronts(c).some(f => f.type === 'door' || f.type === 'drawer');
 function setOpen(ids, v) {
   clearDoorLimits();
   ids.forEach(id => { if (v === undefined ? !ui.open[id] : v) ui.open[id] = true; else delete ui.open[id]; });

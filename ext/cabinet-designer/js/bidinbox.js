@@ -36,6 +36,12 @@ const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => BID_SHELF(r) || 
 // The 9" ADA toe only when a row asks for it (Bid Reader 0.31.0, miss #23): an ADA row is 32.5" high with a normal toe.
 const ADA_TOE = /\bADA\s*toe|\b9\s*(?:"|in(?:ch)?\b)?\s*toe|\btoe(?:\s*kick)?\s*(?:of\s*|at\s*)?9\b/i;
 
+// Wall end caps from Bid Reader (0.61.7, Ayden 2026-11-23: "the bid reader didnt see the wall end caps"): a wall's caps
+// [{ where: 'start'|'end'|'along', x, out }] become its Left/Right end cap (capS/capE) or a custom cap. The reader measures x
+// from the cap's face and gives the clear length between caps, so a free wall end with a cap grows by half a wall (the
+// cap stands half outside the wall line) and the boxes on a wall with a start cap move along by the same amount.
+const BID_CAP_E = 4.5 / 2;
+const bidCapsOf = w => (Array.isArray(w && w.caps) ? w.caps : []).filter(c => c && ['start', 'end', 'along'].includes(c.where));
 function bidWalls(walls) {
   const dir = a => { const r = a * Math.PI / 180; return [Math.round(Math.cos(r)), Math.round(Math.sin(r))]; };
   const out = walls.map(() => null), chain = walls.map((w, i) => i).filter(i => !walls[i].island);
@@ -47,7 +53,13 @@ function bidWalls(walls) {
       const rest = chain.slice(k), stop = rest.findIndex(j => walls[j].turn === 'end'), seg = stop < 0 ? rest : rest.slice(0, stop + 1);
       ang = seg.length > 1 ? 90 : 0; x = maxX + 120; y = seg.length > 1 ? -(+walls[i].len || 0) : 0;
     }
-    const len = +walls[i].len || 0; out[i] = { len, x, y, ang };
+    // Caps only stand at a free end: the start of a chain, or the end of its last wall.
+    const caps = bidCapsOf(walls[i]), freeS = k === 0 || walls[chain[k - 1]].turn === 'end', freeE = k === chain.length - 1 || walls[i].turn === 'end';
+    const capS = freeS && caps.find(c => c.where === 'start'), capE = freeE && caps.find(c => c.where === 'end');
+    if (capS) { const [ux, uy] = dir(ang); x -= ux * BID_CAP_E; y -= uy * BID_CAP_E; }
+    const len = (+walls[i].len || 0) + (capS ? BID_CAP_E : 0) + (capE ? BID_CAP_E : 0); out[i] = { len, x, y, ang };
+    if (capS || capE || caps.some(c => c.where === 'along')) out[i].bidCaps = { shift: capS ? BID_CAP_E : 0, S: capS ? +capS.out || 26 : 0, E: capE ? +capE.out || 26 : 0,
+      along: caps.filter(c => c.where === 'along' && +c.x > 0).map(c => ({ a: +c.x + (capS ? BID_CAP_E : 0), len: +c.out || 26 })) };
     const [ux, uy] = dir(ang); x += ux * len; y += uy * len; maxX = Math.max(maxX, x, out[i].x);
     ang = ((walls[i].turn === 'left' ? ang + 90 : ang - 90) + 360) % 360;
   });
@@ -110,16 +122,39 @@ function bidNativeData(tk) {
       const name = r.product || r.code || r.category;
       const sub = r.category === 'filler' ? 7 : r.category === 'panel' ? 9 : NaN;
       for (let k = 0; k < Math.max(1, Math.round(+r.qty || 1)); k++) {
-        const x = hasX && k === 0 ? +r.x : (cursor[key] || 0);
+        const shift = (walls[wi - 1] && walls[wi - 1].bidCaps && !back && walls[wi - 1].bidCaps.shift) || 0;
+        const x = hasX && k === 0 ? +r.x + shift : (cursor[key] || shift);
         cursor[key] = Math.max(cursor[key] || 0, x + w);
         prods.push({ name, desc: [r.category, text].join(' '), w, h, d, x, y: NaN, elev, outset: 0, rot: 0, wall: wi, back,
           type: type, sub, num: 0, inserts: [], fronts: [], fromBid: true,
-          notes: [r.code, r.material, r.notes].filter(Boolean).join(' · '), ada: ADA_TOE.test(text) });
+          notes: [r.code, r.material, r.notes].filter(Boolean).join(' · '), ada: ADA_TOE.test(text), ends: bidEnds(r.notes) });
       }
     });
     return { name, walls, prods, appls: [], hwNames: {} };
   });
   return { rooms, jobName: tk.job || '', inches: true };
+}
+
+// Ends the bid draws covered (0.61.7): "finished end left", "end panel (R)", "FE both", "right end cap"... in a row's notes
+// turn that end's panel to Always, so the applied end panel is built in either Draw mode. "Wall end cap" (a short wall,
+// sent as the wall's end_caps) and "left end open" don't count.
+const BID_END_WORD = '(?:(?:finished|fin\\.?|applied)\\s*ends?(?:\\s*panels?)?|end\\s*(?:panel|cap)s?|f\\.?\\s?e\\.?(?:\\s?p\\.?)?)';
+const BID_END_RE = {
+  L: new RegExp(`\\b${BID_END_WORD}\\s*(?:on\\s*(?:the\\s*)?|at\\s*(?:the\\s*)?|[-:(,]\\s*)?(?:left|lh|l)\\b|\\b(?:left|lh)\\s*(?:side\\s*)?${BID_END_WORD}(?![a-z])`, 'i'),
+  R: new RegExp(`\\b${BID_END_WORD}\\s*(?:on\\s*(?:the\\s*)?|at\\s*(?:the\\s*)?|[-:(,]\\s*)?(?:right|rh|r)\\b|\\b(?:right|rh)\\s*(?:side\\s*)?${BID_END_WORD}(?![a-z])`, 'i'),
+  both: new RegExp(`\\b${BID_END_WORD}\\s*(?:on\\s*)?(?:both(?:\\s*(?:ends|sides))?|l\\s*(?:&|and|\\/)\\s*r|left\\s*(?:&|and|\\/)\\s*right)\\b|\\bboth\\s*(?:ends|sides)\\s*(?:finished|panel(?:l?ed)?)\\b`, 'i'),
+};
+// The same words taken out of a row's text before it picks a library product, so "finished end right" never picks the
+// Mozaik "Wall Right" filler for an upper.
+const bidNoEndWords = t => ['both', 'L', 'R'].reduce((a, k) => a.replace(new RegExp(BID_END_RE[k].source, 'gi'), ' '), String(t || ''))
+  .replace(/\b(?:left|right)\s*end\s*(?:open|exposed|bare)\b|\bwall\s*end\s*caps?\b/gi, ' ');
+function bidEnds(notes) {
+  const t = String(notes || '').replace(/\bwall\s*end\s*caps?\b/gi, ' ').replace(/\[rule\]/gi, ' ');
+  if (!t.trim()) return null;
+  const both = BID_END_RE.both.test(t), o = {};
+  if (both || BID_END_RE.L.test(t)) o.panelL = 'on';
+  if (both || BID_END_RE.R.test(t)) o.panelR = 'on';
+  return o.panelL || o.panelR ? o : null;
 }
 
 // The library product floating shelves become: one in the Floating Shelves group, a "floating" one first.

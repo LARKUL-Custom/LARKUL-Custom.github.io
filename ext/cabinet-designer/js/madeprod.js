@@ -137,6 +137,39 @@ const MADE = {
       });
     },
   },
+  // 0.61.7 (Ayden 2026-11-23, the Argil laundry: "the openings on the left and right are for the doors to slide in"):
+  // pocket doors on their own, standing in front of an opening built from separate pieces (end panels, fillers, shelves).
+  // The doors hinge at the outer edges; open, each swings to 90°, steps into the slot at its end (slotL / slotR wide,
+  // measured in from that edge) and slides back (back = how deep the pocket is). Doors of the room's door style, cut from
+  // the Finish like every door; a pocket door system per door and the room's pull on the hardware list.
+  pocketdoors: {
+    name: 'Pocket Doors', cat: 'Tall', w: 60, h: 96, d: 0.75, elev: 0, folder: 'Pocket Doors',
+    mp: { n: 2, slotL: 4, slotR: 4, back: 30 }, price: { base: 0, perFt: 0 },
+    fields: [['n', 'Doors', 'select', [[2, '2 (a pair)'], [1, '1 (hinged left)']]], ['slotL', 'Left pocket slot width', 'len'], ['slotR', 'Right pocket slot width', 'len'], ['back', 'Pocket depth (how far back they slide)', 'len']],
+    build(c, mp, x) {
+      const n = +mp.n === 1 ? 1 : 2, g = 0.125, fw = r3((c.w - g * (n - 1)) / n), back = Math.max(1, +mp.back || 30);
+      const pl = hwPick(cabSet(c, 'pull'), 'pull');
+      for (let i = 0; i < n; i++) {
+        const R = n === 2 && i === 1, x0 = R ? r3(c.w - fw) : 0, f = { type: 'door', x0, x1: r3(x0 + fw), z0: 0, z1: c.h, hinge: R ? 'R' : 'L' };
+        const st = apStyle(c, f), ds = st.ds, dm = mat(ds.mat) || x.fm, name = n > 1 ? `Pocket door ${R ? 'right' : 'left'}` : 'Pocket door';
+        if (ds.source === 'buyout') { x.bom[`${name}, ${ds.name} ${fmtLen(fw, 1)} × ${fmtLen(c.h, 1)} (buyout)`] = 1; x.note(`${name} is bought from the door maker`); }
+        const ops = st.framed && ds.type === 'routed' ? [{ type: 'pocket', x: r3(ds.rail), y: r3(ds.stile), w: r3(c.h - 2 * ds.rail), h: r3(fw - 2 * ds.stile), depth: r3(+ds.pocketDepth || 0.25), face: 'front', why: 'shaker field' }] : [];
+        if (st.framed && ds.type !== 'routed' && ds.source !== 'buyout') x.warn.push(`${name}: a ${ds.name} front is cut here as one panel; build it like the room's doors.`);
+        if (ds.source !== 'buyout') { const pt = x.part(name, dm, r3(c.h), fw, { kind: 'door', ops }); pt.fin = true; pt.front = true; pt.pos = { x: x0, y: 0, z: 0, dx: fw, dy: c.h, dz: c.d }; }
+        x.bom[POCKET_HW] = (x.bom[POCKET_HW] || 0) + 1;
+        // The room's pull, upright near the edge the door opens from, at hand height.
+        const len = pl ? Math.max(1, (pl.lengthMM || 128) * MM) : 5, zc = r3(Math.min(c.h - len / 2 - 2, Math.max(len / 2 + 2, 42 - c.elev)));
+        const pull = pl ? { name: pl.name, vert: true, x: r3(R ? x0 + 2 : x0 + fw - 2), z: zc, len: r3(len), slim: true } : null;
+        if (pull) x.bom[pull.name] = (x.bom[pull.name] || 0) + 1;
+        // Where it goes open: its outside face (and pull) toward the end, its back riding by the inside of the slot.
+        const slot = Math.max(fm0(dm) + 0.25, +(R ? mp.slotR : mp.slotL) || 4), ft = fm0(dm), cl = 0.0625, hx = R ? c.w : 0;
+        const pocket = { dx: r3((R ? c.w - slot + cl + ft : slot - cl - ft) - hx), dz: -r3(Math.min(fw + ft + 0.25, back + ft)) };
+        if (fw > back - 0.25) x.warn.push(`${name} is ${fmtLen(fw, 1)} wide but the pocket is ${fmtLen(back, 1)} deep, so it can't slide all the way in.`);
+        x.front({ f, ds, framed: st.framed, m: dm, pull, pocket });
+      }
+      x.note(`${n} pocket door${n > 1 ? 's' : ''} ${fmtLen(fw, 1)} × ${fmtLen(c.h, 1)}, sliding ${fmtLen(back, 1)} back into ${n > 1 ? `slots ${fmtLen(+mp.slotL || 4, 1)} and ${fmtLen(+mp.slotR || 4, 1)} wide` : `a ${fmtLen(+mp.slotL || 4, 1)} slot`}`);
+    },
+  },
   // 3. A laminate top on 2 layers of 3/4" core with a front apron, hung on Rakks EHV brackets, no cabinet under it.
   // ADA: knee clearance under the apron 29" at least, the top 34" at most.
   adatop: {
@@ -273,7 +306,10 @@ function madeSync(c) {
   if (c.made === 'slatwall') c.d = r3((mp.backer === 'off' ? 0 : fm.thick) + fm.thick);
   if (c.made === 'privacy' || c.made === 'panel') c.w = r3(fm.thick);
   if (c.made === 'apfront') c.d = r3(fm.thick);
+  // Pocket doors are as thick as the doors (the Finish).
+  if (c.made === 'pocketdoors') c.d = r3(fm.thick);
 }
+const fm0 = m => (m && m.thick) || 0.75;
 // Own price when the price sheet has none for the product: these aren't priced like cabinets.
 // A support panel is priced like an applied slab end panel (0.59.21): its material by the square foot plus the sheet's charge
 // per panel for its height (Edit prices › Adders).
@@ -283,6 +319,12 @@ function madePrice(c, ps) {
     // 0.61.5: each front at its own width, plus its appliance pull at the price sheet's hardware price (if it has one).
     const fr = apFronts(c), fx = apFixt(c), hw = q => { const p = apPull(c, fx, q, fr); return p && ps.hardware && ps.hardware.on ? +(ps.hardware.items || {})[p.name] || 0 : 0; };
     return { own: true, base: r3(fr.reduce((t, q) => t + priceFront(apStyle(c, { type: 'door', x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.h }).ds, q.w * q.h / 144, ps, q.w, q.h).total + hw(q), 0)), perFt: 0 };
+  }
+  if (c.made === 'pocketdoors' && ps && typeof priceFront === 'function') {
+    // 0.61.7: each door like a door of its style, plus the pocket systems and pulls at the sheet's hardware prices.
+    const b = madeBuildParts(c), hwP = n => ps.hardware && ps.hardware.on ? +(ps.hardware.items || {})[n] || 0 : 0;
+    const doors = b.panelFronts.reduce((t, o) => { const w = o.f.x1 - o.f.x0, h = o.f.z1 - o.f.z0; return t + priceFront(o.ds, w * h / 144, ps, w, h).total; }, 0);
+    return { own: true, base: r3(doors + Object.entries(b.bom).reduce((t, [n, q]) => t + q * hwP(n), 0)), perFt: 0 };
   }
   if (c.made === 'panel' && c.autoOf) return { own: true, base: 0, perFt: 0 };
   if (c.made !== 'panel' || !ps || typeof matSqIn !== 'function') return { own: true, ...d.price };
@@ -317,7 +359,19 @@ function madeMeshes(c, opts = {}) {
   const grp = new THREE.Group(), b = buildParts(c);
   // Panel fronts draw as doors of their style (frame and recessed field), not as flat boxes.
   const pullM = flat3('#2f3236');
-  (b.panelFronts || []).forEach(o => { const M = mat3(typeof texLook === 'function' ? texLook(o.m, 'finished', c) : o.m, opts); doorMeshes(o.ds, o.framed, o.f, c.d, M, M, 0, m => grp.add(m)); if (o.pull) apPullMeshes(o.pull, c.d, pullM, m => grp.add(m)); });
+  (b.panelFronts || []).forEach(o => {
+    const M = mat3(typeof texLook === 'function' ? texLook(o.m, 'finished', c) : o.m, opts);
+    // A pocket door (0.61.7) turns on its outside front corner and slides into its pocket (moveFront in view3d.js).
+    let into = grp;
+    if (o.pocket) {
+      const hx = o.f.hinge === 'R' ? o.f.x1 : o.f.x0, pz = c.d, pivot = new THREE.Group(), fg = new THREE.Group();
+      pivot.position.set(hx, 0, pz); fg.position.set(-hx, 0, -pz); pivot.add(fg); grp.add(pivot); into = fg;
+      pivot.userData.open = { kind: 'pocket', sign: o.f.hinge === 'R' ? 1 : -1, f: o.f, base: { x: hx, z: pz }, dx: o.pocket.dx, dz: o.pocket.dz };
+    }
+    doorMeshes(o.ds, o.framed, o.f, c.d, M, M, 0, m => into.add(m));
+    if (o.pull && o.pull.slim) into.add(box3(0.45, o.pull.len, 0.45, pullM, o.pull.x, o.pull.z, c.d + 0.55));
+    else if (o.pull) apPullMeshes(o.pull, c.d, pullM, m => into.add(m));
+  });
   [...b.parts, ...(b.show || [])].forEach(q => {
     if (q.front) return;
     const M = mat3(madeLook(c, q), opts);
@@ -332,6 +386,7 @@ function madeMeshes(c, opts = {}) {
     madeBoxes(q).forEach(p => { const m = box3(p.dx, p.dy, p.dz, M, p.x + p.dx / 2, p.y + p.dy / 2, p.z + p.dz / 2); m.userData.part = q.name; grp.add(m); });
   });
   grp.traverse(o => { o.userData.cabId = c.id; });
+  if (c.made === 'pocketdoors' && typeof applyOpen === 'function') applyOpen(grp, openT[c.id] || 0);
   return grp;
 }
 // Elevation: each part's face as seen from the front, back to front.
@@ -342,7 +397,8 @@ function madeFrontSVG(c, ex, by, opts = {}) {
     let svg = `<rect ${fillFor(m, 'ev-box')} x="${r3(ex + f.x0)}" y="${r3(by - f.z1)}" width="${r3(fw)}" height="${r3(fh)}"/>`;
     if (o.framed) svg += `<rect class="ev-inner nss" fill="none" x="${r3(ex + f.x0 + ds.stile)}" y="${r3(by - f.z1 + ds.rail)}" width="${r3(Math.max(0, fw - 2 * ds.stile))}" height="${r3(Math.max(0, fh - 2 * ds.rail))}"/>`;
     // 0.61.5: the appliance pull.
-    const p = o.pull; if (p) svg += p.vert ? `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - 0.375)}" y="${r3(by - p.z - p.len / 2)}" width="0.75" height="${r3(p.len)}" rx="0.3"/>` : `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - p.len / 2)}" y="${r3(by - p.z - 0.375)}" width="${r3(p.len)}" height="0.75" rx="0.3"/>`;
+    const p = o.pull; if (p && p.slim) svg += `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - 0.225)}" y="${r3(by - p.z - p.len / 2)}" width="0.45" height="${r3(p.len)}" rx="0.2"/>`;
+    else if (p) svg += p.vert ? `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - 0.375)}" y="${r3(by - p.z - p.len / 2)}" width="0.75" height="${r3(p.len)}" rx="0.3"/>` : `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - p.len / 2)}" y="${r3(by - p.z - 0.375)}" width="${r3(p.len)}" height="0.75" rx="0.3"/>`;
     faces.push({ z: c.d + 1, m, svg });
   });
   [...b.parts, ...(b.show || [])].forEach(q => {

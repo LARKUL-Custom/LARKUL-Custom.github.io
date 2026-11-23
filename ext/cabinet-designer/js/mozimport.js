@@ -160,7 +160,7 @@ function bidNearLib(p, cat) {
   const cornerOk = /blind|susan|corner/i.test(p.name || '') && !/^(bf|wf)\d*\b/i.test(p.name || '');
   const libs = S.library.filter(l => l.cat === cat && !l.made && (cornerOk || !l.corner)); if (!libs.length) return S.library[0];
   const words = s => new Set(s.toLowerCase().replace(/(\d)\s*(drw|drawers?)\b/g, '$1drawer').replace(/(\d)\s*(dr|doors?)\b/g, '$1door').split(/[^a-z0-9]+/).filter(Boolean));
-  const pw = words(p.name + ' ' + p.desc);
+  const pw = words(p.name + ' ' + (typeof bidNoEndWords === 'function' ? bidNoEndWords(p.desc) : p.desc));
   const score = l => { let s = 0; words(l.name).forEach(x => { if (pw.has(x)) s += /\d/.test(x) ? 3 : 1; }); return s - Math.abs(l.w - p.w) / 100; };
   return libs.reduce((a, b) => score(b) > score(a) ? b : a);
 }
@@ -376,6 +376,13 @@ function mozRooms(data) {
     mozMaterials(rm, src, data);
     const walls = mozWalls(src.walls, sz, rm);
     rm.walls = walls.map(({ a0, L, ...w }) => w);
+    // Wall end caps Bid Reader read (bidWalls): Left/Right end caps and custom caps, sticking out on the cabinet side.
+    src.walls.forEach((sw, j) => {
+      const bc = sw.bidCaps, w = rm.walls[j]; if (!bc || !w || w.hidden) return;
+      if (bc.S) w.capS = { on: true, len: bc.S, side: 1 };
+      if (bc.E) w.capE = { on: true, len: bc.E, side: 1 };
+      if (bc.along.length) w.caps = bc.along.map(c => ({ id: uid('cap'), a: r3(c.a), len: c.len, side: 1 }));
+    });
     const ps = src.prods.map(p0 => ({ ...p0, w: sz(p0.w), h: sz(p0.h), d: sz(p0.d), x: cv(p0.x), y: isFinite(p0.y) ? cv(p0.y) : NaN, elev: sz(p0.elev), outset: sz(p0.outset) }));
     const cabs = [], extras = [], flag = (p, why) => (data.flagged = data.flagged || []).push(why ? `${p.name} (${why})` : p.name);
     // A library product placed where the Mozaik one is, at its size.
@@ -410,7 +417,7 @@ function mozRooms(data) {
       const c = newCab(S, lib, at.wall, at.side, at.off);
       Object.assign(c, { name: p.name || lib.name, w: p.w, h: p.h, d: p.d, elev: p.elev, fromMozaik: true });
       // From a Bid Reader row: its notes, and ADA (9" toe) when the row says so.
-      if (p.fromBid) { if (p.notes) c.notes = p.notes; if (p.ada && c.cat !== 'Wall') c.params = { ...(c.params || {}), ada: 'on' }; }
+      if (p.fromBid) { if (p.notes) c.notes = p.notes; if (p.ada && c.cat !== 'Wall') c.params = { ...(c.params || {}), ada: 'on' }; if (p.ends && !c.made && !c.moz) Object.assign(c, p.ends); }
       // A base or tall cabinet hung off the floor (a floating vanity drawer) has no toe kick, legs or toe skin.
       if (p.elev > 0.5 && c.cat !== 'Wall' && c.construction && c.construction.toeKick) c.construction.toeKick = false;
       // Corner products keep their own fronts; Mozaik's name says which end goes in the corner.

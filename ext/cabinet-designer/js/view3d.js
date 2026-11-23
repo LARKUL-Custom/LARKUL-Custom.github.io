@@ -482,7 +482,7 @@ function animateOpen() {
       const goal = ui.open[id] ? 1 : 0, cur = openT[id] || 0;
       if (Math.abs(goal - cur) < 1e-3) { openT[id] = goal; return; }
       // A pocket door has two moves (swing, then slide in), so its cabinet takes twice as long.
-      const c = cab(id), dur = c && c.pocket === 'on' ? 1.1 : 0.45;
+      const c = cab(id), dur = c && (c.pocket === 'on' || c.made === 'pocketdoors') ? 1.1 : 0.45;
       openT[id] = cur + Math.sign(goal - cur) * Math.min(Math.abs(goal - cur), dt / dur); moving = true;
     });
     viewers.forEach(v => { if (!v.ok) return; v.root.traverse(o => { if (o.userData.open && o.userData.cabId) moveFront(o, openT[o.userData.cabId] || 0); }); v.requestRender(); });
