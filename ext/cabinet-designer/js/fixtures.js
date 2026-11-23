@@ -485,6 +485,10 @@ function fixt3d(v, selCol) {
       grp.add(box3(1, 1, 7, steel, f.w / 2, c.top + 13, fy + 3.25));
       v.root.add(tag(grp)); return;
     }
+    // 0.61.4 (Ayden 2026-11-23: "the fridge is peeking through when it should just be the false doors"): with panel fronts
+    // on, the appliance's own model (doors, handles, grille) is not drawn; a plain box stands behind the panels, so only
+    // the panel fronts show.
+    if (f.panels && PANEL_KINDS.includes(f.kind)) { grp.add(box3(f.w - 0.1, f.h - 0.1, Math.max(0.5, f.d - 0.25), hot || metal, f.w / 2, f.elev + f.h / 2, Math.max(0.5, f.d - 0.25) / 2)); v.root.add(tag(grp)); return; }
     const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
     if (mm) { mm.position.set(0, f.elev, 0); grp.add(mm); v.root.add(tag(grp)); return; }
     // A loose model not imported in this browser (or still loading) shows as a solid box.
