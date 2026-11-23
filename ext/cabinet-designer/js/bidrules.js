@@ -34,6 +34,7 @@ function bidRules(rooms, tk, done) {
       done.cornerOff = bidCornerPanels(rooms);
       if (done.cornerOff) done.options.push(`${done.cornerOff} automatic end panel${done.cornerOff === 1 ? '' : 's'} left off where ${done.cornerOff === 1 ? 'it' : 'they'} would run into a corner cabinet`);
     }
+    done.flushFill = bidFlushFillers(rooms);
     done.overlaps = bidOverlaps(rooms);
   } finally { S.rooms = keepRooms; }
   return done;
@@ -163,6 +164,33 @@ function bidFinishLook(tk, done) {
 // 0.60.9 (Ayden's corner-and-countertop-rules.md, 2026-11-20): what it can't fill goes in checks for the job notes: a
 // gap wider than 12" a side (left as drawn), base runs stopped right at the cabinet depth (no room for a filler, the
 // doors and pulls can hit), and uppers that leave a corner empty (only bases get a corner filler for now).
+// Drawn fillers from a bid sit flush with the doors of the cabinet they belong to, like a filler placed by hand
+// (a Mozaik filler is only 4" deep, so left at the wall it hides behind the cabinets). When a filler touches cabinets
+// on both ends, it goes with the one of its own height. Two fillers that meet in an inside corner: the one on the
+// second wall is set back by the overlap (the door thickness) so it butts behind the first one's face.
+function bidFlushFillers(rooms) {
+  let n = 0;
+  rooms.forEach(rm => withRoom(rm, () => {
+    const isF = c => c.moz && /frost-(wall|btf|bth)-(left|right)/.test(c.moz) && c.wall && wall(c.wall);
+    const fl = S.cabinets.filter(isF);
+    fl.forEach(c => {
+      const nbs = S.cabinets.filter(k => k !== c && !k.moz && !k.made && k.wall === c.wall && k.side === c.side
+        && Math.min(Math.abs(k.off - (c.off + c.w)), Math.abs(c.off - (k.off + k.w))) <= 1.01
+        && (k.elev || 0) < (c.elev || 0) + c.h && (c.elev || 0) < (k.elev || 0) + k.h);
+      if (!nbs.length) return;
+      const fit = k => Math.abs((k.elev || 0) - (c.elev || 0)) + Math.abs(k.h - c.h);
+      const nb = nbs.sort((a, b) => fit(a) - fit(b))[0], fr = computeFronts(nb).find(f => f.type !== 'open');
+      const ft = fr ? ((mat(frontStyle(nb, fr).ds.mat) || {}).thick || 0.75) : 0;
+      c.outset = r3((nb.outset || 0) + nb.d + ft - c.d); n++;
+    });
+    fl.forEach((a, i) => fl.slice(i + 1).forEach(b => {
+      if (a.wall === b.wall || !vOverlap(a, b)) return;
+      const pa = cabPoly(a), pb = cabPoly(b); if (!pa || !pb) return;
+      const dd = bidPolyDepth(pa, pb); if (dd > 0.05) b.outset = r3((b.outset || 0) - dd);
+    }));
+  }));
+  return n;
+}
 function bidCornerFillers(rooms, checks) {
   let n = 0; checks = checks || [];
   rooms.forEach(rm => withRoom(rm, () => {
