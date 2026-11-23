@@ -524,15 +524,15 @@ class Viewer3D {
     el.addEventListener('pointercancel', e => { downs.delete(e.pointerId); if (!downs.size) multi = false; });
     el.addEventListener('pointerup', e => {
       const down = downs.get(e.pointerId), wasMulti = multi; downs.delete(e.pointerId); if (!downs.size) multi = false;
-      if (!down || wasMulti || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || e.button !== 0) return;
+      if (this.walk || !down || wasMulti || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || e.button !== 0) return;
       const id = this.pick(e.clientX, e.clientY); if (this.onPick) this.onPick(id);
     });
     if (typeof onAllFingersUp === 'function') onAllFingersUp(() => { downs.clear(); multi = false; });
     host.addEventListener('pointerdown', e => {
-      if (e.button !== 0 || e.target !== el) return;
+      if (e.button !== 0 || e.target !== el || this.walk) return;
       if (typeof partDrag3d === 'function') partDrag3d(this, e);
     }, true);
-    el.addEventListener('dblclick', e => { const id = this.pick(e.clientX, e.clientY); if (id && this.onDouble) this.onDouble(id); else if (id && this.onPick) { this.onPick(id); view3dPreset(this, 'sel'); } });
+    el.addEventListener('dblclick', e => { if (this.walk) return; const id = this.pick(e.clientX, e.clientY); if (id && this.onDouble) this.onDouble(id); else if (id && this.onPick) { this.onPick(id); view3dPreset(this, 'sel'); } });
     this.resize();
   }
   // Moves the drawing into another box (the cabinet editor draws its box again when it reopens).
@@ -598,6 +598,7 @@ class Viewer3D {
     this.root.children.forEach(o => { if (!o.userData.noBounds && !o.isSprite) b.expandByObject(o); }); return b.isEmpty() ? new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(100, 90, 100)) : b; }
   look(dir, keepDistance) {
     if (!this.ok) return;
+    if (this.walk && typeof walkStop === 'function') walkStop();
     const b = this.bounds(), c = b.getCenter(new THREE.Vector3()), r = b.getSize(new THREE.Vector3()).length() / 2;
     const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
     // In a tall, narrow view the side to side angle is the smaller one, so fit to whichever is smaller.
@@ -624,6 +625,7 @@ class Viewer3D {
   }
   setView(v) {
     if (!this.ok || !v) return;
+    if (this.walk && typeof walkStop === 'function') walkStop();
     const next = v.mode === 'ortho' ? this.ortho : this.persp;
     this.cam = next; this.controls.object = next;
     this.orthoH = v.orthoH || 200; this.ortho.zoom = v.zoom || 1; this.resize();

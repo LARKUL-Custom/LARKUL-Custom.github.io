@@ -3718,3 +3718,12 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .prx-profit .prx-pflh{margin:14px 0 4px;font-size:14px}
 .prx-profit .prx-pflab{width:100%}.prx-profit .prx-pflab input{width:64px;text-align:right}
 .prx .prx-tabs{flex-wrap:nowrap;flex:none}.prx-top .prx-r{flex-wrap:wrap;min-width:0}
+
+/* Walk (first-person tour in 3D, js/walk3d.js) */
+.view3d-wrap > .walkui{pointer-events:none;z-index:5}
+.walkbar{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;pointer-events:auto;background:var(--panel,#fff);border:1px solid var(--line,#d8d8d8);border-radius:10px;padding:4px 4px 4px 12px;font-size:12px;color:var(--t-n,#555);white-space:nowrap;max-width:calc(100% - 24px)}
+.walkhint{overflow:hidden;text-overflow:ellipsis;transition:opacity .4s}
+.walkhint.gone{display:none}
+.walkbar:has(.walkhint.gone){padding-left:4px}
+.walkstick{position:absolute;left:14px;bottom:46px;width:100px;height:100px;border-radius:50%;border:1px solid rgba(0,0,0,.25);background:rgba(255,255,255,.35);pointer-events:auto;touch-action:none;display:grid;place-items:center}
+.walkstick i{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.3);display:block}

@@ -293,6 +293,7 @@ function renderRoom() {
   renderViews3d();
   $('#render3d').innerHTML = `${icon('sun')}Realistic`; $('#render3d').setAttribute('aria-pressed', String(!!ui.render3d && !ui.hidden3d));
   { const sp = $('#sunpick'), real = !!ui.render3d && !ui.hidden3d; if (sp) { sp.hidden = !real; const r = $('#sunhour'); if (r && typeof SUN !== 'undefined' && +r.value !== SUN.hour) r.value = SUN.hour; const l = $('#sunlbl'); if (l && typeof sunLabel === 'function') l.textContent = sunLabel(SUN.hour); } }
+  if (typeof renderRoomWalkBtn === 'function') renderRoomWalkBtn();
   $('#hidden3d').innerHTML = `${icon('cube')}Hidden line`; $('#hidden3d').setAttribute('aria-pressed', String(!!ui.hidden3d));
   $('[data-act=snap3d]').innerHTML = `${icon('camera')}Save image`;
   $('[data-act=co-open]').innerHTML = `${icon('print')}Cutout card`;
@@ -962,6 +963,7 @@ document.addEventListener('click', e => {
     // Hidden line and Realistic are two looks of the same view: turning one on turns the other off.
     case 'hidden3d': ui.hidden3d = !ui.hidden3d; if (ui.hidden3d) ui.render3d = false; try { localStorage.setItem(KEY + '.hidden', ui.hidden3d ? '1' : '0'); localStorage.setItem(KEY + '.render', ui.render3d ? '1' : '0'); } catch (_) {} renderRoom(); break;
     case 'snap3d': saveRoomImage(); break;
+    case 'walk3d': walkToggle(); break;
     case 'full3d': toggleFull3d(); break;
     case 'layers-all': ui.layers = {}; ui.wallOp = 1; saveLayers3d(); break;
     case 'layers-faces': ui.layers = { box: false, drawerBox: false, tops: false, molding: false, ceiling: false }; saveLayers3d(); break;

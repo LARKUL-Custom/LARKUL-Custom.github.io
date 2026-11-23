@@ -93,7 +93,7 @@ function readMozRoom(el, fallbackName) {
       // Every door and drawer front with its spot on the cabinet face (Z up from the cabinet bottom).
       fronts: [...x.getElementsByTagName('ProductDoor'), ...x.getElementsByTagName('DrawerFront')].map(f => ({
         type: f.tagName === 'DrawerFront' || f.getAttribute('IsDrawerFront') === 'True' ? 'drawer' : 'door',
-        w: mzNum(f, 'W'), h: mzNum(f, 'H'), x: mzNum(f, 'X') || 0, z: mzNum(f, 'Z') || 0, hinge: (f.getAttribute('HingeEdge') || '')[0] || '', style: f.getAttribute('DoorStyle') || '',
+        w: mzNum(f, 'W'), h: mzNum(f, 'H'), x: mzNum(f, 'X') || 0, y: mzNum(f, 'Y') || 0, z: mzNum(f, 'Z') || 0, face: f.getAttribute('FaceIdx') || '', hinge: (f.getAttribute('HingeEdge') || '')[0] || '', style: f.getAttribute('DoorStyle') || '',
       })).filter(f => f.w > 0 && f.h > 0),
     };
   }).filter(p => p.w > 0 && p.h > 0 && p.d > 0);
@@ -424,7 +424,17 @@ function mozRooms(data) {
       if (c.corner) { if (/right|\(r\)/i.test(p.name)) c.corner.side = 'R'; else if (/left|\(l\)/i.test(p.name)) c.corner.side = 'L'; }
       // A 45° or 90° corner ("45 Susan Cabinet") has no side in its name: its full-depth end goes against the other wall.
       if (angledCorner(c)) { const s = mozCornerSide(c, rm.walls); if (s) c.corner.side = s; }
-      const rows = angledCorner(c) ? null : mozRows(p, sz); if (rows) c.rows = rows;
+      // 0.61.10 (Ayden 2026-11-23, Argil laundry: "in yours the corner cab is all weird"): a 45° or 90° corner takes its leg
+      // depth from Mozaik (how far out its doors stand from the back, 15" on the laundry talls, not the library's 12") and its
+      // rows of doors from one face (Mozaik's 90° corner has a tall door with a short one over it on each leg).
+      let rows = null;
+      if (angledCorner(c)) {
+        const ys = p.fronts.map(f => sz(f.y)).filter(y => y > 3 && y < Math.min(p.w, p.d) - 3);
+        if (ys.length) c.corner = { ...c.corner, leg: Math.round(Math.max(...ys) * 4) / 4 };
+        const faces = [...new Set(p.fronts.map(f => f.face))], one = p.fronts.filter(f => f.face === faces[0]);
+        if (one.length) { rows = mozRows({ ...p, fronts: one }, sz); if (rows) rows.forEach(r => { if (r.count) r.count = 1; }); }
+      } else rows = mozRows(p, sz);
+      if (rows) c.rows = rows;
       if (/oven/i.test(p.name) && !(rows || []).some(r => r.type === 'open')) flag(p, 'check the oven opening');
       if (p.outset) c.outset = p.outset;
       if (p.num) c.num = p.num;

@@ -55,6 +55,7 @@ const ICON_PATHS = {
   gridsplit: '<rect x="3" y="3" width="14" height="14" rx="1"/><path d="M3 7.7h14M3 12.3h14M7.7 3v14M12.3 3v14"/>',
   join: '<rect x="3" y="3" width="14" height="14" rx="1"/><path d="M10 4.5v3.5M8 6l2 2 2-2M10 15.5V12M8 14l2-2 2 2"/>',
   equal: '<rect x="3" y="3" width="14" height="14" rx="1"/><path d="M6 7.5h8M6 12.5h8"/>',
+  walk: '<circle cx="11" cy="3.6" r="1.6"/><path d="M9.8 7.2L8 11.2l2.8 1.8-1 4.5M9.8 7.2l2.6 1.4 1 2.6 2 .8M8.8 9.5L6 9.8l-1.6 2.4M10.8 13l2.4 4.4"/>',
   cube: '<path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2z"/><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"/>',
   plan: '<rect x="3" y="3" width="14" height="14" rx="1"/><path d="M3 8h6V3M13 17v-5h4"/>',
   elev: '<path d="M2.5 17h15"/><rect x="4" y="9" width="5" height="8"/><rect x="11" y="9" width="5" height="8"/><rect x="4" y="3" width="12" height="4"/>',
