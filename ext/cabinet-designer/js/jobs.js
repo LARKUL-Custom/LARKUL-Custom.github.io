@@ -124,6 +124,8 @@ async function bootJobs() {
 function setOpenJob(path) { jobs.path = path; jobs.folder = jobFolderOf(path); jobs.closed = false; jobStore().setCurrent(path); }
 // Swaps the app over to another job's data and clears everything that belonged to the last one.
 function loadJobState(s, path) {
+  // The last job's library changes go to the shop library first; the job opening gets the shop items it's missing.
+  if (typeof shopLibSync === 'function') { shopLibSync(); shopLibOpen(s); }
   S = s; setOpenJob(path);
   undoStack = []; redoStack = [];
   Object.assign(ui, { sel: null, drawing: null, drawWalls: false, placing: null, ghost: null, open: {}, cutPick: null, cutPickOpen: false, cutRoom: 'all', setRoom: null, partSel: null });
@@ -147,6 +149,8 @@ function blankJob(name, customer) {
   s.job = { ...s.job, name, customer: customer || '', notes: '' }; delete s.job.priceOver;
   s.rooms = [newRoom('r1', 'Room 1', [])]; s.rooms[0].wallThick = s.job.wallThick; s.rooms[0].wallHeight = s.job.wallHeight;
   s.roomId = 'r1'; s.designer = null;
+  // The shop library's version of every item (what was saved in any job), not just this job's copy.
+  if (typeof shopLibNew === 'function') { shopLibSync(); shopLibNew(s); }
   // New jobs start on the shop's 3/4 Melamine cabinet material (Ayden 2026-11-19).
   const out = migrate(JSON.parse(JSON.stringify(s)));
   if (out && out.matTemplates && out.matTemplates.cabinet.some(t => t.id === MEL_CAB_TPL.id)) out.job.defaults.cabMatT = MEL_CAB_TPL.id;

@@ -710,7 +710,8 @@ function migrate(s) {
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
 // The open job lives in its own file (see jobs.js); browser storage keeps a working copy too.
-const loadState = () => bootJobs();
+// The shop library (shoplib.js) loads first, so the job that opens gets the items saved in other jobs.
+const loadState = async () => { if (typeof shopLibLoad === 'function') await shopLibLoad(); const s = await bootJobs(); return typeof shopLibOpen === 'function' ? shopLibOpen(s) : s; };
 function save() {
   if (typeof keepAllOffCeiling === 'function') keepAllOffCeiling();
   clearTimeout(saveTimer);
@@ -718,6 +719,7 @@ function save() {
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* the job file is the real copy */ }
   }, 400);
   saveJobSoon();
+  if (typeof shopLibSoon === 'function') shopLibSoon(); // library items added, changed or deleted go to the shop library
 }
 function snapshot() { undoStack.push(JSON.stringify(S)); if (undoStack.length > 80) undoStack.shift(); redoStack = []; }
 function mutate(fn, defer) {
@@ -756,7 +758,7 @@ function swapLibrary(id) {
     if (id === 'easy') ensureEasyJoints(S);
     S.libSets = S.libSets || {}; S.libSets[cur] = S.library;
     if (def.kit) def.kit(S); // materials, templates and styles the set's products point at
-    S.library = S.libSets[id] || clone(def.items ? def.items() : []);
+    S.library = S.libSets[id] || (typeof shopLibSet === 'function' && shopLibSet(id, def.items ? def.items() : [])) || clone(def.items ? def.items() : []);
     delete S.libSets[id]; S.libSet = id;
     ui.libSel = S.library[0] && S.library[0].id;
   });

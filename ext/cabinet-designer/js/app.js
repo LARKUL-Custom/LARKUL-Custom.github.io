@@ -1385,9 +1385,9 @@ document.addEventListener('click', e => {
       let d; try { d = JSON.parse($('#imptext').value); } catch (_) { $('#impnote').textContent = 'That is not valid JSON.'; break; }
       d = migrate(d);
       if (!d) { $('#impnote').textContent = 'This is not a Cabinet Designer backup. Use "Show full job backup" to make one.'; break; }
-      mutate(() => { S = d; }); ui.sel = null; goTab('room'); requestAnimationFrame(fitView); break;
+      mutate(() => { if (typeof shopLibSync === 'function') { shopLibSync(); shopLibOpen(d); } S = d; }); ui.sel = null; goTab('room'); requestAnimationFrame(fitView); break;
     }
-    case 'reset-sample': { const fresh = seed(); mutate(() => { S = fresh; }); ui.sel = null; goTab('room'); requestAnimationFrame(fitView); break; }
+    case 'reset-sample': { const fresh = seed(); mutate(() => { if (typeof shopLibSync === 'function') { shopLibSync(); shopLibOpen(fresh); } S = fresh; }); ui.sel = null; goTab('room'); requestAnimationFrame(fitView); break; }
     case 'clear-room': mutate(() => { S.walls = []; S.cabinets = []; S.ctRuns = {}; }); ui.sel = null; goTab('room'); startWalls(); break;
   }
 });
