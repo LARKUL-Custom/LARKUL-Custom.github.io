@@ -291,7 +291,7 @@ function mozThing(rm, p, at, put, flag, sz) {
     rm.fixtures.push(f);
     const lib = libItem('made-apfront');
     if (lib) {
-      const fr = p.fronts.map(q => ({ z: sz(q.z), h: sz(q.h) })).sort((a, b) => b.z - a.z);
+      const fr = p.fronts.map(q => ({ z: sz(q.z), h: sz(q.h), x: sz(q.x), w: sz(q.w), hinge: q.hinge, type: q.type })).sort((a, b) => b.z - a.z || a.x - b.x);
       put(lib, p, at, { name: p.name + ' panel front', d: 0.75, outset: r3((p.outset || 0) + p.d), mp: { fr: fr.length ? fr : [] }, fixt: f.id });
     }
     return true;

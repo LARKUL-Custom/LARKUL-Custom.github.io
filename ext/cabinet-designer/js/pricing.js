@@ -87,7 +87,7 @@ function defaultPriceSheet(name = 'Standard pricing') {
     if (h.cost != null && n === h.name) return +h.cost;
     if (h.plateCost != null && n === h.name + ' mounting plate') return +h.plateCost;
   } return null; };
-  const hwPrice = n => own(n) ?? (/slide/i.test(n) ? 32 : /plate/i.test(n) ? 1.5 : /hinge/i.test(n) ? 5.5 : /pin/i.test(n) ? 0.15 : /pull|knob/i.test(n) ? 7 : /\bleg\b/i.test(n) ? 2 : /clip/i.test(n) ? 0.5 : 2);
+  const hwPrice = n => own(n) ?? (/pocket door system/i.test(n) ? 300 : /slide/i.test(n) ? 32 : /plate/i.test(n) ? 1.5 : /hinge/i.test(n) ? 5.5 : /pin/i.test(n) ? 0.15 : /pull|knob/i.test(n) ? 7 : /\bleg\b/i.test(n) ? 2 : /clip/i.test(n) ? 0.5 : 2);
   const hardware = {};
   if (S) allCabs().forEach(c => inRoomOf(c, () => Object.keys(buildParts(c).bom).forEach(k => { if (!(k in hardware)) hardware[k] = hwPrice(k); })));
   return {

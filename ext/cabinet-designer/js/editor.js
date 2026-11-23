@@ -108,7 +108,7 @@ function edTab(c, tab, qr) {
       return `${qeOpening(c, qr, 'face')}
         <div class="psec box">${secHead('door', 'Doors and drawers', 'violet')}
           <div class="grid2">${fld('Door template', R, 'doorT', c.doorT || '', 'select', { options: setOpts('doorT', opts(S.doorTemplates), 'cab') })}${fld('Pulls', R, 'pull', c.pull || '', 'select', { options: setOpts('pull', opts(hwOf('pull')), 'cab') })}
-          ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}</div></div>${ffBox(c)}${edFrontList(c, qr)}`;
+          ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}${typeof pocketBtn === 'function' && pocketBtn(c) ? fld('Pocket doors', R, 'pocket', c.pocket || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'on', l: 'On (swing open, slide back in)' }] }) : ''}</div></div>${ffBox(c)}${edFrontList(c, qr)}`;
     }
     case 'interior': return `${qeOpening(c, qr, 'inside')}${intLibrary(c, qr)}<div class="psec box">${intWhole(c)}</div>${typeof qInteriorExtras === 'function' ? qInteriorExtras(c) : ''}`;
     case 'materials': return `${finishedBox(c)}<div class="psec box">${secHead('palette', 'Materials and hardware', 'amber')}${dockBody('cab-tpl')}

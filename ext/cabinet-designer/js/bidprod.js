@@ -97,6 +97,9 @@ function bidLibItems() {
     mk('b-mw-drawer', 'Microwave Drawer', 'Base', 27, 34.5, 24, 0, [R1('open', 16.5, 1, { mw: true }), R1('drawer', '*')], { shelfCount: 0 }, { folder: 'Appliance Bases' }),
     // ADA: 32 1/2" tall with a 9" toe kick, so a 1 1/2" laminate top comes out at 34".
     mk('b-mw-drawer-ada', 'Microwave Drawer ADA', 'Base', 27, 32.5, 24, 0, [R1('open', 16.5, 1, { mw: true }), R1('drawer', '*')], { shelfCount: 0, ada: 'on' }, { folder: 'Appliance Bases' }),
+    // Pocket door cabinets (Ayden 2026-11-23): the doors swing open and slide back into pockets inside (pocket.js).
+    mk('t-pocket', 'Pocket Door Tall', 'Tall', 36, 84, 24, 0, [R1('door', '*', 2)], { shelfCount: 3 }, { pocket: 'on', folder: 'Pocket Doors' }),
+    mk('b-pocket', 'Pocket Door Base', 'Base', 36, 34.5, 24, 0, [R1('door', '*', 2)], { shelfCount: 1 }, { pocket: 'on', folder: 'Pocket Doors' }),
     mk('w-mw-shelf', 'Microwave Shelf', 'Wall', shelf.w, shelf.h, shelf.d, r3(54 - shelf.h), [R1('open', '*')], { shelfCount: 0 }, { appl: 'mw-ct', finished: true, finInt: true, wrap: true, folder: 'Open Shelving' }),
   ];
 }

@@ -1205,6 +1205,7 @@ document.addEventListener('click', e => {
       mutate(() => { setOpenGap(c, end, 0); if (!settle(c)) c.off = was; });
       if (Math.abs(c.off - was) < 0.001) flash('It is already against that side'); break;
     }
+    case 'cab-pocket': { const c = cab(id); if (!c) break; const on = c.pocket !== 'on'; mutate(() => { if (on) c.pocket = 'on'; else delete c.pocket; }); flash(on ? 'Pocket doors on' : 'Pocket doors off'); break; }
     case 'cab-finint': { const c = cab(id); if (!c) break; const on = !c.finInt; mutate(() => { if (on) c.finInt = true; else delete c.finInt; }); flash(on ? 'Finished interior on' : 'Finished interior off'); break; }
     case 'cab-flip': {
       if ((cab(id) || {}).noMirror) { flash('Flip is turned off for this cabinet (Info tab).'); break; }

@@ -228,6 +228,8 @@ function pairCap(c, f) {
 function openOne(c, f, placed, cap, shutAll) {
   const fr = frontFrame(c); if (!fr) return { v: f.type === 'door' ? DOOR_MAX : drawerTravel(c) };
   const z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1;
+  // A pocket door ends up inside its own cabinet, so once open it is in nobody's way (pocket.js).
+  if (f.type === 'door' && typeof pocketDoor === 'function' && pocketDoor(c, f)) return { v: Math.PI / 2, poly: [], z0, z1 };
   // Cabinets, walls and fronts that stay shut are still; anything one of them already touches with this front shut
   // (a corner door's edge over the next front, say) is how the cabinets were placed, not this front running into it.
   const near = placed.filter(p => !(p.c.id === c.id && frontKey3(p.c, p.f) === frontKey3(c, f)) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
@@ -444,7 +446,9 @@ function interiorLayout(c, p, fronts) {
   const zones = doorZones.length ? doorZones : (fronts.length ? [] : [[zIn0, zIn1]]);
   const low = zones.length ? zones[zones.length - 1] : null, ins = c.inserts || [];
   const hasDoors = fronts.some(f => f.type === 'door');
-  const out = { t, zIn0, zIn1, inW, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? t : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], pulls: [], bom: [] };
+  // Pocket doors: each pocket (slot + pocket panel) takes its width out of the inside (pocket.js).
+  const pk = typeof pocketInfo === 'function' ? pocketInfo(c, p, fronts, t, zIn0, zIn1) : null;
+  const out = { t, zIn0, zIn1, inW: pk ? inW - pk.wL - pk.wR : inW, x0: t + (pk ? pk.wL : 0), pocket: pk, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? t : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], pulls: [], bom: [] };
   // An insert goes in the door opening it names (it.row), or else the bottom one.
   const used = new Set();
   ins.forEach(it => {
@@ -667,6 +671,8 @@ function buildParts(c) {
   const fronts = computeFronts(c, p), rails = caseRails(c, p, fronts, t);
   const dParts = drawerPartitions(c, p, fronts, t, rails).map(q => ({ ...q, ops: [] })), bpC = blindPart(c, p, t);
   if (fronts.overfull) warn.push('Front rows are taller than the cabinet. Reduce a fixed row height.');
+  // Pocket doors (pocket.js): their hinges go on the pocket system, not on the cabinet side.
+  const pk = typeof pocketInfo === 'function' ? pocketInfo(c, p, fronts, t, zIn0, zIn1) : null;
 
   const frontPart = (label, f) => {
     const hg = (f.face && cornerHingeHw(c, f)) || hgAll; // a corner door can take its own hinge
@@ -691,7 +697,9 @@ function buildParts(c) {
       const midHinge = !f.face && !ffr && hk.plate && (f.hinge === 'R' ? (bpC && bpC.side === 'R' ? bpC.x1 : W) - f.x1 : f.x0 - (bpC && bpC.side === 'L' ? bpC.x0 : 0)) > t + 0.5;
       const mhMsg = `A door hinges in the middle of ${lbl} with no side to screw its hinge plates to. Change the door count, or hinge the door on a side.`;
       if (midHinge && !warn.includes(mhMsg)) warn.push(mhMsg);
-      if ((!f.face || atSide) && !ffr && hk.plate && !midHinge) hinges.forEach(hp => {
+      const inPocket = pocketOf(c, f, pk);
+      if (inPocket) { addB(POCKET_HW, 1); if (fw > inD - 0.5) warn.push(`A ${fmtLen(fw)}" pocket door is wider than ${lbl} is deep inside (${fmtLen(inD)}"), so it can't slide all the way in.`); }
+      if ((!f.face || atSide) && !ffr && hk.plate && !midHinge && !inPocket) hinges.forEach(hp => {
         const z = f.z0 + hp, ops = (atSide || f.hinge) === 'L' ? leftOps : rightOps;
         hg.plateHoles.forEach(ph => ops.push({ type: 'bore', x: z + ph.dz * MM, y: ph.y * MM, dia: ph.dia * MM, depth: ph.depth * MM, face: 'inside', why: 'hinge plate' }));
         if (hg.plateHoles.length) { const ys = hg.plateHoles.map(ph => ph.y * MM), half = Math.max(25, ...hg.plateHoles.map(ph => Math.abs(ph.dz) + 10)) * MM;
@@ -913,15 +921,24 @@ function buildParts(c) {
     });
     if (lay.divX !== null) {
       parts.find(q => q.name === 'Vertical divider' && q.cabId === c.id).ops.push(...divOps);
-      const wl = lay.divX - t / 2 - t - 0.0625, wr = W - t - (lay.divX + t / 2) - 0.0625;
+      const wl = lay.divX - t / 2 - t - 0.0625 - (pk ? pk.wL : 0), wr = W - t - (lay.divX + t / 2) - 0.0625 - (pk ? pk.wR : 0);
       part('Adjustable shelf (left)', sm, wl, inD - p.shelfFrontSetback, { qty: shelves, kind: 'shelf' });
       part('Adjustable shelf (right)', sm, wr, inD - p.shelfFrontSetback, { qty: shelves, kind: 'shelf' });
       addB(pin.name, 8 * shelves);
     } else {
-      part('Adjustable shelf', sm, (bpC ? bpC.o1 - bpC.o0 : inW) - 0.0625, inD - p.shelfFrontSetback, { qty: shelves, kind: 'shelf' });
+      part('Adjustable shelf', sm, (bpC ? bpC.o1 - bpC.o0 : lay.inW) - 0.0625, inD - p.shelfFrontSetback, { qty: shelves, kind: 'shelf' });
       addB(pin.name, 4 * shelves);
     }
   }
+
+  // Pocket panels: one each side a door slides into, front to back between the bottom and the top (or as high as the
+  // doors reach). The shelves rest on them, so that side's shelf pins move onto the panel's inside face.
+  if (pk) [pk.L, pk.R].filter(Boolean).forEach(s => {
+    const from = s.side === 'L' ? leftOps : rightOps, face = s.side === 'L' ? 'right' : 'left';
+    const pins = []; for (let i = from.length - 1; i >= 0; i--) if (from[i].why === 'shelf pin' && from[i].x >= s.z0 && from[i].x <= s.z1) pins.unshift(...from.splice(i, 1));
+    const pp = part(`Pocket panel (${s.side === 'L' ? 'left' : 'right'})`, cm, r3(s.z1 - s.z0), r3(inD - 0.0625), { kind: 'divider', ops: pins.map(o => ({ ...o, x: r3(o.x - s.z0), face })) });
+    pp.pocket = s.side;
+  });
 
   // Carcass
   // On feet the sides start at the top of the legs, so their machining moves down by the leg height.
@@ -1084,6 +1101,19 @@ function buildParts(c) {
       const fem = []; jx.a = 0; jx.b = dv.W; jx.type = 'divider'; jx.side = null; jx.off = 0; jx.zr = undefined;
       jtFasten(J, fem, dv, i ? r3(dv.L) : 0, i ? 'W2' : 'W1', jtSpots(J, 'divider', 0, dv.W, spots, t).map(y => ({ x: lay.divX - t, y, m: y })), `${J.name} (divider)`, jx);
       pt.ops.push(...jtShift(pt, fem));
+    });
+  }
+  if (pk) {
+    const J = hw(cabSet(c, 'jointU'));
+    if (J && J.kind === 'joint') [pk.L, pk.R].filter(Boolean).forEach(s => {
+      const pp = parts.find(q => q.cabId === c.id && q.pocket === s.side); if (!pp) return;
+      [['Bottom', zIn0, 0, 'W1'], ['Top', zIn1, 1, 'W2']].forEach(([name, zEnd, i, end]) => {
+        if (Math.abs((i ? s.z1 : s.z0) - zEnd) > 0.01) return;
+        const pt = parts.find(q => q.cabId === c.id && q.name === name); if (!pt) return;
+        const fem = []; jx.a = 0; jx.b = pp.W; jx.type = 'divider'; jx.side = null; jx.off = 0; jx.zr = undefined;
+        jtFasten(J, fem, pp, i ? r3(pp.L) : 0, end, jtSpots(J, 'divider', 0, pp.W, spots, t).map(y => ({ x: s.x - t, y, m: y })), `${J.name} (pocket panel)`, jx);
+        pt.ops.push(...jtShift(pt, fem));
+      });
     });
   }
   const jtLateCtx = { jt: (type, pt, fx, zr) => joinSides(type, pt, fx, zr, 0, Math.min(backY, pt.W)), jFor, spread: spots, addB };

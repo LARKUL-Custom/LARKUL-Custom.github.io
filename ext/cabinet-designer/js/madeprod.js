@@ -120,17 +120,20 @@ const MADE = {
     name: 'Appliance Panel Front', cat: 'Base', w: 24, h: 34.5, d: 0.75, elev: 0, folder: 'Desks and Panels',
     mp: { fr: [] }, price: { base: 0, perFt: 0 }, fields: [],
     build(c, mp, x) {
-      const fr = apFronts(c, mp);
+      const fr = apFronts(c, mp), fx = apFixt(c);
       fr.forEach((q, i) => {
         // 0.61.3 (Ayden 2026-11-23: "have them use the door styles"): each front is a door of the room's door style (shape
         // only); its material comes from the Finish, like every door (frontStyle applies withFinish).
-        const f = { type: 'door', x0: 0, x1: c.w, z0: q.z, z1: q.z + q.h }, st = apStyle(c, f), ds = st.ds, dm = mat(ds.mat) || x.fm;
+        // 0.61.5: a front can be one of a pair (Mozaik's French-door fridge columns): x and w across the appliance.
+        const fw = q.w, f = { type: 'door', x0: q.x, x1: q.x + fw, z0: q.z, z1: q.z + q.h }, st = apStyle(c, f), ds = st.ds, dm = mat(ds.mat) || x.fm;
         const name = fr.length > 1 ? `Panel front ${i + 1}` : 'Panel front';
-        if (ds.source === 'buyout') { x.bom[`${name}, ${ds.name} ${fmtLen(c.w, 1)} × ${fmtLen(q.h, 1)} (buyout)`] = 1; x.note(`${name} is bought from the door maker`); }
-        const ops = st.framed && ds.type === 'routed' ? [{ type: 'pocket', x: r3(ds.rail), y: r3(ds.stile), w: r3(q.h - 2 * ds.rail), h: r3(c.w - 2 * ds.stile), depth: r3(+ds.pocketDepth || 0.25), face: 'front', why: 'shaker field' }] : [];
+        if (ds.source === 'buyout') { x.bom[`${name}, ${ds.name} ${fmtLen(fw, 1)} × ${fmtLen(q.h, 1)} (buyout)`] = 1; x.note(`${name} is bought from the door maker`); }
+        const ops = st.framed && ds.type === 'routed' ? [{ type: 'pocket', x: r3(ds.rail), y: r3(ds.stile), w: r3(q.h - 2 * ds.rail), h: r3(fw - 2 * ds.stile), depth: r3(+ds.pocketDepth || 0.25), face: 'front', why: 'shaker field' }] : [];
         if (st.framed && ds.type !== 'routed' && ds.source !== 'buyout') x.warn.push(`${name}: a ${ds.name} front is cut here as one panel; build it like the room's doors.`);
-        if (ds.source !== 'buyout') { const pt = x.part(name, dm, r3(q.h), r3(c.w), { kind: 'door', ops }); pt.fin = true; pt.front = true; pt.pos = { x: 0, y: q.z, z: 0, dx: c.w, dy: q.h, dz: c.d }; }
-        x.front({ f, ds, framed: st.framed, m: dm });
+        if (ds.source !== 'buyout') { const pt = x.part(name, dm, r3(q.h), r3(fw), { kind: 'door', ops }); pt.fin = true; pt.front = true; pt.pos = { x: q.x, y: q.z, z: 0, dx: fw, dy: q.h, dz: c.d }; }
+        const pull = apPull(c, fx, q, fr);
+        if (pull) x.bom[pull.name] = (x.bom[pull.name] || 0) + 1;
+        x.front({ f, ds, framed: st.framed, m: dm, pull });
       });
     },
   },
@@ -232,7 +235,37 @@ function apFrontFit(c, f) {
 // The fronts of an Appliance Panel Front that fit on it, top first; none = one front the whole size.
 function apFronts(c, mp = madeMp(c)) {
   const fr = (Array.isArray(mp.fr) ? mp.fr : []).filter(q => +q.h > 0 && +q.z >= -0.01 && +q.z + +q.h <= c.h + 0.01);
-  return fr.length ? fr.map(q => ({ z: +q.z, h: +q.h })) : [{ z: 0, h: c.h }];
+  // 0.61.5: x and w across the front (a pair of doors); none = the whole width. hinge L/R when Mozaik says.
+  const one = q => { const x0 = Math.max(0, +q.x || 0), w = +q.w > 0 ? Math.min(+q.w, c.w - x0) : c.w - x0; return { z: +q.z, h: +q.h, x: r3(x0), w: r3(w), hinge: q.hinge || '', type: q.type || 'door' }; };
+  return fr.length ? fr.map(one) : [{ z: 0, h: c.h, x: 0, w: c.w, hinge: '', type: 'door' }];
+}
+const apFixt = c => c.fixt && typeof fixtList === 'function' ? fixtList().find(f => f.id === c.fixt) || (S.rooms || []).flatMap(r => r.fixtures || []).find(f => f.id === c.fixt) : null;
+// 0.61.5 (Ayden 2026-11-23: "the fridge doors need tall handles in the center where you would pull the handle on a normal
+// fridge"): a fridge's panel doors get a tall upright appliance pull on the edge they open from: the meeting edges of a pair
+// (French doors, in the middle), the side away from the hinge on a single door. A drawer front, a dishwasher or an
+// under-counter fridge gets a pull across near its top. Returns { name, vert, x, z, len } in the front's terms
+// (x across from the appliance's left, z up), or null.
+function apPull(c, fx, q, fr) {
+  const kind = fx ? fx.kind : 'fridge';
+  if (kind === 'fridge' && q.type !== 'drawer' && q.h >= 20) {
+    const len = q.h >= 48 ? 24 : q.h >= 30 ? 18 : 12, inset = 2;
+    const mate = fr.find(o => o !== q && Math.abs(o.z - q.z) < 0.5 && Math.abs(o.h - q.h) < 0.5);
+    let side = q.hinge === 'R' ? 'L' : q.hinge === 'L' ? 'R' : '';
+    if (mate) side = mate.x > q.x ? 'R' : 'L';
+    if (!side) side = 'R';
+    const x = side === 'R' ? q.x + q.w - inset : q.x + inset;
+    // On a tall door the pull sits where a hand reaches it: low on an upper door, high on a lower one, else centered.
+    const mid = q.z + q.h / 2, reach = 40, zc = q.h > len + 8 ? Math.min(q.z + q.h - len / 2 - 3, Math.max(q.z + len / 2 + 3, mid > reach ? q.z + len / 2 + 3 : mid)) : mid;
+    return { name: `Appliance pull ${len}" (fridge)`, vert: true, x: r3(x), z: r3(zc), len };
+  }
+  const len = q.w >= 24 ? 18 : 12;
+  return { name: `Appliance pull ${len}"`, vert: false, x: r3(q.x + q.w / 2), z: r3(q.z + q.h - Math.min(3, q.h / 4)), len };
+}
+// A pull's bar and posts in 3D, standing off the front face (at depth d).
+function apPullMeshes(p, d, M, add) {
+  const t = 0.75, off = 1.25, post = 0.5;
+  if (p.vert) { add(box3(t, p.len, t, M, p.x, p.z, d + off + t / 2)); [-1, 1].forEach(s => add(box3(post, post, off, M, p.x, p.z + s * (p.len / 2 - 1), d + off / 2))); }
+  else { add(box3(p.len, t, t, M, p.x, p.z, d + off + t / 2)); [-1, 1].forEach(s => add(box3(post, post, off, M, p.x + s * (p.len / 2 - 1), p.z, d + off / 2))); }
 }
 function madeSync(c) {
   const d = madeDef(c); if (!d) return;
@@ -247,7 +280,9 @@ function madeSync(c) {
 function madePrice(c, ps) {
   const d = madeDef(c); if (!d) return null;
   if (c.made === 'apfront' && ps && typeof priceFront === 'function' && typeof panelDoor === 'function') {
-    return { own: true, base: r3(apFronts(c).reduce((t, q) => t + priceFront(apStyle(c, { type: 'door', x0: 0, x1: c.w, z0: q.z, z1: q.z + q.h }).ds, c.w * q.h / 144, ps, c.w, q.h).total, 0)), perFt: 0 };
+    // 0.61.5: each front at its own width, plus its appliance pull at the price sheet's hardware price (if it has one).
+    const fr = apFronts(c), fx = apFixt(c), hw = q => { const p = apPull(c, fx, q, fr); return p && ps.hardware && ps.hardware.on ? +(ps.hardware.items || {})[p.name] || 0 : 0; };
+    return { own: true, base: r3(fr.reduce((t, q) => t + priceFront(apStyle(c, { type: 'door', x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.h }).ds, q.w * q.h / 144, ps, q.w, q.h).total + hw(q), 0)), perFt: 0 };
   }
   if (c.made === 'panel' && c.autoOf) return { own: true, base: 0, perFt: 0 };
   if (c.made !== 'panel' || !ps || typeof matSqIn !== 'function') return { own: true, ...d.price };
@@ -281,7 +316,8 @@ function madeLook(c, q) { const m = mat(q.mat); return typeof texLook === 'funct
 function madeMeshes(c, opts = {}) {
   const grp = new THREE.Group(), b = buildParts(c);
   // Panel fronts draw as doors of their style (frame and recessed field), not as flat boxes.
-  (b.panelFronts || []).forEach(o => { const M = mat3(typeof texLook === 'function' ? texLook(o.m, 'finished', c) : o.m, opts); doorMeshes(o.ds, o.framed, o.f, c.d, M, M, 0, m => grp.add(m)); });
+  const pullM = flat3('#2f3236');
+  (b.panelFronts || []).forEach(o => { const M = mat3(typeof texLook === 'function' ? texLook(o.m, 'finished', c) : o.m, opts); doorMeshes(o.ds, o.framed, o.f, c.d, M, M, 0, m => grp.add(m)); if (o.pull) apPullMeshes(o.pull, c.d, pullM, m => grp.add(m)); });
   [...b.parts, ...(b.show || [])].forEach(q => {
     if (q.front) return;
     const M = mat3(madeLook(c, q), opts);
@@ -305,6 +341,8 @@ function madeFrontSVG(c, ex, by, opts = {}) {
     const m = typeof texLook === 'function' ? texLook(o.m, 'finished', c) : o.m, { f, ds } = o, fw = f.x1 - f.x0, fh = f.z1 - f.z0;
     let svg = `<rect ${fillFor(m, 'ev-box')} x="${r3(ex + f.x0)}" y="${r3(by - f.z1)}" width="${r3(fw)}" height="${r3(fh)}"/>`;
     if (o.framed) svg += `<rect class="ev-inner nss" fill="none" x="${r3(ex + f.x0 + ds.stile)}" y="${r3(by - f.z1 + ds.rail)}" width="${r3(Math.max(0, fw - 2 * ds.stile))}" height="${r3(Math.max(0, fh - 2 * ds.rail))}"/>`;
+    // 0.61.5: the appliance pull.
+    const p = o.pull; if (p) svg += p.vert ? `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - 0.375)}" y="${r3(by - p.z - p.len / 2)}" width="0.75" height="${r3(p.len)}" rx="0.3"/>` : `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - p.len / 2)}" y="${r3(by - p.z - 0.375)}" width="${r3(p.len)}" height="0.75" rx="0.3"/>`;
     faces.push({ z: c.d + 1, m, svg });
   });
   [...b.parts, ...(b.show || [])].forEach(q => {

@@ -288,7 +288,10 @@ function cabinetMeshes(c, opts = {}) {
   const fronts = computeFronts(c, p), lay = interiorLayout(c, p, fronts);
   const inD = D - p.backInset - bt, sm = I3(mat(mt.shelf) || cm, bk);
   // shelves, split by a divider when there is one
-  const bpS = blindPart(c, p, t), spans = bpS ? [[bpS.o0, bpS.o1]] : lay.divX !== null ? [[t, lay.divX - t / 2], [lay.divX + t / 2, W - t]] : [[t, W - t]];
+  // Pocket doors: the shelves stop at the pocket panels (pocket.js).
+  const pk3 = lay.pocket, pxL = t + (pk3 ? pk3.wL : 0), pxR = W - t - (pk3 ? pk3.wR : 0);
+  const bpS = blindPart(c, p, t), spans = bpS ? [[bpS.o0, bpS.o1]] : lay.divX !== null ? [[pxL, lay.divX - t / 2], [lay.divX + t / 2, pxR]] : [[pxL, pxR]];
+  if (pk3) [pk3.L, pk3.R].filter(Boolean).forEach(s => grp.add(box3(t, s.z1 - s.z0, inD - 0.0625, cmM, s.x, (s.z0 + s.z1) / 2, p.backInset + bt + (inD - 0.0625) / 2)));
   if (angledCorner(c)) shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => grp.add(cornerShelf3d(c, p, t, bt, z, sm)));
   else shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => spans.forEach(([a, b]) => grp.add(box3(b - a - 0.06, t, inD - p.shelfFrontSetback, sm, (a + b) / 2, z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2))));
   if (lay.divX !== null) grp.add(box3(t, lay.zIn1 - lay.zIn0, inD, cmM, lay.divX, (lay.zIn0 + lay.zIn1) / 2, p.backInset + bt + inD / 2));
@@ -308,8 +311,8 @@ function cabinetMeshes(c, opts = {}) {
     const bkH = bx.full ? bx.h : Math.max(0.5, bx.h - bx.rec - bx.bt); g.add(box3(w - 2 * bx.st, bkH, bx.st, sM, cx, bx.z + bx.h - bkH / 2, zb + bx.st / 2));
     g.add(box3(w - 2 * bx.st, bx.bt, bx.d - bx.st, bM, cx, bx.z + bx.rec + bx.bt / 2, zb + (bx.d - bx.st) / 2, false));
   };
-  const ix0 = t + lay.spacer, ix1 = W - t - lay.spacer, idx = (ix1 - ix0);
-  if (lay.spacer && lay.rollouts.length) [t + lay.spacer / 2, W - t - lay.spacer / 2].forEach(x => grp.add(box3(lay.spacer, 2.5, inD, cmM, x, lay.rollouts[0].z + 1.25, p.backInset + bt + inD / 2)));
+  const ix0 = pxL + lay.spacer, ix1 = pxR - lay.spacer, idx = (ix1 - ix0);
+  if (lay.spacer && lay.rollouts.length) [pxL + lay.spacer / 2, pxR - lay.spacer / 2].forEach(x => grp.add(box3(lay.spacer, 2.5, inD, cmM, x, lay.rollouts[0].z + 1.25, p.backInset + bt + inD / 2)));
   // Roll-outs on the cabinet's runner, sized like their cut parts (buildParts): the runner length deep, opening less the runner's allowance wide.
   const sl3 = hwPick(cabSet(c, 'slide'), 'slide'), nom3 = sl3 && nominalFor(sl3, inD), rbm = mat(dmt.bottom) || bm, rsm = mat(dmt.sides) || cm;
   lay.rollouts.forEach(ro => {
@@ -358,6 +361,13 @@ function cabinetMeshes(c, opts = {}) {
       const hx = f.hinge === 'R' ? f.x1 : f.x0, pz = D + ft, pivot = new THREE.Group();
       pivot.position.set(hx, 0, pz); fg.position.set(-hx, 0, -pz); pivot.add(fg);
       pivot.userData.open = { kind: 'door', sign: f.hinge === 'R' ? 1 : -1, f };
+      // A pocket door swings to 90°, steps in off the side into its slot, then slides back (pocket.js, pocketMove).
+      const pko = pocketOf(c, f, pk3);
+      if (pko) {
+        // At 90° the door's outside face (and its pull) faces the cabinet side, so its back rides by the pocket panel.
+        const back = Math.min(fw + 0.25, inD - 0.25), cl = 0.0625;
+        Object.assign(pivot.userData.open, { kind: 'pocket', base: { x: hx, z: pz }, dx: (f.hinge === 'R' ? W - t - pk3.gap + cl + ft : t + pk3.gap - cl - ft) - hx, dz: -(ft + back) });
+      }
       host.add(pivot);
     } else host.add(fg);
   });
@@ -447,9 +457,15 @@ const openT = {};     // cabinet id -> 0 (closed) .. 1 (open), animated
 function applyOpen(root, t) {
   root.traverse(o => {
     const op = o.userData.open; if (!op) return;
-    if (op.kind === 'door') o.rotation.y = op.sign * ease(t) * doorSwing(o);
-    else o.position.z = ease(t) * drawerOut(o);
+    moveFront(o, t);
   });
+}
+// Puts one door or drawer at open amount t (0 shut .. 1 open).
+function moveFront(o, t) {
+  const op = o.userData.open;
+  if (op.kind === 'pocket') { const m = pocketMove(o, t); o.rotation.y = op.sign * m.a; o.position.set(op.base.x + m.dx, 0, op.base.z + m.dz); }
+  else if (op.kind === 'door') o.rotation.y = op.sign * ease(t) * doorSwing(o);
+  else o.position.z = ease(t) * drawerOut(o);
 }
 // A door opens as far as it can before it hits something (see doorLimit).
 function doorSwing(o) { const c = cab(o.userData.cabId), f = o.userData.open.f; return c && f ? doorLimit(c, f) : 1.75; }
@@ -465,9 +481,11 @@ function animateOpen() {
     ids.forEach(id => {
       const goal = ui.open[id] ? 1 : 0, cur = openT[id] || 0;
       if (Math.abs(goal - cur) < 1e-3) { openT[id] = goal; return; }
-      openT[id] = cur + Math.sign(goal - cur) * Math.min(Math.abs(goal - cur), dt / 0.45); moving = true;
+      // A pocket door has two moves (swing, then slide in), so its cabinet takes twice as long.
+      const c = cab(id), dur = c && c.pocket === 'on' ? 1.1 : 0.45;
+      openT[id] = cur + Math.sign(goal - cur) * Math.min(Math.abs(goal - cur), dt / dur); moving = true;
     });
-    viewers.forEach(v => { if (!v.ok) return; v.root.traverse(o => { if (o.userData.open && o.userData.cabId) { const t = openT[o.userData.cabId] || 0; if (o.userData.open.kind === 'door') o.rotation.y = o.userData.open.sign * ease(t) * doorSwing(o); else o.position.z = ease(t) * drawerOut(o); } }); v.requestRender(); });
+    viewers.forEach(v => { if (!v.ok) return; v.root.traverse(o => { if (o.userData.open && o.userData.cabId) moveFront(o, openT[o.userData.cabId] || 0); }); v.requestRender(); });
     openAnim = moving ? requestAnimationFrame(step) : 0;
   };
   openAnim = requestAnimationFrame(step);
