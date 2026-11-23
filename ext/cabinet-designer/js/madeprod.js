@@ -110,6 +110,18 @@ const MADE = {
       pt.pos = { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d };
     },
   },
+  // 0.61.0 (Ayden 2026-11-23: panel-ready fridge columns and dishwashers came in as cabinets): the panel fronts on a
+  // panel-ready appliance, standing in front of it. mp.fr = the fronts [{ z (up from the bottom), h }], from Mozaik's
+  // doors and drawer fronts on the product; none = one front the whole size. Cut from the Finish material and priced like
+  // doors of the room's door style.
+  apfront: {
+    name: 'Appliance Panel Front', cat: 'Base', w: 24, h: 34.5, d: 0.75, elev: 0, folder: 'Desks and Panels',
+    mp: { fr: [] }, price: { base: 0, perFt: 0 }, fields: [],
+    build(c, mp, x) {
+      const fr = apFronts(c, mp);
+      fr.forEach((q, i) => { const pt = x.part(fr.length > 1 ? `Panel front ${i + 1}` : 'Panel front', x.fm, r3(q.h), r3(c.w), { kind: 'door' }); pt.fin = true; pt.pos = { x: 0, y: q.z, z: 0, dx: c.w, dy: q.h, dz: c.d }; });
+    },
+  },
   // 3. A laminate top on 2 layers of 3/4" core with a front apron, hung on Rakks EHV brackets, no cabinet under it.
   // ADA: knee clearance under the apron 29" at least, the top 34" at most.
   adatop: {
@@ -177,26 +189,44 @@ function madeBuildParts(c) {
   return { parts, bom, warn, fronts: [], inD: c.d, inW: c.w, removed, notes };
 }
 // Sizes that follow the settings: a slat wall is as deep as its backer and slats, a privacy panel as wide as its board.
+// The fronts of an Appliance Panel Front that fit on it, top first; none = one front the whole size.
+function apFronts(c, mp = madeMp(c)) {
+  const fr = (Array.isArray(mp.fr) ? mp.fr : []).filter(q => +q.h > 0 && +q.z >= -0.01 && +q.z + +q.h <= c.h + 0.01);
+  return fr.length ? fr.map(q => ({ z: +q.z, h: +q.h })) : [{ z: 0, h: c.h }];
+}
 function madeSync(c) {
   const d = madeDef(c); if (!d) return;
   const mp = madeMp(c), cm = mat(cabMatT(cabSet(c, 'cabMatT')).carcass) || S.materials[0], fm = mat(finishMat(c)) || cm;
   if (c.made === 'slatwall') c.d = r3((mp.backer === 'off' ? 0 : fm.thick) + fm.thick);
   if (c.made === 'privacy' || c.made === 'panel') c.w = r3(fm.thick);
+  if (c.made === 'apfront') c.d = r3(fm.thick);
 }
 // Own price when the price sheet has none for the product: these aren't priced like cabinets.
 // A support panel is priced like an applied slab end panel (0.59.21): its material by the square foot plus the sheet's charge
 // per panel for its height (Edit prices › Adders).
 function madePrice(c, ps) {
   const d = madeDef(c); if (!d) return null;
+  if (c.made === 'apfront' && ps && typeof priceFront === 'function' && typeof panelDoor === 'function') {
+    const ds = panelDoor(c);
+    return { own: true, base: r3(apFronts(c).reduce((t, q) => t + priceFront(ds, c.w * q.h / 144, ps, c.w, q.h).total, 0)), perFt: 0 };
+  }
   if (c.made !== 'panel' || !ps || typeof matSqIn !== 'function') return { own: true, ...d.price };
   const m = mat(finishMat(c)) || mat(cabMatT(cabSet(c, 'cabMatT')).carcass);
   return { own: true, base: r3((m ? c.h * c.d * matSqIn(m, ps) : 0) + (typeof panelAdd === 'function' ? panelAdd(ps, c.h >= 60 ? 'Tall' : c.elev >= 30 ? 'Wall' : 'Base') : 0)), perFt: 0 };
 }
 
 /* ---------- Library ---------- */
+// 0.61.0 (Ayden 2026-11-23: "an option to put down base panels and wall panels that arent automatic so i can change it"):
+// a Base End Panel and a Wall End Panel, the same finished panel as the Support Panel at base and upper sizes. Placed by
+// hand like a cabinet, so they can be moved, resized or deleted; the cabinet beside one gets no automatic panel there.
+const MADE_PANEL_SIZES = [
+  { id: 'made-panel-base', name: 'Base End Panel', cat: 'Base', h: 34.5, d: 24.75, elev: 0 },
+  { id: 'made-panel-wall', name: 'Wall End Panel', cat: 'Wall', h: 30, d: 12.75, elev: 54 },
+];
 function madeLibItems() {
-  return Object.entries(MADE).map(([k, d]) => ({ id: 'made-' + k, name: d.name, cat: d.cat, w: d.w, h: d.h, d: d.d, elev: d.elev, rows: [], params: {},
-    construction: { toeKick: false, top: 'full' }, made: k, mp: clone(d.mp), noTop: true, folder: d.folder, group: 'made' }));
+  const item = (k, d, o = {}) => ({ id: 'made-' + k, name: d.name, cat: d.cat, w: d.w, h: d.h, d: d.d, elev: d.elev, rows: [], params: {},
+    construction: { toeKick: false, top: 'full' }, made: k, mp: clone(d.mp), noTop: true, folder: d.folder, group: 'made', ...o });
+  return [...Object.entries(MADE).map(([k, d]) => item(k, d)), ...MADE_PANEL_SIZES.map(o => item('panel', MADE.panel, o))];
 }
 function ensureMadeLib(s, lib) {
   const had = new Set(s.madeLibKeys || []);

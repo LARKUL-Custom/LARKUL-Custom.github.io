@@ -219,6 +219,29 @@ function hasPanel(c, end) { return !!panelPieces(c, end); }
 // cabinets beside it gets a panel on the strip that sticks out; a floating shelf between two uppers leaves the sides above
 // and below it showing, so each upper gets a panel notched around the shelf. Set to Never, nothing.
 function panelPieces(c, end) {
+  const own = panelPiecesOwn(c, end);
+  const isl = islandPartner(c, end); if (!isl) return own;
+  // 0.61.0 (Ayden 2026-11-23: "the island need end panels that cover all the cabinets even if its double sided"): on an
+  // island with cabinets back to back, one end panel runs across both. The taller cabinet carries it (side 1 when they
+  // match) out past its back to the other cabinet's front; the other one gets no panel at that end.
+  if (!isl.owner) return panelPiecesOwn(isl.k, isl.end) ? null : own;
+  if (!own) return own;
+  const w = wall(c.wall), ext = -r3((c.outset || 0) + (w ? w.thick : 0) + faceOut(isl.k)), z0 = isl.k.elev - c.elev, z1 = z0 + isl.k.h;
+  return own.map(pc => ({ ...pc, steps: pc.steps.map(q => { const mid = (q.z0 + q.z1) / 2; return mid > z0 && mid < z1 ? { ...q, d0: Math.min(q.d0, ext) } : q; }) }));
+}
+// The cabinet back to back with this one at this end, on the other side of an island line: { k, end (k's end), owner
+// (this cabinet carries the shared panel) }, or null.
+function islandPartner(c, end) {
+  if (c.moz || c.made || !c.wall) return null;
+  const w = wall(c.wall); if (!w || !(w.hidden || w.island)) return null;
+  const dir = (end === 'L') === (c.side === 1) ? -1 : 1, at = k => dir < 0 ? k.off : k.off + k.w;
+  const k = (S.cabinets || []).find(x => x !== c && x.wall === c.wall && x.side === -c.side && !x.moz && !x.made && Math.abs(at(x) - at(c)) <= 1
+    && Math.min(x.elev + x.h, c.elev + c.h) - Math.max(x.elev, c.elev) > 1);
+  if (!k) return null;
+  const tc = c.elev + c.h, tk = k.elev + k.h, owner = Math.abs(tc - tk) > 0.5 ? tc > tk : c.side === 1;
+  return { k, end: (dir < 0) === (k.side === 1) ? 'L' : 'R', owner };
+}
+function panelPiecesOwn(c, end) {
   if (c.moz || c.made) return null;
   const m = panelMode(c, end), full = () => { const z0 = panelZ0(c); return [{ z0, z1: c.h, steps: [{ z0, z1: c.h, d0: 0 }] }]; };
   // Products wrapped in the finish material all round (open shelf units, the open vanity) are their own finished ends.
@@ -314,6 +337,8 @@ function endFinished(c, end) {
   const o = end === 'L' ? c.endL : c.endR;
   if (o === 'fin') return true; if (o === 'unfin') return false;
   if (!c.wall || hasPanel(c, end)) return false;
+  // Covered by the island panel the cabinet back to back with it carries.
+  const isl = islandPartner(c, end); if (isl && !isl.owner && panelPiecesOwn(isl.k, isl.end)) return false;
   // 0.58.39: any part of the end that shows makes it a finished end (a deeper upper's strip past its neighbour, the side
   // above and below a floating shelf), the same test the automatic panels use. Before, only an end with nothing near it.
   return !!exposedPieces(c, end);

@@ -34,6 +34,11 @@ const FIXT_LIB = [
   FX('sk-apron', 'sink', 'Kitchen sinks', 'Stainless Apron Sink', 33, 9, 22.25, { apron: true }),
   FX('sk-bar', 'sink', 'Kitchen sinks', 'Bar Undermount', 16, 8, 16),
   FX('sk-bath', 'sink', 'Kitchen sinks', 'Bath Drop In Oval', 22, 5, 15),
+  // 0.61.0: cooktops sit in the countertop like a drop-in sink (a cutout in the top), with no bowl or faucet.
+  FX('ck-gas30', 'sink', 'Cooktops', 'Gas Cooktop 30', 30, 4, 21, { cooktop: true, mount: 'drop' }),
+  FX('ck-gas36', 'sink', 'Cooktops', 'Gas Cooktop 36', 36, 4, 21, { cooktop: true, mount: 'drop' }),
+  FX('ck-ind30', 'sink', 'Cooktops', 'Induction Cooktop 30', 30, 4, 21, { cooktop: true, mount: 'drop' }),
+  FX('ck-ind36', 'sink', 'Cooktops', 'Induction Cooktop 36', 36, 4, 21, { cooktop: true, mount: 'drop' }),
   FX('dw', 'dw', 'Dishwashers', 'Dishwasher', 24, 34.5, 26),
   FX('dw-pr', 'dw', 'Dishwashers', 'Dishwasher (PR)', 24, 34.5, 24, { pr: true }),
   FX('fr-std', 'fridge', 'Refrigerators', 'Standard Fridge', 30, 68, 33),
@@ -42,6 +47,7 @@ const FIXT_LIB = [
   FX('fr-fd36', 'fridge', 'Refrigerators', '36in French Door (PR)', 36, 84, 24, { pr: true }),
   FX('fr-fd42', 'fridge', 'Refrigerators', '42in French Door (PR)', 42, 84, 24, { pr: true }),
   FX('fr-profd', 'fridge', 'Refrigerators', 'Pro French Door', 36, 84, 27),
+  FX('fr-col36', 'fridge', 'Refrigerators', '36in Column (PR)', 36, 84, 24, { pr: true }),
   FX('fr-col30', 'fridge', 'Refrigerators', '30in Column (PR)', 30, 84, 24, { pr: true }),
   FX('fr-col24', 'fridge', 'Refrigerators', '24in Column (PR)', 24, 84, 24, { pr: true }),
   FX('uc-fr24', 'ucfridge', 'Under-counter fridges', '24in Fridge U-C (PR)', 24, 34.5, 24, { pr: true }),
@@ -74,7 +80,7 @@ const FIXT_LIB = [
   FX('wn-sh2', 'window', 'Windows', 'Single Hung 2', 54, 48, 0, { hung: true }),
   FX('wn-pic', 'window', 'Windows', 'Picture Window', 90, 60, 0),
 ];
-const FIXT_FOLDERS = ['Kitchen sinks', 'Dishwashers', 'Refrigerators', 'Under-counter fridges', 'Ranges', 'Laundry', 'Doors', 'Doorways and openings', 'Windows'];
+const FIXT_FOLDERS = ['Kitchen sinks', 'Cooktops', 'Dishwashers', 'Refrigerators', 'Under-counter fridges', 'Ranges', 'Laundry', 'Doors', 'Doorways and openings', 'Windows'];
 const fixtPreset = id => FIXT_LIB.find(x => x.id === id) || (typeof modelItem === 'function' ? modelItem(id) : null);
 // A built-in appliance already placed in a job draws with the imported Mozaik model of the same name, when that
 // library is imported here. Names that differ in Mozaik's library are listed (with the folder they're in).
@@ -267,7 +273,7 @@ function fixtElevSpot(f, p, cabId) {
 function fixtNew(pid) {
   const d = fixtPreset(pid); if (!d) return null;
   const f = { id: uid('fx'), kind: d.kind, lib: d.id, name: d.name, w: d.w, h: d.h, d: d.d, elev: d.elev };
-  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
+  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md', 'cooktop', 'mount'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
   return f;
 }
 function fixtPlace(k, p) {
@@ -313,6 +319,7 @@ function fixtPlanOne(f, ghost) {
     const k = sinkCut(f), Q = pts => polyPts(pts.map(q => P(q.x, h + q.y))), under = k.mount !== 'drop';
     const rim = roundRectPts(f.off, k.sy0, f.off + f.w, k.sy1, k.oval ? 0 : k.r + (k.mount === 'drop' ? 0.5 : 1), k.oval);
     s += `<polygon class="${cls}${under ? ' fx-under' : ''} nss" points="${Q(rim)}"${id}/>`;
+    if (f.cooktop) { [[0.27, 0.3], [0.73, 0.3], [0.27, 0.7], [0.73, 0.7]].forEach(([u, v]) => { const c = at(f.w * u, k.sy0 + (k.sy1 - k.sy0) * v); s += `<circle class="fx-burner nss" cx="${c.x}" cy="${c.y}" r="${Math.min(f.w, f.d) * 0.12}"/>`; }); return s; }
     s += `<polygon class="fx-cut nss" points="${Q(sinkCutPts(k))}" pointer-events="none"/>`;
     const n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5;
     if (n > 1) { const bw = (k.w - gap * (n - 1)) / n; for (let i = 1; i < n; i++) { const x = k.x0 + i * bw + (i - 0.5) * gap, a = P(x, h + k.y0), b = P(x, h + k.y1); s += `<line class="fx-divide nss" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`; } }
@@ -344,6 +351,7 @@ function fixtElevSVG(w, side, L, fs, holes) {
     if (fixtSink(f)) {
       // Under the countertop: dashed bowl; above it the faucet.
       const t = fixtCounter(f).top, cx = x + f.w / 2;
+      if (f.cooktop) { s += `<rect class="fixt fx-sink nss" x="${x}" y="${-t - 0.4}" width="${f.w}" height="0.4"/><rect class="fx-bowl ev nss" x="${x + 1}" y="${-t}" width="${f.w - 2}" height="${f.h}"/><rect class="ev-hit" x="${x}" y="${-t - 2}" width="${f.w}" height="${2 + f.h}"/>`; return s + '</g>'; }
       s += f.apron ? `<rect class="fixt fx-sink nss" x="${x}" y="${-t}" width="${f.w}" height="${f.h}"/>` : (k => `<rect class="fx-bowl ev nss" x="${x + (f.w - k.w) / 2}" y="${-t}" width="${k.w}" height="${f.h}" rx="${Math.min(k.r, 2)}"/>`)(sinkCut(f));
       s += `<path class="fx-faucet ev nss" d="M${cx - 1} ${-t}V${-t - 11}Q${cx - 1} ${-t - 14} ${cx + 2} ${-t - 14}Q${cx + 5} ${-t - 14} ${cx + 5} ${-t - 11}V${-t - 9.5}"/>`;
       s += `<rect class="ev-hit" x="${x}" y="${-t - 14}" width="${f.w}" height="${14 + f.h}"/>`;
@@ -442,6 +450,12 @@ function fixt3d(v, selCol) {
       // An imported sink model hangs from the countertop by its rim, lined up with the cutout.
       const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
       if (mm) { mm.position.set(0, c.top - f.h + 0.2, k.sy0); grp.add(mm); v.root.add(tag(grp)); return; }
+      // A cooktop: black glass on the top over its cutout, with its burner box hanging under it.
+      if (f.cooktop) {
+        grp.add(box3(f.w, 0.25, k.sy1 - k.sy0, hot || dark, f.w / 2, c.top + 0.125, (k.sy0 + k.sy1) / 2));
+        grp.add(box3(k.w, Math.max(1, f.h - 0.5), k.y1 - k.y0, hot || metal, lx((k.x0 + k.x1) / 2), c.top - c.thick - Math.max(1, f.h - 0.5) / 2, (k.y0 + k.y1) / 2));
+        v.root.add(tag(grp)); return;
+      }
       const steel = hot || metal, wallT = 0.06, bowlTop = under ? c.top - c.thick : c.top;
       // The bowl under the cutout: its walls (a thin ring the shape of the cutout) and its bottom.
       const bowlPts = k.open ? roundRectPts(k.x0, k.y0, k.x1, k.y1 - 0.6, k.r, false) : sinkCutPts(k);
@@ -469,10 +483,14 @@ function fixt3d(v, selCol) {
     const body = f.kind === 'washer' || f.kind === 'dryer' ? white : metal;
     grp.add(box3(f.w, f.h, f.d, hot || body, f.w / 2, f.elev + f.h / 2, f.d / 2));
     const z = f.d + 0.4;
-    if (f.kind === 'fridge') { grp.add(box3(f.w, 0.3, 0.2, dark, f.w / 2, f.h * 0.68, f.d + 0.1, false)); grp.add(box3(0.3, f.h * 0.32, 0.2, dark, f.w / 2, f.h * 0.84, f.d + 0.1, false)); [-2, 2].forEach(dx => grp.add(box3(0.8, f.h * 0.2, 0.8, dark, f.w / 2 + dx, f.h * 0.84, z))); grp.add(box3(f.w - 6, 0.8, 0.8, dark, f.w / 2, f.h * 0.62, z)); }
-    else if (f.kind === 'dw' || f.kind === 'ucfridge') grp.add(box3(f.w - 6, 0.8, 0.8, dark, f.w / 2, f.h - 5, z));
-    else if (f.kind === 'range') { grp.add(box3(f.w, 0.6, f.d, dark, f.w / 2, f.h + 0.3, f.d / 2)); grp.add(box3(f.w - 6, f.h * 0.4, 0.2, dark, f.w / 2, f.h * 0.42, f.d + 0.1, false)); grp.add(box3(f.w, 5, 2, dark, f.w / 2, f.h + 2.5, 1)); }
-    else if (f.kind === 'washer' || f.kind === 'dryer') { const r = Math.min(f.w, f.h) * 0.3, cy = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.6, 32), hot || (f.kind === 'washer' ? glass : dark)); cy.rotation.x = Math.PI / 2; cy.position.set(f.w / 2, (f.h - 6) * 0.52, f.d + 0.3); grp.add(cy); grp.add(box3(f.w, 6, 0.3, dark, f.w / 2, f.h - 3, f.d + 0.15, false)); }
+    // A panel-ready appliance has its panel fronts in front of it: no handles of its own.
+    if (f.pr) { v.root.add(tag(grp)); return; }
+    // The fronts' details ride with the appliance when it stands off the floor (a washer on a pedestal).
+    const dg = new THREE.Group(); dg.position.y = f.elev || 0; grp.add(dg);
+    if (f.kind === 'fridge') { dg.add(box3(f.w, 0.3, 0.2, dark, f.w / 2, f.h * 0.68, f.d + 0.1, false)); dg.add(box3(0.3, f.h * 0.32, 0.2, dark, f.w / 2, f.h * 0.84, f.d + 0.1, false)); [-2, 2].forEach(dx => dg.add(box3(0.8, f.h * 0.2, 0.8, dark, f.w / 2 + dx, f.h * 0.84, z))); dg.add(box3(f.w - 6, 0.8, 0.8, dark, f.w / 2, f.h * 0.62, z)); }
+    else if (f.kind === 'dw' || f.kind === 'ucfridge') dg.add(box3(f.w - 6, 0.8, 0.8, dark, f.w / 2, f.h - 5, z));
+    else if (f.kind === 'range') { dg.add(box3(f.w, 0.6, f.d, dark, f.w / 2, f.h + 0.3, f.d / 2)); dg.add(box3(f.w - 6, f.h * 0.4, 0.2, dark, f.w / 2, f.h * 0.42, f.d + 0.1, false)); dg.add(box3(f.w, 5, 2, dark, f.w / 2, f.h + 2.5, 1)); }
+    else if (f.kind === 'washer' || f.kind === 'dryer') { const r = Math.min(f.w, f.h) * 0.3, cy = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.6, 32), hot || (f.kind === 'washer' ? glass : dark)); cy.rotation.x = Math.PI / 2; cy.position.set(f.w / 2, (f.h - 6) * 0.52, f.d + 0.3); dg.add(cy); dg.add(box3(f.w, 6, 0.3, dark, f.w / 2, f.h - 3, f.d + 0.15, false)); }
     v.root.add(tag(grp));
   });
 }
