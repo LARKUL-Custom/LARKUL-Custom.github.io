@@ -97,6 +97,8 @@ function obstacles(wallId, side, spec, excludeId) {
   S.walls.forEach(k => { if (k.id !== w.id) add(wallPoly(k), 'wall', k.id); capsOf(k).forEach(cp => add(capPoly(k, cp), 'wall', k.id)); });
   S.cabinets.forEach(k => {
     if (k.id === excludeId || !vOverlap(k, spec)) return;
+    // Pocket Doors (0.61.9) are fronts standing in front of other pieces: nothing is kept out of their space.
+    if (k.made === 'pocketdoors') return;
     const p = cabPoly(k); if (!p) return;
     add(p, 'cab', k.id);
     panelPolys(k, true).forEach(pp => add(pp, 'cab', k.id));
@@ -112,6 +114,8 @@ function ownExtents(c, side) {
 }
 // Offsets along the wall the cabinet's box may not start in, given what is already there.
 function blockedOffs(c, wallId, side, excludeId) {
+  // Pocket Doors go anywhere along the wall: they stand in front of what is there (pocketDoorsSync sets their outset).
+  if (c && c.made === 'pocketdoors') return [];
   const ly = lay(), [eLo, eHi] = ownExtents(c, side), out = [];
   obstacles(wallId, side, c, excludeId).forEach(o => {
     // A wall keeps a filler's width clear, unless that end's filler is set to Never.
@@ -143,7 +147,7 @@ function snapOff(c, wallId, side, off, excludeId, px) {
 // The opening around spot t along a wall side, between two cabinets or walls (keeping a wall's filler clear).
 // Returns { off, w } when its width is inside the fit range and differs from the cabinet's own, otherwise null.
 function fitOpening(spec, wallId, side, t) {
-  const ly = lay(); if (!ly.fitOpenings) return null;
+  const ly = lay(); if (!ly.fitOpenings || spec.made === 'pocketdoors') return null;
   const obs = obstacles(wallId, side, spec, null), e = 0.01;
   if (obs.some(o => t > o.a0 + e && t < o.a1 - e)) return null;
   const left = obs.filter(o => o.a1 <= t + e).sort((a, b) => b.a1 - a.a1)[0], right = obs.filter(o => o.a0 >= t - e).sort((a, b) => a.a0 - b.a0)[0];
@@ -174,7 +178,7 @@ function snapToWall(pt, spec, excludeId, delta, px) {
 // True when a cabinet's box runs into a wall or another cabinet (at its own spot, or at o).
 function conflicts(c, o) {
   const wl = o ? o.wall : c.wall, sd = o ? o.side : c.side, off = o ? o.off : c.off;
-  if (!wall(wl)) return false;
+  if (!wall(wl) || c.made === 'pocketdoors') return false;
   return obstacles(wl, sd, c, c.id).some(k => Math.min(k.a1, off + c.w) - Math.max(k.a0, off) > 0.01);
 }
 // Moves a cabinet to the nearest free spot on its wall side. Returns false when there is no room for it.

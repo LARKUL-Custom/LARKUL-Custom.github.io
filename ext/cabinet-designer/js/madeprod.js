@@ -144,8 +144,8 @@ const MADE = {
   // the Finish like every door; a pocket door system per door and the room's pull on the hardware list.
   pocketdoors: {
     name: 'Pocket Doors', cat: 'Tall', w: 60, h: 96, d: 0.75, elev: 0, folder: 'Pocket Doors',
-    mp: { n: 2, slotL: 4, slotR: 4, back: 30 }, price: { base: 0, perFt: 0 },
-    fields: [['n', 'Doors', 'select', [[2, '2 (a pair)'], [1, '1 (hinged left)']]], ['slotL', 'Left pocket slot width', 'len'], ['slotR', 'Right pocket slot width', 'len'], ['back', 'Pocket depth (how far back they slide)', 'len']],
+    mp: { n: 2, slotL: 4, slotR: 4, back: 30, front: 'auto' }, price: { base: 0, perFt: 0 },
+    fields: [['front', 'Stands', 'select', [['auto', 'In front of what is behind it (auto)'], ['own', 'At the Outset I type']]], ['n', 'Doors', 'select', [[2, '2 (a pair)'], [1, '1 (hinged left)']]], ['slotL', 'Left pocket slot width', 'len'], ['slotR', 'Right pocket slot width', 'len'], ['back', 'Pocket depth (how far back they slide)', 'len']],
     build(c, mp, x) {
       const n = +mp.n === 1 ? 1 : 2, g = 0.125, fw = r3((c.w - g * (n - 1)) / n), back = Math.max(1, +mp.back || 30);
       const pl = hwPick(cabSet(c, 'pull'), 'pull');
@@ -258,6 +258,21 @@ function apFrontSync() {
       Object.assign(c, { name: (f.name || 'Appliance') + ' panel front', fixt: f.id, mp: { fr: [], toe: f.kind === 'fridge' ? 0 : 4.5 } });
       apFrontFit(c, f); r.cabinets.push(c);
     });
+  });
+}
+// 0.61.9 (Ayden 2026-11-23: "keeps saying there is no room for that here"): Pocket Doors stand in front of the pieces
+// behind them (fillers, end panels, an open base): their outset follows the deepest piece they cover, along the wall and
+// up and down. Runs after every change (mutate). Mode 'own' keeps the Outset typed in.
+function pocketDoorsSync() {
+  (S.cabinets || []).forEach(c => {
+    if (c.made !== 'pocketdoors' || !c.wall || (c.mp || {}).front === 'own') return;
+    let deep = null;
+    S.cabinets.forEach(k => {
+      if (k === c || k.made === 'pocketdoors' || k.wall !== c.wall || k.side !== c.side) return;
+      if (Math.min(k.off + k.w, c.off + c.w) - Math.max(k.off, c.off) < 0.01 || !vOverlap(k, c)) return;
+      const f = r3((k.outset || 0) + k.d); if (deep === null || f > deep) deep = f;
+    });
+    if (deep !== null && c.outset !== deep) c.outset = deep;
   });
 }
 function apFrontFit(c, f) {
