@@ -287,7 +287,7 @@ function mozThing(rm, p, at, put, flag, sz) {
     const kind = /dish/.test(n) ? 'dw' : p.h < 40 ? 'ucfridge' : 'fridge';
     const pre = FIXT_LIB.find(x => x.name.toLowerCase() === p.name.trim().toLowerCase()) || FIXT_LIB.find(x => x.kind === kind && x.pr);
     const f = fixtNew(pre.id);
-    Object.assign(f, { name: p.name, w: p.w, h: p.h, d: p.d, wall: at.wall, side: at.side, off: at.off, elev: p.elev || 0, pr: true, fromMozaik: true });
+    Object.assign(f, { name: p.name, w: p.w, h: p.h, d: p.d, wall: at.wall, side: at.side, off: at.off, elev: p.elev || 0, pr: true, panels: true, fromMozaik: true });
     rm.fixtures.push(f);
     const lib = libItem('made-apfront');
     if (lib) {

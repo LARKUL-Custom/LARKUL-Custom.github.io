@@ -106,7 +106,7 @@ function itemBarX(x) {
     <div class="ib-size">${sizes}</div>
     <div class="ib-acts"><div class="ib-name"><span class="chip shape">${esc(kind)}</span> <b>${esc(name)}</b></div>
       ${fx ? '' : `<button class="ib-edit" data-act="shape-edit" data-id="${id}" title="Change its outline in the shape editor">${icon('edit')}<span>Edit shape</span></button>`}
-      <div class="ib-small">${fx ? (fixtSink(o) ? sb('fixt-center', 'ends', 'Center', 'Center on the cabinet under it') : sb('fixt-flip', 'flip', o.kind === 'door' ? 'Swing' : 'Flip', 'Flip it to the other side')) + sb('fixt-dup', 'copy', 'Copy', 'Duplicate') + sb('fixt-del', 'trash', 'Delete', 'Delete')
+      <div class="ib-small">${fx ? (fixtSink(o) ? sb('fixt-center', 'ends', 'Center', 'Center on the cabinet under it') : sb('fixt-flip', 'flip', o.kind === 'door' ? 'Swing' : 'Flip', 'Flip it to the other side')) + (PANEL_KINDS.includes(o.kind) ? sb('fixt-panels', 'door', o.panels ? 'Panels on' : 'Panels', 'Panel fronts in the room\'s door style, cut from the Finish', o.panels ? 'on' : '') : '') + sb('fixt-dup', 'copy', 'Copy', 'Duplicate') + sb('fixt-del', 'trash', 'Delete', 'Delete')
         : sb('shape-flip', 'flip', 'Flip', 'Flip it to the other side') + sb('shape-dup', 'copy', 'Copy', 'Duplicate') + sb('shape-del', 'trash', 'Delete', 'Delete')}</div></div>
   </div>`;
 }

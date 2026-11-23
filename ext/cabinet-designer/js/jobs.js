@@ -157,6 +157,8 @@ function blankJob(name, customer) {
   // 0.60.8: countertop corners are mitered unless one is set to run through (Ayden 2026-11-20: "mitered corner tops are
   // standard"). New jobs only; saved jobs keep the tops they were priced with.
   if (out && out.job) out.job.ctMiter = true;
+  // 0.61.3: automatic end panels are their own pieces (Ayden 2026-11-23). New jobs only.
+  if (out && out.job) out.job.layout = { ...(out.job.layout || {}), panelItems: true };
   return out || d;
 }
 async function newJob(name, folder, customer) {

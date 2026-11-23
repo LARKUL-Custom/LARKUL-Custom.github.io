@@ -94,6 +94,8 @@ function fixtModelOf(f) {
   return m ? { model: m.model, md: m.md } : null;
 }
 const CASE = 2.5;
+// Appliances that can take panel fronts in the room's door style (0.61.3).
+const PANEL_KINDS = ['fridge', 'ucfridge', 'dw'];
 const fixtKind = k => FIXT_KINDS.find(x => x.k === k);
 const fixtDef = f => fixtKind(f.kind) || FIXT_KINDS[0];
 const fixtList = () => S.fixtures || [];
@@ -273,6 +275,8 @@ function fixtElevSpot(f, p, cabId) {
 function fixtNew(pid) {
   const d = fixtPreset(pid); if (!d) return null;
   const f = { id: uid('fx'), kind: d.kind, lib: d.id, name: d.name, w: d.w, h: d.h, d: d.d, elev: d.elev };
+  // 0.61.3: a panel-ready appliance gets its panel fronts when placed (Panel fronts in its item bar turns them off).
+  if (d.pr && PANEL_KINDS.includes(d.kind)) f.panels = true;
   ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md', 'cooktop', 'mount'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
   return f;
 }
@@ -355,6 +359,11 @@ function fixtElevSVG(w, side, L, fs, holes) {
       s += f.apron ? `<rect class="fixt fx-sink nss" x="${x}" y="${-t}" width="${f.w}" height="${f.h}"/>` : (k => `<rect class="fx-bowl ev nss" x="${x + (f.w - k.w) / 2}" y="${-t}" width="${k.w}" height="${f.h}" rx="${Math.min(k.r, 2)}"/>`)(sinkCut(f));
       s += `<path class="fx-faucet ev nss" d="M${cx - 1} ${-t}V${-t - 11}Q${cx - 1} ${-t - 14} ${cx + 2} ${-t - 14}Q${cx + 5} ${-t - 14} ${cx + 5} ${-t - 11}V${-t - 9.5}"/>`;
       s += `<rect class="ev-hit" x="${x}" y="${-t - 14}" width="${f.w}" height="${14 + f.h}"/>`;
+    } else if (f.panels && !ghost) {
+      // 0.61.3: the panel fronts stand in front of it and show instead; it can still be picked there.
+      const y = -(f.elev + f.h);
+      s += `<rect class="ev-hit" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
+      if (sel) s += `<rect class="ev-halo nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/><rect class="ev-sel nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
     } else {
       const y = -(f.elev + f.h);
       s += `<rect class="${cls}" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
@@ -484,7 +493,7 @@ function fixt3d(v, selCol) {
     grp.add(box3(f.w, f.h, f.d, hot || body, f.w / 2, f.elev + f.h / 2, f.d / 2));
     const z = f.d + 0.4;
     // A panel-ready appliance has its panel fronts in front of it: no handles of its own.
-    if (f.pr) { v.root.add(tag(grp)); return; }
+    if (f.panels) { v.root.add(tag(grp)); return; }
     // The fronts' details ride with the appliance when it stands off the floor (a washer on a pedestal).
     const dg = new THREE.Group(); dg.position.y = f.elev || 0; grp.add(dg);
     if (f.kind === 'fridge') { dg.add(box3(f.w, 0.3, 0.2, dark, f.w / 2, f.h * 0.68, f.d + 0.1, false)); dg.add(box3(0.3, f.h * 0.32, 0.2, dark, f.w / 2, f.h * 0.84, f.d + 0.1, false)); [-2, 2].forEach(dx => dg.add(box3(0.8, f.h * 0.2, 0.8, dark, f.w / 2 + dx, f.h * 0.84, z))); dg.add(box3(f.w - 6, 0.8, 0.8, dark, f.w / 2, f.h * 0.62, z)); }
@@ -523,7 +532,7 @@ function fixtProps(f) {
   const id = f.id, R = 'fixt:' + id, d = fixtDef(f), pre = fixtPreset(f.lib) || {}, w = wall(f.wall), L = w ? wg(w).L : 0;
   const from = fixtHole(f) ? 'From the wall start' : 'Along the wall';
   return `<div class="psec"><div class="pshead"><div class="cabtitle"><span class="chip shape">${esc(String(pre.folder || d.name).split(' › ').pop())}</span> <b>${esc(fixtName(f))}</b></div></div>
-    <div class="row-actions">${fixtSink(f) ? '' : `<button class="btn" data-act="fixt-flip" data-id="${id}">${icon('flip')}${f.kind === 'door' ? 'Swing to the other side' : fixtHole(f) ? 'Other side' : 'Flip'}</button>`}<button class="btn" data-act="fixt-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn danger" data-act="fixt-del" data-id="${id}">${icon('trash')}Delete</button></div>${f.model && modelItem(f.lib) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-unlib" data-id="${id}" title="Takes this model out of the Imported models list. Ones already in jobs stay.">${icon('trash')}Remove from Imported models</button></div>` : ''}
+    <div class="row-actions">${fixtSink(f) ? '' : `<button class="btn" data-act="fixt-flip" data-id="${id}">${icon('flip')}${f.kind === 'door' ? 'Swing to the other side' : fixtHole(f) ? 'Other side' : 'Flip'}</button>`}${PANEL_KINDS.includes(f.kind) ? `<button class="btn${f.panels ? ' on' : ''}" data-act="fixt-panels" data-id="${id}" aria-pressed="${!!f.panels}" title="Panel fronts in the room's door style, cut from the Finish">${icon('door')}Panel fronts${f.panels ? ' on' : ''}</button>` : ''}<button class="btn" data-act="fixt-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn danger" data-act="fixt-del" data-id="${id}">${icon('trash')}Delete</button></div>${f.model && modelItem(f.lib) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-unlib" data-id="${id}" title="Takes this model out of the Imported models list. Ones already in jobs stay.">${icon('trash')}Remove from Imported models</button></div>` : ''}
     <div class="sizeline">${fixtHole(f) && !f.bare ? 'With casing: ' : ''}${fmtLen(f.w, 1)} wide × ${fmtLen(f.h, 1)} high${f.d ? ` × ${fmtLen(f.d, 1)} deep` : ''}</div>
     <div class="note">${w ? esc(wallName(w)) : ''}${fixtSink(f) ? ' · sits in the countertop' : fixtUnder(f) ? ' · the countertop runs over it' : fixtHole(f) ? ' · cabinets stay out of it where they would overlap' : fixtLoose(f) ? ' · just to look at, cabinets can go over it' : ' · cabinets stay out of its space'}. Not on the cut list.</div></div>
   <div class="psec box">${secHead('ruler', 'Size and position', 'teal')}
@@ -552,6 +561,7 @@ function fixtAct(a, id) {
     case 'fixt-unlib': if (f && f.lib) removeModels([f.lib]); return true;
     case 'fixt-del': ui.sel = null; mutate(() => { S.fixtures = fixtList().filter(x => x.id !== id); }); return true;
     case 'fixt-flip': if (f) mutate(() => { f.side = -f.side; }); return true;
+    case 'fixt-panels': if (f) mutate(() => { f.panels = !f.panels; if (f.panels) f.pr = true; }); return true;
     case 'fixt-dup': {
       if (!f) return true;
       const n = { ...clone(f), id: uid('fx') }, off = fixtFree(n, f.wall, f.side, f.off + f.w, 0);

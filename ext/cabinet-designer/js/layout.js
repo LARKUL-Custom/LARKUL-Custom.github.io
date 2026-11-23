@@ -14,10 +14,59 @@ const LAYOUT_FIELDS = [
   { k: 'autoLights', label: 'Automatic ceiling lights', type: 'bool', note: 'A closed-in room with no ceiling lights drawn gets recessed pucks in Realistic, shown dashed in the plan. Placing any ceiling light turns them off.' },
   { k: 'fridgePanels', label: 'Automatic fridge panels', type: 'bool', note: 'A fridge with no wall or tall cabinet beside it gets a full-height panel on each open side, floor to the top of the cabinet over it. Cabinets butted against it slide over to make room. Delete a panel to leave that side bare; turning this off takes them all out.' },
   { k: 'panelReach', label: 'Counts as next to something within', type: 'len' },
+  { k: 'panelItems', label: 'Panels as separate pieces', type: 'bool', note: 'Each automatic end panel is its own panel in the room that you can pick, move and size. It follows its cabinet until you change it; after that it stays where you put it. Delete one to leave that end bare.' },
   { k: 'fitOpenings', label: 'Fit new cabinets to openings', type: 'bool', note: 'A cabinet dropped into a gap takes the width of the gap when it is inside the range below. It grows only between two cabinets; against a wall it only shrinks to fit.' },
   { k: 'fitMin', label: 'Narrowest fitted width', type: 'len' },
   { k: 'fitMax', label: 'Widest fitted width', type: 'len', note: 'Wider or narrower gaps keep the cabinet at its library size.' },
 ];
+// 0.61.3 (Ayden 2026-11-23: "i want the automatic panels to be placed not just on the cabinet, that way i can adjust when i
+// need to"): with Layout › Panels as separate pieces on (new jobs), each automatic end panel is a panel piece of its own in
+// the room (a Support Panel, c.autoOf = its cabinet, c.autoEnd = L/R). It follows its cabinet while untouched; once moved
+// or resized it is yours (the cabinet's end turns to Never so no second panel comes); deleted, that end stays bare.
+// Only plain rectangular panels become pieces; one notched round a shelf or stepped past a neighbour stays on the cabinet.
+function panelItemSync() {
+  const on = lay().autoPanels && lay().panelItems, lib = typeof libItem === 'function' && libItem('made-panel');
+  (S.rooms || []).forEach(r => {
+    const sig = k => [k.wall, k.side, k.off, k.w, k.h, k.d, k.elev, k.outset || 0].map(v => typeof v === 'number' ? r3(v) : v).join('|');
+    const byId = id => r.cabinets.find(k => k.id === id);
+    // Deleted by hand: that end stays bare. Moved or resized by hand: the piece is yours.
+    r.cabinets.forEach(c => { if (!c.pItems) return; Object.keys(c.pItems).forEach(e => { if (!byId(c.pItems[e])) { c['panel' + e] = 'off'; delete c.pItems[e]; } }); if (!Object.keys(c.pItems).length) delete c.pItems; });
+    r.cabinets.forEach(k => {
+      if (!k.autoOf) return;
+      const c = byId(k.autoOf);
+      if (c && k.autoSig && sig(k) !== k.autoSig) { c['panel' + k.autoEnd] = 'off'; if (c.pItems) { delete c.pItems[k.autoEnd]; if (!Object.keys(c.pItems).length) delete c.pItems; } delete k.autoOf; delete k.autoEnd; delete k.autoSig; }
+    });
+    // What the automatic panels would be, worked out with the pieces left out.
+    const want = new Map(), all = r.cabinets;
+    if (on && lib) {
+      r.cabinets = all.filter(k => !k.autoOf);
+      try { withRoom(r, () => r.cabinets.forEach(c => { if (c.made || c.moz || !c.wall) return; ['L', 'R'].forEach(e => { const d = panelItemWant(c, e); if (d) want.set(c.id + ':' + e, { c, e, d }); }); })); }
+      finally { r.cabinets = all; }
+    }
+    const keep = new Set();
+    want.forEach(({ c, e, d }, key) => {
+      let k = c.pItems && c.pItems[e] && byId(c.pItems[e]);
+      if (!k || k.autoOf !== c.id) {
+        k = withRoom(r, () => newCab(S, lib, d.wall, d.side, d.off));
+        Object.assign(k, { name: c.cat === 'Wall' ? 'Wall End Panel' : c.cat === 'Tall' ? 'Tall End Panel' : 'Base End Panel', cat: c.cat, autoOf: c.id, autoEnd: e, num: null });
+        r.cabinets.push(k); c.pItems = { ...(c.pItems || {}), [e]: k.id };
+      }
+      Object.assign(k, d); k.autoSig = sig(k); keep.add(k.id);
+    });
+    r.cabinets = r.cabinets.filter(k => {
+      if (!k.autoOf || keep.has(k.id)) return true;
+      const c = byId(k.autoOf); if (c && c.pItems) { delete c.pItems[k.autoEnd]; if (!Object.keys(c.pItems).length) delete c.pItems; }
+      return false;
+    });
+  });
+}
+// The panel piece for one end of a cabinet, or null when it has none or it isn't a plain rectangle.
+function panelItemWant(c, end) {
+  const pcs = panelPieces(c, end); if (!pcs || pcs.length !== 1) return null;
+  const pc = pcs[0], d0 = pc.steps[0].d0; if (pc.steps.some(q => Math.abs(q.d0 - d0) > 1e-6)) return null;
+  const t = panelThick(c), ps = panelFor(c), D = endDepth(c, end) + ps.frontOverhang, dir = (end === 'L') === (c.side === 1) ? -1 : 1;
+  return { wall: c.wall, side: c.side, off: r3(dir < 0 ? c.off - t : c.off + c.w), w: r3(t), h: r3(pc.z1 - pc.z0), elev: r3((c.elev || 0) + pc.z0), outset: r3((c.outset || 0) + d0), d: r3(D - d0) };
+}
 function lay() { return { ...LAYOUT_DEFAULTS, ...((S && S.job && S.job.layout) || {}) }; }
 // Runs fn in the room that holds cabinet c, so neighbors are looked up in the right room.
 function inRoomOf(c, fn) {
@@ -218,7 +267,25 @@ function hasPanel(c, end) { return !!panelPieces(c, end); }
 // it only over the height it shares and only out to its own front face (doors included). An upper deeper than the
 // cabinets beside it gets a panel on the strip that sticks out; a floating shelf between two uppers leaves the sides above
 // and below it showing, so each upper gets a panel notched around the shelf. Set to Never, nothing.
+// 0.61.3: when this end's panel is a piece of its own in the room (panelItemSync), the piece is what is drawn (drawnPanels),
+// but for everything else (cut list, CNC, price, molding returns, tops) the cabinet still has its panel, worked out with
+// the automatic pieces left out of the room, so nothing changes but the drawing.
+// Runs fn in the current room with its automatic end panel pieces left out.
+function withoutPieces(fn) {
+  const r = typeof curRoom === 'function' && curRoom(); if (!r || !r.cabinets.some(x => x.autoOf)) return fn();
+  const all = r.cabinets; r.cabinets = all.filter(x => !x.autoOf);
+  try { return withRoom(r, fn); } finally { r.cabinets = all; }
+}
+let panelDrawing = 0;
+function drawnPanels(fn) { panelDrawing++; try { return fn(); } finally { panelDrawing--; } }
 function panelPieces(c, end) {
+  const id = c.pItems && c.pItems[end], k = id && S.cabinets.find(x => x.id === id);
+  if (k) {
+    if (panelDrawing || k.autoOf !== c.id) return null;
+    const r = S.rooms.find(x => x.cabinets.includes(c)); if (!r) return null;
+    const all = r.cabinets; r.cabinets = all.filter(x => !x.autoOf);
+    try { return withRoom(r, () => panelPieces(c, end)); } finally { r.cabinets = all; }
+  }
   const own = panelPiecesOwn(c, end);
   const isl = islandPartner(c, end); if (!isl) return own;
   // 0.61.0 (Ayden 2026-11-23: "the island need end panels that cover all the cabinets even if its double sided"): on an

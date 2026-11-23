@@ -1104,7 +1104,7 @@ function buildParts(c) {
   });
   // One rod per pin spot for each applied panel and for the cabinet beside this one on its right (each pair counted once).
   if (pinSpots.length) {
-    const rods = ['L', 'R'].filter(sd => hasPanel(c, sd)).length * pinSpots.length
+    const rods = ['L', 'R'].filter(sd => !!panelPieces(c, sd)).length * pinSpots.length
       + (typeof nearestAt === 'function' && c.wall && inRoomOf(c, () => { const n = nearestAt(c, 1); return n && n.kind === 'cab' && n.gap < 0.05; }) ? pinSpots.length : 0);
     if (rods) addB(`${fmtLen(pinD, 1)} dowel pin, ${fmtLen(t * 2, 1)} long`, rods);
   }
@@ -1265,7 +1265,9 @@ function cornerBridges() {
   });
   return out;
 }
-function countertopRuns() {
+// 0.61.3: worked out with automatic end panel pieces left out, so tops and molding are as with panels on the cabinets.
+function countertopRuns() { return withoutPieces(countertopRunsAll); }
+function countertopRunsAll() {
   // Automatic runs on base cabinets (unless the room turned them off), then any tops placed by hand.
   const runs = curRoom().autoTops === false ? [] : runsBy(c => c.cat === 'Base' && !c.noTop, () => 'top', (typeof fixtUnderList === 'function' ? fixtUnderList() : []).concat(cornerBridges()));
   runs.forEach(r => {
@@ -1315,7 +1317,9 @@ function countertopRuns() {
 // Every run carries: fz (front of the doors), extS / extE (how far the front piece goes past the run's ends),
 // backS / backE (where a return stops, out from the wall face), front, returns and len.
 const moldCabD = c => (angledCorner(c) ? cornerLeg(c) : c.d) + (c.outset || 0);
-function moldingRuns() {
+// 0.61.3: worked out with automatic end panel pieces left out, so tops and molding are as with panels on the cabinets.
+function moldingRuns() { return withoutPieces(moldingRunsAll); }
+function moldingRunsAll() {
   const runs = runsBy(c => !!c.molding && !!molding(c.molding), c => c.molding + '@' + Math.round(moldCabD(c) * 16));
   runs.forEach(r => {
     r.k = String(r.k).split('@')[0];

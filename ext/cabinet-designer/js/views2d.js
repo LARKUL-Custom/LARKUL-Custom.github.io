@@ -115,7 +115,7 @@ function cabPlanSVG(c) {
   const poly = cabTopShape(c) ? cabOutline(c, 'top').map(q => cabPt(c, c.side === 1 ? q.x : c.w - q.x, q.y)) : box;
   const px = ui.px, isSel = (ui.sel && ui.sel.type === 'cab' && ui.sel.id === c.id) || inMulti(c.id), isDrop = ui.dropCab === c.id;
   const cls = c.cat === 'Wall' ? 'c-wall' : c.cat === 'Tall' ? 'c-tall' : 'c-base';
-  let s = panelPolys(c).map(pp => `<polygon class="apanel nss" points="${polyPts(pp)}"/>`).join('');
+  let s = drawnPanels(() => panelPolys(c)).map(pp => `<polygon class="apanel nss" points="${polyPts(pp)}"/>`).join('');
   s += fillerPolys(c).map(pp => `<polygon class="filler nss" points="${polyPts(pp)}"/>`).join('');
   if (isSel || isDrop) s += `<polygon class="halo nss${isDrop ? ' drop' : ''}" points="${polyPts(poly)}"/>`;
   s += `<polygon class="${cls} nss${isDrop ? ' c-drop' : isSel ? ' c-sel' : conflicts(c) ? ' c-bad' : ''}" points="${polyPts(poly)}"/>`;
@@ -808,7 +808,7 @@ function renderElev(pr) {
     body += `<g data-cab="${c.id}">` + f.svg;
     const ps = panelFor(c), pt = panelThick(c), pm = texLook(mat(ps.mat), 'finished', c); mats.push(pm && pm.id);
     // Each panel piece over the height it covers (one piece for a full panel; parts round a shelf or shorter neighbour).
-    [['L', ex - pt], ['R', ex + c.w]].forEach(([sd, x]) => (panelPieces(c, sd) || []).forEach(pc => { body += `<rect ${fillFor(pm, 'apanel')} x="${x}" y="${by - pc.z1}" width="${pt}" height="${pc.z1 - pc.z0}"/>`; }));
+    [['L', ex - pt], ['R', ex + c.w]].forEach(([sd, x]) => (drawnPanels(() => panelPieces(c, sd)) || []).forEach(pc => { body += `<rect ${fillFor(pm, 'apanel')} x="${x}" y="${by - pc.z1}" width="${pt}" height="${pc.z1 - pc.z0}"/>`; }));
     const fm = texLook(mat(fillerMat(c)), 'finished', c), ftk = c.cat === 'Wall' || !hasToe(c) ? 0 : effParams(c).toeKickHeight; mats.push(fm && fm.id);
     fillersOf(c).forEach(fl => { body += `<rect ${fillFor(fm, 'ev-filler')} x="${fl.end === 'L' ? ex - fl.gap : ex + c.w}" y="${by - c.h}" width="${fl.gap}" height="${c.h - ftk}"/>`; });
     body += `<rect class="ev-hit" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`;
@@ -816,7 +816,8 @@ function renderElev(pr) {
     else if ((ui.sel && ui.sel.type === 'cab' && ui.sel.id === c.id) || inMulti(c.id)) body += `<rect class="ev-halo nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/><rect class="ev-sel nss" x="${ex}" y="${by - c.h}" width="${c.w}" height="${c.h}"/>`;
     body += '</g>';
     // On paper the number sits in a white tag inside the cabinet's top, clear of tops and molding.
-    if (pr) { const t = LBL[c.id] || '', tw = t.length * fs * 0.58 + fs * 0.7, th = fs * 1.35, ty = by - c.h + Math.min(c.h * 0.5, fs * 1.5); labels += `<g class="ev-tag" pointer-events="none"><rect class="nss" x="${ex + c.w / 2 - tw / 2}" y="${ty - th / 2}" width="${tw}" height="${th}" rx="${th / 2}"/><text x="${ex + c.w / 2}" y="${ty}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" font-weight="600">${t}</text></g>`; }
+    // 0.61.3: an automatic end panel piece has no tag of its own (its cabinet's tag covers it).
+    if (c.autoOf) { /* no tag */ } else if (pr) { const t = LBL[c.id] || '', tw = t.length * fs * 0.58 + fs * 0.7, th = fs * 1.35, ty = by - c.h + Math.min(c.h * 0.5, fs * 1.5); labels += `<g class="ev-tag" pointer-events="none"><rect class="nss" x="${ex + c.w / 2 - tw / 2}" y="${ty - th / 2}" width="${tw}" height="${th}" rx="${th / 2}"/><text x="${ex + c.w / 2}" y="${ty}" font-size="${fs}" text-anchor="middle" dominant-baseline="central" font-weight="600">${t}</text></g>`; }
     else labels += `<text class="lbl dimtxt" x="${ex + c.w / 2}" y="${by - c.h - 2 * px}" font-size="${fs}" text-anchor="middle" font-weight="600" pointer-events="none">${LBL[c.id]}</text>`;
     if (!c.noDim) dims.push([ex, ex + c.w, c.cat === 'Wall' ? 'up' : 'down']);
     fillersOf(c).forEach(fl => { const fx = fl.end === 'L' ? ex - fl.gap : ex + c.w; dims.push([fx, fx + fl.gap, c.cat === 'Wall' ? 'up' : 'down', 'fill']); });

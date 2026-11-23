@@ -160,6 +160,7 @@ function instCounts(cabs, own) {
     computeFronts(c).forEach(f => { if (f.type === 'door') n.door++; else if (f.type === 'drawer' || f.type === 'false') n.drawer++; if (pullPlacement(c, f)) n.pull++; });
   });
   own.forEach(({ c }) => {
+    if (c.made === 'panel' && c.autoOf) return;
     if (c.made === 'panel') { panelOne(c.name, wallOf(c.wall), c.h, c.d); return; }
     const l = c.libId && typeof libItem === 'function' && libItem(c.libId);
     if (/floating|shelf|mantel/i.test(c.name || '') || (l && ['shelf', 'mantel'].includes(libGroup(l)))) n.shelf += shelfN(c);
@@ -493,7 +494,8 @@ function ensureLibPrices(ps) {
 }
 function priceJob(ps) {
   const rooms = S.rooms.map(r => withRoom(r, () => {
-    const all = S.cabinets.map(c => ({ c, label: LBL[c.id], ...priceCab(c, ps) })), cabs = all.filter(k => !k.own);
+    // 0.61.3: automatic end panel pieces are priced with their cabinet, so they make no line or install footage of their own.
+    const all = S.cabinets.filter(c => !c.autoOf).map(c => ({ c, label: LBL[c.id], ...priceCab(c, ps) })), cabs = all.filter(k => !k.own);
     // Products priced on their own go on the room as lines of their own, never in with the cabinets.
     const own = all.filter(k => k.own).map(k => ({ name: `${k.label} ${k.c.name} (${fmtLen(k.c.w, 1)} wide)`, amount: k.total, own: true }));
     // Tops and molding are one line each for the room, not one per wall (Ayden 2026-11-06). The kinds used go in brackets.

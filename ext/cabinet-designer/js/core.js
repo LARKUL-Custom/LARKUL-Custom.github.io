@@ -724,7 +724,7 @@ function save() {
 function snapshot() { undoStack.push(JSON.stringify(S)); if (undoStack.length > 80) undoStack.shift(); redoStack = []; }
 function mutate(fn, defer) {
   ui.intSel = []; // picked interior lines point at places that may move
-  snapshot(); fn(); attachRoom(S); if (typeof recalcFormulas === 'function') recalcFormulas(); save();
+  snapshot(); fn(); attachRoom(S); if (typeof apFrontSync === 'function') apFrontSync(); if (typeof panelItemSync === 'function') panelItemSync(); if (typeof recalcFormulas === 'function') recalcFormulas(); save();
   if (defer) setTimeout(() => { const id = document.activeElement && document.activeElement.id; render(); if (id) { const el = document.getElementById(id); if (el) el.focus(); } }, 0);
   else render();
 }
@@ -1010,7 +1010,9 @@ let LBL = {};
 function labels() {
   const out = {}, nums = S.job.labelStyle !== 'type';
   if (nums) ensureNums();
-  S.rooms.forEach(r => { const n = {}; r.cabinets.forEach(c => { n[c.cat] = (n[c.cat] || 0) + 1; out[c.id] = nums ? '#' + c.num : c.cat[0] + n[c.cat]; }); });
+  S.rooms.forEach(r => { const n = {}; r.cabinets.forEach(c => { if (c.autoOf) return; n[c.cat] = (n[c.cat] || 0) + 1; out[c.id] = nums ? '#' + c.num : c.cat[0] + n[c.cat]; }); });
+  // 0.61.3: an automatic end panel piece takes its cabinet's label and end, not a number of its own.
+  S.rooms.forEach(r => r.cabinets.forEach(c => { if (c.autoOf) out[c.id] = (out[c.autoOf] || '') + ' ' + (c.autoEnd === 'L' ? 'left' : 'right') + ' panel'; }));
   return out;
 }
 // Each room owns a block of 100 numbers. A cabinet keeps its number once it has one, so numbers sent out stay put;
@@ -1026,8 +1028,8 @@ function ensureNums() {
     }
     seen.add(r.block);
     const used = new Set(), base = r.block * 100;
-    r.cabinets.forEach(c => { if (c.num > base && c.num < base + 100 && !used.has(c.num)) used.add(c.num); else c.num = null; });
-    numOrder(r).forEach(c => { if (c.num) return; let n = base + 1; while (used.has(n)) n++; c.num = n; used.add(n); });
+    r.cabinets.forEach(c => { if (!c.autoOf && c.num > base && c.num < base + 100 && !used.has(c.num)) used.add(c.num); else c.num = null; });
+    numOrder(r).forEach(c => { if (c.num || c.autoOf) return; let n = base + 1; while (used.has(n)) n++; c.num = n; used.add(n); });
   });
 }
 // Numbers in wall order, left to right, bases before uppers.

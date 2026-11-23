@@ -365,7 +365,7 @@ function cabinetMeshes(c, opts = {}) {
   const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pdL = endDepth(c, 'L') + ps.frontOverhang, pdR = endDepth(c, 'R') + ps.frontOverhang;
   const pL = hasPanel(c, 'L'), pR = hasPanel(c, 'R');
   // Each panel piece, step by step up the end (a strip past a shallower neighbour, notched round a shelf).
-  [['L', -pt / 2, pdL], ['R', W + pt / 2, pdR]].forEach(([sd, x, pd]) => (panelPieces(c, sd) || []).forEach(pc => pc.steps.forEach(q => {
+  [['L', -pt / 2, pdL], ['R', W + pt / 2, pdR]].forEach(([sd, x, pd]) => (drawnPanels(() => panelPieces(c, sd)) || []).forEach(pc => pc.steps.forEach(q => {
     const h = q.z1 - q.z0, d = pd - q.d0; if (h > 0 && d > 0) grp.add(box3(pt, h, d, pmM, x, q.z0 + h / 2, q.d0 + d / 2));
   })));
   // Fillers to the wall, flush with the fronts, with a short return behind them.
@@ -752,7 +752,7 @@ function buildRoomScene(v) {
       if (f.face) { const q = facePt(f.face, f.x0 + fw / 2, ft + 1); sp.position.set(q.x, fy, q.z); } else sp.position.set(f.x0 + fw / 2, fy, D + ft + 1);
       m.add(sp);
     });
-    if ((ui.dims.cab && !R3 && L.labels) || hot) {
+    if ((ui.dims.cab && !R3 && L.labels && !c.autoOf) || hot) {
       // Printed pictures show just the cabinet number, smaller; the sizes are on the elevation pages.
       // Tiny cabinets (the dollhouse set) get a tag in proportion, so it doesn't bury them.
       const ks = k * Math.min(1, Math.max(c.w, c.h) / 24);

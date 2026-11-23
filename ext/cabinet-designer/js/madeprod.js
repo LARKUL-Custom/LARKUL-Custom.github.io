@@ -106,6 +106,8 @@ const MADE = {
     name: 'Support Panel', cat: 'Tall', w: 0.75, h: 84, d: 24, elev: 0, folder: 'Desks and Panels',
     mp: {}, price: { base: 0, perFt: 0 }, fields: [],
     build(c, mp, x) {
+      // 0.61.3: an automatic end panel piece is cut and priced by its cabinet (panelPieces); here it is only drawn.
+      if (c.autoOf) { const o = allCabs().find(k => k.id === c.autoOf), pm = o && typeof panelFor === 'function' && mat(panelFor(o).mat); x.show({ name: 'End panel', mat: (pm || x.fm).id, fin: true, pos: { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d } }); x.note('Cut and priced with its cabinet as an applied end panel. Move or resize it to make it your own'); return; }
       const pt = x.part('Support panel', x.fm, r3(c.h), r3(c.d), { kind: 'applied' }); pt.fin = true;
       pt.pos = { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d };
     },
@@ -119,7 +121,17 @@ const MADE = {
     mp: { fr: [] }, price: { base: 0, perFt: 0 }, fields: [],
     build(c, mp, x) {
       const fr = apFronts(c, mp);
-      fr.forEach((q, i) => { const pt = x.part(fr.length > 1 ? `Panel front ${i + 1}` : 'Panel front', x.fm, r3(q.h), r3(c.w), { kind: 'door' }); pt.fin = true; pt.pos = { x: 0, y: q.z, z: 0, dx: c.w, dy: q.h, dz: c.d }; });
+      fr.forEach((q, i) => {
+        // 0.61.3 (Ayden 2026-11-23: "have them use the door styles"): each front is a door of the room's door style (shape
+        // only); its material comes from the Finish, like every door (frontStyle applies withFinish).
+        const f = { type: 'door', x0: 0, x1: c.w, z0: q.z, z1: q.z + q.h }, st = apStyle(c, f), ds = st.ds, dm = mat(ds.mat) || x.fm;
+        const name = fr.length > 1 ? `Panel front ${i + 1}` : 'Panel front';
+        if (ds.source === 'buyout') { x.bom[`${name}, ${ds.name} ${fmtLen(c.w, 1)} × ${fmtLen(q.h, 1)} (buyout)`] = 1; x.note(`${name} is bought from the door maker`); }
+        const ops = st.framed && ds.type === 'routed' ? [{ type: 'pocket', x: r3(ds.rail), y: r3(ds.stile), w: r3(q.h - 2 * ds.rail), h: r3(c.w - 2 * ds.stile), depth: r3(+ds.pocketDepth || 0.25), face: 'front', why: 'shaker field' }] : [];
+        if (st.framed && ds.type !== 'routed' && ds.source !== 'buyout') x.warn.push(`${name}: a ${ds.name} front is cut here as one panel; build it like the room's doors.`);
+        if (ds.source !== 'buyout') { const pt = x.part(name, dm, r3(q.h), r3(c.w), { kind: 'door', ops }); pt.fin = true; pt.front = true; pt.pos = { x: 0, y: q.z, z: 0, dx: c.w, dy: q.h, dz: c.d }; }
+        x.front({ f, ds, framed: st.framed, m: dm });
+      });
     },
   },
   // 3. A laminate top on 2 layers of 3/4" core with a front apron, hung on Rakks EHV brackets, no cabinet under it.
@@ -183,12 +195,40 @@ function madeBuildParts(c) {
     if (!(L > 0) || !(Wd > 0)) warn.push(`${name} has a zero or negative size. Check the sizes.`);
     parts.push(pt); return pt;
   };
-  d.build(c, mp, { part, cm, fm, bom, warn, note: s => notes.push(s) });
+  const panelFronts = [], show = [];
+  d.build(c, mp, { part, cm, fm, bom, warn, note: s => notes.push(s), front: o => panelFronts.push(o), show: o => show.push(o) });
   if (c.addParts && c.addParts.length && typeof addedParts === 'function') addedParts(c, parts, warn, part, cm);
   const removed = (c.partEdits && typeof applyPartEdits === 'function') ? applyPartEdits(c, parts, warn, ptT) : [];
-  return { parts, bom, warn, fronts: [], inD: c.d, inW: c.w, removed, notes };
+  return { parts, bom, warn, fronts: [], panelFronts, show, inD: c.d, inW: c.w, removed, notes };
 }
 // Sizes that follow the settings: a slat wall is as deep as its backer and slats, a privacy panel as wide as its board.
+// A panel front's style: the room's door style for a door of that size (frontStyle: size rules, and the Finish material).
+function apStyle(c, f) { return typeof frontStyle === 'function' ? frontStyle(c, f) : { ds: panelDoor(c), framed: false }; }
+// 0.61.3: every appliance with Panel fronts on has one Appliance Panel Front standing in front of it, kept to its size and
+// spot; one whose appliance is gone or has them off is taken out. Runs after every change (mutate).
+function apFrontSync() {
+  const lib = typeof libItem === 'function' && libItem('made-apfront');
+  (S.rooms || []).forEach(r => {
+    const fx = r.fixtures || [], keep = [];
+    r.cabinets = r.cabinets.filter(c => {
+      if (c.made !== 'apfront' || !c.fixt) return true;
+      const f = fx.find(x => x.id === c.fixt); if (!f || !f.panels || keep.includes(f.id)) return false;
+      keep.push(f.id); apFrontFit(c, f); return true;
+    });
+    if (!lib) return;
+    fx.forEach(f => {
+      if (!f.panels || !PANEL_KINDS.includes(f.kind) || keep.includes(f.id) || !f.wall) return;
+      const c = newCab(S, lib, f.wall, f.side, f.off);
+      Object.assign(c, { name: (f.name || 'Appliance') + ' panel front', fixt: f.id, mp: { fr: [], toe: f.kind === 'fridge' ? 0 : 4.5 } });
+      apFrontFit(c, f); r.cabinets.push(c);
+    });
+  });
+}
+function apFrontFit(c, f) {
+  const toe = Math.max(0, +(c.mp || {}).toe || 0), fm = mat(typeof finishMat === 'function' ? finishMat(c) : '') || { thick: 0.75 };
+  const want = { wall: f.wall, side: f.side, off: f.off, w: f.w, h: r3(Math.max(1, f.h - toe)), elev: r3((f.elev || 0) + toe), outset: r3((f.outset || 0) + f.d), d: r3(fm.thick) };
+  Object.keys(want).forEach(k => { if (c[k] !== want[k]) c[k] = want[k]; });
+}
 // The fronts of an Appliance Panel Front that fit on it, top first; none = one front the whole size.
 function apFronts(c, mp = madeMp(c)) {
   const fr = (Array.isArray(mp.fr) ? mp.fr : []).filter(q => +q.h > 0 && +q.z >= -0.01 && +q.z + +q.h <= c.h + 0.01);
@@ -207,9 +247,9 @@ function madeSync(c) {
 function madePrice(c, ps) {
   const d = madeDef(c); if (!d) return null;
   if (c.made === 'apfront' && ps && typeof priceFront === 'function' && typeof panelDoor === 'function') {
-    const ds = panelDoor(c);
-    return { own: true, base: r3(apFronts(c).reduce((t, q) => t + priceFront(ds, c.w * q.h / 144, ps, c.w, q.h).total, 0)), perFt: 0 };
+    return { own: true, base: r3(apFronts(c).reduce((t, q) => t + priceFront(apStyle(c, { type: 'door', x0: 0, x1: c.w, z0: q.z, z1: q.z + q.h }).ds, c.w * q.h / 144, ps, c.w, q.h).total, 0)), perFt: 0 };
   }
+  if (c.made === 'panel' && c.autoOf) return { own: true, base: 0, perFt: 0 };
   if (c.made !== 'panel' || !ps || typeof matSqIn !== 'function') return { own: true, ...d.price };
   const m = mat(finishMat(c)) || mat(cabMatT(cabSet(c, 'cabMatT')).carcass);
   return { own: true, base: r3((m ? c.h * c.d * matSqIn(m, ps) : 0) + (typeof panelAdd === 'function' ? panelAdd(ps, c.h >= 60 ? 'Tall' : c.elev >= 30 ? 'Wall' : 'Base') : 0)), perFt: 0 };
@@ -240,7 +280,10 @@ const madeBoxes = q => q.pos3 || (q.pos ? [q.pos] : []);
 function madeLook(c, q) { const m = mat(q.mat); return typeof texLook === 'function' ? texLook(m, q.fin || q.look === 'finished' ? 'finished' : 'inside', c) : m; }
 function madeMeshes(c, opts = {}) {
   const grp = new THREE.Group(), b = buildParts(c);
-  b.parts.forEach(q => {
+  // Panel fronts draw as doors of their style (frame and recessed field), not as flat boxes.
+  (b.panelFronts || []).forEach(o => { const M = mat3(typeof texLook === 'function' ? texLook(o.m, 'finished', c) : o.m, opts); doorMeshes(o.ds, o.framed, o.f, c.d, M, M, 0, m => grp.add(m)); });
+  [...b.parts, ...(b.show || [])].forEach(q => {
+    if (q.front) return;
     const M = mat3(madeLook(c, q), opts);
     if (q.ext) {
       // A shaped panel: its outline in the panel's own plane (along the depth, up), cut to its thickness across the width.
@@ -258,7 +301,14 @@ function madeMeshes(c, opts = {}) {
 // Elevation: each part's face as seen from the front, back to front.
 function madeFrontSVG(c, ex, by, opts = {}) {
   const b = buildParts(c), mats = [], faces = [];
-  b.parts.forEach(q => {
+  (b.panelFronts || []).forEach(o => {
+    const m = typeof texLook === 'function' ? texLook(o.m, 'finished', c) : o.m, { f, ds } = o, fw = f.x1 - f.x0, fh = f.z1 - f.z0;
+    let svg = `<rect ${fillFor(m, 'ev-box')} x="${r3(ex + f.x0)}" y="${r3(by - f.z1)}" width="${r3(fw)}" height="${r3(fh)}"/>`;
+    if (o.framed) svg += `<rect class="ev-inner nss" fill="none" x="${r3(ex + f.x0 + ds.stile)}" y="${r3(by - f.z1 + ds.rail)}" width="${r3(Math.max(0, fw - 2 * ds.stile))}" height="${r3(Math.max(0, fh - 2 * ds.rail))}"/>`;
+    faces.push({ z: c.d + 1, m, svg });
+  });
+  [...b.parts, ...(b.show || [])].forEach(q => {
+    if (q.front) return;
     const m = madeLook(c, q);
     if (q.ext) { faces.push({ z: 0, m, svg: `<rect ${fillFor(m, 'ev-box')} x="${r3(ex)}" y="${r3(by - Math.max(...q.ext.pts.map(p => p.y)))}" width="${r3(q.ext.thick)}" height="${r3(Math.max(...q.ext.pts.map(p => p.y)))}"/>` }); return; }
     madeBoxes(q).forEach(p => faces.push({ z: p.z + p.dz, m, svg: `<rect ${fillFor(m, 'ev-box')} x="${r3(ex + p.x)}" y="${r3(by - p.y - p.dy)}" width="${r3(p.dx)}" height="${r3(p.dy)}"/>` }));
