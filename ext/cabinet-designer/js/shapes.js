@@ -111,6 +111,8 @@ function shapeLook(s) {
 const shapeMatOpts = () => [{ v: SHAPE_FIN, l: 'Finish material' }, ...azOpts(S.materials)];
 const shapeT = s => { const m = s && shapeMat(s); return m && +m.thick > 0 ? +m.thick : (+(s && s.thick) || 0.75); };
 const shapeToLib = (d, id) => ({ id, name: d.name, plane: d.plane, pts: clone(d.pts), thick: d.thick, mat: d.mat });
+// 0.63.34: the shop's standard leg, 6 x 6 and base height, miter-folded from the room's finish.
+const LEG_SHAPE = () => ({ id: 'sh-leg', name: 'Leg', plane: 'upright', leg: true, pts: rect4(6, 34.5), thick: 6, mat: SHAPE_FIN });
 function defaultShapeLib(S) {
   const top = (S.materials.find(m => /butcher/i.test(m.name)) || S.materials[0]).id, sheet = (S.materials.find(m => (m.kind || 'sheet') === 'sheet') || S.materials[0]).id;
   const p1 = rect4(60, 26); p1[2].r = 3; p1[3].r = 3;
@@ -118,6 +120,7 @@ function defaultShapeLib(S) {
   return [
     { id: 'sh-wtop', name: 'Wood top, rounded front', plane: 'flat', pts: p1, thick: 1.5, mat: top },
     { id: 'sh-shelf', name: 'Floating shelf, bow front', plane: 'flat', pts: p2, thick: 1.5, mat: top },
+    LEG_SHAPE(),
     { id: 'sh-arch', name: 'Arched end panel', plane: 'upright', pts: (() => { const p = rect4(24, 34.5); p[2].b = 4; return p; })(), thick: 0.75, mat: sheet },
   ];
 }
@@ -164,17 +167,27 @@ function shapesElevSVG(w, side, L, mats) {
    An upright shape with postDoor set ('same' = the room's doors, or a door style id) is a hollow post its Thickness deep:
    four faces cut from its material, long edges mitered 45° and folded, each face in that door style. A framed style in a
    material the shop doesn't make (not HDM/MDF) is bought: the four faces go on the door order. */
+// 0.63.34 (Ayden 2026-11-24: "legs are 6x6 by defualt", "i want to be able to change the width and or depth"): an upright
+// shape that is a leg (s.leg, or named column / leg / post, like Mozaik's "MF (O) Column") is always a post its Thickness
+// deep. With no door style it is miter-folded from flat faces; before, it was drawn as one 3/4" board.
+const shapeLeg = s => !!s && s.plane === 'upright' && (!!s.leg || /\b(column|leg|post)s?\b/i.test(s.name || ''));
+function shapeLegSize(s, field, v) {
+  if (!(v > 0)) return;
+  const b = shapeBox(s.pts), k = field === 'legW' ? v / (b.w || 1) : v / (b.h || 1);
+  s.pts = s.pts.map(q => field === 'legW' ? { ...q, x: r3(b.x0 + (q.x - b.x0) * k) } : { ...q, y: r3(b.y0 + (q.y - b.y0) * k) });
+}
 function shapePost(s) {
-  if (!s || s.plane !== 'upright' || !s.postDoor || typeof panelDoorPick !== 'function') return null;
+  const pd = s && (s.postDoor || (shapeLeg(s) ? 'slab' : ''));
+  if (!s || s.plane !== 'upright' || !pd || typeof panelDoorPick !== 'function') return null;
   const b = shapeBox(s.pts), D = +s.thick || 0, m = shapeMat(s); if (!(D > 1) || !m || !(b.w > 1) || !(b.h > 1)) return null;
-  let ds = withFinish(doorStyle(panelDoorPick(s.postDoor, doorTpl(roomSet('doorT')), 'Base')), null);
+  let ds = withFinish(doorStyle(panelDoorPick(pd === 'slab' ? '' : pd, doorTpl(roomSet('doorT')), 'Base')), null);
   const buy = typeof panelBuys === 'function' && panelBuys(ds, m.id); if (buy) ds = buyStyle(ds);
   // A face shows the frame when there is at least 1" of field between its stiles and rails.
   const framed = w => ds.type !== 'slab' && w >= 2 * (+ds.stile || 0) + 1 && b.h >= 2 * (+ds.rail || 0) + 1;
   const faces = [['front', b.w], ['back', b.w], ['left', D], ['right', D]].map(([k, w]) => ({ k, w: r3(w), h: r3(b.h), framed: framed(w) }));
   return { ds, buy, W: b.w, D, H: b.h, T: +m.thick || 0.75, m, faces };
 }
-const postDoorOpts = () => [{ v: '', l: 'Solid (no door style)' }, { v: 'same', l: 'Same as the doors' }, ...opts(S.doorStyles)];
+const postDoorOpts = s => [{ v: '', l: shapeLeg(s) ? 'Flat faces' : 'Solid (no door style)' }, { v: 'same', l: 'Same as the doors' }, ...opts(S.doorStyles)];
 function postMeshes(s, P, M, grp) {
   const look = f => ({ ds: P.ds, framed: f.framed }), y0 = s.elev || 0, [fr, bk, lf, rt] = P.faces, T = P.T, add = o => grp.add(o);
   // Front (facing out of the wall) and back.
@@ -232,11 +245,11 @@ function shapeProps(s) {
     <div class="sizeline">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(shapePost(s) ? +s.thick : shapeT(s), 1)}</div>
     <div class="note">${s.plane === 'flat' ? 'Lies flat' : 'Stands up'} · ${wallName(wall(s.wall))} · ${o.length} outline points</div></div>
   <div class="psec box">${secHead('magnet', 'Position', 'blue')}
-    <div class="grid2">${fld('Along the wall', R, 'off', s.off, 'len')}${fld('Out from wall', R, 'outset', s.outset || 0, 'len')}${fld(s.plane === 'flat' ? 'Bottom height' : 'Height off floor', R, 'elev', s.elev, 'len')}${fld('Thickness', R, 'thick', s.thick, 'len')}</div>
+    <div class="grid2">${fld('Along the wall', R, 'off', s.off, 'len')}${fld('Out from wall', R, 'outset', s.outset || 0, 'len')}${fld(s.plane === 'flat' ? 'Bottom height' : 'Height off floor', R, 'elev', s.elev, 'len')}${shapeLeg(s) ? `${fld('Width', R, 'legW', r3(b.w), 'len')}${fld('Depth', R, 'thick', s.thick, 'len')}${fld('Height', R, 'legH', r3(b.h), 'len')}` : fld('Thickness', R, 'thick', s.thick, 'len')}</div>
     <div class="note">Along the wall is measured from the wall's start to the shape's end nearest it.</div></div>
   <div class="psec box">${secHead('palette', 'Finish', 'amber')}${fld('Name', R, 'name', s.name, 'text', { wide: true })}${fld('Material', R, 'mat', s.mat, 'select', { options: shapeMatOpts() })}
     <div class="f"><span>Look</span>${typeof txqBtn === 'function' ? txqBtn('shape', s.id) : ''}</div>
-    ${s.plane === 'upright' ? fld('Leg door style (miter-folded)', R, 'postDoor', s.postDoor || '', 'select', { options: postDoorOpts(), wide: true }) + (shapePost(s) ? `<div class="note">A ${fmtLen(+s.thick, 1)} deep post: four faces mitered and folded, each in ${esc(shapePost(s).ds.name)}.${shapePost(s).buy ? ' Bought from the door maker (only HDM/MDF is made here).' : ''}</div>` : '') : ''}
+    ${s.plane === 'upright' ? fld('Leg door style (miter-folded)', R, 'postDoor', s.postDoor || '', 'select', { options: postDoorOpts(s), wide: true }) + (shapePost(s) ? `<div class="note">A ${fmtLen(+s.thick, 1)} deep post: four faces mitered and folded, each in ${esc(shapePost(s).ds.name)}.${shapePost(s).buy ? ' Bought from the door maker (only HDM/MDF is made here).' : ''}</div>` : '') : ''}
     <div class="note">${s.mat === SHAPE_FIN ? `Cut from ${esc((shapeMat(s) || {}).name || 'the finish material')}, the room's finish. It wears the Finished ends look unless you pick one here.` : 'Look only changes how it looks; the cut list and price stay the same.'}</div>
     <div class="row-actions"><button class="btn sm" data-act="shape-to-lib" data-id="${id}">Save to shape library</button></div></div>${typeof vFitBox === 'function' ? vFitBox(s) : ''}`;
 }

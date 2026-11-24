@@ -684,6 +684,7 @@ function migrate(s) {
   // Molding profiles live on the molding (0.21.2); 3/8 HDF for two-piece door panels came with 0.21.0.
   (s.moldings || []).forEach(m => { if (m.profile === 'shape' && !(m.pts || []).length) { const l = s.shapeLib.find(x => x.id === m.shape); m.pts = l ? clone(l.pts) : moldStartPts(); } delete m.shape; });
   s.shapeLib = s.shapeLib.filter(l => l.id !== 'sh-crown');
+  if (typeof LEG_SHAPE === 'function' && !s.shapeLib.some(l => l.id === 'sh-leg')) s.shapeLib.push(LEG_SHAPE());
   if (s.materials && !s.materials.some(m => m.id === 'm-hdf38')) s.materials.push({ id: 'm-hdf38', name: '3/8 HDF (door panels)', kind: 'sheet', thick: 0.375, sheetW: 49, sheetL: 97, grain: false, cost: 38, color: '#b89a74', texture: null, procedural: null, texScale: 24 });
   if (typeof ensureInteriorLib === 'function') ensureInteriorLib(s);
   if (typeof ensureMozLib === 'function') ensureMozLib(s);
