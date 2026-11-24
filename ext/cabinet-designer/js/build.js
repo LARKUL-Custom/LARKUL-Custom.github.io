@@ -177,8 +177,8 @@ function computeFronts(c, p) {
       // 0.62.4 (Ayden 2026-11-24: "a false front option so it stays like the design but is false front and removes all
       // interior parts that aren't needed"): with False front on, every door and drawer front stays where it is, in its
       // own style and with its pull, but is glued on (no hinges, slides or drawer box). f.was keeps what it looked like.
-      if (falseOn(c) && (r.type === 'door' || r.type === 'drawer')) out.push({ type: 'false', was: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', pull: true });
-      else out.push({ type: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', ...(r.pull ? { pull: true } : {}) });
+      if (falseOn(c) && (r.type === 'door' || r.type === 'drawer')) out.push({ type: 'false', was: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', pull: true, ...fMids(r) });
+      else out.push({ type: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', ...(r.pull ? { pull: true } : {}), ...fMids(r) });
     }
     z = z0 - gap;
   });
@@ -233,7 +233,7 @@ function colFronts(c, p, r, ri, cols, xl, xr, z0, z1, gap, out) {
         const fx0 = x0 + i * (fw + gap);
         let hinge = null;
         if (type === 'door') hinge = n === 1 ? (lf.hinge === 'L' || lf.hinge === 'R' ? lf.hinge : j === 0 ? 'L' : j === nc - 1 ? 'R' : p.hingeSide) : n === 2 ? (i === 0 ? 'L' : 'R') : (i % 2 ? 'R' : 'L');
-        const base = { row: ri, cell, col: j, ncol: nc, sub: leaves.length > 1 ? k : null, idx: i, n, x0: fx0, x1: fx0 + fw, z0: lz0, z1: lz1, hinge, style: lf.style || '', gxL, gxR };
+        const base = { row: ri, cell, col: j, ncol: nc, sub: leaves.length > 1 ? k : null, idx: i, n, x0: fx0, x1: fx0 + fw, z0: lz0, z1: lz1, hinge, style: lf.style || '', gxL, gxR, ...fMids(lf) };
         if (falseOn(c) && (type === 'door' || type === 'drawer')) out.push({ type: 'false', was: type, ...base, pull: true });
         else out.push({ type, ...base, ...(lf.pull ? { pull: true } : {}) });
       }
@@ -413,6 +413,8 @@ function frontStyle(c, f) {
   // 0.63.22 (Ayden 2026-11-24: "we only make hdm doors in house, if the material is maple doors we have other people make it"):
   // a door style with a frame in any material but HDM/MDF is ordered from the door maker (Buyout).
   if (ds.type !== 'slab' && ds.source !== 'buyout' && typeof shopMadeDoorMat === 'function' && !shopMadeDoorMat(mat(ds.mat))) ds = { ...ds, source: 'buyout' };
+  // 0.63.35: the style's split rules and the section's own mid stiles and rails (Face tab).
+  ds = splitDs(ds, fw, fh, frontKind(c, f), f.mids);
   const { nR, nS, mrs, mss } = doorMids(ds, fw, fh), sum = a => a.reduce((x, y) => x + y, 0);
   const mp = +ds.minPanel > 0 ? +ds.minPanel : 2, needH = 2 * ds.rail + sum(mrs) + (nR + 1) * mp, needW = 2 * ds.stile + sum(mss) + (nS + 1) * mp;
   const framed = ds.type !== 'slab' && fh >= Math.max(needH, (f.was || f.type) === 'door' ? 0 : dt.minFrameHeight || 0) && fw >= needW;
@@ -451,6 +453,65 @@ function doorMids(ds, fw, fh) {
   const widths = (list, n, dflt) => Array.from({ length: n }, (_, i) => { const t = String((list || [])[i] ?? '').trim(); if (t) { try { const v = evalExpr(t, vars); if (v > 0) return v; } catch (_) {} } return dflt; });
   const nR = count(ds.midRailsF, ds.midRails), nS = count(ds.midStilesF, ds.midStiles);
   return { nR, nS, mrs: widths(ds.midRailWs, nR, ds.midRailW || ds.rail), mss: widths(ds.midStileWs, nS, ds.midStileW || ds.stile) };
+}
+/* 0.63.35 (Ayden 2026-11-24: "make me in the door styles to automatically add rails or stiles when parameters are met ...
+   automatic stiles when a product is to wide or rails when a product is too long or when its marked as an island end panel it
+   automatically gets a split unless its below a certain width"). A door style keeps split rules: for a kind of front or panel,
+   wider than / taller than -> this many mid stiles and mid rails. The biggest count of every rule that fits wins. A section's
+   or panel's own count (Face tab, mids {S, R}) wins over the rules. Counts that would not leave a panel field drop to fit. */
+const SPLIT_KINDS = [['any', 'Every front and panel'], ['door', 'Doors'], ['drawer', 'Drawer and false fronts'], ['panel', 'End panels (all)'], ['island', 'Island end panels'], ['apfront', 'Appliance panel fronts'], ['leg', 'Leg faces']];
+const fMids = o => o && o.mids && (o.mids.S != null || o.mids.R != null) ? { mids: { ...o.mids } } : {};
+// What kind of front this is for the rules.
+function frontKind(c, f) {
+  if (c && c.made === 'apfront') return 'apfront';
+  const t = (f && (f.was || f.type)) || 'door';
+  return t === 'drawer' || t === 'false' ? 'drawer' : 'door';
+}
+const splitNum = v => v !== '' && v !== null && v !== undefined && isFinite(+v);
+function splitRuleHits(r, fw, fh, kind) {
+  const on = r.on || 'any';
+  if (on !== 'any' && on !== kind && !(on === 'panel' && kind === 'island')) return false;
+  if (splitNum(r.wOver) && !(fw > +r.wOver)) return false;
+  if (splitNum(r.hOver) && !(fh > +r.hOver)) return false;
+  return true;
+}
+// The rule counts for a front or panel fw wide and fh tall: { S, R, rules } (null = no rule sets it).
+function splitRuleCounts(ds, fw, fh, kind) {
+  let S = null, R = null; const rules = [];
+  (ds && ds.splitRules || []).forEach((r, i) => {
+    if (!splitRuleHits(r, fw, fh, kind)) return;
+    const hs = splitNum(r.stiles), hr = splitNum(r.rails); if (!hs && !hr) return;
+    if (hs) S = Math.max(S ?? 0, +r.stiles | 0); if (hr) R = Math.max(R ?? 0, +r.rails | 0); rules.push(i);
+  });
+  return { S, R, rules };
+}
+// The style with its split rules and the piece's own counts worked in. Unchanged when nothing applies (same outputs).
+// ds._extraMids = mid stiles and rails past the style's own (each one adds the style's Each extra mid price).
+function splitDs(ds, fw, fh, kind, man) {
+  if (!ds || ds.type === 'slab' || !(fw > 0) || !(fh > 0)) return ds;
+  const base = doorMids(ds, fw, fh), rc = splitRuleCounts(ds, fw, fh, kind);
+  let nS = man && splitNum(man.S) ? +man.S | 0 : rc.S, nR = man && splitNum(man.R) ? +man.R | 0 : rc.R;
+  if (nS === null && nR === null) return ds;
+  if (nS === null) nS = base.nS; if (nR === null) nR = base.nR;
+  nS = Math.max(0, Math.min(MAX_MIDS, nS)); nR = Math.max(0, Math.min(MAX_MIDS, nR));
+  if (nS === base.nS && nR === base.nR) return ds;
+  const mp = +ds.minPanel > 0 ? +ds.minPanel : 2, msw = +ds.midStileW || +ds.stile || 0, mrw = +ds.midRailW || +ds.rail || 0;
+  while (nS > 0 && 2 * ds.stile + nS * msw + (nS + 1) * mp > fw) nS--;
+  while (nR > 0 && 2 * ds.rail + nR * mrw + (nR + 1) * mp > fh) nR--;
+  const o = { ...ds };
+  if (nS !== base.nS) { o.midStiles = nS; o.midStilesF = ''; o.midStileWs = []; o.splitW = []; o.fieldPanels = []; }
+  if (nR !== base.nR) { o.midRails = nR; o.midRailsF = ''; o.midRailWs = []; o.splitH = []; o.fieldPanels = []; }
+  o._extraMids = Math.max(0, nS - base.nS) + Math.max(0, nR - base.nR);
+  return o;
+}
+// 0.63.35: a routed panel with mid stiles or rails gets one recess per panel field, not one across the whole panel.
+// The part runs L along its length (the panel's height) and W across (its width); y0 = where the face starts across
+// (past a scribe strip). null = no mids, keep the one recess.
+function panelFieldPockets(ds, L, W, y0, depth, face) {
+  if (!ds || ds.type === 'slab') return null;
+  const m = doorMids(ds, W, L); if (!m.nS && !m.nR) return null;
+  const lay = doorLayout(ds, W, L, true); if (lay.fields.length < 2) return null;
+  return lay.fields.map(fl => ({ type: 'pocket', x: r3(fl.z0), y: r3(y0 + fl.x0), w: r3(fl.z1 - fl.z0), h: r3(fl.x1 - fl.x0), depth: depth || 0.25, face, why: 'panel recess' }));
 }
 // Opening sizes across one direction of a split door. Each entry is a size or a formula of W and H (the door's width
 // and height) or a job variable; blank or * shares what is left. With every entry set, the last one takes the rest.
@@ -1339,12 +1400,17 @@ function buildParts(c) {
     pcs.forEach((pc, i) => {
       const g = panelGeom(c, sd, pc, ps), { L, W: Wd } = g;
       // 0.63.22: a door-style panel the shop doesn't make is ordered (door order, priced as a front of its style), not cut.
-      if (buyP) { const nm = `Applied end panel${i ? ' ' + (i + 1) : ''} (${sd})`, ds = buyStyle(ps.door); buyPanels.push({ cab: lbl, cabId: c.id, name: nm, kind: 'applied', mat: pm.id, L: r3(g.L), W: r3(Wd), qty: 1, ds, buy: true }); addB(`${nm}, ${ds.name} ${fmtLen(Wd, 1)} × ${fmtLen(g.L, 1)} (buyout)`, 1); return; }
-      const ops = (ps.type === 'routed' && ps.frame > 0 && (g.full || (!g.outline && Wd - 2 * ps.frame - g.sc > 1 && L - 2 * ps.frame > 1))) ? [{ type: 'pocket', x: ps.frame, y: ps.frame + g.sc, w: L - 2 * ps.frame, h: Wd - 2 * ps.frame - g.sc, depth: ps.pocketDepth, face: 'show', why: 'panel recess' }] : [];
+      // 0.63.35: the panel's style with its split rules and own mid stiles and rails for this end.
+      const sds = typeof panelLook === 'function' && ps.door && ps.door.type !== 'slab' ? panelLook(c, Wd, L, ps.door, sd).ds : ps.door;
+      if (buyP) { const nm = `Applied end panel${i ? ' ' + (i + 1) : ''} (${sd})`, ds = buyStyle(sds); buyPanels.push({ cab: lbl, cabId: c.id, name: nm, kind: 'applied', mat: pm.id, L: r3(g.L), W: r3(Wd), qty: 1, ds, buy: true }); addB(`${nm}, ${ds.name} ${fmtLen(Wd, 1)} × ${fmtLen(g.L, 1)} (buyout)`, 1); return; }
+      const pOk = ps.type === 'routed' && ps.frame > 0 && (g.full || (!g.outline && Wd - 2 * ps.frame - g.sc > 1 && L - 2 * ps.frame > 1));
+      const multi = pOk && panelFieldPockets(sds, L, Wd - g.sc, g.sc, ps.pocketDepth, 'show');
+      const ops = multi || (pOk ? [{ type: 'pocket', x: ps.frame, y: ps.frame + g.sc, w: L - 2 * ps.frame, h: Wd - 2 * ps.frame - g.sc, depth: ps.pocketDepth, face: 'show', why: 'panel recess' }] : []);
       // Blind pin holes on the hidden face, lined up with the side's (the panel's y runs from its back edge).
       pinSpots.forEach(q => { const y = g.y(g.D - q.y), x = r3(q.z - pc.z0); if (g.inside(x, y)) ops.push({ type: 'bore', x, y: r3(y), dia: pinD, depth: r3(pm.thick / 2), face: 'hidden', why: 'pin hole' }); });
       const pt = part(`Applied end panel${i ? ' ' + (i + 1) : ''} (${sd})`, pm, g.L, Wd, { kind: 'applied', ops });
       if (g.outline) pt.outline = g.outline;
+      if (sds !== ps.door) pt.pds = sds;
     });
   });
   // One rod per pin spot for each applied panel and for the cabinet beside this one on its right (each pair counted once).

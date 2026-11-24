@@ -333,7 +333,7 @@ function priceCab(c, ps) {
   // 0.59.21 (Ayden 2026-11-19): a flat slab end panel is its material by the sq ft plus the sheet's charge per panel ($25), like a
   // loose panel. A panel in a framed door style (shaker...) is priced as that door, as before.
   const slabP = pds.type === 'slab';
-  const ends = panelParts.reduce((a, pt) => { const m = mat(pt.mat); return a + pt.qty * (pt.ds ? (ps.doors.on ? priceFront(pt.ds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0) : slabP ? (m ? pt.L * pt.W * matSqIn(m, ps) : 0) + panelAdd(ps, c.cat) : ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0); }, 0) + fillerPrice(c, b, ps);
+  const ends = panelParts.reduce((a, pt) => { const m = mat(pt.mat); return a + pt.qty * (pt.ds ? (ps.doors.on ? priceFront(pt.ds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0) : slabP ? (m ? pt.L * pt.W * matSqIn(m, ps) : 0) + panelAdd(ps, c.cat) : ps.doors.on ? priceFront(pt.pds || pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0); }, 0) + fillerPrice(c, b, ps);
   let hardware = 0;
   if (ps.hardware.on) Object.entries(b.bom).forEach(([k, q]) => { hardware += q * (+ps.hardware.items[k] || 0); });
   hardware *= gMark(ps, 'hardware');
@@ -400,7 +400,8 @@ function priceFront(ds, sq, ps, w, h) {
     const material = bm.sheetSq != null ? sq * (+bm.sheetSq || 0) * (1 + (+((ps || {}).materials || {}).waste || 0) / 100) : bm.doorSpecial ? sq * matSqIn(bm, ps) * 144 : 0;
     return { labor, material, total: labor + material };
   }
-  const material = sq * doorMatRate(ds, ps), total = Math.max(doorMin(ds), sq * doorRate(ds) + material);
+  // 0.63.35: each mid stile or rail added past the style's own (split rules or the Face tab) adds the style's Each extra mid.
+  const material = sq * doorMatRate(ds, ps), total = Math.max(doorMin(ds), sq * doorRate(ds) + material) + (ds._extraMids | 0) * (+ds.midAdd || 0);
   return { labor: total - material, material, total };
 }
 // Material cost per square foot of door: the style's own number (what a buyout door costs you, say),
@@ -440,10 +441,24 @@ function panelDoorPick(id, t, cat) {
 function panelDoor(c) { return withFinish(doorStyle(panelDoorPick(cabSet(c, 'panelDoor'), doorTpl(cabSet(c, 'doorT')), c.cat)), c); }
 // 0.63.22 (Ayden 2026-11-24: "when i change the applied panels to the door style panels arent changing"): how an end panel
 // w deep and h tall looks in that style. framed = a frame and field wide and tall enough to show (else it draws as a slab).
-function panelLook(c, w, h, ds) {
+// 0.63.35: end = which end of cabinet c the panel is on (its own mid stiles and rails, and island or not); a made panel
+// product passes no end and keeps its own on itself. The style's split rules and those counts are worked in (splitDs).
+function panelLook(c, w, h, ds, end) {
   ds = ds || panelDoor(c);
   const framed = ds.type !== 'slab' && w >= 2 * (+ds.stile || 0) + 2 && h >= 2 * (+ds.rail || 0) + 2;
+  if (framed && typeof splitDs === 'function') { const k = panelSplitOf(c, end); ds = splitDs(ds, w, h, k.kind, k.man); }
   return { ds, framed };
+}
+// 0.63.35 (Ayden 2026-11-24: "this is on the island end panel so i cant add vertical stiles or extra rails"): a panel's own
+// mid stiles and rails { S, R } and its kind for the split rules ('island' or 'panel'). A cabinet keeps them per end
+// (c.pSplit.L / .R); a Base or Wall End Panel or Support Panel on itself (c.pSplit), and its Island end panel pick (c.islandP:
+// true, false, or unset = on an island wall or named island).
+function panelSplitOf(c, end) {
+  if (!c) return { kind: 'panel', man: null };
+  const w = c.wall && typeof wall === 'function' ? wall(c.wall) : null, onIsland = !!(w && (w.island || w.hidden));
+  if (end === 'L' || end === 'R') return { kind: onIsland ? 'island' : 'panel', man: (c.pSplit || {})[end] || null };
+  const ip = c.islandP, isl = ip === true || ip === '1' ? true : ip === false || ip === '0' ? false : onIsland || /island/i.test(c.name || '');
+  return { kind: isl ? 'island' : 'panel', man: c.pSplit && (c.pSplit.S != null || c.pSplit.R != null) ? c.pSplit : null };
 }
 // 0.63.22 (Ayden 2026-11-24: "if the panels have door styles and the materials not hdm they need to be buyout doors",
 // "we only make hdm doors in house"): an end panel in a framed door style is made in the shop only from HDM. In any other
@@ -467,7 +482,7 @@ function priceShapes(ps) {
   return (S.shapes || []).map(s => {
     // 0.63.24: a miter-folded leg is four fronts of its door style (bought or made).
     const P = typeof shapePost === 'function' && shapePost(s);
-    if (P) return { name: `Leg, ${s.name || 'shape'} (${fmtLen(P.W, 1)} × ${fmtLen(P.D, 1)} × ${fmtLen(P.H, 1)}, ${P.ds.name}${P.buy ? ', buyout' : ''})`, amount: ps.doors && ps.doors.on ? P.faces.reduce((t, f) => t + priceFront(P.ds, f.w * f.h / 144, ps, f.w, f.h).total * gMark(ps, 'doors'), 0) : 0 };
+    if (P) return { name: `Leg, ${s.name || 'shape'} (${fmtLen(P.W, 1)} × ${fmtLen(P.D, 1)} × ${fmtLen(P.H, 1)}, ${P.ds.name}${P.buy ? ', buyout' : ''})`, amount: ps.doors && ps.doors.on ? P.faces.reduce((t, f) => t + priceFront(f.ds || P.ds, f.w * f.h / 144, ps, f.w, f.h).total * gMark(ps, 'doors'), 0) : 0 };
     const m = shapeMat(s), b = shapeBox(s.pts || []), cat = shapePanelCat(s), o = shapeOutline(s.pts || []), area = o.length > 2 ? Math.abs(o.reduce((t, q, i) => { const r = o[(i + 1) % o.length]; return t + q.x * r.y - r.x * q.y; }, 0)) / 2 : b.w * b.h;
     const amount = (m ? area * matSqIn(m, ps) : 0) + panelAdd(ps, cat);
     return { name: `Panel, ${s.name || 'shape'} (${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)}, ${cat.toLowerCase()})`, amount };

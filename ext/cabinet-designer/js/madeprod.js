@@ -108,18 +108,19 @@ const MADE = {
     build(c, mp, x) {
       // 0.61.3: an automatic end panel piece is cut and priced by its cabinet (panelPieces); here it is only drawn.
       // 0.63.22: drawn in the applied end panel door style (Settings › Cabinet and panels) on the face that shows.
-      if (c.autoOf) { const o = allCabs().find(k => k.id === c.autoOf), pm = o && typeof panelFor === 'function' && mat(panelFor(o).mat); x.show({ name: 'End panel', mat: (pm || x.fm).id, fin: true, pos: { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d }, look3: o && madePanelLook(o, c, [c.autoEnd]) }); x.note('Cut and priced with its cabinet as an applied end panel. Move or resize it to make it your own'); return; }
+      if (c.autoOf) { const o = allCabs().find(k => k.id === c.autoOf), pm = o && typeof panelFor === 'function' && mat(panelFor(o).mat); x.show({ name: 'End panel', mat: (pm || x.fm).id, fin: true, pos: { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d }, look3: o && madePanelLook(o, c, [c.autoEnd], c.autoEnd) }); x.note('Cut and priced with its cabinet as an applied end panel. Move or resize it to make it your own'); return; }
       const look = madePanelLook(c, c, madePanelFaces(c));
       // 0.63.22: in a door style the shop doesn't make (not HDM, or a buyout style) the panel is ordered, not cut.
       const pds = typeof panelDoor === 'function' && panelDoor(c);
       if (pds && typeof panelBuys === 'function' && panelBuys(pds, x.fm.id)) {
-        const ds = buyStyle(pds); x.buy({ cab: LBL[c.id] || c.name, cabId: c.id, name: 'Support panel', kind: 'applied', mat: x.fm.id, L: r3(c.h), W: r3(c.d), qty: 1, ds, buy: true });
+        const ds = buyStyle(look ? look.ds : pds); x.buy({ cab: LBL[c.id] || c.name, cabId: c.id, name: 'Support panel', kind: 'applied', mat: x.fm.id, L: r3(c.h), W: r3(c.d), qty: 1, ds, buy: true });
         x.bom[`Support panel, ${ds.name} ${fmtLen(c.d, 1)} × ${fmtLen(c.h, 1)} (buyout)`] = 1; x.note('Bought from the door maker in its door style');
         x.show({ name: 'Support panel', mat: x.fm.id, fin: true, pos: { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d }, look3: look }); return;
       }
       // A routed style is cut into the panel's show face, like a cabinet's applied end panel (build.js).
       const ds = look && look.ds, fr = ds ? Math.max(+ds.stile || 0, +ds.rail || 0) : 0;
-      const ops = look && fr > 0 ? look.faces.map((e, i) => ({ type: 'pocket', x: fr, y: fr, w: r3(c.h - 2 * fr), h: r3(c.d - 2 * fr), depth: +ds.pocketDepth || 0.25, face: i ? 'hidden' : 'show', why: 'panel recess' })) : [];
+      // 0.63.35: with mid stiles or rails, one recess per panel field.
+      const ops = look && fr > 0 ? look.faces.flatMap((e, i) => panelFieldPockets(ds, c.h, c.d, 0, +ds.pocketDepth || 0.25, i ? 'hidden' : 'show') || [{ type: 'pocket', x: fr, y: fr, w: r3(c.h - 2 * fr), h: r3(c.d - 2 * fr), depth: +ds.pocketDepth || 0.25, face: i ? 'hidden' : 'show', why: 'panel recess' }]) : [];
       const pt = x.part('Support panel', x.fm, r3(c.h), r3(c.d), { kind: 'applied', ops }); pt.fin = true;
       pt.pos = { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d }; if (look) MADE_LOOK3.set(pt, look);
     },
@@ -137,10 +138,10 @@ const MADE = {
         // 0.61.3 (Ayden 2026-11-23: "have them use the door styles"): each front is a door of the room's door style (shape
         // only); its material comes from the Finish, like every door (frontStyle applies withFinish).
         // 0.61.5: a front can be one of a pair (Mozaik's French-door fridge columns): x and w across the appliance.
-        const fw = q.w, f = { type: 'door', x0: q.x, x1: q.x + fw, z0: q.z, z1: q.z + q.h }, st = apStyle(c, f), ds = st.ds, dm = mat(ds.mat) || x.fm;
+        const fw = q.w, f = { type: 'door', x0: q.x, x1: q.x + fw, z0: q.z, z1: q.z + q.h, ...fMids(q) }, st = apStyle(c, f), ds = st.ds, dm = mat(ds.mat) || x.fm;
         const name = fr.length > 1 ? `Panel front ${i + 1}` : 'Panel front';
         if (ds.source === 'buyout') { x.bom[`${name}, ${ds.name} ${fmtLen(fw, 1)} × ${fmtLen(q.h, 1)} (buyout)`] = 1; x.note(`${name} is bought from the door maker`); }
-        const ops = st.framed && ds.type === 'routed' ? [{ type: 'pocket', x: r3(ds.rail), y: r3(ds.stile), w: r3(q.h - 2 * ds.rail), h: r3(fw - 2 * ds.stile), depth: r3(+ds.pocketDepth || 0.25), face: 'front', why: 'shaker field' }] : [];
+        const ops = st.framed && ds.type === 'routed' ? panelFieldPockets(ds, q.h, fw, 0, r3(+ds.pocketDepth || 0.25), 'front') || [{ type: 'pocket', x: r3(ds.rail), y: r3(ds.stile), w: r3(q.h - 2 * ds.rail), h: r3(fw - 2 * ds.stile), depth: r3(+ds.pocketDepth || 0.25), face: 'front', why: 'shaker field' }] : [];
         if (st.framed && ds.type !== 'routed' && ds.source !== 'buyout') x.warn.push(`${name}: a ${ds.name} front is cut here as one panel; build it like the room's doors.`);
         if (ds.source !== 'buyout') { const pt = x.part(name, dm, r3(q.h), r3(fw), { kind: 'door', ops }); pt.fin = true; pt.front = true; pt.pos = { x: q.x, y: q.z, z: 0, dx: fw, dy: q.h, dz: c.d }; }
         const pull = apPull(c, fx, q, fr);
@@ -165,7 +166,7 @@ const MADE = {
         const R = n === 2 && i === 1, x0 = R ? r3(c.w - fw) : 0, f = { type: 'door', x0, x1: r3(x0 + fw), z0: 0, z1: c.h, hinge: R ? 'R' : 'L' };
         const st = apStyle(c, f), ds = st.ds, dm = mat(ds.mat) || x.fm, name = n > 1 ? `Pocket door ${R ? 'right' : 'left'}` : 'Pocket door';
         if (ds.source === 'buyout') { x.bom[`${name}, ${ds.name} ${fmtLen(fw, 1)} × ${fmtLen(c.h, 1)} (buyout)`] = 1; x.note(`${name} is bought from the door maker`); }
-        const ops = st.framed && ds.type === 'routed' ? [{ type: 'pocket', x: r3(ds.rail), y: r3(ds.stile), w: r3(c.h - 2 * ds.rail), h: r3(fw - 2 * ds.stile), depth: r3(+ds.pocketDepth || 0.25), face: 'front', why: 'shaker field' }] : [];
+        const ops = st.framed && ds.type === 'routed' ? panelFieldPockets(ds, c.h, fw, 0, r3(+ds.pocketDepth || 0.25), 'front') || [{ type: 'pocket', x: r3(ds.rail), y: r3(ds.stile), w: r3(c.h - 2 * ds.rail), h: r3(fw - 2 * ds.stile), depth: r3(+ds.pocketDepth || 0.25), face: 'front', why: 'shaker field' }] : [];
         if (st.framed && ds.type !== 'routed' && ds.source !== 'buyout') x.warn.push(`${name}: a ${ds.name} front is cut here as one panel; build it like the room's doors.`);
         if (ds.source !== 'buyout') { const pt = x.part(name, dm, r3(c.h), fw, { kind: 'door', ops }); pt.fin = true; pt.front = true; pt.pos = { x: x0, y: 0, z: 0, dx: fw, dy: c.h, dz: c.d }; }
         x.bom[POCKET_HW] = (x.bom[POCKET_HW] || 0) + 1;
@@ -238,9 +239,9 @@ function madeEnds(c, pick) {
 const MADE_LOOK3 = new WeakMap();
 // 0.63.22: a panel product's look in the end panel door style: { ds, framed, faces } or null for a flat slab.
 // src = whose setting it follows (an automatic piece follows its cabinet). faces = the ends that show ('L' = -x).
-function madePanelLook(src, c, faces) {
+function madePanelLook(src, c, faces, end) {
   if (typeof panelLook !== 'function' || !faces || !faces.length) return null;
-  const lk = panelLook(src, c.d, c.h); return lk.framed ? { ...lk, faces } : null;
+  const lk = panelLook(src, c.d, c.h, null, end); return lk.framed ? { ...lk, faces } : null;
 }
 // A loose panel shows the face with nothing butted against it; the name says which end of a run it is (Mozaik's
 // "Tall End Panel Left" faces left). Between two cabinets, or standing alone, both faces show.
@@ -320,7 +321,7 @@ function apRowFronts(c) {
     const cols = Array.isArray(r.cols) && r.cols.length > 1 ? r.cols : null;
     if (cols) return colFronts(c, { hingeSide: 'L' }, r, ri, cols, 0, c.w, z0, z1, gap, out);
     const type = r.type === 'drawer' ? 'drawer' : r.type === 'false' ? 'false' : 'door', n = type === 'door' ? Math.max(1, r.count | 0) : 1, fw = (c.w - gap * (n - 1)) / n;
-    for (let i = 0; i < n; i++) out.push({ type, row: ri, idx: i, n, x0: i * (fw + gap), x1: i * (fw + gap) + fw, z0, z1, hinge: type === 'door' ? (n === 1 ? r.hinge || '' : i % 2 ? 'R' : 'L') : null, style: r.style || '' });
+    for (let i = 0; i < n; i++) out.push({ type, row: ri, idx: i, n, x0: i * (fw + gap), x1: i * (fw + gap) + fw, z0, z1, hinge: type === 'door' ? (n === 1 ? r.hinge || '' : i % 2 ? 'R' : 'L') : null, style: r.style || '', ...fMids(r) });
   });
   return out;
 }
@@ -330,7 +331,7 @@ function apRowFronts(c) {
 // (over an end panel between them, up to 1 1/2") so the gap to them is the regular 1/8". Next to another panel front
 // each takes half. Worked out on the fronts as drawn, so it follows whatever sits beside it.
 function apFrontsRaw(c, mp = madeMp(c)) {
-  if ((c.rows || []).length) return apRowFronts(c).map(f => ({ z: r3(f.z0), h: r3(f.z1 - f.z0), x: r3(f.x0), w: r3(f.x1 - f.x0), hinge: f.hinge || '', type: f.type === 'drawer' ? 'drawer' : 'door', ...(f.style ? { style: f.style } : {}) }));
+  if ((c.rows || []).length) return apRowFronts(c).map(f => ({ z: r3(f.z0), h: r3(f.z1 - f.z0), x: r3(f.x0), w: r3(f.x1 - f.x0), hinge: f.hinge || '', type: f.type === 'drawer' ? 'drawer' : 'door', ...(f.style ? { style: f.style } : {}), ...fMids(f) }));
   const fr = (Array.isArray(mp.fr) ? mp.fr : []).filter(q => +q.h > 0 && +q.z >= -0.01 && +q.z + +q.h <= c.h + 0.01);
   // 0.61.5: x and w across the front (a pair of doors); none = the whole width. hinge L/R when Mozaik says.
   // 0.62.4: jobs brought in before 0.61.5 have a pair as two fronts the same height with no x or w (both the whole
@@ -469,7 +470,7 @@ function madePrice(c, ps) {
   if (c.made !== 'panel' || !ps || typeof matSqIn !== 'function') return { own: true, ...d.price };
   // 0.63.22: in a framed end panel door style it is priced as a front of that style, like a cabinet's applied panel.
   const pds = typeof panelDoor === 'function' && panelDoor(c);
-  if (pds && pds.type !== 'slab' && typeof priceFront === 'function') { const ds = panelBuys(pds, (mat(finishMat(c)) || {}).id) ? buyStyle(pds) : pds; return { own: true, base: r3(ps.doors && ps.doors.on ? priceFront(ds, c.h * c.d / 144, ps, c.d, c.h).total * gMark(ps, 'doors') : 0), perFt: 0 }; }
+  if (pds && pds.type !== 'slab' && typeof priceFront === 'function') { const sp = typeof panelLook === 'function' ? panelLook(c, c.d, c.h, pds).ds : pds, ds = panelBuys(pds, (mat(finishMat(c)) || {}).id) ? buyStyle(sp) : sp; return { own: true, base: r3(ps.doors && ps.doors.on ? priceFront(ds, c.h * c.d / 144, ps, c.d, c.h).total * gMark(ps, 'doors') : 0), perFt: 0 }; }
   const m = mat(finishMat(c)) || mat(cabMatT(cabSet(c, 'cabMatT')).carcass);
   return { own: true, base: r3((m ? c.h * c.d * matSqIn(m, ps) : 0) + (typeof panelAdd === 'function' ? panelAdd(ps, c.h >= 60 ? 'Tall' : c.elev >= 30 ? 'Wall' : 'Base') : 0)), perFt: 0 };
 }

@@ -433,7 +433,7 @@ function endRows(c) {
   const fl = fillersOf(c);
   return ['L', 'R'].map(end => {
     const f = fl.find(x => x.end === end), now = f ? `Filler ${fmtLen(f.gap)}` : hasPanel(c, end) ? 'End panel' : 'Nothing', pick = endChoice(c, end);
-    return `<div class="endrow"><div class="endhead"><b>${end === 'L' ? 'Left' : 'Right'} end</b><span class="note">${now}</span></div>
+    return `<div class="endrow"><div class="endhead"><b title="Now: ${now}">${end === 'L' ? 'Left' : 'Right'}<span class="endw"> end</span></b><span class="note">${now}</span></div>
       <div class="seg" role="group" aria-label="${end === 'L' ? 'Left' : 'Right'} end">${END_CHOICES.map(([k, l]) => `<button data-act="cab-end" data-id="${c.id}:${end}:${k}" aria-pressed="${pick === k}">${l}</button>`).join('')}</div>
       ${f ? fld('Filler width', 'cabpos:' + c.id, end, r3(f.gap), 'len') : ''}</div>`;
   }).join('');
@@ -570,9 +570,8 @@ function renderQuick() {
 
 // Tabs of the details dock: what each one shows depends on what is selected.
 function dockTabs() {
-  const c = ui.sel && ui.sel.type === 'cab' && cab(ui.sel.id);
-  // The item bar (size and position of the selected item) comes first, then the cabinet's ends, then room-wide tops, molding, lights and layout.
-  return [['item', 'Item', 'ruler'], ...(c && multiIds().length < 2 ? [['ends', 'Ends', 'ends']] : []), ['tops', 'Tops', 'stack'], ['molding', 'Molding', 'stack'], ['tex', 'Textures', 'palette'], ['room', 'Room', 'home'], ['lights', 'Lights', 'sun'], ['layout', 'Layout', 'magnet']];
+  // A picked item's ends (Auto, Filler, Panel, None) are in its item bar, so there is no Ends tab (Ayden 2026-11-24).
+  return [['item', 'Item', 'ruler'], ['tops', 'Tops', 'stack'], ['molding', 'Molding', 'stack'], ['tex', 'Textures', 'palette'], ['room', 'Room', 'home'], ['lights', 'Lights', 'sun'], ['layout', 'Layout', 'magnet']];
 }
 function renderDock() {
   const el = $('#dock'); if (!el) return;

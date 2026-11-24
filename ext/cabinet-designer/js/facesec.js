@@ -218,6 +218,58 @@ function fsRef(id) {
   return leaf;
 }
 
+/* ---------- Mid stiles and rails (0.63.35) ---------- */
+// Ayden 2026-11-24: "this is on the island end panel so i cant add vertical stiles or extra rails or whatever i need".
+// Two rows with − and +: how many mid stiles and mid rails this front or panel has. Its own count wins over the door style's
+// split rules; Auto goes back to them. ref = where the count is kept (secm: a face section, pspl: a panel). info = { ds (with
+// everything worked in), fw, fh, kind } of a framed front, or null (a slab: nothing to split).
+function fsMidRows(ref, own, info) {
+  if (!info) return '';
+  const m = doorMids(info.ds, info.fw, info.fh), base = doorStyle(info.ds.id) || info.ds, rc = splitRuleCounts(base, info.fw, info.fh, info.kind);
+  const row = (dim, label, n) => { const mine = own && splitNum(own[dim]);
+    return `<div class="fs-row"><span>${label}</span><div class="fs-step"><button class="btn sm icon-only" data-act="fs-mid" data-id="${esc(ref)}|${dim}|-1" aria-label="One ${label.toLowerCase().replace(/s$/, '')} less"${n ? '' : ' disabled'}>−</button><b>${n}</b><button class="btn sm icon-only" data-act="fs-mid" data-id="${esc(ref)}|${dim}|1" aria-label="One ${label.toLowerCase().replace(/s$/, '')} more">+</button>
+      ${mine ? `<button class="btn sm" data-act="fs-mid" data-id="${esc(ref)}|${dim}|auto" title="Back to the door style and its split rules">Auto</button>` : `<span class="muted">Auto</span>`}</div></div>`; };
+  const why = rc.rules.length ? `${esc(base.name)} split rule${rc.rules.length > 1 ? 's' : ''} ${rc.rules.map(i => i + 1).join(', ')} ${rc.rules.length > 1 ? 'fit' : 'fits'} this size.` : `No split rule of ${esc(base.name)} fits this size. Add rules under Libraries › Door styles › Split rules.`;
+  return `<fieldset class="fs-size fs-mids"><legend>Stiles and rails</legend>${row('S', 'Mid stiles', m.nS)}${row('R', 'Mid rails', m.nR)}<div class="note show">${why}</div></fieldset>`;
+}
+// A panel's settings: where its split is kept, whose door style it follows and its size. An automatic end panel piece
+// follows its cabinet's end; a Base or Wall End Panel or Support Panel keeps its own.
+function fsPanelInfo(c) {
+  if (c.autoOf) { const o = allCabs().find(k => k.id === c.autoOf); if (o) return { src: o, end: c.autoEnd, ref: `pspl:${o.id}:${c.autoEnd}`, own: (o.pSplit || {})[c.autoEnd], w: c.d, h: c.h }; }
+  return { src: c, end: null, ref: `pspl:${c.id}`, own: c.pSplit, w: c.d, h: c.h };
+}
+// The Face tab of a panel: its face drawn in its door style, mid stiles and rails, and its door style.
+function fsPanelTab(c) {
+  const P = fsPanelInfo(c), lk = typeof panelLook === 'function' ? panelLook(P.src, P.w, P.h, null, P.end) : null, k = panelSplitOf(P.src, P.end);
+  const ds = lk ? lk.ds : null, R = 'cab:' + P.src.id;
+  const svg = ds && typeof doorRenderSVG === 'function' ? doorRenderSVG(ds, P.w, P.h, { dims: true }) : '';
+  const style = `<label class="fs-row"><span>Door style</span>${fctl(R, 'panelDoor', P.src.panelDoor || '', 'select', { options: setOpts('panelDoor', [{ v: 'same', l: 'Same as the doors' }, ...opts(S.doorStyles)], 'cab'), label: 'Panel door style' })}</label>`;
+  const isl = P.end ? `<div class="note show">${k.kind === 'island' ? 'An island end panel (its cabinet is on an island wall).' : 'An end panel.'}</div>`
+    : `<label class="fs-row"><span>Island end panel</span><select data-obj="cab:${c.id}" data-field="islandP" data-type="select" aria-label="Island end panel"><option value=""${c.islandP == null || c.islandP === '' ? ' selected' : ''}>Auto · ${k.kind === 'island' ? 'Yes' : 'No'}</option><option value="1"${c.islandP === '1' || c.islandP === true ? ' selected' : ''}>Yes</option><option value="0"${c.islandP === '0' || c.islandP === false ? ' selected' : ''}>No</option></select></label>`;
+  const mids = lk && lk.framed ? fsMidRows(P.ref, P.own, { ds, fw: P.w, fh: P.h, kind: k.kind })
+    : `<div class="note show">${ds && ds.type !== 'slab' ? 'This panel is too small for its frame.' : 'This panel is a flat slab. Pick a framed door style above (like Shaker) to give it stiles and rails you can split.'}</div>`;
+  const buy = ds && typeof panelBuys === 'function' && panelBuys(ds, (mat(finishMat(P.src)) || {}).id);
+  return `<div class="fs-tab">
+    <div class="fs-work"><div class="fs-draw fs-pdraw">${svg || `<div class="note show">Flat slab panel, ${fmtLen(P.w, 1)} × ${fmtLen(P.h, 1)}.</div>`}</div>
+    <aside class="fs-panel" aria-label="Panel">
+      <div class="fs-head"><b>${c.autoOf ? 'End panel' : esc(c.name || 'Panel')}</b><span class="muted">${fmtLen(P.w, 1)} wide × ${fmtLen(P.h, 1)}</span></div>
+      ${style}${isl}${mids}
+      ${ds && ds.type !== 'slab' ? `<div class="note show">${buy ? 'Bought from the door maker in this style: the order lists its panels wide and high.' : 'Made in the shop: one recess per panel on the CNC.'}${c.autoOf ? ' Cut and priced with its cabinet.' : ''}</div>` : ''}
+    </aside></div>
+    <div class="fs-status">Mid stiles split the panel side to side, mid rails top to bottom. The door style's split rules set them until you change them here.</div></div>`;
+}
+// A cabinet's own end panels in a framed style: their mid stiles and rails, under the face.
+function fsEndPanelsBox(c) {
+  if (c.made || typeof panelLook !== 'function' || typeof panelPieces !== 'function') return '';
+  const ends = ['L', 'R'].map(sd => { let pcs = null; try { pcs = drawnPanels(() => panelPieces(c, sd)); } catch (_) {} return pcs && pcs.length ? [sd, pcs[0]] : null; }).filter(Boolean);
+  if (!ends.length) return '';
+  const ps = panelFor(c); if (!ps.door || ps.door.type === 'slab') return '';
+  const D = sd => endDepth(c, sd) + ps.frontOverhang;
+  const box = ends.map(([sd, pc]) => { const w = D(sd), h = pc.z1 - pc.z0, lk = panelLook(c, w, h, ps.door, sd), k = panelSplitOf(c, sd);
+    return lk.framed ? `<div class="fs-endp"><b>${sd === 'L' ? 'Left' : 'Right'} end panel</b> <span class="muted">${fmtLen(w, 1)} × ${fmtLen(h, 1)}${k.kind === 'island' ? ', island' : ''}</span>${fsMidRows(`pspl:${c.id}:${sd}`, (c.pSplit || {})[sd], { ds: lk.ds, fw: w, fh: h, kind: k.kind })}</div>` : ''; }).join('');
+  return box ? `<div class="fs-endps">${box}</div>` : '';
+}
+
 /* ---------- Drawing ---------- */
 // The face drawn big, every section clickable with its letter and size, the picked one outlined.
 function fsFaceSVG(c, sel, inside) {
@@ -258,6 +310,7 @@ function fsFaceTab(c) {
   fsSel(c);
   const sel = fsSel(c), id = c.id, R = 'cab:' + id;
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return `<div class="psec box"><div class="note show">This product came from Mozaik with its own fronts. Its face is set on the Mozaik product (Size tab).</div></div>`;
+  if (c.made === 'panel') return fsPanelTab(c);
   if (c.made && !fsApFront(c)) return `<div class="psec box"><div class="note show">This product has no face to split. Its settings are on the Size tab.</div></div>`;
   const draw = `<div class="fs-draw">${fsFaceSVG(c, sel, false)}</div>`;
   const bottom = `<div class="fs-bottom">
@@ -269,7 +322,7 @@ function fsFaceTab(c) {
       <span class="fs-gap"></span>
       <button class="btn sm" data-act="fs-equal" data-id="${id}" title="Make every section the same size: Lock off on every width and height">Equal sizes</button>
       <button class="btn sm" data-act="fs-clear" data-id="${id}" title="Back to one front the whole face. Undo brings it back.">Clear</button></div>
-    ${ffSizeBox(c)}`;
+    ${ffSizeBox(c)}${fsEndPanelsBox(c)}`;
   return `<div class="fs-tab">
     <div class="fs-work">${draw}${fsPanel(c, sel)}</div>
     ${bottom}
@@ -308,6 +361,7 @@ function fsPanel(c, s) {
     ${lf.type === 'false' ? pick('Pull', 'pull', [['', 'None'], ['1', 'Drawer pull']], lf.pull ? '1' : '') : ''}
     ${size}
     ${lf.type === 'open' ? '' : pick('Style', 'style', styleOpts, lf.style || '')}
+    ${lf.type === 'open' || !f0 ? '' : fsMidRows(`secm:${id}:${key}`, lf.mids, (() => { try { const st = frontStyle(c, f0); return st.framed ? { ds: st.ds, fw, fh: f0.z1 - f0.z0, kind: frontKind(c, f0) } : null; } catch (_) { return null; } })())}
     <div class="fs-acts">
       <button class="btn sm" data-act="fs-reset" data-id="${key}" title="Take off this section's own style and hinge">Reset</button>
       <button class="btn sm danger" data-act="fs-del" data-id="${key}" title="Take section ${s.letter} out; the section beside it takes its room"${fsSecs(c).length > 1 ? '' : ' disabled'}>${icon('trash')}Delete</button></div>
@@ -396,6 +450,11 @@ document.addEventListener('click', e => {
   const a = b.dataset.act, id = b.dataset.id || '', c = qeCab(); if (!c) return;
   e.stopPropagation();
   if (a === 'fs-pick') { fsPick(c, id); ui.fsSplit = null; renderQuick(); return; }
+  if (a === 'fs-mid') {
+    const [ref, dim, d] = id.split('|'), cur = +(b.closest('.fs-step') || {}).querySelector?.('b')?.textContent || 0;
+    mutate(() => { const o = resolve(ref); if (!o) return; if (d === 'auto') delete o[dim]; else o[dim] = Math.max(0, Math.min(MAX_MIDS, cur + +d)); });
+    return;
+  }
   if (a === 'fs-split') {
     const [key, d] = [id.slice(0, id.lastIndexOf(':')), id.slice(id.lastIndexOf(':') + 1)];
     fsPick(c, key);

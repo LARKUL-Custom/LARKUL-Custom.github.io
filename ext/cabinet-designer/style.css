@@ -3971,3 +3971,64 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .ed3-big .preview.ed3-host canvas{display:block;width:100%!important;height:100%!important;position:absolute;inset:0;cursor:grab}
 .ed3-big .preview.ed3-host canvas:active{cursor:grabbing}
 @media (max-width: 1000px){ .edx-body.big3d{grid-template-columns:minmax(0,1fr)} }
+/* 0.63.35 mid stiles and rails on the Face tab, split rules in the door style library */
+.fs-mids{display:grid;gap:6px}
+.fs-mids .note{margin:0}
+.fs-endps{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px}
+.fs-endp{flex:1 1 260px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;display:grid;gap:6px}
+.fs-pdraw svg{max-width:420px;margin:0 auto;display:block}
+.srule{border:1px solid var(--line);border-radius:6px;padding:6px 10px;margin:6px 0}
+.srule-h{display:flex;align-items:center;justify-content:space-between}
+.srule-add{display:flex;gap:8px;margin:6px 0}
+
+
+/* 0.63.36: a picked item's ends sit in its item bar (the Ends tab is gone), where the room-wide Auto switches
+   used to be; those switches now show only with nothing picked (Ayden 2026-11-24). One line per end:
+   Left/Right, Auto Filler Panel None, and the filler width when it has one. What is there now shows as the
+   end's tooltip-free small line under its name on wide windows. */
+@media (min-width: 961px){
+  .room .dock .itembar > .ib-ends{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 8px;display:grid;grid-template-columns:auto auto auto;align-content:center;align-items:center;gap:4px 8px;flex:none}
+  .room .dock .ib-ends .endrow{display:contents}
+  .room .dock .ib-ends .endhead{display:flex;flex-direction:column;gap:0;grid-column:1}
+  .room .dock .ib-ends .endhead b{font:600 13px/1.15 var(--f-ui);white-space:nowrap}
+  .room .dock .ib-ends .endhead .note{display:block!important;font-size:11.5px;line-height:1.15;color:var(--muted);white-space:nowrap}
+  .room .dock .ib-ends .seg{grid-column:2;align-self:center}
+  .room .dock .ib-ends .seg button{min-height:0;height:28px;padding:0 8px;font-size:13px}
+  .room .dock .ib-ends .f{grid-column:3;display:flex;align-items:center;gap:5px;margin:0;font-size:12.5px;color:var(--muted);white-space:nowrap}
+  .room .dock .ib-ends .f input{width:58px;height:28px;font-size:14px;padding:0 4px}
+}
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock .ib-ends .endhead .note{display:none!important}
+  .room .dock .ib-ends .seg button{padding:0 6px;font-size:12.5px}
+  .room .dock .ib-ends .f > span:first-child{display:none}
+}
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock .itembar > .ib-ends{column-gap:5px;padding:5px 6px}
+  .room .dock .ib-ends .seg button{padding:0 5px}
+  .room .dock .itembar:not(.ib-empty) .ib-pos{column-gap:5px}
+}
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock .ib-ends .endw{display:none}
+  .room .dock .ib-ends .inwrap > button{display:none}
+  .room .dock .ib-ends .f input{width:50px}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f input{width:64px}
+}
+/* Ends in the item bar: what is there now is the end name's tooltip; the filler width box needs no label. */
+@media (min-width: 961px){
+  .room .dock .ib-ends .endhead .note{display:none!important}
+  .room .dock .ib-ends .f > span:first-child{display:none}
+  .room .dock .ib-ends .inwrap > button{display:none}
+}
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock .ib-ends .seg button{padding:0 4px}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f > span{font-size:12px}
+}
+@media (min-width: 961px){ .room .dock .ib-ends .f input{width:66px} }
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock .ib-ends .f input{width:56px;font-size:14px;padding:0 4px}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f input{font-size:14px;padding:0 4px}
+}
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock .itembar:not(.ib-empty) .ib-size{grid-template-columns:repeat(3,66px);column-gap:5px}
+  .room .dock .itembar:not(.ib-empty) .ib-size .ib-f input{font-size:14px;padding:0 4px}
+}

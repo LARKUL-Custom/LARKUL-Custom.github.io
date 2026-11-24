@@ -622,6 +622,7 @@ function doorDesigner() {
         ${fld('Mid rails by formula', R, 'midRailsF', d.midRailsF || '', 'text', { ph: 'like round(H/12) - 1', wide: true })}${fld('Mid stiles by formula', R, 'midStilesF', d.midStilesF || '', 'text', { ph: 'like floor(W/20)', wide: true })}
         ${fld('Inside edge', R, 'insideProfile', d.insideProfile, 'select', { options: EDGE_PROFILES })}</div>
       ${(() => { const k = doorMids(d, pw, ph); return k.nR || k.nS ? splitFields(d, R, pw, ph) : ''; })()}
+      ${splitRulesBox(d, R)}
       <div class="dsec">${secHead('shelf', 'Panel', 'teal')}
         ${fld(nFields > 1 ? 'Panels' : 'Panel type', R, 'panelType', d.panelType, 'select', { options: PANEL_TYPES, wide: true })}
         ${nFields > 1 ? `<div class="note">Swap any opening's panel. The numbers match the drawing, across then down from the top left.</div>${Array.from({ length: nFields }, (_, i) => fld(`Opening ${i + 1}`, `sub:fieldPanels|${R}`, String(i), (d.fieldPanels || [])[i] || '', 'select', { options: [{ v: '', l: 'Same as Panels' }, ...PANEL_TYPES], wide: true })).join('')}` : ''}
@@ -1438,13 +1439,41 @@ function cncSkippedNote() {
 }
 // 0.63.22: door-style end panels the shop doesn't make (buyPanels from buildParts), for the door orders.
 // Each is { rm, ri, c, ds, w (its depth), h (its height) }, ordered like a door with no hinge boring.
+// 0.63.35 (Ayden 2026-11-24): the style's automatic split rules. Each rule: what it is for, wider than / taller than (blank =
+// any), and how many mid stiles and mid rails it gives. A section's or panel's own count on the Face tab wins.
+function splitRulesBox(d, R) {
+  if (d.type === 'slab') return '';
+  const rules = d.splitRules || [];
+  const row = (r, i) => { const Q = `srule:${d.id}:${i}`;
+    return `<div class="srule"><div class="srule-h"><b>Rule ${i + 1}</b><button class="btn sm icon-only danger" data-act="srule-del" data-id="${esc(d.id)}:${i}" title="Take this rule out" aria-label="Take rule ${i + 1} out">${icon('trash')}</button></div>
+      <div class="grid2">${fld('For', Q, 'on', r.on || 'any', 'select', { options: SPLIT_KINDS.map(([v, l]) => ({ v, l })), wide: true })}
+      ${fld('Wider than', Q, 'wOver', r.wOver ?? '', 'len', { blank: true, ph: 'any width' })}${fld('Taller than', Q, 'hOver', r.hOver ?? '', 'len', { blank: true, ph: 'any height' })}
+      ${fld('Mid stiles', Q, 'stiles', r.stiles ?? '', 'int', { blank: true, ph: 'leave' })}${fld('Mid rails', Q, 'rails', r.rails ?? '', 'int', { blank: true, ph: 'leave' })}</div></div>`; };
+  return `<div class="dsec">${secHead('gridsplit', 'Split rules', 'amber')}
+    <div class="note">Add mid stiles or mid rails on their own when a front or panel is past a size. Panel width is how deep it is. Every rule that fits counts, the biggest number wins. A section or panel set by hand on the Face tab keeps its own.</div>
+    ${rules.map(row).join('')}
+    <div class="srule-add"><button class="btn sm" data-act="srule-add" data-id="${esc(d.id)}">${icon('plus')}Add rule</button>
+    ${rules.length ? '' : `<button class="btn sm" data-act="srule-add" data-id="${esc(d.id)}:island" title="Island end panels get one mid stile unless 18&quot; wide or less">Island panel example</button>`}</div>
+    <div class="grid2">${fld('Each extra mid ($)', R, 'midAdd', d.midAdd ?? '', 'num', { blank: true, ph: '0' })}</div>
+    <div class="note">Each mid stile or rail a rule or the Face tab adds past this style's own costs this much more.</div></div>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-act="srule-add"],[data-act="srule-del"]'); if (!b) return;
+  e.stopPropagation();
+  const id = b.dataset.id || '', j = id.lastIndexOf(':'), sid = b.dataset.act === 'srule-del' || id.endsWith(':island') ? id.slice(0, j) : id, d = S.doorStyles.find(x => x.id === sid); if (!d) return;
+  mutate(() => {
+    d.splitRules = d.splitRules || [];
+    if (b.dataset.act === 'srule-del') { d.splitRules.splice(+id.slice(j + 1), 1); return; }
+    d.splitRules.push(id.endsWith(':island') ? { on: 'island', wOver: 18, stiles: 1 } : { on: 'any', wOver: '', hOver: '', stiles: '', rails: '' });
+  });
+});
 function buyPanelList() {
   const out = [];
   S.rooms.forEach((rm, ri) => withRoom(rm, () => {
     S.cabinets.forEach(c => { if (c.noCut) return; let b; try { b = buildParts(c); } catch (_) { return; }
       (b.buyPanels || []).forEach(pt => { for (let k = 0; k < (pt.qty || 1); k++) out.push({ rm, ri, c, ds: pt.ds, w: pt.W, h: pt.L }); }); });
     // Miter-folded legs bought in their door style (shapes.js): their four faces.
-    (S.shapes || []).forEach(sh => { const P = typeof shapePost === 'function' && shapePost(sh); if (P && P.buy) P.faces.forEach(f => out.push({ rm, ri, c: { id: sh.id, name: (sh.name || 'Leg') + ' face' }, ds: P.ds, w: f.w, h: f.h })); });
+    (S.shapes || []).forEach(sh => { const P = typeof shapePost === 'function' && shapePost(sh); if (P && P.buy) P.faces.forEach(f => out.push({ rm, ri, c: { id: sh.id, name: (sh.name || 'Leg') + ' face' }, ds: f.ds || P.ds, w: f.w, h: f.h })); });
   }));
   return out;
 }

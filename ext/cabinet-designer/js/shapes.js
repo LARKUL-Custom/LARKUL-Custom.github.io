@@ -184,15 +184,16 @@ function shapePost(s) {
   const buy = typeof panelBuys === 'function' && panelBuys(ds, m.id); if (buy) ds = buyStyle(ds);
   // A face shows the frame when there is at least 1" of field between its stiles and rails.
   const framed = w => ds.type !== 'slab' && w >= 2 * (+ds.stile || 0) + 1 && b.h >= 2 * (+ds.rail || 0) + 1;
-  const faces = [['front', b.w], ['back', b.w], ['left', D], ['right', D]].map(([k, w]) => ({ k, w: r3(w), h: r3(b.h), framed: framed(w) }));
+  // 0.63.35: each face takes the style's split rules for legs (kind 'leg'), e.g. a mid rail on a tall leg.
+  const faces = [['front', b.w], ['back', b.w], ['left', D], ['right', D]].map(([k, w]) => ({ k, w: r3(w), h: r3(b.h), framed: framed(w), ds: framed(w) && typeof splitDs === 'function' ? splitDs(ds, w, b.h, 'leg', s.pSplit) : ds }));
   return { ds, buy, W: b.w, D, H: b.h, T: +m.thick || 0.75, m, faces };
 }
 const postDoorOpts = s => [{ v: '', l: shapeLeg(s) ? 'Flat faces' : 'Solid (no door style)' }, { v: 'same', l: 'Same as the doors' }, ...opts(S.doorStyles)];
 function postMeshes(s, P, M, grp) {
-  const look = f => ({ ds: P.ds, framed: f.framed }), y0 = s.elev || 0, [fr, bk, lf, rt] = P.faces, T = P.T, add = o => grp.add(o);
+  const look = f => ({ ds: f.ds || P.ds, framed: f.framed }), y0 = s.elev || 0, [fr, bk, lf, rt] = P.faces, T = P.T, add = o => grp.add(o);
   // Front (facing out of the wall) and back.
-  doorMeshes(P.ds, fr.framed, { x0: 0, x1: P.W, z0: y0, z1: y0 + P.H }, T, M, M, P.D - T, add);
-  const g = new THREE.Group(); doorMeshes(P.ds, bk.framed, { x0: 0, x1: P.W, z0: 0, z1: P.H }, T, M, M, 0, o => g.add(o));
+  doorMeshes(fr.ds || P.ds, fr.framed, { x0: 0, x1: P.W, z0: y0, z1: y0 + P.H }, T, M, M, P.D - T, add);
+  const g = new THREE.Group(); doorMeshes(bk.ds || P.ds, bk.framed, { x0: 0, x1: P.W, z0: 0, z1: P.H }, T, M, M, 0, o => g.add(o));
   g.rotation.y = Math.PI; g.position.set(P.W, y0, T); grp.add(g);
   // Ends: a slab face draws as a plain board.
   [['L', lf, T], ['R', rt, P.W - T]].forEach(([sd, f, xIn]) => { if (!endPanel3(add, look(f), sd, xIn, y0, P.H, 0, P.D, T, M)) grp.add(box3(T, P.H, P.D, M, sd === 'L' ? T / 2 : P.W - T / 2, y0 + P.H / 2, P.D / 2)); });
@@ -261,7 +262,7 @@ function shapeParts() {
       if (P.buy) return [];
       const fr = Math.max(+P.ds.stile || 0, +P.ds.rail || 0);
       return P.faces.map(f => ({ cabId: s.id, cab: 'Shape', name: `${s.name} face (${f.k})`, kind: 'shape', qty: 1, L: f.h, W: f.w, T: P.T, mat: P.m.id, grain: !!P.m.grain, edges: '', band: {}, fin: true,
-        ops: [{ type: 'edge', profile: 'bevel', face: 'show', why: '45° miter on both long edges (miter fold)' }, ...(f.framed && fr > 0 ? [{ type: 'pocket', x: fr, y: fr, w: r3(f.h - 2 * fr), h: r3(f.w - 2 * fr), depth: +P.ds.pocketDepth || 0.25, face: 'show', why: 'panel recess' }] : [])] }));
+        ops: [{ type: 'edge', profile: 'bevel', face: 'show', why: '45° miter on both long edges (miter fold)' }, ...(f.framed && fr > 0 ? (typeof panelFieldPockets === 'function' && panelFieldPockets(f.ds, f.h, f.w, 0, +P.ds.pocketDepth || 0.25, 'show')) || [{ type: 'pocket', x: fr, y: fr, w: r3(f.h - 2 * fr), h: r3(f.w - 2 * fr), depth: +P.ds.pocketDepth || 0.25, face: 'show', why: 'panel recess' }] : [])] }));
     } const b = shapeBox(s.pts); return { cabId: s.id, cab: 'Shape', name: s.name, kind: 'shape', qty: 1, L: r3(b.w), W: r3(b.h), T: shapeT(s), mat: shapeMatId(s), grain: false, edges: '', band: {}, ops: [], outline: shapeOutline(s.pts).map(p => ({ x: r3(p.x - b.x0), y: r3(p.y - b.y0) })) }; });
 }
 

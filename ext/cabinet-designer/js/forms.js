@@ -66,6 +66,11 @@ function resolve(ref) {
     case 'des': return S.designer; case 'desp': return S.designer && (S.designer.params = S.designer.params || {});
     case 'desc': return S.designer && S.designer.construction;
     case 'mat': return mat(id); case 'door': return S.doorStyles.find(d => d.id === id);
+    // 0.63.35: one split rule of a door style (srule:<style id>:<n>); a panel's own mid stiles and rails (pspl:<cabinet
+    // id>[:L|R], or a shape's), and a face section's (secm:<cabinet id>:<section key>).
+    case 'srule': { const j = id.lastIndexOf(':'), d = S.doorStyles.find(x => x.id === id.slice(0, j)); return d && (d.splitRules || [])[+id.slice(j + 1)] || null; }
+    case 'pspl': { const [cid, end] = id.split(':'), c = cab(cid) || (S.shapes || []).find(x => x.id === cid); if (!c) return null; const o = (c.pSplit = c.pSplit || {}); return end ? (o[end] = o[end] || {}) : o; }
+    case 'secm': { const j = id.indexOf(':'), c = cab(id.slice(0, j)); if (!c || typeof fsLeaf !== 'function') return null; if (typeof fsEnsureRows === 'function') fsEnsureRows(c); const lf = fsLeaf(c, id.slice(j + 1)); return lf && (lf.mids = lf.mids || {}); }
     case 'dtpl': return S.doorTemplates.find(d => d.id === id);
     case 'mtc': return S.matTemplates.cabinet.find(d => d.id === id);
     case 'mtd': return S.matTemplates.drawer.find(d => d.id === id);

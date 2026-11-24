@@ -379,7 +379,7 @@ function cabinetMeshes(c, opts = {}) {
   // 0.63.22: a one-piece panel in a framed door style shows its frame and field on the outside face.
   [['L', -pt / 2, pdL], ['R', W + pt / 2, pdR]].forEach(([sd, x, pd]) => (drawnPanels(() => panelPieces(c, sd)) || []).forEach(pc => pc.steps.forEach(q => {
     const h = q.z1 - q.z0, d = pd - q.d0; if (!(h > 0 && d > 0)) return;
-    if (pc.steps.length === 1 && endPanel3(o => grp.add(o), panelLook(c, d, h, ps.door), sd, sd === 'L' ? 0 : W, q.z0, h, q.d0, d, pt, pmM)) return;
+    if (pc.steps.length === 1 && endPanel3(o => grp.add(o), panelLook(c, d, h, ps.door, sd), sd, sd === 'L' ? 0 : W, q.z0, h, q.d0, d, pt, pmM)) return;
     grp.add(box3(pt, h, d, pmM, x, q.z0 + h / 2, q.d0 + d / 2));
   })));
   // Fillers to the wall, flush with the fronts, with a short return behind them.
