@@ -3732,6 +3732,9 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .walkui.locked .walkdot{display:block}
 .walkui.locked [data-walk=full],.walkui.full [data-walk=full]{display:none}
 .walkui.locked .walkbar{opacity:.85}
+.walksun{display:flex;align-items:center;gap:5px;color:var(--t-n,#555);white-space:nowrap}.walksun input{width:96px;accent-color:var(--accent,#2563eb)}.walksun span{min-width:58px}
+.walklights[aria-pressed=true]{background:var(--ink,#1d2533);border-color:var(--ink,#1d2533);color:#fff}
+@media (max-width:640px){.walksun input{width:70px}.walksun span{display:none}}
 .view3d-wrap:fullscreen{border-radius:0;width:100vw;height:100vh}
 .walkstick{position:absolute;left:14px;bottom:46px;width:100px;height:100px;border-radius:50%;border:1px solid rgba(0,0,0,.25);background:rgba(255,255,255,.35);pointer-events:auto;touch-action:none;display:grid;place-items:center}
 .walkstick i{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.3);display:block}
@@ -3789,7 +3792,7 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .fs-acts,.fs-move{display:flex;gap:6px}
 .fs-acts .danger{margin-left:auto}
 .fs-dlg{border:1px solid var(--line-strong);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--sunk)}
-.fs-dlgh{font-weight:600}
+.fs-dlgh{font-weight:600;display:flex;align-items:center;justify-content:space-between}
 .fs-dlgb{display:flex;gap:6px;justify-content:flex-end}
 .fs-bottom{display:flex;flex-wrap:wrap;align-items:end;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
 .fs-b{display:flex;flex-direction:column;gap:2px;min-width:150px}
@@ -3944,3 +3947,24 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .libtop{position:sticky;top:0;z-index:2;background:var(--panel,#fff);padding-bottom:1px}
 .room .rail .libtop{background:var(--d-tree)}
 @media (max-width: 760px){ .libtop{position:static} }
+/* 0.63.21 multi-select: bottom bar for several cabinets, and the Faces tiles in the right-click menu. */
+.room .dock .itembar.mbar{grid-template-columns:repeat(2,auto)!important}
+.room .dock .itembar.mbar > .ib-size{grid-column:1!important;grid-row:1!important}
+.room .dock .itembar.mbar > .ib-acts{grid-column:2!important;grid-row:1!important;align-self:center}
+.mbar .ib-name .muted{font-weight:400}
+.ctxmenu .ctxfaces{display:grid;grid-template-columns:repeat(4,76px);gap:4px;padding:4px 6px 6px}
+.ctxmenu .ctxfaces button.ctxface{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:11px;line-height:1.2;text-align:center;white-space:normal;width:auto}
+.ctxmenu .ctxfaces button.ctxface:hover,.ctxmenu .ctxfaces button.ctxface:focus-visible{border-color:var(--accent);background:var(--accent-soft)}
+.ctxmenu .ctxfaces svg{width:26px;height:40px}
+.ctxmenu button[aria-checked="true"]{font-weight:600;color:var(--accent)}
+/* 0.63.28: the cabinet editor's big 3D view (ed3dview.js): a bar of looks, cameras and shown parts over one large view. */
+.edx-body.big3d{grid-template-columns:minmax(0,1fr) 170px}
+.ed3-big{display:flex;flex-direction:column;gap:8px;padding:12px 14px;min-width:0;min-height:0;background:var(--sunk)}
+.ed3-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}
+.ed3-grp{display:flex;align-items:center;gap:6px}
+.ed3-lbl{font:500 13px var(--f-ui);color:var(--muted)}
+.ed3-bar .btn.sm.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.ed3-big .preview.ed3-host{flex:1;min-height:300px;padding:0;position:relative;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.ed3-big .preview.ed3-host canvas{display:block;width:100%!important;height:100%!important;position:absolute;inset:0;cursor:grab}
+.ed3-big .preview.ed3-host canvas:active{cursor:grabbing}
+@media (max-width: 1000px){ .edx-body.big3d{grid-template-columns:minmax(0,1fr)} }

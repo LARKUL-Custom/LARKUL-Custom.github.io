@@ -27,6 +27,8 @@ function paintCab(c, ps, b, fr) {
   const add = (k, v, matId) => { (prefin(matId) ? eb : sq)[k] += v; };
   // Bought fronts (Bywater melamine) come finished and edged: no paint, no edgebanding.
   fr.forEach(f => { if (f.type === 'open') return; const { ds } = frontStyle(c, f); if (!ds.bought) add('fronts', (f.x1 - f.x0) * (f.z1 - f.z0) / 144 * (po.bothSides ? 2 : 1), ds.mat); });
+  // Bought panels are finished like bought doors: Bywater melamine ones come done, the rest get painted.
+  (b.buyPanels || []).forEach(pt => { if (!(pt.ds && pt.ds.bought)) add('panels', area(pt), pt.mat); });
   b.parts.forEach(pt => {
     if (pt.cabId !== c.id) return;
     if (pt.kind === 'applied') add('panels', area(pt), pt.mat);
@@ -156,7 +158,7 @@ function instCounts(cabs, own) {
   });
   cabs.forEach(({ c }) => {
     n.filler += (typeof fillersOf === 'function' ? fillersOf(c).length : 0);
-    const b = buildParts(c); b.parts.forEach(pt => { if (pt.cabId === c.id && pt.kind === 'applied') n[c.cat === 'Tall' ? 'panelTall' : 'panel'] += pt.qty || 1; });
+    const b = buildParts(c); panelPartsOf(b, c).forEach(pt => { n[c.cat === 'Tall' ? 'panelTall' : 'panel'] += pt.qty || 1; });
     computeFronts(c).forEach(f => { if (f.type === 'door') n.door++; else if (f.type === 'drawer' || f.type === 'false') n.drawer++; if (pullPlacement(c, f)) n.pull++; });
   });
   own.forEach(({ c }) => {
@@ -327,11 +329,11 @@ function priceCab(c, ps) {
   const boxEach = nDr ? dbxPrice(ps, drawerMatT(cabSet(c, 'drawerMatT'))) : 0;
   const extras = nPull * (+ad.perPull || 0) + nDr * ((+ad.perDrawer || 0) + boxEach) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
-  const pds = panelDoor(c), panelParts = b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied');
+  const pds = panelDoor(c), panelParts = panelPartsOf(b, c);
   // 0.59.21 (Ayden 2026-11-19): a flat slab end panel is its material by the sq ft plus the sheet's charge per panel ($25), like a
   // loose panel. A panel in a framed door style (shaker...) is priced as that door, as before.
   const slabP = pds.type === 'slab';
-  const ends = panelParts.reduce((a, pt) => { const m = mat(pt.mat); return a + pt.qty * (slabP ? (m ? pt.L * pt.W * matSqIn(m, ps) : 0) + panelAdd(ps, c.cat) : ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0); }, 0) + fillerPrice(c, b, ps);
+  const ends = panelParts.reduce((a, pt) => { const m = mat(pt.mat); return a + pt.qty * (pt.ds ? (ps.doors.on ? priceFront(pt.ds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0) : slabP ? (m ? pt.L * pt.W * matSqIn(m, ps) : 0) + panelAdd(ps, c.cat) : ps.doors.on ? priceFront(pds, pt.L * pt.W / 144, ps, pt.W, pt.L).total * gMark(ps, 'doors') : 0); }, 0) + fillerPrice(c, b, ps);
   let hardware = 0;
   if (ps.hardware.on) Object.entries(b.bom).forEach(([k, q]) => { hardware += q * (+ps.hardware.items[k] || 0); });
   hardware *= gMark(ps, 'hardware');
@@ -436,6 +438,24 @@ function panelDoorPick(id, t, cat) {
   return id === 'same' ? door : panelSlabId(t) || door;
 }
 function panelDoor(c) { return withFinish(doorStyle(panelDoorPick(cabSet(c, 'panelDoor'), doorTpl(cabSet(c, 'doorT')), c.cat)), c); }
+// 0.63.22 (Ayden 2026-11-24: "when i change the applied panels to the door style panels arent changing"): how an end panel
+// w deep and h tall looks in that style. framed = a frame and field wide and tall enough to show (else it draws as a slab).
+function panelLook(c, w, h, ds) {
+  ds = ds || panelDoor(c);
+  const framed = ds.type !== 'slab' && w >= 2 * (+ds.stile || 0) + 2 && h >= 2 * (+ds.rail || 0) + 2;
+  return { ds, framed };
+}
+// 0.63.22 (Ayden 2026-11-24: "if the panels have door styles and the materials not hdm they need to be buyout doors",
+// "we only make hdm doors in house"): an end panel in a framed door style is made in the shop only from HDM. In any other
+// material (maple, alder...), or in a buyout style, it is ordered from the door maker: not cut, on the door order, priced
+// as a front of that style. A flat slab panel is always cut in the shop.
+// HDM and MDF are the same sheet here (the shop's library calls it "3/4 MDF (paint grade)").
+const shopMadeDoorMat = m => /\b(hdm|mdf)\b/i.test((m && m.name) || '');
+function panelBuys(ds, matId) { return !!ds && ds.type !== 'slab' && (ds.source === 'buyout' || !shopMadeDoorMat(mat(matId))); }
+// The style a bought panel is ordered and priced in.
+const buyStyle = ds => ds.source === 'buyout' ? ds : { ...ds, source: 'buyout' };
+// A cabinet's applied panels, cut and bought: the parts (kind 'applied') plus the ones ordered (b.buyPanels).
+const panelPartsOf = (b, c) => [...b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'applied'), ...(b.buyPanels || [])];
 // The panel library keeps the fit (overhang, scribe, to the floor); the look comes from the door style.
 function panelFor(c) {
   const ps = panelStyle(cabSet(c, 'panelStyle')), ds = panelDoor(c), framed = ds.type !== 'slab';
@@ -445,6 +465,9 @@ function panelFor(c) {
 function shapePanelCat(s) { const b = shapeBox(s.pts || []); return b.h > 48 ? 'Tall' : (+s.elev || 0) >= 30 ? 'Wall' : 'Base'; }
 function priceShapes(ps) {
   return (S.shapes || []).map(s => {
+    // 0.63.24: a miter-folded leg is four fronts of its door style (bought or made).
+    const P = typeof shapePost === 'function' && shapePost(s);
+    if (P) return { name: `Leg, ${s.name || 'shape'} (${fmtLen(P.W, 1)} × ${fmtLen(P.D, 1)} × ${fmtLen(P.H, 1)}, ${P.ds.name}${P.buy ? ', buyout' : ''})`, amount: ps.doors && ps.doors.on ? P.faces.reduce((t, f) => t + priceFront(P.ds, f.w * f.h / 144, ps, f.w, f.h).total * gMark(ps, 'doors'), 0) : 0 };
     const m = shapeMat(s), b = shapeBox(s.pts || []), cat = shapePanelCat(s), o = shapeOutline(s.pts || []), area = o.length > 2 ? Math.abs(o.reduce((t, q, i) => { const r = o[(i + 1) % o.length]; return t + q.x * r.y - r.x * q.y; }, 0)) / 2 : b.w * b.h;
     const amount = (m ? area * matSqIn(m, ps) : 0) + panelAdd(ps, cat);
     return { name: `Panel, ${s.name || 'shape'} (${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)}, ${cat.toLowerCase()})`, amount };
@@ -738,6 +761,7 @@ function libUsage(ps) {
     S.cabinets.forEach(c => {
       try { computeFronts(c).forEach(f => { if (f.type !== 'open') add(doors, frontStyle(c, f).ds.id, (f.x1 - f.x0) * (f.z1 - f.z0) / 144); }); } catch (_) {}
       const b = buildParts(c);
+      (b.buyPanels || []).forEach(pt => add(doors, pt.ds.id, pt.L * pt.W * pt.qty / 144, pt.qty));
       b.parts.forEach(pt => { if (pt.cabId !== c.id) return; if (pt.kind === 'applied') add(doors, panelDoor(c).id, pt.L * pt.W * pt.qty / 144, pt.qty); if (pt.mat && !(ps.doors.on && (FRONT_KINDS.includes(pt.kind) || pt.kind === 'applied'))) add(mats, pt.mat, pt.L * pt.W * pt.qty / 144, pt.qty); });
       (c.inserts || []).forEach(it => add(ins, insertType(it.type).id, 0));
     });

@@ -384,7 +384,7 @@ const WX_CSS = `
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#e4e1db;font:14px/1.4 'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);-webkit-tap-highlight-color:transparent}
 .wx-wrap{position:fixed;inset:0}.wx-host{position:absolute;inset:0}.wx-host canvas{display:block;width:100%!important;height:100%!important;touch-action:none}
 .walkui{position:absolute;inset:0}
-.wx-wrap:has(.walkui) #walk3d{display:none}
+.wx-wrap:has(.walkui) #walk3d,.wx-wrap:has(.walkui) .wx-sun{display:none}
 .ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:7px 12px;font:inherit;font-weight:600;cursor:pointer}
 .btn.sm{padding:4px 9px;font-size:12px}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}

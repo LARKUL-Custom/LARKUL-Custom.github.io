@@ -81,6 +81,7 @@ function readMozRoom(el, fallbackName) {
   const prods = kids(el.querySelector(':scope > Products'), 'Product').map(x => {
     const t = x.querySelector(':scope > ProductType');
     return {
+      el: x,
       name: x.getAttribute('ProdName') || x.getAttribute('Name') || '', desc: x.getAttribute('ProductDesc') || '',
       w: mzNum(x, 'Width'), h: mzNum(x, 'Height'), d: mzNum(x, 'Depth'), x: mzNum(x, 'X') || 0, y: mzNum(x, 'Y'),
       elev: mzNum(x, 'Elev') || 0, outset: mzNum(x, 'Outset') || 0, rot: mzNum(x, 'Rot') || 0,
@@ -89,6 +90,11 @@ function readMozRoom(el, fallbackName) {
       // ProductType SubType 1 base, 2 wall, 3 tall; SubSubType 7 filler, 9 end panel or applied door.
       type: t ? +t.getAttribute('SubType') : NaN, sub: t ? +t.getAttribute('SubSubType') : NaN, num: +x.getAttribute('CabNo') || 0,
       // Inserts placed in the cabinet's openings (graphic-only ones like an oven picture are left out).
+      // 0.63.19: which ends Mozaik built finished ("Fin End (L)") or unfinished ("UnFin End (R)").
+      // 0.63.30: how far a panel product's own end part reaches in front of the product (Mozaik brings a tall end panel
+      // out to the door faces, 21.8 mm on Argil). The part stands on edge (A1 -90): A2 0 runs from Y back, A2 180 ends at Y.
+      fwd: [...x.getElementsByTagName('CabProdPart')].filter(q => /^(Un)?Fin End \(/i.test(q.getAttribute('Name') || '') && Math.abs(mzNum(q, 'A1') + 90) < 1).reduce((m, q) => { const y = mzNum(q, 'Y'), w = mzNum(q, 'W'); if (!isFinite(y) || !isFinite(w)) return m; const f = Math.abs(mzNum(q, 'A2') - 180) < 1 ? y - w : y; return Math.max(m, -f); }, 0),
+      ends: [...x.getElementsByTagName('CabProdPart')].reduce((o, q) => { const m = /^(Un)?Fin End \(([LR])\)/i.exec(q.getAttribute('Name') || ''); if (m) o[m[2].toUpperCase()] = m[1] ? 'unfin' : 'fin'; return o; }, {}),
       inserts: [...x.getElementsByTagName('*')].filter(e => /^Insert[ABC]$/.test(e.tagName) && e.getAttribute('GraphicOnly') !== 'True').map(e => e.getAttribute('Name') || ''),
       // Every door and drawer front with its spot on the cabinet face (Z up from the cabinet bottom).
       fronts: [...x.getElementsByTagName('ProductDoor'), ...x.getElementsByTagName('DrawerFront')].map(f => ({
@@ -115,7 +121,9 @@ function readMozRoom(el, fallbackName) {
   }
   // Room quantity (Mozaik's Quan): the same room built that many times.
   const qty = Math.max(1, Math.round(+el.getAttribute('Quan') || +el.getAttribute('Quantity') || 1));
-  return { name: el.getAttribute('Name') || fallbackName, walls, prods, appls, hwNames, mats, qty };
+  // Mozaik's room countertop settings (mm): thickness, front and end overlay, backsplash height.
+  const rp = el.querySelector(':scope > RoomParms'), ct = rp ? { thick: mzNum(rp, 'CT_Thick'), front: mzNum(rp, 'CT_FrOLay'), end: mzNum(rp, 'CT_FEOlay'), splash: mzNum(rp, 'CT_Splash') } : null;
+  return { name: el.getAttribute('Name') || fallbackName, walls, prods, appls, hwNames, mats, qty, ct };
 }
 function readMozaik(texts) {
   const rooms = []; let jobName = '';
@@ -146,6 +154,9 @@ function epName(n) {
   const side = (m[1] || m[4] || '').toLowerCase();
   return `${EP_SHORT[m[2].toUpperCase()]} End Panel${m[3] ? ' Live Edge' : ''}${side ? ' ' + side[0].toUpperCase() + side.slice(1) : ''}`;
 }
+// 0.63.30 (Ayden 2026-11-24: Mozaik's panels between the talls and the fridge are "as deep as our doors so like 24.875 so
+// they lined up with the doors"): a standalone end panel comes in that much deeper, to the nearest 1/16".
+const panelFwd = p => { const f = (p.fwd || 0) * (p.d0 > 0 && p.d > 0 ? p.d / p.d0 : 1); return f > 0.05 && f < 3 ? Math.round(f * 16) / 16 : 0; };
 const isEndPanel = p => /end panel/i.test(p.name + ' ' + p.desc) || EP_RE.test(String(p.name || '').trim()) || p.sub === 9;
 function mozCat(p) {
   const known = Object.keys(MOZ_LIB_CATS).find(k => MOZ_LIB_CATS[k].includes(p.name.trim()));
@@ -245,9 +256,17 @@ function mozRows(p, sz) {
   // 0.61.0: a space between two rows of fronts (a wall oven's or microwave's opening) is an open row that tall.
   bands.forEach((b, i) => {
     const up = bands[i - 1], gap = up ? up.z - (b.z + b.h) : 0;
-    if (sz(gap) > 3) out.push({ type: 'open', h: sz(gap) });
+    // The open row sits between two front gaps, so it is the space less those (0.63.19: the oven's doors were 1/4" short).
+    const fg = (S.job && S.job.params && S.job.params.frontGap) ?? SHOP_PARAMS.frontGap;
+    if (sz(gap) > 3) out.push({ type: 'open', h: r3(sz(gap) - 2 * fg) });
     out.push(row(b));
   });
+  // 0.63.19 (Jimmy Walker "Tall Double Oven": two doors at the top, the ovens below them): fronts that stop well up the
+  // cabinet leave an opening under them down to the toe, as tall as what is left.
+  const low = Math.min(...bands.map(b => b.z));
+  // An upper with its doors over a microwave space (Ayden's Serv 2615 list: "full-height doors instead of short doors over
+  // an 18" open microwave space") has no toe under it, so any space of 3" or more under its fronts is that opening.
+  if (p.type === 2 ? sz(low) > 3 : sz(low) > 12 && sz(low) > sz(p.h) / 2) { out.forEach(r => { if (r.h === '*') r.h = sz(tall.h); }); out.push({ type: 'open', h: '*' }); }
   // The opening holds the appliance, so it gets no shelves; shelves set row by row then, about one per 14" of door.
   if (out.some(r => r.type === 'open')) {
     const fixed = out.reduce((t, r) => t + (r.h === '*' ? 0 : +r.h), 0), star = Math.max(0, sz(p.h) - fixed);
@@ -261,6 +280,47 @@ function mozRows(p, sz) {
     const st = style(fs[0].style); if (st) r.style = st;
     return r;
   }
+}
+// 0.63.25 (Ayden 2026-11-24: "100% exact copy"; Ryan Servro vanity: drawer stacks beside pairs of doors): a face Mozaik
+// splits into side-by-side sections comes in as one row split into columns (row.cols, like the Face tab's side-by-side
+// split), each column its fronts top to bottom, at Mozaik's widths and heights. Null when the fronts don't fall into
+// clean columns.
+function mozCols(p, sz) {
+  const fs = p.fronts.map(f => ({ ...f, x1: f.x + f.w, z1: f.z + f.h })).sort((a, b) => a.x - b.x);
+  const cols = [];
+  fs.forEach(f => { const c = cols.find(k => f.x < k.x1 - 2 && f.x1 > k.x0 + 2); if (c) { c.fs.push(f); c.x0 = Math.min(c.x0, f.x); c.x1 = Math.max(c.x1, f.x1); } else cols.push({ x0: f.x, x1: f.x1, fs: [f] }); });
+  // Columns that grew into each other merge.
+  for (let i = 0; i < cols.length; i++) for (let j = i + 1; j < cols.length; j++) if (cols[j].x0 < cols[i].x1 - 2 && cols[j].x1 > cols[i].x0 + 2) { cols[i].fs.push(...cols[j].fs); cols[i].x0 = Math.min(cols[i].x0, cols[j].x0); cols[i].x1 = Math.max(cols[i].x1, cols[j].x1); cols.splice(j, 1); j = i; }
+  if (cols.length < 2) return null;
+  cols.sort((a, b) => a.x0 - b.x0);
+  const style = n => { const k = String(n || '').toLowerCase(), d = S.doorStyles.find(x => x.name.toLowerCase() === k) || S.doorStyles.find(x => x.name.toLowerCase() === shapeName(n).toLowerCase()); return d ? d.id : ''; };
+  const fg = (S.job && S.job.params && S.job.params.frontGap) ?? SHOP_PARAMS.frontGap;
+  const out = [];
+  for (const col of cols) {
+    const bands = [];
+    col.fs.forEach(f => { let b = bands.find(b => Math.abs(b.z - f.z) < 2 && Math.abs(b.h - f.h) < 2); if (!b) bands.push(b = { z: f.z, h: f.h, fs: [] }); b.fs.push(f); });
+    bands.sort((a, b) => b.z - a.z);
+    for (let i = 1; i < bands.length; i++) if (bands[i].z + bands[i].h > bands[i - 1].z + 2) return null;
+    const leaves = [];
+    const gaps = bands.slice(1).map((b, i) => sz(bands[i].z - (b.z + b.h))).filter(g => g <= 3), vg = gaps.length ? Math.min(...gaps) : fg;
+    bands.forEach((b, i) => {
+      const up = bands[i - 1], gap = up ? sz(up.z - (b.z + b.h)) : 0;
+      if (gap > 3) leaves.push({ type: 'open', h: r3(gap - 2 * vg) });
+      const bf = b.fs.sort((x, y) => x.x - y.x), type = bf.some(f => f.type === 'door') ? 'door' : 'drawer';
+      const lf = { type, h: sz(b.h), count: bf.length };
+      if (type === 'door' && bf.length === 1 && /[LR]/.test(bf[0].hinge)) lf.hinge = bf[0].hinge;
+      const st = style(bf[0].style); if (st) lf.style = st;
+      leaves.push(lf);
+    });
+    const tall = leaves.reduce((a, b) => (b.type !== 'open' && +b.h > +a.h ? b : a), leaves[0]); tall.h = '*';
+    const one = leaves.length > 1 ? { w: sz(col.x1 - col.x0), rows: leaves } : { w: sz(col.x1 - col.x0), ...leaves[0] };
+    delete one.h; if (leaves.length > 1 && Math.abs(vg - fg) > 0.001) one.vgap = vg;
+    out.push(one);
+  }
+  const cgs = cols.slice(1).map((k, i) => sz(k.x0 - cols[i].x1)), colGap = cgs.length ? Math.min(...cgs) : fg;
+  // The widest column takes up what rounding leaves.
+  out.reduce((a, b) => (+b.w > +a.w ? b : a)).w = '*';
+  return [{ type: 'door', h: '*', count: 1, cols: out, ...(Math.abs(colGap - fg) > 0.001 ? { colGap } : {}) }];
 }
 // The room's Mozaik drawer guide, hinge and pull, when the job has the same product: it must share a model word
 // like "563H", "TANDEM" or "CLIP", not just a maker's name.
@@ -383,6 +443,8 @@ function mozRooms(data) {
     rm.wallThick = th ? sz(th) : S.job.wallThick; rm.wallHeight = ht ? sz(ht) : S.job.wallHeight;
     mozHardware(rm, src);
     mozMaterials(rm, src, data);
+    // 0.63.19: the room's tops as Mozaik makes them (thickness, front and end overhang, backsplash from its room settings).
+    if (src.ct && !data.inches) mozTopParms(rm, src.ct, sz);
     const walls = mozWalls(src.walls, sz, rm);
     rm.walls = walls.map(({ a0, L, ...w }) => w);
     // Wall end caps Bid Reader read (bidWalls): Left/Right end caps and custom caps, sticking out on the cabinet side.
@@ -392,7 +454,7 @@ function mozRooms(data) {
       if (bc.E) w.capE = { on: true, len: bc.E, side: 1 };
       if (bc.along.length) w.caps = bc.along.map(c => ({ id: uid('cap'), a: r3(c.a), len: c.len, side: 1 }));
     });
-    const ps = src.prods.map(p0 => ({ ...p0, w: sz(p0.w), h: sz(p0.h), d: sz(p0.d), x: cv(p0.x), y: isFinite(p0.y) ? cv(p0.y) : NaN, elev: sz(p0.elev), outset: sz(p0.outset) }));
+    const ps = src.prods.map(p0 => ({ ...p0, w0: p0.w, h0: p0.h, d0: p0.d, w: sz(p0.w), h: sz(p0.h), d: sz(p0.d), x: cv(p0.x), y: isFinite(p0.y) ? cv(p0.y) : NaN, elev: sz(p0.elev), outset: sz(p0.outset) }));
     const cabs = [], extras = [], flag = (p, why) => (data.flagged = data.flagged || []).push(why ? `${p.name} (${why})` : p.name);
     // A library product placed where the Mozaik one is, at its size.
     const put = (lib, p, at, o = {}) => {
@@ -422,7 +484,7 @@ function mozRooms(data) {
         return;
       }
       const cat = mozCat(p), lib = mozLib(p, cat);
-      if (!lib) { flag(p, 'no product of that name or kind in the library'); return; }
+      if (!lib) { if (!mozOwnProduct(rm, p, at, put)) flag(p, 'no product of that name or kind in the library'); return; }
       const c = newCab(S, lib, at.wall, at.side, at.off);
       Object.assign(c, { name: p.name || lib.name, w: p.w, h: p.h, d: p.d, elev: p.elev, fromMozaik: true });
       // From a Bid Reader row: its notes, and ADA (9" toe) when the row says so.
@@ -439,14 +501,31 @@ function mozRooms(data) {
       let rows = null;
       if (angledCorner(c)) {
         const ys = p.fronts.map(f => sz(f.y)).filter(y => y > 3 && y < Math.min(p.w, p.d) - 3);
-        if (ys.length) c.corner = { ...c.corner, leg: Math.round(Math.max(...ys) * 4) / 4 };
+        // A 45° corner's door starts where the angled face leaves the leg, so there the leg is the depth less that y
+        // (Jimmy Walker "45 Susan Cabinet": 36" deep, door at 12", 24" legs; 0.63.19).
+        if (ys.length) c.corner = { ...c.corner, leg: Math.round((c.corner.type === 'diag' ? c.d - Math.min(...ys) : Math.max(...ys)) * 4) / 4 };
         // 0.62.6 (Ayden 2026-11-24: "its two separate doors"): a Mozaik 90° corner's doors are two doors, each hung on
         // the cabinet, not a bi-fold.
         if (c.corner.type === 'l' && new Set(p.fronts.map(f => f.face)).size > 1) c.corner = { ...c.corner, doors: 'pair' };
         const faces = [...new Set(p.fronts.map(f => f.face))], one = p.fronts.filter(f => f.face === faces[0]);
         if (one.length) { rows = mozRows({ ...p, fronts: one }, sz); if (rows) rows.forEach(r => { if (r.count) r.count = 1; }); }
-      } else rows = mozRows(p, sz);
+      } else rows = mozRows(p, sz) || (!faceFrame(c) && !(typeof blindCorner === 'function' && blindCorner(c)) && !c.moz && p.fronts.length > 1 ? mozCols(p, sz) : null);
       if (rows) c.rows = rows;
+      // 0.63.19 (Ayden 2026-11-24: "follow the exact drawing 100% exact copy"): the fronts' side reveals as Mozaik drew them.
+      // A 45° corner's one door on its angled face: Mozaik's reveals each side of it (wider than a plain cabinet's).
+      if (rows && c.corner && c.corner.type === 'diag' && p.fronts.length === 1) {
+        const f = p.fronts[0], fl = Math.hypot(c.w - c.corner.leg, c.d - c.corner.leg), l = sz(f.x), fw = sz(f.w);
+        if (l >= 0 && l < 2 && fl - l - fw >= 0 && fl - l - fw < 2) { c.revL = l; c.revR = r3(fl - l - fw); }
+      }
+      if (rows && !angledCorner(c) && !(typeof blindCorner === 'function' && blindCorner(c))) {
+        const l = sz(Math.min(...p.fronts.map(f => f.x))), r = sz(p.w0 - Math.max(...p.fronts.map(f => f.x + f.w)));
+        if (l >= 0 && l < 0.5) c.revL = l; if (r >= 0 && r < 0.5) c.revR = r;
+      }
+      if (rows) {
+        const z0 = sz(Math.min(...p.fronts.map(f => f.z))), t = sz(p.h0 - Math.max(...p.fronts.map(f => f.z + f.h)));
+        const lowOpen = rows.length && rows[rows.length - 1].type === 'open' && rows[rows.length - 1].h === '*';
+        if (z0 >= 0 && z0 < c.h / 2 && !lowOpen) c.frontZ0 = z0; if (t >= 0 && t < 1) c.revT = t;
+      }
       if (/oven/i.test(p.name) && !(rows || []).some(r => r.type === 'open')) flag(p, 'check the oven opening');
       // 0.62.6 (Ayden 2026-11-24: "the tall cabinet in the butler pantry is a double oven"): an oven cabinet gets its wall
       // oven (or two, one over the other for a "double") standing in the opening between its fronts, front flush with the
@@ -454,6 +533,9 @@ function mozRooms(data) {
       if (/oven/i.test(p.name) && (rows || []).some(r => r.type === 'open') && typeof fixtNew === 'function') {
         const fr = p.fronts.map(f => ({ z0: sz(f.z), z1: sz(f.z + f.h) })).sort((a, b) => a.z0 - b.z0);
         let gap = null; for (let i = 1; i < fr.length; i++) { const g0 = Math.max(...fr.slice(0, i).map(q => q.z1)), g1 = fr[i].z0; if (g1 - g0 > 3 && (!gap || g1 - g0 > gap.h)) gap = { z: g0, h: g1 - g0 }; }
+        // Fronts only at the top: the ovens stand in the opening under them, from the toe up.
+        const tk = c.construction && c.construction.toeKick ? 4 : 0;
+        if (!gap && fr.length && fr[0].z0 - tk > 12) gap = { z: tk, h: fr[0].z0 - tk };
         if (gap) {
           const dbl = /double|\b2\b|two/i.test(p.name + ' ' + (p.desc || '')) || gap.h > 40, ow = r3(Math.max(10, c.w - 1.5)), od = Math.min(23.5, c.d - 0.5);
           const f = fixtNew(dbl ? (c.w < 29 ? 'ov-d27' : 'ov-d30') : (c.w < 29 ? 'ov-s27' : 'ov-s30'));
@@ -463,6 +545,8 @@ function mozRooms(data) {
       }
       if (p.outset) c.outset = p.outset;
       if (p.num) c.num = p.num;
+      // Finished and unfinished ends as Mozaik built them (Mozaik's L/R are the viewer's, as here).
+      if (!p.fromBid && p.ends) { if (p.ends.L) c.endL = p.ends.L; if (p.ends.R) c.endR = p.ends.R; }
       if (p.inserts.length) c.inserts = p.inserts.map(mozInsert);
       rm.cabinets.push(c); cabs.push(c);
     });
@@ -470,6 +554,12 @@ function mozRooms(data) {
     // End panels belong to the cabinet beside them; a filler with no product of its name too: one that reaches a wall turns
     // that cabinet's filler on, anything else becomes its end panel.
     extras.forEach(({ p, at }) => {
+      // 0.63.25 (Ayden's Serv 2615 list: "a 3" filler next to a lazy susan corner turns into an end panel"): a Mozaik filler
+      // is placed as the library's filler at its own spot and size, never turned into an end panel.
+      if (isFiller(p) && !p.fromBid) {
+        const cat = mozCat(p), r = /right|\(r\)/i.test(p.name) ? 'right' : 'left', fl = libItem(cat === 'Wall' ? 'moz-frost-wall-' + r : cat === 'Tall' ? 'moz-frost-tth-' + r : 'moz-frost-bth-' + r);
+        if (fl) { put(fl, p, at); return; }
+      }
       // hi: the piece sits past the cabinet's far end along the wall. Which of those is the viewer's left or right
       // depends on the side of the wall.
       const near = (c, hi) => c.wall === at.wall && c.side === at.side && p.elev < c.elev + c.h - 0.5 && p.elev + p.h > c.elev + 0.5 && Math.abs(hi ? at.off - (c.off + c.w) : c.off - (at.off + p.w)) < 0.2;
@@ -481,7 +571,7 @@ function mozRooms(data) {
       // as a Support Panel instead of being left out.
       const sp = !c && isEndPanel(p) && typeof libItem === 'function' && libItem('made-panel');
       if (sp) {
-        const k = put(sp, p, at, { name: p.name && !/^finished panel$/i.test(p.name) ? epName(p.name) : sp.name, h: p.h > 0 ? p.h : sp.h, d: p.d > 3 ? p.d : p.w > 3 ? p.w : sp.d, elev: p.elev || 0, outset: p.outset || 0 });
+        const k = put(sp, p, at, { name: p.name && !/^finished panel$/i.test(p.name) ? epName(p.name) : sp.name, h: p.h > 0 ? p.h : sp.h, d: p.d > 3 ? p.d + panelFwd(p) : p.w > 3 ? p.w : sp.d, elev: p.elev || 0, outset: p.outset || 0 });
         return;
       }
       // 0.61.0: a filler with no cabinet beside it (in a washer niche, beside a bench) is placed as the library's filler.
@@ -495,6 +585,10 @@ function mozRooms(data) {
       const toWall = ref && !ref.hidden && (hi ? at.off + p.w > L - 0.5 : at.off < 0.5 + ref.a0) && rm.walls.length > 1;
       if (isFiller(p) && toWall) c['fill' + end] = 'on'; else c['panel' + end] = 'on';
     });
+    // 0.63.19 (Ayden 2026-11-24: "when importing from mozaik i want to follow the exact drawing 100% exact copy"): Mozaik
+    // draws every end panel and filler as a product, so the shop's automatic ones stay off on an imported cabinet's ends
+    // (set to Never; an end Mozaik panelled or filled stays Always). Cabinets added later still follow the shop's rules.
+    if (!data.inches) cabs.forEach(c => ['L', 'R'].forEach(e => { if (c['panel' + e] !== 'on') c['panel' + e] = 'off'; if (c['fill' + e] !== 'on') c['fill' + e] = 'off'; }));
     // A cabinet under a top brought in from Mozaik (a washer pedestal or bench under a wood top) gets no automatic
     // countertop as well.
     rm.shapes.filter(x => x.fromMozaik && x.plane === 'flat').forEach(t => {
@@ -553,6 +647,32 @@ function mozRooms(data) {
 // 0.61.0 (Ayden 2026-11-23: the laundry Wall 90 Corner ran 3/4" into the tall beside it on the next wall): Mozaik
 // butts the cabinet on the next wall against the corner's return a little inside the corner's depth, so the corner's
 // return leg is cut back to meet it (up to 2"; more than that is a real overlap and is left to see).
+function mozTopParms(rm, ct, sz) {
+  const base = countertop(rm.settings.countertop || roomSet('countertop')); if (!base || !base.id) return;
+  const want = { thick: sz(ct.thick), frontOverhang: sz(ct.front), endOverhang: sz(ct.end), backsplash: sz(ct.splash) };
+  Object.keys(want).forEach(k => { if (!isFinite(want[k]) || want[k] < 0) delete want[k]; });
+  if (Object.keys(want).every(k => Math.abs((+base[k] || 0) - want[k]) < 0.01)) return;
+  const name = `${base.name} (Mozaik)`, same = t => Object.keys(want).every(k => Math.abs((+t[k] || 0) - want[k]) < 0.01);
+  let t = (S.countertops || []).find(x => x.name === name && same(x));
+  if (!t) { t = { ...clone(base), id: uid('top'), name, ...want }; S.countertops.push(t); }
+  rm.settings.countertop = t.id;
+}
+// 0.63.25 (Ayden 2026-11-24, Argil master closet: "WM Double Hang" and "Top Cap" weren't drawn): a Mozaik product with
+// nothing like it in the library is brought in part for part from the job's own copy of it (its parts, outlines,
+// holes and formulas), like the Mozaik library products (mozprod.js). The product is kept in the job (S.mozJob).
+function mozOwnProduct(rm, p, at, put) {
+  if (!p.el || typeof mozParseProduct !== 'function' || typeof XMLSerializer === 'undefined') return false;
+  let d; try { d = mozParseProduct(new XMLSerializer().serializeToString(p.el)); } catch (e) { d = null; }
+  if (!d || !d.parts || !d.parts.length) return false;
+  const sig = JSON.stringify([d.n, d.lib, d.parts.length, d.parts.map(q => q.n).join(',')]);
+  S.mozJob = S.mozJob || [];
+  let def = S.mozJob.find(x => x.sig === sig);
+  if (!def) { def = { ...d, key: uid('mzj'), name: d.n, sig }; S.mozJob.push(def); }
+  const cat = d.sub === 3 ? 'Tall' : d.sub === 2 ? 'Wall' : 'Base';
+  const lib = { id: def.key, name: d.n, cat, w: p.w, h: p.h, d: p.d, elev: p.elev, moz: def.key, rows: [], params: {}, construction: { toeKick: false, top: 'full' } };
+  put(lib, p, at, { moz: def.key, cat, rows: [] });
+  return true;
+}
 function mozCornerFit(rm) {
   rm.cabinets.filter(c => c.corner && c.corner.type === 'l' && angledCorner(c)).forEach(c => {
     rm.cabinets.forEach(k => {
@@ -575,7 +695,24 @@ function mozMaterials(rm, src, data) {
   // from the Finish). A drawer template "15mm Rubberwood/White Mel" is sides / bottom: the box is picked by its sides.
   const part = (n, i) => { const a = String(n).split('/').map(x => x.trim()).filter(Boolean); return a.length > 1 ? a[i < 0 ? a.length - 1 : i] : n; };
   if (m.cabinet) pick('cabMatT', (S.matTemplates || {}).cabinet || [], part(m.cabinet, -1), (n, l) => same(n, l));
-  if (m.drawer) pick('drawerMatT', (S.matTemplates || {}).drawer || [], part(m.drawer, 0), (n, l) => same(n, l), (n, l) => /baltic|birch|ply/.test(n) && /birch/.test(l));
+  if (m.drawer) {
+    const dl = (S.matTemplates || {}).drawer || [], dn = part(m.drawer, 0);
+    const hit = dl.find(x => same(words(dn), words(x.name))) || (/baltic|birch|ply/.test(words(dn)) && dl.find(x => /birch/.test(words(x.name)))) || dl.find(x => words(x.name) === words(dn));
+    if (hit) rm.settings.drawerMatT = hit.id;
+    else {
+      // 0.63.25 (Ayden's Argil list: "the 15mm Rubberwood drawers get no match"): a drawer box material with nothing like
+      // it here is added as its own sheet (thickness from the name, "15mm" = 0.59") with a drawer template named after it,
+      // the bottom kept from the job's drawer template. Its price starts at $0, noted in the job notes.
+      const mm = /(\d+(?:\.\d+)?)\s*mm/i.exec(dn), fr = /(\d+)\s*\/\s*(\d+)\s*"?/.exec(dn), th = mm ? r3(+mm[1] / 25.4) : fr ? r3(+fr[1] / +fr[2]) : 0.5;
+      const base = drawerMatT(S.job.defaults.drawerMatT) || dl[0] || {}, bm = mat(base.sides) || {};
+      let sm = S.materials.find(x => words(x.name) === words(dn));
+      if (!sm) { sm = { ...clone(bm), id: uid('m'), name: dn, kind: 'sheet', thick: th, cost: 0, group: bm.group || '' }; S.materials.push(sm); }
+      let t = dl.find(x => words(x.name) === words(dn));
+      if (!t) { t = { ...clone(base), id: uid('dt'), name: dn, sides: sm.id }; dl.push(t); }
+      rm.settings.drawerMatT = t.id;
+      (data.matNotes = data.matNotes || []).push(`${rm.name}: added ${dn} (${fmtLen(th)}") for the drawer boxes; set its price in Materials`);
+    }
+  }
   // Doors and finished parts: the finish by wood, the door template by shape (style = shape only; the finish decides material).
   const fin = m.finish || m.door, fw = wood(words(fin));
   if (fin && fw && fw !== 'melamine') pick('finish', S.finishes || [], fin, (n, l) => same(n, l));

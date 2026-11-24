@@ -74,7 +74,9 @@ function cornerFronts(c, p, rows, zs) {
   rows.forEach((r, ri) => {
     const [z0, z1] = zs[ri];
     faces.forEach((fc, i) => {
-      const x0 = faces.length > 1 && i === 1 ? ft + gap : rv, x1 = r3(fc.len - rv);
+      // Two separate doors are each as wide as their face, as Mozaik draws them (0.63.19); a bi-fold's second door starts past the first.
+      const one = faces.length === 1, rvL = one && isFinite(c.revL) ? +c.revL : rv, rvR = one && isFinite(c.revR) ? +c.revR : rv; // Mozaik's reveals (0.63.19)
+      const x0 = faces.length > 1 && i === 1 && !cornerPair(c) ? ft + gap : rvL, x1 = r3(fc.len - rvR);
       let hinge = null;
       // A 90° corner set to two separate doors (0.62.6) hinges like the bi-fold too (Ayden 2026-11-24, 0.63.2: "the
       // continuing door should be seen as a continuation"): the hinge-side door on its outside end, the other on the

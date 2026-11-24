@@ -107,9 +107,21 @@ const MADE = {
     mp: {}, price: { base: 0, perFt: 0 }, fields: [],
     build(c, mp, x) {
       // 0.61.3: an automatic end panel piece is cut and priced by its cabinet (panelPieces); here it is only drawn.
-      if (c.autoOf) { const o = allCabs().find(k => k.id === c.autoOf), pm = o && typeof panelFor === 'function' && mat(panelFor(o).mat); x.show({ name: 'End panel', mat: (pm || x.fm).id, fin: true, pos: { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d } }); x.note('Cut and priced with its cabinet as an applied end panel. Move or resize it to make it your own'); return; }
-      const pt = x.part('Support panel', x.fm, r3(c.h), r3(c.d), { kind: 'applied' }); pt.fin = true;
-      pt.pos = { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d };
+      // 0.63.22: drawn in the applied end panel door style (Settings › Cabinet and panels) on the face that shows.
+      if (c.autoOf) { const o = allCabs().find(k => k.id === c.autoOf), pm = o && typeof panelFor === 'function' && mat(panelFor(o).mat); x.show({ name: 'End panel', mat: (pm || x.fm).id, fin: true, pos: { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d }, look3: o && madePanelLook(o, c, [c.autoEnd]) }); x.note('Cut and priced with its cabinet as an applied end panel. Move or resize it to make it your own'); return; }
+      const look = madePanelLook(c, c, madePanelFaces(c));
+      // 0.63.22: in a door style the shop doesn't make (not HDM, or a buyout style) the panel is ordered, not cut.
+      const pds = typeof panelDoor === 'function' && panelDoor(c);
+      if (pds && typeof panelBuys === 'function' && panelBuys(pds, x.fm.id)) {
+        const ds = buyStyle(pds); x.buy({ cab: LBL[c.id] || c.name, cabId: c.id, name: 'Support panel', kind: 'applied', mat: x.fm.id, L: r3(c.h), W: r3(c.d), qty: 1, ds, buy: true });
+        x.bom[`Support panel, ${ds.name} ${fmtLen(c.d, 1)} × ${fmtLen(c.h, 1)} (buyout)`] = 1; x.note('Bought from the door maker in its door style');
+        x.show({ name: 'Support panel', mat: x.fm.id, fin: true, pos: { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d }, look3: look }); return;
+      }
+      // A routed style is cut into the panel's show face, like a cabinet's applied end panel (build.js).
+      const ds = look && look.ds, fr = ds ? Math.max(+ds.stile || 0, +ds.rail || 0) : 0;
+      const ops = look && fr > 0 ? look.faces.map((e, i) => ({ type: 'pocket', x: fr, y: fr, w: r3(c.h - 2 * fr), h: r3(c.d - 2 * fr), depth: +ds.pocketDepth || 0.25, face: i ? 'hidden' : 'show', why: 'panel recess' })) : [];
+      const pt = x.part('Support panel', x.fm, r3(c.h), r3(c.d), { kind: 'applied', ops }); pt.fin = true;
+      pt.pos = { x: 0, y: 0, z: 0, dx: c.w, dy: c.h, dz: c.d }; if (look) MADE_LOOK3.set(pt, look);
     },
   },
   // 0.61.0 (Ayden 2026-11-23: panel-ready fridge columns and dishwashers came in as cabinets): the panel fronts on a
@@ -222,6 +234,23 @@ function madeEnds(c, pick) {
   });
   return out;
 }
+// The 3D look of a made part (kept off the part so cut lists and exports stay the same).
+const MADE_LOOK3 = new WeakMap();
+// 0.63.22: a panel product's look in the end panel door style: { ds, framed, faces } or null for a flat slab.
+// src = whose setting it follows (an automatic piece follows its cabinet). faces = the ends that show ('L' = -x).
+function madePanelLook(src, c, faces) {
+  if (typeof panelLook !== 'function' || !faces || !faces.length) return null;
+  const lk = panelLook(src, c.d, c.h); return lk.framed ? { ...lk, faces } : null;
+}
+// A loose panel shows the face with nothing butted against it; the name says which end of a run it is (Mozaik's
+// "Tall End Panel Left" faces left). Between two cabinets, or standing alone, both faces show.
+function madePanelFaces(c) {
+  const n = String(c.name || ''), named = /\bleft\b|\(l\)/i.test(n) ? ['L'] : /\bright\b|\(r\)/i.test(n) ? ['R'] : null;
+  if (named) return named;
+  let open = ['L', 'R'];
+  try { if (c.wall && typeof nearestAt === 'function') open = inRoomOf(c, () => open.filter(e => { const b = nearestAt(c, e === 'L' ? -1 : 1); return !(b && b.gap < 0.05 && b.kind === 'cab'); })); } catch (_) {}
+  return open.length ? open : ['L', 'R'];
+}
 function madeBuildParts(c) {
   const d = madeDef(c), mp = madeMp(c), lbl = LBL[c.id] || c.name, parts = [], bom = {}, warn = [], notes = [];
   const mt = cabMatT(cabSet(c, 'cabMatT')), cm = mat(mt.carcass) || S.materials[0], fm = mat(finishMat(c)) || cm, ptT = partTpl(cabSet(c, 'partT'));
@@ -231,11 +260,11 @@ function madeBuildParts(c) {
     if (!(L > 0) || !(Wd > 0)) warn.push(`${name} has a zero or negative size. Check the sizes.`);
     parts.push(pt); return pt;
   };
-  const panelFronts = [], show = [];
-  d.build(c, mp, { part, cm, fm, bom, warn, note: s => notes.push(s), front: o => panelFronts.push(o), show: o => show.push(o) });
+  const panelFronts = [], show = [], buyPanels = [];
+  d.build(c, mp, { part, cm, fm, bom, warn, note: s => notes.push(s), front: o => panelFronts.push(o), show: o => show.push(o), buy: o => buyPanels.push(o) });
   if (c.addParts && c.addParts.length && typeof addedParts === 'function') addedParts(c, parts, warn, part, cm);
   const removed = (c.partEdits && typeof applyPartEdits === 'function') ? applyPartEdits(c, parts, warn, ptT) : [];
-  return { parts, bom, warn, fronts: [], panelFronts, show, inD: c.d, inW: c.w, removed, notes };
+  return { parts, bom, warn, fronts: [], panelFronts, show, buyPanels, inD: c.d, inW: c.w, removed, notes };
 }
 // Sizes that follow the settings: a slat wall is as deep as its backer and slats, a privacy panel as wide as its board.
 // A panel front's style: the room's door style for a door of that size (frontStyle: size rules, and the Finish material).
@@ -296,7 +325,11 @@ function apRowFronts(c) {
   return out;
 }
 // The fronts of an Appliance Panel Front that fit on it, top first; none = one front the whole size.
-function apFronts(c, mp = madeMp(c)) {
+// 0.63.27 (Ayden 2026-11-24, Argil fridge wall: "big gaps are on the outside of the fridge panels, we wouldnt do that,
+// they would follow the regular 1/8 rule"): an appliance panel front's outside fronts reach toward the fronts beside it
+// (over an end panel between them, up to 1 1/2") so the gap to them is the regular 1/8". Next to another panel front
+// each takes half. Worked out on the fronts as drawn, so it follows whatever sits beside it.
+function apFrontsRaw(c, mp = madeMp(c)) {
   if ((c.rows || []).length) return apRowFronts(c).map(f => ({ z: r3(f.z0), h: r3(f.z1 - f.z0), x: r3(f.x0), w: r3(f.x1 - f.x0), hinge: f.hinge || '', type: f.type === 'drawer' ? 'drawer' : 'door', ...(f.style ? { style: f.style } : {}) }));
   const fr = (Array.isArray(mp.fr) ? mp.fr : []).filter(q => +q.h > 0 && +q.z >= -0.01 && +q.z + +q.h <= c.h + 0.01);
   // 0.61.5: x and w across the front (a pair of doors); none = the whole width. hinge L/R when Mozaik says.
@@ -310,6 +343,47 @@ function apFronts(c, mp = madeMp(c)) {
   };
   // A single front with nothing saved has its hinge in mp.hinge (Rehinge, 0.62.4).
   return fr.length ? fr.map(one) : [{ z: 0, h: c.h, x: 0, w: c.w, hinge: mp.hinge || '', type: 'door' }];
+}
+function apFronts(c, mp = madeMp(c)) {
+  const fr = apFrontsRaw(c, mp); if (!fr.length || !c.wall || typeof S === 'undefined') return fr;
+  const ext = apEdgeExt(c, fr); if (!ext.L && !ext.R) return fr;
+  const lo = Math.min(...fr.map(q => q.x)), hi = Math.max(...fr.map(q => q.x + q.w));
+  return fr.map(q => {
+    let x = q.x, w = q.w;
+    if (ext.L && Math.abs(q.x - lo) < 0.01) { x = r3(x - ext.L); w = r3(w + ext.L); }
+    if (ext.R && Math.abs(q.x + q.w - hi) < 0.01) w = r3(w + ext.R);
+    return { ...q, x, w };
+  });
+}
+// How far the outside fronts reach past their own reveal on the viewer's left (L) and right (R).
+function apEdgeExt(c, fr) {
+  const out = { L: 0, R: 0 }, G = 0.125, MAXR = 1.5, list = (S.cabinets || []).filter(k => k !== c && k.wall === c.wall && k.side === c.side && k.elev < c.elev + c.h - 1 && k.elev + k.h > c.elev + 1);
+  // Viewer-left positions: along the wall on the front side, mirrored on the back.
+  const vx = (k, x) => c.side === -1 ? -(k.off + k.w - x) : k.off + x;
+  const lo = vx(c, Math.min(...fr.map(q => q.x))), hi = vx(c, Math.max(...fr.map(q => q.x + q.w)));
+  const cL = c.side === -1 ? -(c.off + c.w) : c.off, cR = cL + c.w;
+  const edges = k => {
+    let f = [];
+    try { f = k.made === 'apfront' ? apFrontsRaw(k).map(q => [q.x, q.x + q.w]) : (typeof computeFronts === 'function' ? computeFronts(k) : []).filter(q => q.type !== 'open').map(q => [q.x0, q.x1]); } catch (e) { f = []; }
+    if (!f.length) return null;
+    return [vx(k, Math.min(...f.map(q => q[0]))), vx(k, Math.max(...f.map(q => q[1])))];
+  };
+  // Nearest first on each side, so the closest thing that shows decides the gap.
+  // 0.63.30: an end panel as deep as the doors (Mozaik's 24 7/8" tall end panels beside a fridge) is a neighbour like a
+  // door, its own side the edge; only a panel set back behind the fronts is looked past.
+  const flush = k => (+k.outset || 0) + k.d >= (+c.outset || 0) + 0.5;
+  const done = { L: false, R: false };
+  list.map(k => { const kL = k.side === -1 ? -(k.off + k.w) : k.off; return { k, kL, kR: kL + k.w }; })
+    .sort((a, b) => Math.min(Math.abs(cL - a.kR), Math.abs(a.kL - cR)) - Math.min(Math.abs(cL - b.kR), Math.abs(b.kL - cR)))
+    .forEach(({ k, kL, kR }) => {
+      const thin = k.w < 1.01;
+      if (thin && !flush(k)) return; // an end panel set back between: looked past
+      const e = thin ? [kL, kR] : edges(k); if (!e) return;
+      const half = k.made === 'apfront' ? 0.5 : 1;
+      if (!done.L && kR <= cL + 0.01 && cL - kR <= MAXR) { done.L = true; const gap = lo - e[1]; if (gap > G + 0.01) out.L = r3((gap - G) * half); }
+      if (!done.R && kL >= cR - 0.01 && kL - cR <= MAXR) { done.R = true; const gap = e[0] - hi; if (gap > G + 0.01) out.R = r3((gap - G) * half); }
+    });
+  return out;
 }
 const apFixt = c => c.fixt && typeof fixtList === 'function' ? fixtList().find(f => f.id === c.fixt) || (S.rooms || []).flatMap(r => r.fixtures || []).find(f => f.id === c.fixt) : null;
 // 0.61.5 (Ayden 2026-11-23: "the fridge doors need tall handles in the center where you would pull the handle on a normal
@@ -393,6 +467,9 @@ function madePrice(c, ps) {
   }
   if (c.made === 'panel' && c.autoOf) return { own: true, base: 0, perFt: 0 };
   if (c.made !== 'panel' || !ps || typeof matSqIn !== 'function') return { own: true, ...d.price };
+  // 0.63.22: in a framed end panel door style it is priced as a front of that style, like a cabinet's applied panel.
+  const pds = typeof panelDoor === 'function' && panelDoor(c);
+  if (pds && pds.type !== 'slab' && typeof priceFront === 'function') { const ds = panelBuys(pds, (mat(finishMat(c)) || {}).id) ? buyStyle(pds) : pds; return { own: true, base: r3(ps.doors && ps.doors.on ? priceFront(ds, c.h * c.d / 144, ps, c.d, c.h).total * gMark(ps, 'doors') : 0), perFt: 0 }; }
   const m = mat(finishMat(c)) || mat(cabMatT(cabSet(c, 'cabMatT')).carcass);
   return { own: true, base: r3((m ? c.h * c.d * matSqIn(m, ps) : 0) + (typeof panelAdd === 'function' ? panelAdd(ps, c.h >= 60 ? 'Tall' : c.elev >= 30 ? 'Wall' : 'Base') : 0)), perFt: 0 };
 }
@@ -447,6 +524,13 @@ function madeMeshes(c, opts = {}) {
       const mesh = new THREE.Mesh(g, M); mesh.rotation.y = -Math.PI / 2; mesh.position.set(q.ext.thick, 0, 0);
       if (!R3) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat3()));
       mesh.userData.part = q.name; grp.add(mesh); return;
+    }
+    // 0.63.22: a panel in a framed door style shows its frame and field on the face(s) that show.
+    const lk = q.look3 || MADE_LOOK3.get(q); if (lk && q.pos && typeof endPanel3 === 'function') {
+      const p = q.pos, add = o => { o.traverse(k => { k.userData.part = q.name; }); grp.add(o); };
+      if (lk.faces.length > 1) { lk.faces.forEach(e => endPanel3(add, lk, e, p.x + p.dx / 2, p.y, p.dy, p.z, p.dz, p.dx / 2, M)); }
+      else endPanel3(add, lk, lk.faces[0], lk.faces[0] === 'L' ? p.x + p.dx : p.x, p.y, p.dy, p.z, p.dz, p.dx, M);
+      return;
     }
     madeBoxes(q).forEach(p => { const m = box3(p.dx, p.dy, p.dz, M, p.x + p.dx / 2, p.y + p.dy / 2, p.z + p.dz / 2); m.userData.part = q.name; grp.add(m); });
   });

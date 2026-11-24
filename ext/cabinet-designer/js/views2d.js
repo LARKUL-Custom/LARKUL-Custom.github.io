@@ -45,7 +45,7 @@ function renderPlan(pr) {
   if (typeof wdPlanSVG === 'function') s += wdPlanSVG();
   S.walls.forEach(w => {
     const g = wg(w), h = w.thick / 2, P = (a, b) => ({ x: w.x1 + g.u.x * a + g.n.x * b, y: w.y1 + g.u.y * a + g.n.y * b });
-    const isSel = ui.sel && ui.sel.type === 'wall' && ui.sel.id === w.id;
+    const isSel = (ui.sel && ui.sel.type === 'wall' && ui.sel.id === w.id) || (typeof inMultiW === 'function' && inMultiW(w.id));
     if (pwalls && !w.hidden) { pwalls.push(polyPts([P(-h, -h), P(g.L + h, -h), P(g.L + h, h), P(-h, h)])); capsOf(w).forEach(cp => pwalls.push(polyPts(capPoly(w, cp)))); }
     // An island line (see-through wall) shows as a dashed line.
     if (w.hidden) s += `<line class="wallhid nss${isSel ? ' sel' : ''}" data-wall="${w.id}" x1="${w.x1}" y1="${w.y1}" x2="${w.x2}" y2="${w.y2}" stroke-width="${Math.max(2 * px, w.thick)}" stroke-dasharray="${6 * px} ${4 * px}"/>`;
@@ -620,6 +620,8 @@ function initPlan() {
     // The plan redraws on the first click, so the browser's dblclick never arrives: count two quick clicks here.
     // Shift or Ctrl click adds a cabinet to the selection or takes it out; Shift-drag on an empty spot draws a box.
     if (hits.length && (e.shiftKey || e.ctrlKey || e.metaKey)) { toggleMulti(hits[0]); return; }
+    // 0.63.21: Shift or Ctrl click on a wall picks several walls to change together.
+    if (!hits.length && (e.shiftKey || e.ctrlKey || e.metaKey)) { const wh = hitWall(p); if (wh) { toggleMultiW(wh); return; } }
     if (!hits.length && (e.shiftKey || e.ctrlKey || e.metaKey) && e.pointerType !== 'touch') { ui.drag = { mode: 'box', p0: p, add: e.ctrlKey || e.metaKey || multiIds().length > 0 }; return; }
     if (hits.length && dbl) { openQuick(ui.sel && hits.includes(ui.sel.id) ? ui.sel.id : hits[0]); return; }
     if (hits.length) {

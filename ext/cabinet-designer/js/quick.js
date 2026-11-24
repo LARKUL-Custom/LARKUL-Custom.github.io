@@ -78,16 +78,21 @@ function qbApply(f, t) {
   let v;
   if (f === 'endL' || f === 'endR') { v = t.value; if (v === MIXED) return; }
   else { v = parseLen(t.value); if (v === null || !isFinite(v) || (SIZE_F[f] && v <= 0) || (f === 'elev' && v < 0)) { renderDock(); return; } }
-  const notes = [];
+  const notes = []; let over = 0;
   mutate(() => ids.forEach(id => {
     const c = cab(id); if (!c) return;
     if (f === 'endL' || f === 'endR') { if (v) c[f] = v; else delete c[f]; cabLog(c, `${label}: ${t.selectedOptions[0].textContent} (quick edit)`); return; }
     let nv = v; if (SIZE_F[f]) { const r = qSizeRule(c, f, v); if (r.refuse) { notes.push(r.note); return; } nv = r.v; if (r.note) notes.push(r.note); }
-    const was = c[f], wasOff = c.off; if (f === 'w') qGrow(c, nv); c[f] = nv;
-    if (c.wall && !settle(c)) { c[f] = was; c.off = wasOff; notes.push(`${LBL[id] || c.name}: there is no room for that here.`); return; }
-    cabLog(c, `${label}: ${fmtLen(nv, 1)} (quick edit)`);
+    // 0.63.21: never refused for overlaps (Ayden's rule, 0.62.4). A new width still slides to free space when there is
+    // some; whatever then overlaps is kept, shown red and listed before Print, CNC and the quote.
+    if (f === 'w') qGrow(c, nv); c[f] = nv;
+    const want = c.off; if (c.wall && f === 'w' && !settle(c)) c.off = want;
+    if (c.wall && conflicts(c)) over++;
+    cabLog(c, `${label}: ${fmtLen(nv, 1)} (${ids.length > 1 ? 'changed together' : 'quick edit'})`);
   }));
   if (notes.length) flash(notes[0]);
+  else if (over) flash(`${ids.length > 1 ? `Changed ${ids.length} cabinets. ` : ''}${over} now overlap${over === 1 ? 's' : ''} and show${over === 1 ? 's' : ''} red until fixed.`);
+  else if (ids.length > 1) flash(`${label} changed on ${ids.length} cabinets`);
 }
 
 /* ----- Q7: snap to a standard height ----- */

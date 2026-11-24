@@ -264,7 +264,8 @@ function ctjEdgeSet(key, k, v) {
   mutate(() => {
     const o = ctjStore(r, true);
     if (v === '') delete o[k];
-    else if (k === 'bs' || /^ov[SEF]$/.test(k) || k === 'depth') o[k] = Math.max(0, +v || 0);
+    else if (k === 'bs' || k === 'depth') o[k] = Math.max(0, +v || 0);
+    else if (/^ov[SEF]$/.test(k)) o[k] = +v || 0;
     else if (/^ss/.test(k)) o[k] = !!+v;
     else if (+v) o[k] = true; else delete o[k];
   });
@@ -289,3 +290,19 @@ function ctjAct(a, id) {
   flash(v === 'm' ? 'The tops miter at this corner' : `${wallName(v === 'A' ? k.A.w : k.B.w)} top runs through the corner`);
   return true;
 }
+
+// 0.63.29 (Ayden 2026-11-24, "adjust the countertops length and depth by inputing a number"): the Length and Depth boxes
+// in the runs tables. A length grows or shrinks the top at its open end (the right end first; an end against a wall or
+// another top only when no end is open), as that end's overhang. A depth is the top's front overhang. Never refused.
+const ctjSizeIn = (r, k) => `<input type="text" class="num ctr-size" inputmode="decimal" data-id="${esc(r.key)}" data-k="${k}" value="${esc(fmtLen(r3(k === 'len' ? r.len : r.depth)))}" aria-label="${k === 'len' ? 'Length' : 'Depth'}">`;
+function ctjSize(key, k, v) {
+  const r = countertopRuns().find(q => q.key === key); if (!r || !isFinite(v) || v <= 0) return;
+  if (k === 'depth') { ctjEdgeSet(key, 'ovF', r3(r.ovF + v - r.depth)); return; }
+  const j = r.joints || {}, right = r.side === 1 ? 'E' : 'S', left = right === 'E' ? 'S' : 'E', open = e => !j[e] && !r['block' + e];
+  const e = open(right) ? right : open(left) ? left : right, ov = r3((r['ov' + e] || 0) + v - r.len);
+  mutate(() => { const o = ctjStore(r, true); o['ov' + e] = Math.max(-(r.end - r.start) + 1, ov); });
+}
+document.addEventListener('change', e => {
+  const t = e.target; if (!t.classList || !t.classList.contains('ctr-size')) return;
+  ctjSize(t.dataset.id, t.dataset.k, parseLen(t.value));
+});

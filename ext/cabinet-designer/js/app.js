@@ -88,7 +88,7 @@ function renderLibNav(on) {
   if (it) { main.style.setProperty('--libtone', `var(--t-${it[2]})`); main.style.setProperty('--libic', `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="#000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[it[1]]}</svg>`)}")`); }
 }
 function select(sel, keepMulti) {
-  ui.sel = sel; if (!keepMulti) ui.multi = [];
+  ui.sel = sel; if (!keepMulti) { ui.multi = []; ui.multiW = []; }
   if (sel && sel.type === 'cab') { const c = cab(sel.id); if (c) ui.elevWall = c.wall; }
   renderRoom();
 }
@@ -269,7 +269,9 @@ function toggleFull3d(on = !ui.full3d) {
   renderRoom(); requestAnimationFrame(() => { if (roomViewer) { roomViewer.resize(); roomViewer.requestRender(); } });
 }
 function renderRoom() {
-  clearDoorLimits();
+  // Opening or closing fronts (setOpen) changes nothing that is built: the shut fronts and the 3D room stay as they are.
+  const keep = renderRoom.keep3d; renderRoom.keep3d = false;
+  if (!keep) clearDoorLimits();
   if (ui.tab !== 'room') return;
   LBL = labels();
   renderSources();
@@ -305,7 +307,7 @@ function renderRoom() {
   if (ui.viewMode === 'plan') renderPlan();
   if (ui.viewMode === 'elev') renderElev();
   renderProps(); renderDock(); renderQuick();
-  if (ui.viewMode === '3d') { ensureRoomViewer(); buildRoom3D(); }
+  if (ui.viewMode === '3d' && !(keep && roomViewer)) { ensureRoomViewer(); buildRoom3D(); }
   if (ui.viewMode !== 'plan') renderHint();
 }
 function ensureRoomViewer() {
@@ -334,7 +336,7 @@ const wideQuery = matchMedia('(max-width: 960px)');
 const propsShut = () => !!ui.propsShut && !wideQuery.matches && !(ui.sel && (ui.sel.type === 'wall' || ui.sel.type === 'shape' || ui.sel.type === 'fixt'));
 function renderProps() {
   const el = $('#props'), room = $('#tab-room'), shut = propsShut();
-  if (room && room.classList.contains('props-shut') !== shut) { room.classList.toggle('props-shut', shut); requestAnimationFrame(redrawView); }
+  if (room && room.classList.contains('props-shut') !== shut) { room.classList.toggle('props-shut', shut); requestAnimationFrame(relayoutView); }
   if (shut) { setHTML(el, `<button class="railtab pstrip" data-act="props-toggle" title="Show the side panel" aria-expanded="false">${icon('chevl')}<span>${ui.sel && ui.sel.type === 'cab' ? 'Cabinet' : 'Room'} details</span></button>`); return; }
   // Built off screen, then only the changes go into the panel, so it does not flash or lose its scroll.
   const tmp = el.cloneNode(false); tmp.removeAttribute('id');
@@ -346,6 +348,7 @@ function renderProps() {
 }
 function renderPropsBody(el = $('#props')) {
   if (multiIds().length > 1) { el.innerHTML = multiProps(); return; }
+  if (multiWIds().length > 1) { el.innerHTML = multiWallProps(); return; }
   if (ui.sel && ui.sel.type === 'cab') { const c = cab(ui.sel.id); if (c) { el.innerHTML = cabProps(c); return; } }
   if (ui.sel && ui.sel.type === 'wall') { const w = wall(ui.sel.id); if (w) { el.innerHTML = wallProps(w); return; } }
   if (ui.sel && ui.sel.type === 'shape') { const s = shapeById(ui.sel.id); if (s) { el.innerHTML = shapeProps(s); return; } }
@@ -580,7 +583,7 @@ function renderDock() {
     if (sc) { if (!ui.dockCab) ui.dockWas = ui.dockOpen; ui.dock = 'item'; ui.dockOpen = true; }
     else if (ui.dockCab && ui.dockWas !== undefined) { ui.dockOpen = ui.dockWas; ui.dockWas = undefined; }
     ui.dockCab = sc;
-    if (was !== ui.dockOpen) requestAnimationFrame(() => { if (typeof redrawView === 'function') redrawView(); });
+    if (was !== ui.dockOpen) requestAnimationFrame(relayoutView);
   }
   if (!tabs.some(([k]) => k === ui.dock)) ui.dock = tabs[0][0];
   // Hidden panel (desktop, Ayden 2026-11-24 "a collapsible option for when you just want to view the program"):
@@ -613,7 +616,7 @@ function dockBody(k) {
   if (k === 'tex') return texDock();
   if (k === 'molding') return `<div class="card cardbody">${autoMoldBox(moldingRuns())}</div>${typeof moldLookCard === 'function' ? moldLookCard() : ''}${genMoldsCard()}<div class="row-actions"><button class="btn sm" data-act="tab" data-id="moldings">Molding library and totals</button></div>`;
   if (k === 'room') return roomDockBody();
-  if (k === 'item') { const x = multiIds().length < 2 && typeof xItem === 'function' && xItem(); return x ? itemBarX(x) : itemBar(multiIds().length < 2 ? c : null); }
+  if (k === 'item') { const x = multiIds().length < 2 && typeof xItem === 'function' && xItem(); return x ? itemBarX(x) : multiIds().length > 1 ? multiBar() : itemBar(c); }
   if (k === 'layout') {
     const L = lay();
     // Automatic fillers and panels are switched on the Item tab.
@@ -738,12 +741,14 @@ function dndDrop() {
 
 // Doors and drawers: true opens, false closes, undefined flips each one.
 const openable = c => c.made === 'pocketdoors' || computeFronts(c).some(f => f.type === 'door' || f.type === 'drawer');
+// 0.63.31: the 3D room is not built again: the doors and drawers already in it swing and slide (animateOpen), so a
+// cabinet opens smoothly even in a big room and in Walk. Only which fronts are open is worked out again.
 function setOpen(ids, v) {
-  clearDoorLimits();
+  if (ui.tab === 'room') clearOpenSolve(); else clearDoorLimits();
   ids.forEach(id => { if (v === undefined ? !ui.open[id] : v) ui.open[id] = true; else delete ui.open[id]; });
   animateOpen();
   if (ui.tab === 'designer') renderDesigner();
-  else if (ui.tab === 'room') renderRoom();
+  else if (ui.tab === 'room') { renderRoom.keep3d = true; renderRoom(); }
 }
 
 /* ---------- Right-click menu on a cabinet ---------- */
@@ -765,6 +770,7 @@ function showCtx(id, x, y) {
     + item('ed-open', 'Cabinet editor', ' data-kb="Double-click"')
     + (openable(c) ? item('open-toggle', ui.open[id] ? 'Close doors and drawers' : 'Open doors and drawers', ' data-kb="O"') : '')
     + item('light-draw-one', cabStrips(id).some(x => x.where === stripWhereFor(c)) ? 'Remove LED strip' : 'Add LED strip', ` data-kb="${esc((STRIP_SPOTS.find(x => x.v === stripWhereFor(c)) || {}).l || '')}"`) + (cabStrips(id).length ? item('light-copy', 'Copy its lights') : '') + (lightClip && lightClip.length ? item('light-paste', `Paste lights (${lightClip.length})`) : '')
+    + (hasFace(c) ? item('multi-faces', 'Faces…') + item('multi-doors', 'Door style…') : '')
     + item('q-copyset', 'Copy settings') + (typeof setClip !== 'undefined' && setClip ? item('q-pasteset', 'Paste settings') : '')
     + (ui.ctxTop && typeof ctjSideName === 'function' ? (() => { const [k, p] = ui.ctxTop.split('|'), r = countertopRuns().find(q => q.key === k); return r ? `<button role="menuitem" data-act="ctj-side" data-id="${esc(ui.ctxTop)}">Countertop: ${ctjSideName(r, p).toLowerCase()}</button>` : ''; })() : '')
     + item('te-start', 'Edit top shape here') + item('cab-zoom3d', 'Zoom to it in 3D') + item('clip-copy', 'Copy', ' data-kb="Ctrl+C"') + item('clip-cut', 'Cut', ' data-kb="Ctrl+X"') + item('cab-dup', 'Duplicate', ' data-kb="Ctrl+D"') + item('cab-to-designer', 'Open in Designer')
@@ -778,6 +784,7 @@ function showCtx(id, x, y) {
 // Right-click on a wall: end caps at its ends or right where you clicked.
 function showWallCtx(wid, a, x, y) {
   const w = wall(wid); if (!w) return;
+  if (inMultiW(wid)) { showMultiWallCtx(x, y); return; }
   const es = elevSide(w), L = wg(w).L, from = es === 1 ? a : L - a, m = $('#ctxmenu');
   const item = (act, id, label) => `<button role="menuitem" data-act="${act}" data-id="${id}">${label}</button>`;
   const end = side => (es === 1) === (side === 'L') ? 'S' : 'E', on = side => (w['cap' + end(side)] || {}).on || wallEndJoined(w, end(side));
@@ -865,6 +872,10 @@ document.addEventListener('pointerdown', e => {
 });
 
 function redrawView() { if (ui.viewMode === 'plan') renderPlan(); else if (ui.viewMode === 'elev') renderElev(); else buildRoom3D(); }
+// The drawing got a new size (panel opened, shut or grew): the plan and elevation draw again to fit; the 3D view sizes
+// itself (its own ResizeObserver), so its room isn't built again. 0.63.31: that rebuild came along with opening a
+// cabinet (the panel refits) and made Walk stutter on big jobs.
+function relayoutView() { if (ui.viewMode !== '3d') redrawView(); }
 function flash(text) {
   if (inHub()) { Hub.notify(text); return; }
   const t = $('#toast'); t.textContent = text; t.hidden = false; clearTimeout(flash.tm); flash.tm = setTimeout(() => { t.hidden = true; }, 1800);
@@ -911,8 +922,8 @@ document.addEventListener('click', e => {
     case 'dock': ui.dock = id; ui.dockOpen = true; if (ui.dockMin) { ui.dockMin = false; try { localStorage.setItem(KEY + '.dockmin', '0'); } catch (_) {} } renderDock(); break;
     case 'dock-min': ui.dockMin = !ui.dockMin; try { localStorage.setItem(KEY + '.dockmin', ui.dockMin ? '1' : '0'); } catch (_) {} renderDock(); requestAnimationFrame(() => { if (typeof dockRefit === 'function') dockRefit(); }); break;
     case 'dock-open': ui.dock = id; ui.dockOpen = true; renderDock(); $('#dock').scrollIntoView({ block: 'nearest' }); break;
-    case 'dock-toggle': ui.dockOpen = !ui.dockOpen; ui.dockWas = undefined; try { localStorage.setItem(KEY + '.dock', ui.dockOpen ? '1' : '0'); } catch (_) {} renderDock(); requestAnimationFrame(redrawView); break;
-    case 'rail-toggle': if (isPhone()) { ui.libOpen = !ui.libOpen; renderRail(); break; } ui.railShut = !ui.railShut; try { localStorage.setItem(KEY + '.rail', ui.railShut ? '1' : '0'); } catch (_) {} renderRail(); requestAnimationFrame(redrawView); break;
+    case 'dock-toggle': ui.dockOpen = !ui.dockOpen; ui.dockWas = undefined; try { localStorage.setItem(KEY + '.dock', ui.dockOpen ? '1' : '0'); } catch (_) {} renderDock(); requestAnimationFrame(relayoutView); break;
+    case 'rail-toggle': if (isPhone()) { ui.libOpen = !ui.libOpen; renderRail(); break; } ui.railShut = !ui.railShut; try { localStorage.setItem(KEY + '.rail', ui.railShut ? '1' : '0'); } catch (_) {} renderRail(); requestAnimationFrame(relayoutView); break;
     case 'refit-fillers': { const was = { ...lay(), autoFillers: false }; let n = 0; mutate(() => { n = refitFillers(was, lay()); }); flash(n ? `Fillers fitted on ${nCab(n)}` : 'No cabinets needed moving'); break; }
     case 'undo': undoRedo(-1); break;
     case 'redo': undoRedo(1); break;
@@ -1169,6 +1180,7 @@ document.addEventListener('click', e => {
     case 'ed-undo': case 'ed-redo': undoRedo(a === 'ed-undo' ? -1 : 1); if (ui.quick) renderQuick(); break;
     case 'ed-tab': {
       ui.edTab = id; ui.edPv = ''; if (id === 'interior') ui.ed3d = false;
+      if (ui.ed3Big) { ui.ed3Big = false; ui.ed3Fresh = true; if (typeof edViewer !== 'undefined' && edViewer && edViewer.ok) edViewer.setMode('persp'); }
       // Interior opens on the first opening that has an inside (a door or open space), not a drawer.
       const c = qeCab(), rows = (c && c.rows) || [], r = rows[ui.qeRow | 0];
       if (id === 'interior' && r && !['door', 'open'].includes(r.type)) { const i = rows.findIndex(x => ['door', 'open'].includes(x.type)); if (i >= 0) ui.qeRow = i; }
@@ -1180,6 +1192,8 @@ document.addEventListener('click', e => {
     case 'ed-3d': ui.ed3d = !ui.ed3d; if (ui.ed3d && ED_WIDE.includes(ui.edTab)) ui.edTab = 'size'; renderQuick(); break;
     // The picture on the left: the front, the inside with the fronts off, or 3D.
     case 'ed-pv': ui.ed3d = id === '3d'; ui.edPv = id === '3d' ? '' : id; renderQuick(); break;
+    // 0.63.28: the big 3D view with looks and cameras (ed3dview.js).
+    case 'ed-big3d': case 'ed3-look': case 'ed3-cam': case 'ed3-show': ed3Act(a, id); break;
     case 'ed-3d-fit': if (typeof edView3DFit === 'function') edView3DFit(); break;
     case 'ed-split': { const c = qeCab(), [i, n] = id.split(':').map(Number); if (c) mutate(() => edSplitRows(c, i, n)); break; }
     case 'ed-hsplit': { const c = qeCab(); if (c && c.rows[+id]) mutate(() => edSplitRows(c, +id, 2)); break; }
@@ -1255,7 +1269,7 @@ document.addEventListener('click', e => {
     case 'cab-to-designer': { const c = cab(id); mutate(() => { S.designer = { ...designCabFrom(c), sourceLib: null, name: c.name + ' (custom)' }; }); goTab('designer'); break; }
     case 'capx-add': { const [wid, a] = id.split(':'); addCustomCap(wid, a === '' ? NaN : +a); break; }
     case 'capx-del': { const [wid, cid] = id.split(':'), w = wall(wid); if (w) mutate(() => { w.caps = (w.caps || []).filter(x => x.id !== cid); }); break; }
-    case 'cab-end': { const [cid, end, k] = id.split(':'), c = cab(cid), ch = END_CHOICES.find(x => x[0] === k); if (c && ch) mutate(() => { c['fill' + end] = ch[2]; c['panel' + end] = ch[3]; }); break; }
+    case 'cab-end': { const [cid, end, k] = id.split(':'), c = cab(cid), ch = END_CHOICES.find(x => x[0] === k); if (c && ch) mutate(() => { c.endHand = { ...(c.endHand || {}), [end]: 1 }; c['fill' + end] = ch[2]; c['panel' + end] = ch[3]; }); break; }
     case 'cap-end': { const [wid, end] = id.split(':'), w = wall(wid); if (w && !wallEndJoined(w, end)) { mutate(() => { w['cap' + end] = { ...capDefaults(w), side: elevSide(w), ...(w['cap' + end] || {}), on: true }; settleWall(w); }); select({ type: 'wall', id: wid }); } break; }
     case 'wall-sel': select({ type: 'wall', id }); ui.elevWall = id; renderRoom(); break;
     case 'wall-del': mutate(() => { S.walls = S.walls.filter(w => w.id !== id); S.cabinets = S.cabinets.filter(c => c.wall !== id); S.fixtures = (S.fixtures || []).filter(f => f.wall !== id); }); ui.sel = null; render(); break;
@@ -1525,7 +1539,7 @@ function placeMode(id) {
   if (id && ui.viewMode === '3d') { ui.viewMode = 'plan'; requestAnimationFrame(fitView); }
   if (ui.tab !== 'room') { ui.tab = 'room'; render(); requestAnimationFrame(() => renderRoom()); } else renderRoom();
 }
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && ui.quick) { e.stopImmediatePropagation(); closeQuick(); } }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && ui.quick) { e.stopImmediatePropagation(); if (ui.ed3Big) ed3Act('ed-big3d'); else closeQuick(); } }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#labelsheet').hidden) closeLabels(); });
 document.addEventListener('keydown', e => {
   const tag = (e.target.tagName || '').toLowerCase();
@@ -1559,6 +1573,8 @@ document.addEventListener('keydown', e => {
 function deleteSelected() {
   const many = typeof multiIds === 'function' ? multiIds() : [];
   if (many.length > 1) { mutate(() => { S.cabinets = S.cabinets.filter(c => !many.includes(c.id)); }); ui.multi = []; ui.sel = null; render(); flash(`Deleted ${many.length} cabinets`); return; }
+  const mw = typeof multiWIds === 'function' ? multiWIds() : [];
+  if (mw.length > 1) { deleteWalls(mw); return; }
   const s = ui.sel; if (!s) return; ui.sel = null;
   if (s.type === 'cab') mutate(() => { S.cabinets = S.cabinets.filter(c => c.id !== s.id); });
   else if (s.type === 'shape') mutate(() => { S.shapes = S.shapes.filter(x => x.id !== s.id); });

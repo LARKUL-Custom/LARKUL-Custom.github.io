@@ -132,7 +132,8 @@ function shapePlanPoly(s) {
   if (!wall(s.wall)) return null;
   const { box, out } = shapeLocal(s);
   if (s.plane === 'flat') return out.map(p => shapeWallPt(s, p.x, p.y));
-  return [shapeWallPt(s, 0, 0), shapeWallPt(s, box.w, 0), shapeWallPt(s, box.w, shapeT(s)), shapeWallPt(s, 0, shapeT(s))];
+  const t = shapePost(s) ? +s.thick : shapeT(s);
+  return [shapeWallPt(s, 0, 0), shapeWallPt(s, box.w, 0), shapeWallPt(s, box.w, t), shapeWallPt(s, 0, t)];
 }
 function shapesPlanSVG() {
   const px = ui.px;
@@ -153,13 +154,41 @@ function shapesElevSVG(w, side, L, mats) {
     const sel = ui.sel && ui.sel.type === 'shape' && ui.sel.id === s.id;
     const shape = s.plane === 'flat' ? `<rect ${fillFor(m, 'ev-top')} x="${x0}" y="${-(s.elev + shapeT(s))}" width="${box.w}" height="${shapeT(s)}"/>`
       : `<polygon ${fillFor(m, 'ev-top')} points="${out.map(p => `${r3(x0 + p.x)},${r3(-(s.elev + p.y))}`).join(' ')}"/>`;
+    const P = shapePost(s), fr = P && P.faces[0].framed ? `<rect class="ev-inner nss" fill="none" x="${r3(x0 + +P.ds.stile)}" y="${r3(-(s.elev + box.h) + +P.ds.rail)}" width="${r3(box.w - 2 * P.ds.stile)}" height="${r3(box.h - 2 * P.ds.rail)}"/>` : '';
     const hb = s.plane === 'flat' ? [x0, -(s.elev + shapeT(s)), box.w, shapeT(s)] : [x0, -(s.elev + box.h), box.w, box.h];
-    return `<g data-shape="${s.id}">${shape}<rect class="ev-hit" x="${hb[0]}" y="${hb[1] - (s.plane === 'flat' ? 1 : 0)}" width="${hb[2]}" height="${hb[3] + (s.plane === 'flat' ? 2 : 0)}"/>${sel ? `<rect class="ev-sel nss" x="${hb[0]}" y="${hb[1]}" width="${hb[2]}" height="${hb[3]}"/>` : ''}</g>`;
+    return `<g data-shape="${s.id}">${shape}${fr}<rect class="ev-hit" x="${hb[0]}" y="${hb[1] - (s.plane === 'flat' ? 1 : 0)}" width="${hb[2]}" height="${hb[3] + (s.plane === 'flat' ? 2 : 0)}"/>${sel ? `<rect class="ev-sel nss" x="${hb[0]}" y="${hb[1]}" width="${hb[2]}" height="${hb[3]}"/>` : ''}</g>`;
   }).join('');
+}
+/* ---------- Miter-folded legs (0.63.24) ----------
+   Ayden 2026-11-24: "give me an option to make the legs have a door style like a panel, we would just miterfold the legs".
+   An upright shape with postDoor set ('same' = the room's doors, or a door style id) is a hollow post its Thickness deep:
+   four faces cut from its material, long edges mitered 45° and folded, each face in that door style. A framed style in a
+   material the shop doesn't make (not HDM/MDF) is bought: the four faces go on the door order. */
+function shapePost(s) {
+  if (!s || s.plane !== 'upright' || !s.postDoor || typeof panelDoorPick !== 'function') return null;
+  const b = shapeBox(s.pts), D = +s.thick || 0, m = shapeMat(s); if (!(D > 1) || !m || !(b.w > 1) || !(b.h > 1)) return null;
+  let ds = withFinish(doorStyle(panelDoorPick(s.postDoor, doorTpl(roomSet('doorT')), 'Base')), null);
+  const buy = typeof panelBuys === 'function' && panelBuys(ds, m.id); if (buy) ds = buyStyle(ds);
+  // A face shows the frame when there is at least 1" of field between its stiles and rails.
+  const framed = w => ds.type !== 'slab' && w >= 2 * (+ds.stile || 0) + 1 && b.h >= 2 * (+ds.rail || 0) + 1;
+  const faces = [['front', b.w], ['back', b.w], ['left', D], ['right', D]].map(([k, w]) => ({ k, w: r3(w), h: r3(b.h), framed: framed(w) }));
+  return { ds, buy, W: b.w, D, H: b.h, T: +m.thick || 0.75, m, faces };
+}
+const postDoorOpts = () => [{ v: '', l: 'Solid (no door style)' }, { v: 'same', l: 'Same as the doors' }, ...opts(S.doorStyles)];
+function postMeshes(s, P, M, grp) {
+  const look = f => ({ ds: P.ds, framed: f.framed }), y0 = s.elev || 0, [fr, bk, lf, rt] = P.faces, T = P.T, add = o => grp.add(o);
+  // Front (facing out of the wall) and back.
+  doorMeshes(P.ds, fr.framed, { x0: 0, x1: P.W, z0: y0, z1: y0 + P.H }, T, M, M, P.D - T, add);
+  const g = new THREE.Group(); doorMeshes(P.ds, bk.framed, { x0: 0, x1: P.W, z0: 0, z1: P.H }, T, M, M, 0, o => g.add(o));
+  g.rotation.y = Math.PI; g.position.set(P.W, y0, T); grp.add(g);
+  // Ends: a slab face draws as a plain board.
+  [['L', lf, T], ['R', rt, P.W - T]].forEach(([sd, f, xIn]) => { if (!endPanel3(add, look(f), sd, xIn, y0, P.H, 0, P.D, T, M)) grp.add(box3(T, P.H, P.D, M, sd === 'L' ? T / 2 : P.W - T / 2, y0 + P.H / 2, P.D / 2)); });
 }
 // 3D: the outline pushed out to its thickness.
 function shapeMesh3(s, opts = {}) {
   const w = wall(s.wall); if (!w) return null;
+  const P = shapePost(s);
+  if (P) { const grp = wallGroup(w, s.side, s.side === 1 ? s.off : s.off + P.W, s.outset || 0); postMeshes(s, P, mat3(shapeLook(s), opts), grp); grp.traverse(o => { o.userData.shapeId = s.id; }); return grp; }
   const { box, out } = shapeLocal(s), sh = new THREE.Shape(out.map(p => new THREE.Vector2(p.x, p.y)));
   const g = new THREE.ExtrudeGeometry(sh, { depth: shapeT(s), bevelEnabled: false, curveSegments: 1 });
   const mm = mat3(shapeLook(s), opts), k = (mm.userData && mm.userData.texScale) || 24, uv = g.attributes.uv;
@@ -200,19 +229,27 @@ function shapeProps(s) {
   const id = s.id, R = 'shp:' + id, b = shapeBox(s.pts), o = shapeOutline(s.pts);
   return `<div class="psec"><div class="pshead"><div class="cabtitle"><span class="chip shape">Shape</span> <b>${esc(s.name)}</b></div></div>
     <div class="row-actions"><button class="btn primary" data-act="shape-edit" data-id="${id}">${icon('ruler')}Edit shape</button><button class="btn" data-act="shape-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn" data-act="shape-flip" data-id="${id}">${icon('flip')}Flip</button><button class="btn danger" data-act="shape-del" data-id="${id}">${icon('trash')}Delete</button></div>
-    <div class="sizeline">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(shapeT(s), 1)}</div>
+    <div class="sizeline">${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(shapePost(s) ? +s.thick : shapeT(s), 1)}</div>
     <div class="note">${s.plane === 'flat' ? 'Lies flat' : 'Stands up'} · ${wallName(wall(s.wall))} · ${o.length} outline points</div></div>
   <div class="psec box">${secHead('magnet', 'Position', 'blue')}
     <div class="grid2">${fld('Along the wall', R, 'off', s.off, 'len')}${fld('Out from wall', R, 'outset', s.outset || 0, 'len')}${fld(s.plane === 'flat' ? 'Bottom height' : 'Height off floor', R, 'elev', s.elev, 'len')}${fld('Thickness', R, 'thick', s.thick, 'len')}</div>
     <div class="note">Along the wall is measured from the wall's start to the shape's end nearest it.</div></div>
   <div class="psec box">${secHead('palette', 'Finish', 'amber')}${fld('Name', R, 'name', s.name, 'text', { wide: true })}${fld('Material', R, 'mat', s.mat, 'select', { options: shapeMatOpts() })}
     <div class="f"><span>Look</span>${typeof txqBtn === 'function' ? txqBtn('shape', s.id) : ''}</div>
+    ${s.plane === 'upright' ? fld('Leg door style (miter-folded)', R, 'postDoor', s.postDoor || '', 'select', { options: postDoorOpts(), wide: true }) + (shapePost(s) ? `<div class="note">A ${fmtLen(+s.thick, 1)} deep post: four faces mitered and folded, each in ${esc(shapePost(s).ds.name)}.${shapePost(s).buy ? ' Bought from the door maker (only HDM/MDF is made here).' : ''}</div>` : '') : ''}
     <div class="note">${s.mat === SHAPE_FIN ? `Cut from ${esc((shapeMat(s) || {}).name || 'the finish material')}, the room's finish. It wears the Finished ends look unless you pick one here.` : 'Look only changes how it looks; the cut list and price stay the same.'}</div>
     <div class="row-actions"><button class="btn sm" data-act="shape-to-lib" data-id="${id}">Save to shape library</button></div></div>${typeof vFitBox === 'function' ? vFitBox(s) : ''}`;
 }
 // Cut list rows for the shapes in the open room.
 function shapeParts() {
-  return S.shapes.map(s => { const b = shapeBox(s.pts); return { cabId: s.id, cab: 'Shape', name: s.name, kind: 'shape', qty: 1, L: r3(b.w), W: r3(b.h), T: shapeT(s), mat: shapeMatId(s), grain: false, edges: '', band: {}, ops: [], outline: shapeOutline(s.pts).map(p => ({ x: r3(p.x - b.x0), y: r3(p.y - b.y0) })) }; });
+  return S.shapes.flatMap(s => {
+    const P = shapePost(s);
+    if (P) {
+      if (P.buy) return [];
+      const fr = Math.max(+P.ds.stile || 0, +P.ds.rail || 0);
+      return P.faces.map(f => ({ cabId: s.id, cab: 'Shape', name: `${s.name} face (${f.k})`, kind: 'shape', qty: 1, L: f.h, W: f.w, T: P.T, mat: P.m.id, grain: !!P.m.grain, edges: '', band: {}, fin: true,
+        ops: [{ type: 'edge', profile: 'bevel', face: 'show', why: '45° miter on both long edges (miter fold)' }, ...(f.framed && fr > 0 ? [{ type: 'pocket', x: fr, y: fr, w: r3(f.h - 2 * fr), h: r3(f.w - 2 * fr), depth: +P.ds.pocketDepth || 0.25, face: 'show', why: 'panel recess' }] : [])] }));
+    } const b = shapeBox(s.pts); return { cabId: s.id, cab: 'Shape', name: s.name, kind: 'shape', qty: 1, L: r3(b.w), W: r3(b.h), T: shapeT(s), mat: shapeMatId(s), grain: false, edges: '', band: {}, ops: [], outline: shapeOutline(s.pts).map(p => ({ x: r3(p.x - b.x0), y: r3(p.y - b.y0) })) }; });
 }
 
 /* ---------- Shape editor (Designer › Custom shape) ---------- */

@@ -700,7 +700,7 @@ function migrate(s) {
   // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.
   if (!s.miniGone) { const used = s.rooms.some(r => (r.cabinets || []).some(c => c.libId === 'mini-ad')), L = !s.libSet || s.libSet === 'main' ? s.library : (s.libSets || {}).main;
     if (!used && Array.isArray(L)) { const i = L.findIndex(l => l.id === 'mini-ad'); if (i >= 0) L.splice(i, 1); } s.miniGone = 1; }
-  const out = attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensureBoughtDoors(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s))))))))));
+  const out = attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensurePaintedMaple(ensureBoughtDoors(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))))))));
   // 0.57.3: bid shelves and products were placed from the wall's centerline end, half the corner wall's thickness inside it.
   if (!out.bidFace && typeof bidFaceFix === 'function') { const keep = S; S = out; try { bidFaceFix(out); } catch (_) {} finally { S = keep; } out.bidFace = 1; }
   // 0.59.27 (Ayden 2026-11-19: "fix what he did"): jobs imported from a bid before this get the support panels at the open ends
@@ -818,6 +818,21 @@ function ensureMatGroups(s) {
   if (!s || !Array.isArray(s.materials) || s.matGrouped) return s;
   if (!s.materials.some(m => m.group)) s.materials.forEach(m => { m.group = matGroupGuess(m); });
   s.matGrouped = 1; return s;
+}
+// 0.63.22 (Ayden 2026-11-24: "Ill make a painted Maple door style or you can"): a Painted Maple finish. The shop makes only
+// HDM/MDF doors, so framed doors and door-style end panels in it are bought (Buyout); slabs, boxes and fillers are cut here.
+// Added once (s.pMaple), so deleting it keeps it gone.
+const PMAPLE_MATS = [
+  { id: 'm-pmaple', name: '3/4 Maple Ply (paint grade)', kind: 'sheet', thick: 0.75, sheetW: 49, sheetL: 97, grain: false, cost: 120, color: '#f1f0ec', texture: null, procedural: null, texScale: 24, fin: 'paint' },
+  { id: 'm-pmaple14', name: '1/4 Maple Ply (paint grade door panels)', kind: 'sheet', thick: 0.25, sheetW: 49, sheetL: 97, grain: false, cost: 60, color: '#f1f0ec', texture: null, procedural: null, texScale: 24, fin: 'paint' },
+];
+function ensurePaintedMaple(s) {
+  if (!s || s.pMaple || !Array.isArray(s.materials) || !Array.isArray(s.finishes)) return s;
+  s.pMaple = 1;
+  if (s.finishes.some(f => /painted maple/i.test(f.name || ''))) return s;
+  PMAPLE_MATS.forEach(m => { if (!s.materials.some(x => x.id === m.id)) s.materials.push(clone(s.matGrouped && typeof matGroupGuess === 'function' ? { ...m, group: matGroupGuess(m) } : m)); });
+  s.finishes.push({ id: 'fin-pmaple', name: 'Painted Maple', front: 'm-pmaple', panel: 'm-pmaple14', sheet: 'm-pmaple', solid: 'm-pmaple' });
+  return s;
 }
 function ensureFinishes(s) {
   if (!s || !Array.isArray(s.materials) || !Array.isArray(s.doorStyles)) return s;

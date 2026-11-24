@@ -325,7 +325,9 @@ function mozRot(ang, axes) {
 }
 
 /* ----- In Cabinet Designer ----- */
-const mozDef = key => (typeof MOZ_LIB !== 'undefined' && key && MOZ_LIB.items.find(d => d.key === key)) || null;
+// 0.63.25: products from a Mozaik job with nothing like them in the library (a closet's "WM Double Hang", "Top Cap")
+// come in part for part from the job's own copy of the product, kept in the job (S.mozJob).
+const mozDef = key => (key && ((typeof MOZ_LIB !== 'undefined' && MOZ_LIB.items.find(d => d.key === key)) || (S.mozJob || []).find(d => d.key === key))) || null;
 const isMoz = c => !!(c && c.moz && mozDef(c.moz));
 // 0.60.8: Ayden's Mozaik Corner Filler closes an empty inside corner (Ayden 2026-11-20: bids leave the corner empty, "it
 // needs a corner filler to fill the gap"). Mozaik saved it for one size only (27" x 27" with 3" fillers in its notch, the

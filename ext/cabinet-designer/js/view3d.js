@@ -376,8 +376,11 @@ function cabinetMeshes(c, opts = {}) {
   const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pdL = endDepth(c, 'L') + ps.frontOverhang, pdR = endDepth(c, 'R') + ps.frontOverhang;
   const pL = hasPanel(c, 'L'), pR = hasPanel(c, 'R');
   // Each panel piece, step by step up the end (a strip past a shallower neighbour, notched round a shelf).
+  // 0.63.22: a one-piece panel in a framed door style shows its frame and field on the outside face.
   [['L', -pt / 2, pdL], ['R', W + pt / 2, pdR]].forEach(([sd, x, pd]) => (drawnPanels(() => panelPieces(c, sd)) || []).forEach(pc => pc.steps.forEach(q => {
-    const h = q.z1 - q.z0, d = pd - q.d0; if (h > 0 && d > 0) grp.add(box3(pt, h, d, pmM, x, q.z0 + h / 2, q.d0 + d / 2));
+    const h = q.z1 - q.z0, d = pd - q.d0; if (!(h > 0 && d > 0)) return;
+    if (pc.steps.length === 1 && endPanel3(o => grp.add(o), panelLook(c, d, h, ps.door), sd, sd === 'L' ? 0 : W, q.z0, h, q.d0, d, pt, pmM)) return;
+    grp.add(box3(pt, h, d, pmM, x, q.z0 + h / 2, q.d0 + d / 2));
   })));
   // Fillers to the wall, flush with the fronts, with a short return behind them.
   const flm = mat(fillerMat(c)) || cm, flM = L3(flm, 'finished'), fy0 = c.cat === 'Wall' ? 0 : tk;
@@ -417,6 +420,16 @@ function textSprite(text, h, o = {}) {
   return sp;
 }
 /* ---------- Door faces ---------- */
+// 0.63.22: an end panel in a framed door style, drawn as that door turned to face out of the end (sd 'L' faces -x, 'R' +x).
+// xIn = the panel's inside face, y0..y0+h up, z0..z0+d along the depth. Returns false for a slab (draw a plain box).
+function endPanel3(add, look, sd, xIn, y0, h, z0, d, pt, M) {
+  if (!look || !look.framed) return false;
+  const g = new THREE.Group();
+  doorMeshes(look.ds, true, { x0: 0, x1: d, z0: 0, z1: h }, pt, M, M, 0, o => g.add(o));
+  g.rotation.y = sd === 'L' ? -Math.PI / 2 : Math.PI / 2;
+  g.position.set(xIn, y0, sd === 'L' ? z0 : z0 + d);
+  add(g); return true;
+}
 // Frame, panels and design grooves of one front, from the door designer's layout. z = D is the cabinet front.
 function doorMeshes(ds, framed, f, ft, fmM, panelM, D, add) {
   const fw = f.x1 - f.x0, fh = f.z1 - f.z0, lay = doorLayout(ds, fw, fh, framed), X = x => f.x0 + x, Z = z => f.z0 + z;
@@ -916,20 +929,28 @@ function edView3D(c) {
   if (!edViewer) { edViewer = new Viewer3D(host); if (!edViewer.ok) return; viewers.push(edViewer); }
   if (!edViewer.ok) return;
   edViewer.moveTo(host);
-  const real = !!ui.render3d, key = JSON.stringify(c) + '|' + real + '|' + document.documentElement.dataset.theme;
-  if (key === edViewKey && host.contains(edViewer.renderer.domElement)) return edViewer.requestRender();
+  // 0.63.28: the big 3D view (ed3dview.js) picks the look (Shaded, Wireframe, Hidden line) and which parts show.
+  const st = typeof ed3State === 'function' ? ed3State() : { look: 'shaded', layers: null };
+  const real = !!ui.render3d && st.look === 'shaded', key = JSON.stringify(c) + '|' + real + '|' + document.documentElement.dataset.theme + '|' + st.look + '|' + JSON.stringify(st.layers);
+  if (key === edViewKey && host.contains(edViewer.renderer.domElement) && !ui.ed3Fresh) return edViewer.requestRender();
   edViewKey = key;
   // Drawn in the same look as the room (plain or realistic).
   R3 = real;
   try {
     edViewer.setReal(R3); edViewer.setBackground(R3 ? '#e4e1db' : cssVar('--sunk'));
     edViewer.clear();
-    const m = cabinetMeshes(c); m.position.x = -c.w / 2; edViewer.root.add(m);
+    const m = cabinetMeshes(c, st.layers ? { layers: st.layers } : {}); m.position.x = -c.w / 2; edViewer.root.add(m);
     if (R3) edViewer.fitShadow();
   } finally { R3 = false; }
+  if (st.look === 'hidden') hiddenLine3d(edViewer);
+  else if (st.look === 'wire' && typeof wire3d === 'function') wire3d(edViewer);
   // A new cabinet (or a new size) is framed from the front left; other edits keep where you turned it.
+  // Opening or closing the big view frames it again from its camera pick.
   const fit = [c.id, c.w, c.h, c.d].join('|');
-  if (edViewId !== fit) { edViewId = fit; edViewer.resize(); edViewer.look({ x: -0.8, y: 0.5, z: 1.4 }); }
+  if (edViewId !== fit || ui.ed3Fresh) {
+    edViewId = fit; ui.ed3Fresh = false; edViewer.resize();
+    if (ui.ed3Big && typeof ed3Camera === 'function') ed3Camera(ui.ed3Cam || 'iso'); else edViewer.look({ x: -0.8, y: 0.5, z: 1.4 });
+  }
   edViewer.requestRender();
 }
 function edView3DFit() { if (edViewer && edViewer.ok) edViewer.look({ x: -0.8, y: 0.5, z: 1.4 }); }

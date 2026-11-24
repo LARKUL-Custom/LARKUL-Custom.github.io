@@ -9,6 +9,7 @@ const ICON_PATHS = {
   print: '<path d="M6 7.5V3h8v4.5"/><rect x="3" y="7.5" width="14" height="6.5" rx="1"/><path d="M6 11.5h8V17H6z"/>',
   download: '<path d="M10 3v9.5M6 9l4 4 4-4M4 16.5h12"/>',
   upload: '<path d="M10 13.5V4M6 7.5l4-4 4 4M4 16.5h12"/>',
+  bulb: '<path d="M7.2 14.2c0-2.2-2.7-3.4-2.7-6.4a5.5 5.5 0 0 1 11 0c0 3-2.7 4.2-2.7 6.4zM7.6 16.6h4.8M8.6 18.6h2.8"/>',
   moon: '<path d="M16.5 12.4A7 7 0 0 1 7.6 3.5a7 7 0 1 0 8.9 8.9z"/>',
   sun: '<circle cx="10" cy="10" r="3.4"/><path d="M10 2v2.2M10 15.8V18M2 10h2.2M15.8 10H18M4.3 4.3l1.6 1.6M14.1 14.1l1.6 1.6M4.3 15.7l1.6-1.6M14.1 5.9l1.6-1.6"/>',
   camera: '<path d="M2.5 6.5h3.2l1.5-2h5.6l1.5 2h3.2v9.5h-15z"/><circle cx="10" cy="11" r="3"/>',

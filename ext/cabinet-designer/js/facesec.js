@@ -299,7 +299,7 @@ function fsPanel(c, s) {
       <button class="btn sm icon-only" data-act="fs-split" data-id="${key}:h" title="Split section ${s.letter} top and bottom">${icon('hsplit')}</button>
       <button class="btn sm icon-only" data-act="fs-split" data-id="${key}:v" title="Split section ${s.letter} side by side">${icon('vsplit')}</button>
       <button class="btn sm icon-only" data-act="fs-split" data-id="${key}:g" title="Split section ${s.letter} into equal sections: pick how many and the face type">${icon('gridsplit')}</button></div>`;
-  const dlg = ui.fsSplit && ui.fsSplit.key === key ? fsSplitBox(c, s) : '';
+  const dlg = ui.fsSplit && ui.fsSplit.cab === c.id ? fsSplitBox(c, s) : '';
   return `<aside class="fs-panel" aria-label="Section ${s.letter}">
     <div class="fs-head"><b>Section ${s.letter}</b><span class="muted">${fmtLen(fw, 1)} × ${fmtLen(fh, 1)}${n > 1 ? `, ${n} side by side` : ''}</span></div>
     ${split}${dlg}
@@ -315,15 +315,34 @@ function fsPanel(c, s) {
   </aside>`;
 }
 // Mozaik's Section Split box: direction, how many equal sections, and the face type they get.
+// Ayden 2026-11-24: no OK step, every pick shows on the drawing at once (one undo step for the whole box).
 function fsSplitBox(c, s) {
   const o = ui.fsSplit, dir = o.dir || 'h', n = o.n || 2, type = o.type ?? '';
   return `<div class="fs-dlg" role="dialog" aria-label="Section split">
-    <div class="fs-dlgh">Section split</div>
+    <div class="fs-dlgh">Section split<button class="btn sm icon-only fs-dlgx" data-act="fs-split-close" title="Close the split box (Undo takes the split back)">${icon('close')}</button></div>
     <div class="seg" role="group"><button data-act="fs-splitset" data-id="dir:h" aria-pressed="${dir === 'h'}" title="Top and bottom">${icon('hsplit')}Stacked</button><button data-act="fs-splitset" data-id="dir:v" aria-pressed="${dir === 'v'}" title="Side by side">${icon('vsplit')}Side by side</button></div>
-    <label class="fs-row"><span># Equal sections</span><input type="number" min="2" max="12" step="1" value="${n}" data-fssplit="n" aria-label="Number of equal sections"></label>
-    <label class="fs-row"><span>Face type</span><select data-fssplit="type" aria-label="Face type"><option value=""${type === '' ? ' selected' : ''}>Same as now</option>${FS_NEW.map(([v, l]) => `<option value="${v}"${type === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-    <div class="fs-dlgb"><button class="btn sm primary" data-act="fs-split-ok" data-id="${s.key}">OK</button><button class="btn sm" data-act="fs-split-cancel">Cancel</button></div></div>`;
+    <label class="fs-row"><span># Equal sections</span><input type="number" min="2" max="12" step="1" value="${n}" data-fssplit="n" data-fslive="1" aria-label="Number of equal sections"></label>
+    <label class="fs-row"><span>Face type</span><select data-fssplit="type" aria-label="Face type"><option value=""${type === '' ? ' selected' : ''}>Same as now</option>${FS_NEW.map(([v, l]) => `<option value="${v}"${type === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label></div>`;
 }
+
+// Apply the open split box to its section. Picking again first takes back the box's last split (the undo step it made),
+// so the whole box stays one undo step. Any other edit in between starts a fresh split.
+function fsSplitLive() {
+  const o = ui.fsSplit; if (!o) return;
+  if (o.depth !== undefined && undoStack.length === o.depth && o.after === JSON.stringify(S)) S = attachRoom(JSON.parse(undoStack.pop()));
+  const c = cab(o.cab); if (!c) { ui.fsSplit = null; renderQuick(); return; }
+  let msg = '';
+  mutate(() => { msg = fsSplit(c, o.key, o.dir, +o.n || 2, o.type || ''); });
+  o.depth = undoStack.length; o.after = JSON.stringify(S);
+  if (msg && msg !== o.msg) flash(msg); o.msg = msg;
+}
+function fsSplitInput(el) {
+  const o = ui.fsSplit; if (!o) return;
+  const k = el.dataset.fssplit, v = k === 'n' ? Math.max(2, Math.min(12, +el.value | 0)) : el.value;
+  if (k === 'n' && (!el.value || +o.n === v)) return;
+  if (o[k] === v) return; o[k] = v; fsSplitLive();
+}
+document.addEventListener('input', e => { const el = e.target; if (el && el.matches && el.matches('[data-fslive]')) fsSplitInput(el); }, true);
 
 /* ---------- Interior tab ---------- */
 function fsInteriorTab(c) {
@@ -381,16 +400,12 @@ document.addEventListener('click', e => {
     const [key, d] = [id.slice(0, id.lastIndexOf(':')), id.slice(id.lastIndexOf(':') + 1)];
     fsPick(c, key);
     // Like Mozaik: the split buttons open the Section Split box with the direction picked.
-    ui.fsSplit = { key, dir: d === 'v' ? 'v' : 'h', n: (ui.fsSplit && ui.fsSplit.n) || 2, type: (ui.fsSplit && ui.fsSplit.type) || '' };
-    renderQuick(); return;
+    // The split shows on the drawing right away; the box's picks redo it live.
+    ui.fsSplit = { key, cab: c.id, dir: d === 'v' ? 'v' : 'h', n: 2, type: '' };
+    fsSplitLive(); return;
   }
-  if (a === 'fs-splitset') { const [k, v] = id.split(':'); if (ui.fsSplit) ui.fsSplit[k] = v; renderQuick(); return; }
-  if (a === 'fs-split-cancel') { ui.fsSplit = null; renderQuick(); return; }
-  if (a === 'fs-split-ok') {
-    const o = ui.fsSplit || { dir: 'h', n: 2, type: '' }; let msg = '';
-    mutate(() => { msg = fsSplit(c, id, o.dir, +o.n || 2, o.type || ''); }); ui.fsSplit = null;
-    if (msg) flash(msg); return;
-  }
+  if (a === 'fs-splitset') { const [k, v] = id.split(':'); if (ui.fsSplit) { ui.fsSplit[k] = v; fsSplitLive(); } return; }
+  if (a === 'fs-split-close') { ui.fsSplit = null; renderQuick(); return; }
   if (a === 'fs-del') { let msg = ''; mutate(() => { msg = fsDelete(c, id); }); if (msg) flash(msg); return; }
   if (a === 'fs-reset') { mutate(() => { fsEnsureRows(c); const lf = fsLeaf(c, id); if (lf) { delete lf.style; delete lf.hinge; } }); return; }
   if (a === 'fs-equal') { mutate(() => { fsEnsureRows(c); fsEqual(c); }); return; }
@@ -421,7 +436,7 @@ document.addEventListener('change', e => {
     });
     return;
   }
-  if (el.matches('[data-fssplit]')) { if (ui.fsSplit) { ui.fsSplit[el.dataset.fssplit] = el.dataset.fssplit === 'n' ? Math.max(2, Math.min(12, +el.value | 0)) : el.value; } return; }
+  if (el.matches('[data-fssplit]')) { fsSplitInput(el); return; }
   const act = el.dataset && el.dataset.actChange, c = qeCab();
   if (!c || !act || !act.startsWith('fs-')) return;
   if (act === 'fs-lock') { const [key, dim] = [el.dataset.id.slice(0, el.dataset.id.lastIndexOf(':')), el.dataset.id.slice(el.dataset.id.lastIndexOf(':') + 1)]; mutate(() => fsLock(c, key, dim, el.checked)); }

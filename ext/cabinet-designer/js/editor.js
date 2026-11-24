@@ -199,17 +199,17 @@ function renderEditor(el, c) {
       <div class="ed-nav"><button class="btn sm" data-act="ed-step" data-id="-1" title="Previous cabinet">${icon('chevl')}Previous</button><span class="muted">${at} of ${list.length}</span><button class="btn sm" data-act="ed-step" data-id="1" title="Next cabinet">Next${icon('chevr')}</button></div>
       <button class="btn sm qe-x" data-act="qe-close" aria-label="Close the cabinet editor">${icon('close')}</button></div>
     <div class="ed-tabs edx-tabs" role="tablist" aria-label="Cabinet editor">${ED_TABS.map(([k, l, ic], i) => `<button role="tab" class="tone${i % 6}" data-act="ed-tab" data-id="${k}" aria-selected="${ui.edTab === k}">${icon(ic)}${l}</button>`).join('')}</div>
-    <div class="edx-body${wide ? ' wide' : ''}">
-      ${wide ? '' : `<aside class="qe-prev edx-prev">${pvSeg}${ui.edTab === 'face' ? edTools(c, qr) : ''}${pic}${edStats(c, b)}${logBox}</aside>`}
+    <div class="edx-body${ui.ed3Big ? ' big3d' : wide ? ' wide' : ''}">
+      ${ui.ed3Big ? ed3BigHTML(c) : `${wide ? '' : `<aside class="qe-prev edx-prev">${pvSeg}${ui.edTab === 'face' ? edTools(c, qr) : ''}${pic}${edStats(c, b)}${logBox}</aside>`}
       <section class="edx-main">
         <div class="ed-main">${wide && log.length ? logBox : ''}${edTab(c, ui.edTab, qr)}</div>
-      </section>
+      </section>`}
       <div class="ed-acts">${act('qe-close', 'check', 'OK', ' primary')}<div class="ed-undo"><button class="btn" data-act="ed-undo" title="Undo (Ctrl Z)">↶ Undo</button><button class="btn" data-act="ed-redo" title="Redo (Ctrl Y)">↷ Redo</button></div>
         <span class="edx-sep"></span>
         ${openable(c) ? act('open-toggle', 'open', ui.open[id] ? 'Close fronts' : 'Open fronts', ui.open[id] ? ' on' : '') : ''}
-        ${act('cab-dup', 'copy', 'Duplicate')}${act('cab-flip', 'flip', 'Flip')}${act('show-parts', 'list', 'Cut list')}${act('q-tolib', 'stack', 'Save to library')}${act('cab-to-designer', 'cube', 'Open in Designer')}
+        ${act('cab-dup', 'copy', 'Duplicate')}${act('cab-flip', 'flip', 'Flip')}${act('ed-big3d', 'cube', ui.ed3Big ? 'Close 3D view' : '3D view', ui.ed3Big ? ' on' : '')}${act('show-parts', 'list', 'Cut list')}${act('q-tolib', 'stack', 'Save to library')}${act('cab-to-designer', 'cube', 'Open in Designer')}
         <span class="ed-gap"></span><div class="note helponly">Changes save as you go. Esc closes.</div>${act('cab-del', 'trash', 'Delete', ' danger')}</div>
     </div></div>`);
   const m = el.querySelector('.ed-main'); if (m) m.scrollTop = top;
-  if (pv === '3d' && typeof edView3D === 'function') edView3D(c);
+  if ((pv === '3d' || ui.ed3Big) && typeof edView3D === 'function') edView3D(c);
 }

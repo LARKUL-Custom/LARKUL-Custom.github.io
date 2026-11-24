@@ -116,6 +116,8 @@ function walkStop() {
   walkFull(false);
   const v = WALK.v; WALK.on = false; v.walk = false; WALK.keys = {}; WALK.stick = null; WALK.vx = WALK.vz = WALK.turnV = 0;
   if (WALK.raf) cancelAnimationFrame(WALK.raf); WALK.raf = 0;
+  // Lights back on: lights off is only for the walk.
+  if (WALK.dark || WALK.darkOn) { WALK.dark = false; walkLights(v, false); v.requestRender(); }
   walkUI(v, false);
   v.persp.fov = WALK.fov || 40; v.persp.updateProjectionMatrix();
   v.controls.enabled = true;
@@ -238,6 +240,8 @@ function walkLoop() {
     // The room was rebuilt (a door opened, a change) or doors are still swinging: read the solids again.
     const rebuilt = v.root.children[0] !== WALK.first || v.root.children.length !== WALK.count;
     if (rebuilt || (typeof openAnim !== 'undefined' && openAnim && now - WALK.at > 150)) walkSolids(v);
+    // A room drawn again comes with its lights on; the Walk's lights off goes back on it.
+    if (rebuilt && WALK.dark) walkLights(v);
     const k = WALK.keys, fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0), side = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0), turn = (k.ArrowLeft || k.KeyQ ? 1 : 0) - (k.ArrowRight || k.KeyE ? 1 : 0);
     let f = fwd, s = side;
     if (WALK.stick) { f += -WALK.stick.y; s += WALK.stick.x; }
@@ -339,12 +343,19 @@ function walkUI(v, on) {
   const box = document.createElement('div'); box.className = 'walkui';
   box.innerHTML = `<div class="walkbar"><span class="walkhint">${coarse ? 'Stick to walk · drag to look · tap a cabinet to open it' : 'W A S D or arrows to walk · drag to look · click a cabinet to open it'}</span>`
     + (coarse ? '' : `<button class="btn sm" data-walk="full" title="Fill the screen and look by moving the mouse (F). Esc comes back.">${icon('expand')}Full screen</button>`)
+    // 0.63.31 (Ayden 2026-11-24): the time of day and the room's lights, right in the Walk bar, to set before full screen.
+    + (v.real && typeof SUN === 'object' ? `<label class="walksun" title="Time of day">${icon('sun')}<input type="range" min="5" max="22" step="0.25" value="${SUN.hour}" aria-label="Time of day"><span>${sunLabel(SUN.hour)}</span></label>` : '')
+    + `<button class="btn sm walklights" data-walk="lights" aria-pressed="false" title="Turn the room's ceiling lights and LED strips off or on"></button>`
     + `<button class="btn sm" data-walk="stop">${icon('close')}Stop walking</button></div><div class="walkdot"></div>`
     + (coarse ? '<div class="walkstick"><i></i></div>' : '');
   v.host.parentElement.appendChild(box); WALK.ui = box;
   WALK.hintT = setTimeout(() => { const h = box.querySelector('.walkhint'); if (h) h.classList.add('gone'); }, 6000);
   box.querySelector('[data-walk=stop]').addEventListener('click', e => { e.stopPropagation(); walkStop(); });
   const fb = box.querySelector('[data-walk=full]'); if (fb) fb.addEventListener('click', e => { e.stopPropagation(); fb.blur(); walkFull(true); });
+  const sr = box.querySelector('.walksun input');
+  if (sr) sr.addEventListener('input', e => { e.stopPropagation(); walkSunSet(v, +sr.value); });
+  const lb = box.querySelector('[data-walk=lights]');
+  if (lb) { walkLightsBtn(); lb.addEventListener('click', e => { e.stopPropagation(); lb.blur(); WALK.dark = !WALK.dark; walkLights(v); walkLightsBtn(); v.requestRender(); }); }
 
   // Dragging looks; a short tap or click on a cabinet opens or closes it.
   const drags = new Map();
@@ -393,6 +404,39 @@ function walkUI(v, on) {
     st.addEventListener('pointermove', e => { if (e.pointerId === id) set(e); });
     st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
   }
+}
+
+// Time of day from the Walk bar: the app's own slider (sunSet: saved, shadows fitted) or, in a walk file, just the sun.
+function walkSunSet(v, h) {
+  if (typeof sunSet === 'function') sunSet(h); else { SUN.hour = h; if (v.fitShadow) v.fitShadow(); v.requestRender(); }
+  const l = WALK.ui && WALK.ui.querySelector('.walksun span'); if (l) l.textContent = sunLabel(h);
+  // The other time sliders on the page follow (the one beside Realistic, the walk file's bar).
+  ['sunhour', 'wxsun'].forEach(id => { const r = document.getElementById(id); if (r && +r.value !== h) r.value = h; });
+  const wl = document.getElementById('wxsunl'); if (wl) wl.textContent = sunLabel(h);
+}
+// Lights off (WALK.dark): every room lamp goes to 0, glowing bulbs and discs turn plain, LED washes hide. Window light
+// and the sun stay. Only the Walk's look: nothing in the job changes, and it is undone when the walk stops.
+// Lamps keep their place in the scene (intensity 0, not hidden), so no shader has to be built again.
+const WALK_OFF = {};
+function walkLights(v, force) {
+  const dark = force === undefined ? !!WALK.dark : force;
+  const inLights = o => { for (let p = o; p; p = p.parent) if (p.userData.layer === 'lights') return true; return false; };
+  v.root.traverse(o => {
+    const u = o.userData;
+    if (o.isPointLight) { if (u.lit0 === undefined) u.lit0 = o.intensity; o.intensity = dark ? 0 : u.lit0; return; }
+    if (!o.isMesh || !inLights(o)) return;
+    const m = u.litMat || o.material; if (!m || Array.isArray(m) || m.colorWrite === false) return;
+    if (m.blending === THREE.AdditiveBlending) { o.visible = !dark; return; }
+    if (m.isMeshBasicMaterial && m.toneMapped === false) {
+      if (dark) { u.litMat = m; o.material = WALK_OFF.m || (WALK_OFF.m = new THREE.MeshStandardMaterial({ color: 0xe8e6e1, roughness: 0.6 })); }
+      else if (u.litMat) { o.material = u.litMat; delete u.litMat; }
+    }
+  });
+  WALK.darkOn = dark;
+}
+function walkLightsBtn() {
+  const b = WALK.ui && WALK.ui.querySelector('[data-walk=lights]'); if (!b) return;
+  b.innerHTML = `${icon('bulb')}${WALK.dark ? 'Lights on' : 'Lights off'}`; b.setAttribute('aria-pressed', String(!!WALK.dark));
 }
 
 // Opens or closes the cabinet under the pointer when it is within reach of the room (12').

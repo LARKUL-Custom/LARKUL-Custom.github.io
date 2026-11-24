@@ -52,7 +52,7 @@ function itemBar(c) {
   if (!c) {
     const n = multiIds().length;
     return `<div class="itembar none ib-empty">
-    <div class="ib-hint">${n > 1 ? `<b>${n} items picked.</b> Edit them together in the side panel. <button class="btn sm" data-act="cab-shift-up" data-id="" title="Move every picked cabinet up to the ceiling, ${fmtLen(ceilGap())}&quot; below it">Shift all up</button>` : S.cabinets.length ? '<b>Click a cabinet</b> to edit it, or <b>drag a product</b> onto the drawing.' : (S.walls.length ? '<b>Drag a product</b> from the library onto a wall to start.' : '<b>Draw the walls</b> first (W), then drag products from the library onto them.')}</div>
+    <div class="ib-hint">${typeof multiWIds === 'function' && multiWIds().length > 1 ? `<b>${multiWIds().length} walls picked.</b> Change their ceiling height and thickness together in the side panel. Shift or Ctrl click adds or takes out a wall.` : n > 1 ? `<b>${n} items picked.</b> Edit them together in the side panel. <button class="btn sm" data-act="cab-shift-up" data-id="" title="Move every picked cabinet up to the ceiling, ${fmtLen(ceilGap())}&quot; below it">Shift all up</button>` : S.cabinets.length ? '<b>Click a cabinet</b> to edit it, or <b>drag a product</b> onto the drawing.' : (S.walls.length ? '<b>Drag a product</b> from the library onto a wall to start.' : '<b>Draw the walls</b> first (W), then drag products from the library onto them.')}</div>
     <div class="ib-togs">${tog('autoFillers', 'Fillers')}${tog('autoPanels', 'Panels')}${tog('fridgePanels', 'Fridge panels')}${tog('autoLights', 'Ceiling lights')}</div>
   </div>`;
   }
@@ -97,7 +97,7 @@ function itemBarX(x) {
   const span = px ? Math.max(0, r3(hi - lo - px.w)) : 0;
   const ctr = `<span class="ib-ctrs"><button class="ib-ctr" data-act="x-center" data-id="${x.k}:${id}" title="Center it on the wall" aria-label="Center it on the wall"${px ? '' : ' disabled'}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 3v14M18 3v14M5 10h10m-7-3-3 3 3 3m4-6 3 3-3 3"/></svg></button></span>`;
   const sizes = fx ? `${box('Width', R, 'w', o.w)}${fixtSink(o) ? box('Front to back', R, 'd', o.d) : box('Height', R, 'h', o.h)}${fixtHole(o) ? box(o.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', o.elev || 0) : ''}${fixtFloor(o) ? box('Depth', R, 'd', o.d) : ''}${fixtLoose(o) || fixtHung(o) ? box(fixtHung(o) ? 'Bottom off floor' : 'Off the floor', R, 'elev', o.elev || 0) : ''}`
-    : `${box(o.plane === 'flat' ? 'Bottom height' : 'Off the floor', R, 'elev', o.elev || 0)}${box('Out from wall', R, 'outset', o.outset || 0)}${box('Thickness', R, 'thick', o.thick)}`;
+    : `${box(o.plane === 'flat' ? 'Bottom height' : 'Off the floor', R, 'elev', o.elev || 0)}${box('Out from wall', R, 'outset', o.outset || 0)}${box('Thickness', R, 'thick', o.thick)}${o.plane === 'upright' && typeof postDoorOpts === 'function' ? `<label class="ib-f"><span>Leg door style</span>${ctl(R, 'postDoor', o.postDoor || '', 'select', { options: postDoorOpts(), label: 'Leg door style (miter-folded)' })}</label>` : ''}`;
   const name = fx ? fixtName(o) : o.name || 'Shape', kind = fx ? ((fixtPreset(o.lib) || {}).folder || fixtDef(o).name) : 'Shape';
   const sb = (act, ic, l, t, cls = '') => `<button class="${cls}" data-act="${act}" data-id="${id}" title="${t}">${icon(ic)}${l}</button>`;
   return `<div class="itembar xbar">
@@ -209,7 +209,7 @@ function fitDock(el = document.getElementById('dock')) {
   // Hidden panel: just the thin strip.
   if (el.isConnected && room && el.classList.contains('dmin')) {
     const h = 36;
-    if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof redrawView === 'function') requestAnimationFrame(redrawView); }
+    if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof relayoutView === 'function') requestAnimationFrame(relayoutView); }
     return;
   }
   if (el.isConnected && body && room && !saved) {
@@ -234,7 +234,7 @@ function fitDock(el = document.getElementById('dock')) {
     const rh = room.getBoundingClientRect().height;
     const cap = body.classList.contains('dock-item') ? rh * 0.6 : Math.min(rh * 0.6, Math.max(200, rh * 0.3));
     const h = Math.round(Math.min(cap, Math.max(base, need)));
-    if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof redrawView === 'function') requestAnimationFrame(redrawView); }
+    if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof relayoutView === 'function') requestAnimationFrame(relayoutView); }
   }
 }
 // tmp is the panel's new content built off screen; it gets the same wrapping and zoom as the real one.
@@ -279,7 +279,7 @@ function watchDock() {
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(() => fitDock()));
 addEventListener('load', () => requestAnimationFrame(() => fitDock()));
 // After the panel changes height the drawing gets a new size, so fit the room in it again.
-function dockRefit() { requestAnimationFrame(() => { fitDock(); if (ui.viewMode === 'plan' && typeof fitView === 'function') fitView(); if (typeof redrawView === 'function') redrawView(); }); }
+function dockRefit() { requestAnimationFrame(() => { fitDock(); if (ui.viewMode === 'plan' && typeof fitView === 'function') fitView(); if (typeof relayoutView === 'function') relayoutView(); }); }
 // A saved panel height never takes more than 70% of the room, even after the window gets smaller.
 addEventListener('resize', () => requestAnimationFrame(() => { applyDockH(); fitDock(); }));
 
@@ -333,11 +333,16 @@ function ceilCell() {
   return `<div class="ib-f ib-ceil"><span title="Room setting: cabinets stay this far below the ceiling (room for crown molding). Same as Room tab › Ceiling.">Off ceiling</span><div class="ib-ceilrow">${ctl('rceil', 'gap', ceilGap(), 'len', { label: 'Cabinets off the ceiling (room setting)' })}</div></div>`;
 }
 function keepAllOffCeiling() { (S.cabinets || []).forEach(keepOffCeiling); }
+// The height all of this room's walls share, or '' when they differ (the Wall height box then shows Mixed).
+function wallsHeight() {
+  const hs = [...new Set((S.walls || []).map(w => r3(+w.height || 96)))];
+  return hs.length === 1 ? hs[0] : hs.length ? '' : (curRoom() || {}).wallHeight || 96;
+}
 // Bottom panel Room tab: the ceiling (height, slope, gap above the cabinets) and the walls.
 function roomDockBody() {
   const rm = curRoom(), ws = S.walls;
   return `<div class="roomdock">${typeof ceilingBox === 'function' ? ceilingBox(rm) : ''}
-    <div class="psec box">${secHead('wall', 'Walls', 'teal')}<div class="note show">Change the room's corners and wall lengths point by point.</div><div class="row-actions"><button class="btn sm" data-act="walls-shape"${ws.length ? '' : ' disabled'}>${icon('edit')}Edit walls in the shape editor</button></div></div></div>`;
+    <div class="psec box">${secHead('wall', 'Walls', 'teal')}<div class="autogrid">${fld('Wall height', 'rwalls', 'h', wallsHeight(), 'len', { blank: true, ph: 'Mixed' })}</div><div class="note show">Wall height sets every wall in this room. Change the room's corners and wall lengths point by point.</div><div class="row-actions"><button class="btn sm" data-act="walls-shape"${ws.length ? '' : ' disabled'}>${icon('edit')}Edit walls in the shape editor</button></div></div></div>`;
 }
 
 /* ----- Edit the room's walls in the shape editor: each point is a corner, each edge a wall. ----- */

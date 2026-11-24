@@ -599,7 +599,7 @@ function doorDesigner() {
         ${fld('Name', R, 'name', d.name, 'text', { wide: true })}
         ${fld('Notes', R, 'libNote', d.libNote || '', 'text', { wide: true, ph: 'Only seen here, never printed' })}
         ${fld('Category', R, 'cat', d.cat || '', 'select', { options: [{ v: '', l: `Automatic · ${(DOOR_CATS.find(c => c.v === doorCat({ ...d, cat: '' })) || {}).l}` }, ...DOOR_CATS], wide: true })}
-        ${fld('Made by', R, 'source', d.source, 'select', { options: DOOR_SOURCES, wide: true })}
+        ${fld('Made by', R, 'source', d.source, 'select', { options: DOOR_SOURCES, wide: true })}${d.type !== 'slab' && d.source !== 'buyout' ? '<div class="note">The shop makes framed doors and panels only in HDM/MDF. In any other finish (Painted Maple, Alder, White Oak) they are bought.</div>' : ''}
         ${fld('Construction', R, 'type', d.type, 'select', { options: DOOR_TYPES, wide: true })}
         <div class="note">Material comes from the room's finish (${esc((finishOf(null) || {}).name || '')}), not the door style. Set finishes under Libraries › Materials.</div>
         ${fld('Outside edge', R, 'edgeProfile', d.edgeProfile, 'select', { options: EDGE_PROFILES })}
@@ -1016,12 +1016,12 @@ function renderCountertops() {
   const autoRows = runs.map((r, i) => {
     if (r.generic) return '';
     const R = 'ctrun:' + r.key, col = topTone(r.tpl);
-    return `<tr class="${r.on ? '' : 'off'}${ui.topRun === r.key ? ' on' : ''}"><td><span class="ctx-num" style="background:${r.on ? col : 'var(--muted)'}">${i + 1}</span></td><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(cid => LBL[cid]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts, label: 'Style' })}</td><td class="n">${fmtLen(r.len, 1)}</td><td class="n">${fmtLen(r.depth, 1)}</td>
+    return `<tr class="${r.on ? '' : 'off'}${ui.topRun === r.key ? ' on' : ''}"><td><span class="ctx-num" style="background:${r.on ? col : 'var(--muted)'}">${i + 1}</span></td><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(cid => LBL[cid]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts, label: 'Style' })}</td><td style="width:84px">${ctjSizeIn(r, 'len')}</td><td style="width:84px">${ctjSizeIn(r, 'depth')}</td>
       <td style="width:84px">${ctl(R, 'ovS', r.ovS, 'len', { label: 'Start overhang' })}</td><td style="width:84px">${ctl(R, 'ovE', r.ovE, 'len', { label: 'End overhang' })}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td></tr>`;
   }).join('');
   const runsBody = `<div class="psec box ctx-plan">${secHead('home', `${esc(room.name)} from above`, 'amber')}${topsPlanSVG(runs)}<div class="note help">Right-click a top's back edge for its backsplash, an open end to waterfall it${(runs.corners || []).length ? ', or a corner to miter the tops or pick which one runs through' : ''}.</div></div>
     <div class="psec box">${secHead('ruler', 'Automatic runs', 'teal')}${auto ? '' : '<div class="note show">Automatic tops are off in this room. Auto build countertops on the right lays a top on every run of base cabinets.</div>'}
-      ${autoRows ? `<div class="tscroll"><table class="t ctx-t"><thead><tr><th>#</th><th>Wall</th><th>Cabinets</th><th>Style</th><th class="r">Length</th><th class="r">Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${autoRows}</tbody></table></div>` : auto ? '<div class="note show">Place base cabinets to get countertop runs.</div>' : ''}</div>
+      ${autoRows ? `<div class="tscroll"><table class="t ctx-t"><thead><tr><th>#</th><th>Wall</th><th>Cabinets</th><th>Style</th><th>Length</th><th>Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${autoRows}</tbody></table></div>` : auto ? '<div class="note show">Place base cabinets to get countertop runs.</div>' : ''}</div>
     ${(S.genTops || []).length ? genTopsCard(topOpts) : ''}`;
   // Middle, Styles: the picked style drawn in section, its facts, and its boxes.
   const R = 'top:' + t.id, n = usedRuns(t), m = mat(t.mat) || {};
@@ -1040,9 +1040,9 @@ function renderCountertops() {
 
 // Automatic countertop runs of the open room, on the Tops tab and in the Room's Tops panel.
 function autoTopsCard(runs, topOpts) {
-  return `<div class="card">${cardHead('Automatic runs in ' + esc(curRoom().name), curRoom().autoTops === false ? `<button class="btn primary" data-act="tops-auto">${icon('check')}Auto build countertops</button>` : `<button class="btn" data-act="tops-auto">Rebuild</button><button class="btn" data-act="tops-auto-off">Turn off</button>`)}<div class="tscroll"><table class="t"><thead><tr><th>Wall</th><th>Cabinets</th><th>Style</th><th class="r">Length</th><th class="r">Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${runs.filter(r => !r.generic).map(r => {
+  return `<div class="card">${cardHead('Automatic runs in ' + esc(curRoom().name), curRoom().autoTops === false ? `<button class="btn primary" data-act="tops-auto">${icon('check')}Auto build countertops</button>` : `<button class="btn" data-act="tops-auto">Rebuild</button><button class="btn" data-act="tops-auto-off">Turn off</button>`)}<div class="tscroll"><table class="t"><thead><tr><th>Wall</th><th>Cabinets</th><th>Style</th><th>Length</th><th>Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${runs.filter(r => !r.generic).map(r => {
     const R = 'ctrun:' + r.key;
-    return `<tr><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(id => LBL[id]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts })}</td><td class="n">${fmtLen(r.len, 1)}</td><td class="n">${fmtLen(r.depth, 1)}</td>
+    return `<tr><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(id => LBL[id]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts })}</td><td style="width:80px">${ctjSizeIn(r, 'len')}</td><td style="width:80px">${ctjSizeIn(r, 'depth')}</td>
       <td style="width:80px">${ctl(R, 'ovS', r.ovS, 'len')}</td><td style="width:80px">${ctl(R, 'ovE', r.ovE, 'len')}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td></tr>`;
   }).join('') || `<tr><td colspan="8" class="muted">${curRoom().autoTops === false ? 'Automatic tops are off in this room. Auto build countertops lays a top on every run of base cabinets.' : 'Place base cabinets to get countertop runs.'}</td></tr>`}</tbody></table></div></div>`;
 }
@@ -1436,6 +1436,18 @@ function cncSkippedNote() {
   const li = [...g].map(([k, e]) => `<li>${e.n > 1 ? `<b>${e.n.toLocaleString()} ×</b> ` : ''}${esc(e.at.length && e.n === 1 ? e.at[0] + ' · ' + k : k)}${e.n > 1 && e.at.length ? ` <span class="muted">(${esc(e.at.join(', '))}${e.n > e.at.length ? '…' : ''})</span>` : ''}</li>`).join('');
   return `<details class="note"><summary>${skipped.length} item${skipped.length > 1 ? 's' : ''} not in the file (the CNC can't cut ${skipped.length > 1 ? 'them' : 'it'} yet)</summary><ul>${li}</ul></details>`;
 }
+// 0.63.22: door-style end panels the shop doesn't make (buyPanels from buildParts), for the door orders.
+// Each is { rm, ri, c, ds, w (its depth), h (its height) }, ordered like a door with no hinge boring.
+function buyPanelList() {
+  const out = [];
+  S.rooms.forEach((rm, ri) => withRoom(rm, () => {
+    S.cabinets.forEach(c => { if (c.noCut) return; let b; try { b = buildParts(c); } catch (_) { return; }
+      (b.buyPanels || []).forEach(pt => { for (let k = 0; k < (pt.qty || 1); k++) out.push({ rm, ri, c, ds: pt.ds, w: pt.W, h: pt.L }); }); });
+    // Miter-folded legs bought in their door style (shapes.js): their four faces.
+    (S.shapes || []).forEach(sh => { const P = typeof shapePost === 'function' && shapePost(sh); if (P && P.buy) P.faces.forEach(f => out.push({ rm, ri, c: { id: sh.id, name: (sh.name || 'Leg') + ' face' }, ds: P.ds, w: f.w, h: f.h })); });
+  }));
+  return out;
+}
 // Door and drawer front order: identical fronts across the whole job grouped into one line with a quantity.
 // A plain CSV for now; vendor order formats can be added once we have their files.
 function doorOrderCSV(units) {
@@ -1452,6 +1464,11 @@ function doorOrderCSV(units) {
     const key = row.join('|'), e = lines.get(key) || { row, qty: 0, rooms: new Set(), cabs: [] };
     e.qty++; e.rooms.add(rm.name); e.cabs.push((S.rooms.length > 1 ? rm.name + ' ' : '') + LBL[c.id]); lines.set(key, e);
   }))));
+  buyPanelList().forEach(({ rm, c, ds, w, h }) => {
+    const row = ['End panel', ds.name, ({ routed: 'Routed one-piece', twopiece: 'Two-piece', fivepiece: '5-piece' })[ds.type] || ds.type, (mat(ds.mat) || {}).name || '', r(w), r(h), ds.panelType || '', ds.design !== 'none' ? ds.design : '', ds.edgeProfile || '', ds.insideProfile || '', r(ds.stile), r(ds.rail), '', ''];
+    const key = row.join('|'), e = lines.get(key) || { row, qty: 0, rooms: new Set(), cabs: [] };
+    e.qty++; e.rooms.add(rm.name); e.cabs.push((S.rooms.length > 1 ? rm.name + ' ' : '') + (LBL[c.id] || c.name)); lines.set(key, e);
+  });
   const u = units === 'mm' ? 'mm' : 'in';
   const head = ['Line', 'Qty', 'Type', 'Style', 'Construction', 'Material', `Width (${u})`, `Height (${u})`, 'Panel', 'Design', 'Outside edge', 'Inside profile', `Stile (${u})`, `Rail (${u})`, 'Hinge side', 'Grain match', 'Rooms', 'Cabinets'];
   const rows = [...lines.values()].sort((a, b) => a.row[1].localeCompare(b.row[1]) || a.row[0].localeCompare(b.row[0]) || b.row[5] - a.row[5] || b.row[4] - a.row[4])
@@ -1474,6 +1491,15 @@ function buyoutOrderCSV(units) {
     const key = row.join('|'), e = lines.get(key) || { row, qty: 0, cabs: [] };
     e.qty++; e.cabs.push((S.rooms.length > 1 ? rm.name + ' ' : '') + LBL[c.id]); lines.set(key, e);
   }))));
+  buyPanelList().forEach(({ rm, c, ds, w: pw, h: ph }) => {
+    const w = (k, d) => r(+ds[k] || d), m = doorMids(ds, pw, ph);
+    const row = [txt(ds.vName, ds.name), 'End Panel', txt(ds.vWood, (mat(ds.mat) || {}).name), txt(ds.vFace), txt(ds.vPanel, (mat(ds.type === 'fivepiece' ? ds.panelMat : ds.mat) || mat(ds.mat) || {}).name),
+      txt(ds.vSR), txt(ds.vEdge, (EDGE_PROFILES.find(x => x.v === ds.edgeProfile) || {}).l),
+      w('topRail', ds.rail), w('botRail', ds.rail), w('leftStile', ds.stile), w('rightStile', ds.stile), w('horizRail', ds.midRailW || ds.rail), w('vertRail', ds.midStileW || ds.stile),
+      'None', r(pw), r(ph), m.nS + 1, m.nR + 1, 'N'];
+    const key = row.join('|'), e = lines.get(key) || { row, qty: 0, cabs: [] };
+    e.qty++; e.cabs.push((S.rooms.length > 1 ? rm.name + ' ' : '') + (LBL[c.id] || c.name)); lines.set(key, e);
+  });
   const u = units === 'mm' ? 'mm' : 'in';
   const head = ['Line', 'Door style', 'Part type', 'Wood', 'Panel face', 'Panel material', 'Stile and rail profile', 'Edge profile', `Top rail (${u})`, `Bottom rail (${u})`, `Left stile (${u})`, `Right stile (${u})`, `Horiz. rail (${u})`, `Vert. rail (${u})`, 'Cabinet door hinge boring', 'Qty', `Width (${u})`, `Height (${u})`, 'Panels wide', 'Panels high', 'Hinge boring', 'Cab #'];
   const rows = [...lines.values()].sort((a, b) => a.row[0].localeCompare(b.row[0]) || a.row[1].localeCompare(b.row[1]) || b.row[15] - a.row[15] || b.row[14] - a.row[14])
@@ -1484,12 +1510,18 @@ function buyoutOrderCSV(units) {
 // Bywater's door CSV import (Ayden's Bywater Door CSV Export Guide): no header row, 14 columns in a fixed order,
 // width before height in fractions, dropdown values copied letter for letter. Rows: doors, then 5-piece drawer fronts, then slabs.
 // One row per room, size and style; Cab # is "R2:202(2),204" (room, then each cabinet with its count when more than one).
+// 0.63.22: with no Bywater wood on the style, the wood comes from the front's material (Painted Maple -> Maple Soft (Paint Grade)).
+function bywaterWood(m) {
+  const n = String((m && m.name) || '').toLowerCase(), paint = /paint/.test(n);
+  return /maple/.test(n) ? (paint ? 'Maple Soft (Paint Grade)' : 'Maple') : /oak/.test(n) && /rift/.test(n) ? 'Oak White (Rift)' : /white oak/.test(n) ? 'Oak White' : /red oak/.test(n) ? 'Oak Red'
+    : /alder/.test(n) ? 'Alder' : /walnut/.test(n) ? 'Black Walnut' : /cherry/.test(n) ? 'Cherry' : /hickory/.test(n) ? 'Hickory Calico' : /poplar/.test(n) ? 'Poplar' : /sapele/.test(n) ? 'Sapele' : '';
+}
 function bywaterStyle(ds, framed) {
-  const slab = !framed || !!ds.bought, pick = (k, d) => String(ds['bw' + k] || '').trim() || d;
-  return { product: pick('Product', slab ? 'Hardwood Slab' : BYWATER.product[0]), folder: pick('Folder', BYWATER.folder[0]), wood: pick('Wood', BYWATER.wood[0]),
+  const slab = !framed || !!ds.bought, pick = (k, d) => String(ds['bw' + k] || '').trim() || d, wd = ds.mat && typeof mat === 'function' ? bywaterWood(mat(ds.mat)) : '';
+  return { product: pick('Product', slab ? 'Hardwood Slab' : BYWATER.product[0]), folder: pick('Folder', BYWATER.folder[0]), wood: pick('Wood', wd || BYWATER.wood[0]),
     face: pick('Face', slab ? 'Horizontal Grain' : BYWATER.face[0]),
     // Hardwood Slab has no panel or stile and rail fields, so those columns stay empty.
-    profile: slab ? '' : pick('Profile', BYWATER.profile[0]), panel: slab ? '' : pick('Panel', BYWATER.panel[0]), sr: slab ? '' : pick('SR', BYWATER.sr[0]),
+    profile: slab ? '' : pick('Profile', BYWATER.profile[0]), panel: slab ? '' : pick('Panel', wd === 'Maple Soft (Paint Grade)' ? '1/4" MDF No Veneer' : BYWATER.panel[0]), sr: slab ? '' : pick('SR', BYWATER.sr[0]),
     edge: pick('Edge', BYWATER.edge[0]) };
 }
 function bywaterRows() {
@@ -1503,6 +1535,13 @@ function bywaterRows() {
     const cn = String(LBL[c.id] || '').replace(/^#/, '');
     e.qty++; e.cabs.set(cn, (e.cabs.get(cn) || 0) + 1); lines.set(key, e);
   }))));
+  // End panels go on as doors with no hinge boring.
+  buyPanelList().forEach(({ rm, ri, c, ds, w: pw, h: ph }) => {
+    const b = bywaterStyle(ds, true), row = [fmtLen(pw), fmtLen(ph), 'Door', b.product, b.folder, b.wood, b.face, b.profile, b.panel, b.sr, b.edge, 'None'];
+    const key = ri + '|' + row.join('|'), e = lines.get(key) || { row, qty: 0, room: rm.block || ri + 1, cabs: new Map(), order: 0, W: pw, H: ph, ri };
+    const cn = String(LBL[c.id] || c.name || '').replace(/^#/, '');
+    e.qty++; e.cabs.set(cn, (e.cabs.get(cn) || 0) + 1); lines.set(key, e);
+  });
   return [...lines.values()].sort((a, b) => a.order - b.order || a.ri - b.ri || a.row[3].localeCompare(b.row[3]) || b.H - a.H || b.W - a.W)
     .map(e => [e.qty, e.row[0], e.row[1], e.row[2], `R${e.room}:` + [...e.cabs].map(([n, q]) => q > 1 ? `${n}(${q})` : n).join(','), ...e.row.slice(3)]);
 }

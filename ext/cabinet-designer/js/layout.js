@@ -83,7 +83,13 @@ function wallFrame(w, s) {
 }
 function wallPoly(w) { const g = wg(w), h = w.thick / 2; return [wallPt(w, g, 1, -h, -h), wallPt(w, g, 1, g.L + h, -h), wallPt(w, g, 1, g.L + h, h), wallPt(w, g, 1, -h, h)]; }
 // Applied panels set to "Always" (or an older yes) take room; automatic ones only show where there is room.
-const panelMode = (c, end) => c['panel' + end] || ((end === 'L' ? c.appliedL : c.appliedR) ? 'on' : '');
+// 0.63.20 (Ayden 2026-11-24: "turning off the automatic panels doesnt remove them from the job"): an end panel or filler
+// that came in with a Mozaik job is set to Always on its cabinet, but it is still one the program put there, so the
+// Panels / Fillers switches take it out and bring it back. One you set on that end yourself (Ends pick, endHand) stays.
+// Bid Reader jobs keep theirs: there the bid decides (bidDraw).
+const mozDrawn = (c, end) => !!c.fromMozaik && !(S.job && S.job.bidDraw) && !(c.endHand && c.endHand[end]);
+const panelMode = (c, end) => { const m = c['panel' + end] || ((end === 'L' ? c.appliedL : c.appliedR) ? 'on' : ''); return m === 'on' && mozDrawn(c, end) && !lay().autoPanels ? 'off' : m; };
+const fillMode = (c, end) => { const m = c['fill' + end] || ''; return m === 'on' && mozDrawn(c, end) && !lay().autoFillers ? 'off' : m; };
 // Everything that blocks a cabinet of this height and depth on one side of a wall, as spans along the wall.
 function obstacles(wallId, side, spec, excludeId) {
   const w = wall(wallId); if (!w) return [];
@@ -276,12 +282,12 @@ function fillerFlushOutset(c) {
 // Fillers between a cabinet and a wall, by the viewer's end: [{ end, gap, a0, a1 }].
 function fillersOf(c) {
   if (c.moz || c.made) return []; // a Mozaik product is its own filler or trim
-  const ly = lay(); if (!c.wall || (!ly.autoFillers && c.fillL !== 'on' && c.fillR !== 'on')) return [];
+  const ly = lay(); if (!c.wall || (!ly.autoFillers && fillMode(c, 'L') !== 'on' && fillMode(c, 'R') !== 'on')) return [];
   return inRoomOf(c, () => {
     if (!wall(c.wall)) return [];
     const out = [];
     [-1, 1].forEach(dir => {
-      const end = (dir < 0) === (c.side === 1) ? 'L' : 'R', mode = c['fill' + end] || '';
+      const end = (dir < 0) === (c.side === 1) ? 'L' : 'R', mode = fillMode(c, end);
       const n = nearestAt(c, dir); if (!n || n.kind !== 'wall' || n.gap < 0.01 || mode === 'off') return;
       // Automatic fills small gaps; "Always" fills whatever gap there is, as when the cabinet was set a distance off the wall.
       if (mode !== 'on' && n.gap > Math.max(ly.fillerReach, ly.fillerW) + 0.01) return;
@@ -450,6 +456,9 @@ function refitFillers(from, to) {
     S.cabinets.forEach(c => {
       if (!wall(c.wall)) return;
       [-1, 1].forEach(dir => {
+        // 0.63.20: only ends that take an automatic filler move. Fillers and panels placed as products, ends set to Never
+        // or Always, and a Mozaik job's own fillers stay where they are (they were sliding 1 1/2" each time).
+        const end = (dir < 0) === (c.side === 1) ? 'L' : 'R'; if (c.made || c.moz || (c['fill' + end] || '') !== '') return;
         const n = nearestAt(c, dir); if (!n || n.kind !== 'wall') return;
         const had = from.autoFillers ? from.fillerW : 0, want = to.autoFillers ? to.fillerW : 0;
         if (n.gap > Math.max(had, from.fillerReach || 0, to.fillerReach) + 0.01 || Math.abs(n.gap - want) < 0.01) return;

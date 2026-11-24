@@ -102,6 +102,8 @@ function resolve(ref) {
     // A group inside a hardware item, e.g. hwx:jt-dowel:female
     case 'hwx': { const [hid, sub] = id.split(':'), h = hw(hid); if (!h) return null; return (h[sub] = h[sub] && typeof h[sub] === 'object' ? h[sub] : sub === 'top' && h.ends ? { ...h.ends } : {}); }
     case 'rceil': { const r = curRoom(); return r && (r.ceiling = r.ceiling || {}); }
+    // 0.63.18 (Ayden 2026-11-24): Room tab › Walls › Wall height sets every wall in the room at once (and new walls drawn in it).
+    case 'rwalls': return { get h() { return wallsHeight(); }, set h(v) { if (!(v > 0)) return; const r = curRoom(); if (r) r.wallHeight = v; S.walls.forEach(w => { w.height = v; }); } };
     case 'jtt': case 'jtp': return typeof jtResolve === 'function' ? jtResolve(k, id) : null;
     case 'ptr': { const [tid, kind] = id.split(':'), t = S.partTemplates.find(x => x.id === tid); if (!t) return null; t.rules = t.rules || {}; return (t.rules[kind] = t.rules[kind] || {}); }
     case 'eb': return edgeband(id);
