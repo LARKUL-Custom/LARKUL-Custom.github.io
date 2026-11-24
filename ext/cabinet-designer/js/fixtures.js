@@ -19,6 +19,9 @@ const FIXT_KINDS = [
   // 0.62.0: on the wall above the range, off the floor (they keep wall cabinets out of their space, not base cabinets).
   { k: 'hood', name: 'Range hood', ab: 'HOOD', wallHung: true },
   { k: 'mw', name: 'Microwave', ab: 'MW', wallHung: true },
+  // 0.62.6 (Ayden 2026-11-24: "the tall cabinet in the butler pantry is a double oven"): a wall oven sits in a tall
+  // cabinet's opening, so like a loose model it keeps nothing out of its space.
+  { k: 'oven', name: 'Wall oven', ab: 'OVEN', loose: true },
   // An imported model that is only there to look at (decor, lights, art): it keeps nothing out of its space.
   { k: 'model', name: '3D model', loose: true },
 ];
@@ -81,6 +84,10 @@ const FIXT_LIB = [
   FX('hd-pro48', 'hood', 'Range hoods', 'Pro Hood 48', 48, 30, 27, { elev: 66 }),
   FX('hd-under30', 'hood', 'Range hoods', 'Under Cabinet Hood 30', 30, 8, 18, { elev: 66 }),
   FX('hd-under36', 'hood', 'Range hoods', 'Under Cabinet Hood 36', 36, 8, 18, { elev: 66 }),
+  FX('ov-s30', 'oven', 'Wall ovens', 'Wall Oven Single 30', 28.5, 28.75, 23.5, { ovens: 1, elev: 30 }),
+  FX('ov-d30', 'oven', 'Wall ovens', 'Wall Oven Double 30', 28.5, 51.25, 23.5, { ovens: 2, elev: 18 }),
+  FX('ov-s27', 'oven', 'Wall ovens', 'Wall Oven Single 27', 25.5, 28.75, 23.5, { ovens: 1, elev: 30 }),
+  FX('ov-d27', 'oven', 'Wall ovens', 'Wall Oven Double 27', 25.5, 51.25, 23.5, { ovens: 2, elev: 18 }),
   FX('mw-otr', 'mw', 'Microwaves', 'Over the Range Microwave', 30, 16.25, 18, { elev: 54 }),
   FX('mw-ctr', 'model', 'Microwaves', 'Countertop Microwave', 21.25, 11.5, 17, { elev: 36 }),
   FX('ld-fw', 'washer', 'Laundry', 'Front Load Washer', 27, 38.75, 31),
@@ -335,7 +342,7 @@ function fixtNew(pid) {
   const f = { id: uid('fx'), kind: d.kind, lib: d.id, name: d.name, w: d.w, h: d.h, d: d.d, elev: d.elev };
   // 0.61.3: a panel-ready appliance gets its panel fronts when placed (Panel fronts in its item bar turns them off).
   if (d.pr && PANEL_KINDS.includes(d.kind)) f.panels = true;
-  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md', 'cooktop', 'mount', 'faucet'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
+  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md', 'cooktop', 'mount', 'faucet', 'ovens'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
   return f;
 }
 function fixtPlace(k, p) {
@@ -437,6 +444,7 @@ function fixtElevSVG(w, side, L, fs, holes) {
       }
       else if (f.kind === 'fridge') s += `<path class="fx-line nss" d="M${x} ${y + f.h * 0.32}H${x + f.w}M${x + f.w / 2} ${y}V${y + f.h * 0.32}M${x + f.w / 2 - 2} ${y + f.h * 0.06}V${y + f.h * 0.26}M${x + f.w / 2 + 2} ${y + f.h * 0.06}V${y + f.h * 0.26}M${x + 3} ${y + f.h * 0.38}H${x + f.w - 3}"/>`;
       else if (f.kind === 'dw') s += `<path class="fx-line nss" d="M${x} ${y + 4}H${x + f.w}M${x + 3} ${y + 6}H${x + f.w - 3}"/>`;
+      else if (f.kind === 'oven') { const n = Math.max(1, Math.min(2, f.ovens | 0 || (f.h > 40 ? 2 : 1))), st = Math.min(4, f.h * 0.12), dh = (f.h - st) / n; s += `<path class="fx-line nss" d="M${x} ${y + st}H${x + f.w}"/>`; for (let i = 0; i < n; i++) { const t = y + st + i * dh; s += `<path class="fx-line nss" d="M${x} ${t + dh}H${x + f.w}M${x + 2} ${t + 2.2}H${x + f.w - 2}"/><rect class="fx-glass nss" x="${x + 3}" y="${t + dh * 0.33}" width="${f.w - 6}" height="${dh * 0.5}"/>`; } }
       else if (f.kind === 'ucfridge') s += `<rect class="fx-glass nss" x="${x + 2}" y="${y + 3}" width="${f.w - 4}" height="${f.h - 9}"/>`;
       else if (f.kind === 'range') s += `<path class="fx-line nss" d="M${x} ${y + 4}H${x + f.w}"/><rect class="fx-glass nss" x="${x + 3}" y="${y + 9}" width="${f.w - 6}" height="${f.h * 0.42}"/>`;
       else if (f.kind === 'washer' || f.kind === 'dryer') s += `<path class="fx-line nss" d="M${x} ${y + 6}H${x + f.w}"/><circle class="fx-glass nss" cx="${x + f.w / 2}" cy="${y + 6 + (f.h - 6) * 0.48}" r="${Math.min(f.w, f.h) * 0.3}"/>`;
@@ -463,9 +471,9 @@ function fixtElevMove(d, p) {
 
 /* ---------- 3D ---------- */
 // The wall cut into pieces around its doors and windows (local x runs along the wall, centered on its middle).
-function fixtWall3(w, g, wm, edges) {
+function fixtWall3(w, g, wm, edges, only = fixtHole) {
   const L = g.L, H = w.height, t = w.thick;
-  const holes = fixtList().filter(f => f.wall === w.id && fixtHole(f)).map(f => { const [a0, a1, z0, z1] = fixtInner(f); return { a0: Math.max(0, a0), a1: Math.min(L, a1), z0: Math.max(0, z0), z1: Math.min(H, z1) }; })
+  const holes = fixtList().filter(f => f.wall === w.id && fixtHole(f) && only(f)).map(f => { const [a0, a1, z0, z1] = fixtInner(f); return { a0: Math.max(0, a0), a1: Math.min(L, a1), z0: Math.max(0, z0), z1: Math.min(H, z1) }; })
     .filter(o => o.a1 - o.a0 > 0.1 && o.z1 - o.z0 > 0.1).sort((a, b) => a.a0 - b.a0);
   if (!holes.length) return [box3(L + t, H, t, wm, 0, H / 2, 0, edges)];
   const out = [], piece = (a0, a1, z0, z1) => { if (a1 - a0 > 0.01 && z1 - z0 > 0.01) out.push(box3(a1 - a0, z1 - z0, t, wm, (a0 + a1) / 2 - L / 2, (z0 + z1) / 2, 0, edges)); };
@@ -584,6 +592,19 @@ function fixt3d(v, selCol) {
     if (f.panels && PANEL_KINDS.includes(f.kind)) { grp.add(box3(f.w - 0.1, f.h - 0.1, Math.max(0.5, f.d - 0.25), hot || metal, f.w / 2, f.elev + f.h / 2, Math.max(0.5, f.d - 0.25) / 2)); v.root.add(tag(grp)); return; }
     const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
     if (mm) { mm.position.set(0, f.elev, 0); grp.add(mm); v.root.add(tag(grp)); return; }
+    // 0.62.6: a wall oven: stainless, a control strip on top, then one or two doors, each with a dark window and a bar.
+    if (f.kind === 'oven') {
+      const n = Math.max(1, Math.min(2, f.ovens | 0 || (f.h > 40 ? 2 : 1))), strip = Math.min(4, f.h * 0.12), dh = (f.h - strip) / n;
+      grp.add(box3(f.w, f.h, f.d, hot || metal, f.w / 2, f.elev + f.h / 2, f.d / 2));
+      grp.add(box3(f.w - 1, strip - 0.5, 0.2, dark, f.w / 2, f.elev + f.h - strip / 2, f.d + 0.1, false));
+      for (let i = 0; i < n; i++) {
+        const z0 = f.elev + i * dh;
+        grp.add(box3(f.w - 6, dh * 0.5, 0.2, glass, f.w / 2, z0 + dh * 0.42, f.d + 0.1, false));
+        grp.add(box3(f.w - 4, 0.9, 0.9, dark, f.w / 2, z0 + dh - 2.2, f.d + 1.6));
+        [-1, 1].forEach(k => grp.add(box3(0.5, 0.5, 1.2, dark, f.w / 2 + k * (f.w / 2 - 3), z0 + dh - 2.2, f.d + 0.6)));
+      }
+      v.root.add(tag(grp)); return;
+    }
     // A loose model not imported in this browser (or still loading) shows as a solid box.
     if (fixtLoose(f)) { grp.add(box3(f.w, f.h, f.d, hot || flat3('#d4d7db'), f.w / 2, f.elev + f.h / 2, f.d / 2)); v.root.add(tag(grp)); return; }
     const body = f.kind === 'washer' || f.kind === 'dryer' ? white : metal;

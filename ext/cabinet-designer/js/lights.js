@@ -22,11 +22,11 @@ function lightsCard() {
   const drawing = ui.placeLight === 'strip', placing = ui.placeLight === true;
   const stripList = ui.lightList === 'strip' && strips.length ? `<div class="tscroll lt-list"><table class="t gentab"><thead><tr><th>Cabinet</th><th>Where</th><th>Color</th><th class="r">Length</th><th></th></tr></thead><tbody>${strips.map(l => { const R = 'light:' + l.id; return `<tr><td>${ctl(R, 'cab', l.cab, 'select', { options: cabOpts, label: 'Cabinet' })}</td><td>${ctl(R, 'where', l.where, 'select', { options: STRIP_SPOTS, label: 'Where' })}</td><td>${temp(R, l)}</td><td class="n">${fmtLen(stripLen(stripCab(l)))}</td><td>${del(l.id, 'strip')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
   const ceilList = ui.lightList === 'ceiling' && ceil.length ? `<div class="tscroll lt-list"><table class="t gentab"><thead><tr><th>Light</th><th>Across (X)</th><th>Down (Y)</th><th>Color</th><th>Drop</th><th></th></tr></thead><tbody>${ceil.map(l => { const R = 'light:' + l.id; return `<tr><td>${ctl(R, 'style', l.style || 'can', 'select', { options: CEIL_STYLES, label: 'Light style' })}${l.auto ? '<span class="lt-auto" title="Made by Regenerate ceiling lights. Regenerate replaces these and keeps the ones you placed.">auto</span>' : ''}</td><td>${ctl(R, 'x', l.x, 'len', { label: 'X' })}</td><td>${ctl(R, 'y', l.y, 'len', { label: 'Y' })}</td><td>${temp(R, l)}</td><td>${l.style === 'pendant' ? ctl(R, 'drop', l.drop || 30, 'len', { label: 'Drop' }) : ''}</td><td>${del(l.id, 'light')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
-  const ap = !ceil.length ? autoPucks().length : 0;
+  const ap = !ceil.length ? autoPucks().length : 0, wo = !!lay().winOnly;
   return `<div class="lt-dock">
   <div class="lt-box"><div class="lt-head"><b>LED strips</b><span class="muted">${strips.length} · ${feet.toFixed(1)} ft</span>${listBtn('strip', strips.length)}</div>
     <div class="lt-row"><button class="btn sm${drawing ? ' on' : ''}" data-act="${drawing ? 'light-place-stop' : 'light-draw'}" aria-pressed="${drawing}" title="Then click each cabinet. Click again to take it off.">${icon(drawing ? 'check' : 'edit')}${drawing ? 'Done' : 'Draw'}</button><select class="strip-where" aria-label="Where the strip goes" title="Where the strip goes"><option value="auto"${(ui.stripWhere || 'auto') === 'auto' ? ' selected' : ''}>Auto spot</option>${STRIP_SPOTS.map(o => `<option value="${o.v}"${ui.stripWhere === o.v ? ' selected' : ''}>${o.l}</option>`).join('')}</select><button class="btn sm" data-act="light-strips" data-id="under" title="A strip under every wall cabinet">${icon('plus')}Under uppers</button><button class="btn sm" data-act="light-strips" data-id="top" title="A strip on top of every wall cabinet">${icon('plus')}On uppers</button><button class="btn sm" data-act="light-strips" data-id="toe" title="A strip in the toe kick of every base">${icon('plus')}Toe kicks</button>${strips.length ? `<button class="btn sm danger" data-act="light-clear" data-id="strip" title="Remove all strips">${icon('trash')}All</button>` : ''}</div>${stripList}</div>
-  <div class="lt-box"><div class="lt-head"><b>Ceiling lights</b><span class="muted">${ceil.length ? ceil.length + (nAuto ? ` (${nAuto} auto)` : '') : ap ? ap + ' automatic' : 'none'}</span>${listBtn('ceiling', ceil.length)}</div>
+  <div class="lt-box"><div class="lt-head"><b>Ceiling lights</b><span class="muted">${ceil.length ? ceil.length + (nAuto ? ` (${nAuto} auto)` : '') : ap ? ap + ' automatic' : 'none'}</span><button class="btn sm${wo ? ' on' : ''}" data-act="light-winonly" aria-pressed="${wo}" title="Realistic only: no daylight or fill from outside the drawing except what comes in through the windows (following the time of day). Ceiling lights and LED strips you placed stay on. The automatic ceiling lights stay off.">${icon(wo ? 'check' : 'sun')}Only through windows</button>${listBtn('ceiling', ceil.length)}</div>
     <div class="lt-row"><button class="btn sm${placing ? ' on' : ''}" data-act="${placing ? 'light-place-stop' : 'light-place'}" aria-pressed="${placing}" title="Click in the plan to place a light">${icon(placing ? 'check' : 'plus')}${placing ? 'Done' : 'Place'}</button><button class="btn sm" data-act="light-regen" title="Lays out recessed cans over the room again. Replaces the automatic ones, keeps lights you placed.">${icon('regen')}Regenerate ceiling lights</button><label class="lt-sp" title="Spacing between cans">${icon('gridsplit')}${ctl('layout', 'lightGrid', (S.job.layout || {}).lightGrid || 48, 'len', { label: 'Spacing between cans' })}</label>${ceil.length ? `<button class="btn sm danger" data-act="light-clear" data-id="ceiling" title="Remove all ceiling lights">${icon('trash')}All</button>` : ''}</div>${ceilList}</div>
 </div>`;
 }
@@ -153,9 +153,77 @@ function puckSpots(force, sp, max) {
   return out;
 }
 let puckGeo3 = null;
+/* Only through windows (Ayden 2026-11-24: "the simulation light to literally only pass through the windows, there
+   should be no other lights unless it is ceiling or LED strips or whatever we build"). realLight (real3d.js) turns off
+   the sky fill, the overhead fill and reflections of the made-up surroundings. The sun is kept out of the room by
+   an invisible shadow-only shell (winSeal3): every wall again with only its windows cut out (so walls cut away for the
+   view, faded walls and doorways still block it), the open sides of the room and a roof. Each window also gets a soft
+   sky light just inside it, aimed into the room, that follows the time of day. Lights placed in the drawing stay on. */
+const SEAL3 = (() => { let m = null; return () => m || (m = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false })); })();
+function winSeal3(v) {
+  const ws = S.walls.filter(w => !w.hidden && !w.island); if (!ws.length) return;
+  const g0 = new THREE.Group(), mat = SEAL3(), add = (o, grp = g0) => { o.castShadow = true; o.receiveShadow = false; o.userData.noBounds = true; o.userData.layer = 'lights'; o.userData.seal = true; grp.add(o); };
+  const cl = typeof roomCeiling === 'function' ? roomCeiling() : {}, H = Math.max(+cl.h || 0, ...ws.map(w => w.height || 96));
+  const T = Math.max(...ws.map(w => w.thick || 4)), isWin = f => f.kind === 'window';
+  // Only walls on the room's outline are raised to the ceiling (a low wall inside the room, like a half wall, isn't).
+  const bx = ws.flatMap(w => [w.x1, w.x2]), by = ws.flatMap(w => [w.y1, w.y2]), bx0 = Math.min(...bx), bx1 = Math.max(...bx), by0 = Math.min(...by), by1 = Math.max(...by);
+  const edge = (x, y) => Math.min(Math.abs(x - bx0), Math.abs(x - bx1), Math.abs(y - by0), Math.abs(y - by1)) <= T + 6, outer = w => edge(w.x1, w.y1) && edge(w.x2, w.y2);
+  ws.forEach(w => {
+    const g = wg(w), grp = new THREE.Group(); grp.position.set((w.x1 + w.x2) / 2, 0, (w.y1 + w.y2) / 2); grp.rotation.y = Math.atan2(-g.u.y, g.u.x);
+    fixtWall3(w, g, mat, false, isWin).forEach(m => add(m, grp));
+    // Up to the ceiling where the wall is lower than it.
+    const wh = w.height || 96; if (H - wh > 0.5 && outer(w)) add(new THREE.Mesh(new THREE.BoxGeometry(g.L + w.thick, H - wh + 1, w.thick), mat).translateY(wh + (H - wh + 1) / 2), grp);
+    g0.add(grp);
+  });
+  // Open sides: stretches of the room's outline with no wall along them get a wall, a little outside the room.
+  const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), o = T + 1;
+  const near = (x, y) => ws.some(w => { const dx = w.x2 - w.x1, dy = w.y2 - w.y1, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((x - w.x1) * dx + (y - w.y1) * dy) / L2)); return Math.hypot(w.x1 + t * dx - x, w.y1 + t * dy - y) <= (w.thick || 4) + 6; });
+  [[x0, y0, x1, y0, 0, -o], [x0, y1, x1, y1, 0, o], [x0, y0, x0, y1, -o, 0], [x1, y0, x1, y1, o, 0]].forEach(([ax, ay, bx, by, ox, oy]) => {
+    const L = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.ceil(L / 3)); let run = null;
+    const flush = (k) => { if (!run) return; const a = (run - 0.5) / n, b = Math.min(1, (k + 0.5) / n), len = (b - a) * L + 2 * o, cx = ax + (bx - ax) * (a + b) / 2 + ox, cy = ay + (by - ay) * (a + b) / 2 + oy;
+      add(new THREE.Mesh(ox ? new THREE.BoxGeometry(2, H + 2, len) : new THREE.BoxGeometry(len, H + 2, 2), mat).translateX(cx).translateY((H + 2) / 2).translateZ(cy)); run = null; };
+    for (let i = 0; i <= n; i++) { const t = i / n, x = ax + (bx - ax) * t, y = ay + (by - ay) * t; if (!near(x, y)) { if (run === null) run = Math.max(0.5, i); } else flush(i - 1); }
+    flush(n);
+  });
+  // A roof over everything.
+  add(new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 2 * o + 4, 2, y1 - y0 + 2 * o + 4), mat).translateX((x0 + x1) / 2).translateY(H + 1.5).translateZ((y0 + y1) / 2));
+  g0.userData.noBounds = true; g0.userData.layer = 'lights'; v.root.add(g0);
+}
+const winOnly3 = R3 => !!(R3 && lay().winOnly);
+const WIN_SKY = { max: 6 };
+function windowSky3(v) {
+  v.winBounce = 0;
+  const ws = S.walls; if (!ws.length || typeof fixtList !== 'function') return;
+  const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
+  const mid = new THREE.Vector3((Math.min(...xs) + Math.max(...xs)) / 2, 0, (Math.min(...ys) + Math.max(...ys)) / 2);
+  let n = 0, tot = 0;
+  fixtList().filter(f => f.kind === 'window').forEach(f => {
+    const w = wall(f.wall); if (!w || n >= WIN_SKY.max) return;
+    const [a0, a1, z0, z1] = fixtInner(f), T = w.thick, g = wallGroup(w, 1, 0, -w.thick);
+    g.updateMatrixWorld(true);
+    const P = new THREE.Vector3((a0 + a1) / 2, (z0 + z1) / 2, T / 2).applyMatrix4(g.matrixWorld);
+    const N = new THREE.Vector3(0, 0, 1).transformDirection(g.matrixWorld); N.y = 0; N.normalize();
+    const flat = new THREE.Vector3(P.x, 0, P.z);
+    if (flat.clone().add(N).distanceTo(mid) > flat.clone().sub(N).distanceTo(mid)) N.negate();
+    const area = Math.max(1, (a1 - a0) * (z1 - z0)) / 1440; // a 30x48 window is 1
+    const sl = new THREE.SpotLight(0xdfe8ff, 0, 360, 1.25, 1, 1.6);
+    sl.position.copy(P).addScaledVector(N, T / 2 + 1);
+    sl.target.position.copy(P).addScaledVector(N, 80).add(new THREE.Vector3(0, -40, 0));
+    sl.userData.winSky = Math.min(2.5, Math.sqrt(area)); sl.userData.noBounds = true; sl.target.userData.noBounds = true;
+    v.root.add(sl); v.root.add(sl.target); n++; tot += area;
+  });
+  // Daylight that came in through the windows bounces round the room: an even soft light, as strong as the windows
+  // are big for the floor they light (window glass over floor area). No windows, no bounce. realLight sets it by the hour.
+  const fa = Math.max(1, (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)));
+  v.winBounce = Math.min(0.35, 2.5 * tot * 1440 / fa);
+}
 function addLights3d(v, R3, layerOn, ceilOn) {
   if (R3) AUTO_CEIL.n = 0;
+  if (winOnly3(R3)) { windowSky3(v); winSeal3(v); }
   if (!layerOn) return;
+  // The automatic pucks are not lights anyone placed, so they stay off while only windows light the room.
+  const off = winOnly3(R3);
   let lamps = 0;
   let shadows = 0;
   const lamp = (grp, col, x, y, z, k, dist, ceiling) => {
@@ -209,7 +277,7 @@ function addLights3d(v, R3, layerOn, ceilOn) {
   // make up for the rest; two cast shadows on computers.
   if (!R3) return;
   const saved = roomLights().filter(isPuck), H = (() => { const cl = typeof roomCeiling === 'function' ? roomCeiling() : {}; return +cl.h > 0 ? +cl.h : hgt; })();
-  const P = saved.length ? saved.map(l => ({ x: +l.x || 0, y: +l.y || 0, h: H, col: lightColor(l.temp) })) : ceilOn ? autoPucks() : [];
+  const P = saved.length ? saved.map(l => ({ x: +l.x || 0, y: +l.y || 0, h: H, col: lightColor(l.temp) })) : ceilOn && !off ? autoPucks() : [];
   if (!P.length) return;
   const lit = Math.min(P.length, AUTO_CEIL.max, MAX_LAMPS - lamps); AUTO_CEIL.n = P.length;
   const step = P.length / Math.max(1, lit), k = 0.9 * Math.sqrt(P.length / Math.max(1, lit)), col = lightColor('warm');

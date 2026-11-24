@@ -178,7 +178,7 @@ function cncFlip(p, top) {
   if (k === 'applied') return top === (/\(L\)$/.test(n) ? 'hidden' : 'show');
   // Stands like a side, inside face to the right: the blind corner inside panel and drawer partitions too
   // (a right-hand blind corner's panel is drilled on its left face, so it has to be cut mirror image).
-  if (k === 'divider' && /^(Vertical divider|Blind corner inside panel|Drawer partition)/.test(n)) return top === 'left';
+  if (k === 'divider' && /^(Vertical divider|Blind corner inside panel|Drawer partition|Partition)/.test(n)) return top === 'left';
   return false;
 }
 

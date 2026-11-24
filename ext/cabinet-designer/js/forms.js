@@ -55,6 +55,8 @@ function resolve(ref) {
     case 'cabmp': { const c = cab(id); return c && (c.mp = c.mp || {}); }
     case 'cabc': { const c = cab(id); return c && (c.construction = c.construction || defaultConstruction(c.cat)); }
     case 'wall': return wall(id);
+    // 0.63.4: a wall's stone or panel detail (walldetail.js).
+    case 'wdet': { const w = wall(id); return w && (w.detail = w.detail || {}); }
     // A line from the bid on Pricing › Quote: bidi:<room id>:<line id>
     case 'bidi': return bidItemRef(id);
     case 'jline': return typeof jobLineRef === 'function' ? jobLineRef(id) : null;
@@ -113,6 +115,8 @@ function resolve(ref) {
     case 'jvar': return (S.job.vars || []).find(v => v.id === id);
     case 'rvar': { const [rid, vid] = id.split(':'), r = roomById(rid); return r && (r.vars || []).find(v => v.id === vid); }
     case 'jfield': return (S.job.fields || []).find(f => f.id === id);
+    // 0.63.0: one section of a cabinet's face (facesec.js): sec:<cabinet id>:<section key>
+    case 'sec': return typeof fsRef === 'function' ? fsRef(id) : null;
     case 'cvar': { const [cid, vid] = id.split(':'), c = cab(cid); return c && (c.vars || []).find(v => v.id === vid); }
   }
   return null;
@@ -196,7 +200,7 @@ document.addEventListener('change', e => {
     if ((ref === 'des' || ref.startsWith('lib:')) && field === 'group') { o.group = v; if (CLASS_CAT[v]) o.cat = CLASS_CAT[v]; return; }
     if (ref.startsWith('cab:') && field === 'appl' && typeof setAppl === 'function') return setAppl(o, v);
     if (ref.startsWith('cabmp:') && typeof madeSync === 'function') { o[field] = v; madeSync(cab(ref.slice(6))); return; }
-    if (ref.startsWith('wall:') && field === 'len') return setWallLen(o, v);
+    if (ref.startsWith('wall:') && field === 'len') return setWallLen(o, v + wg(o).L - insideLen(o));
     if (ref.startsWith('wall:') && field === 'angle') return setWallAngle(o, v);
     if (ref === 'layout') {
       const from = lay(); o[field] = v;

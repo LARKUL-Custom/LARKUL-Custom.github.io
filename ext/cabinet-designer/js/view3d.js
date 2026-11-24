@@ -249,7 +249,7 @@ function cabinetMeshes(c, opts = {}) {
     if ((c.construction || {}).top === 'stretchers') {
       const apH = sinkApronH(c, p), rsAt = rearStretcherAt(p, D, D - p.backInset - bt, bt);
       if (apH) grp.add(box3(W - 2 * t, apH, t, cmM, W / 2, H - apH / 2, D - t / 2));
-      else grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, D - p.stretcherWidth / 2));
+      else { const az = apronStretcherZ(c, p, t); grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, az !== null ? az : H - t / 2, D - p.stretcherWidth / 2)); }
       grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, H - t / 2, rsAt ? p.stretcherWidth / 2 : p.stretcherWidth / 2 + p.backInset + bt));
     } else grp.add(box3(W - 2 * t, t, D, cmM, W / 2, H - t / 2, D / 2));
     grp.add(box3(W - 2 * t, H - tk - 2 * t, bt, I3(bm, 'inside'), W / 2, tk + H / 2 - tk / 2, p.backInset + bt / 2, false));
@@ -294,6 +294,7 @@ function cabinetMeshes(c, opts = {}) {
   if (pk3) [pk3.L, pk3.R].filter(Boolean).forEach(s => grp.add(box3(t, s.z1 - s.z0, inD - 0.0625, cmM, s.x, (s.z0 + s.z1) / 2, p.backInset + bt + (inD - 0.0625) / 2)));
   if (angledCorner(c)) shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => grp.add(cornerShelf3d(c, p, t, bt, z, sm)));
   else shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => spans.forEach(([a, b]) => grp.add(box3(b - a - 0.06, t, inD - p.shelfFrontSetback, sm, (a + b) / 2, z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2))));
+  if (!angledCorner(c)) colShelves(lay).forEach(q => grp.add(box3(q.x1 - q.x0 - 0.06, t, inD - p.shelfFrontSetback, sm, (q.x0 + q.x1) / 2, q.z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2)));
   if (lay.divX !== null) grp.add(box3(t, lay.zIn1 - lay.zIn0, inD, cmM, lay.divX, (lay.zIn0 + lay.zIn1) / 2, p.backInset + bt + inD / 2));
   // inserts
   const dmt = drawerMatT(cabSet(c, 'drawerMatT')), dbx = L3(mat(dmt.sides) || cm, 'drawerBox');
@@ -724,6 +725,8 @@ function buildRoomScene(v) {
     const cut = { x: mx, z: my, nx: g.n.x * inward, nz: g.n.y * inward, ux: g.u.x, uz: g.u.y, half: g.L / 2 + (w.thick || 4) };
     grp.userData.wall = true; if (cutaway) grp.userData.cut = cut;
     v.root.add(grp);
+    // 0.63.4: stone or panels on the room side of the wall, with real depth (walldetail.js). Not on faded walls.
+    if (wallMode === 'solid' && typeof wdMeshes3 === 'function') { const dg = wdMeshes3(w, inward); if (dg) { dg.userData.wall = true; if (cutaway) dg.userData.cut = cut; v.root.add(dg); } }
     capsOf(w).forEach(cp => {
       const cg = wallGroup(w, cp.side, cp.side === 1 ? cp.a0 : cp.a1);
       cg.add(box3(cp.t, cp.height, cp.len, wm, cp.t / 2, cp.height / 2, cp.len / 2, wallMode !== 'faded'));
@@ -802,7 +805,7 @@ function buildRoomScene(v) {
     else if (ts && ts.sinks.length) v.root.add(ctTop3(r, tm, ts.outline, ts.holes));
     else if (r.poly) v.root.add(ctTop3(r, tm));
     else grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
-    if (r.bs > 0) { const off = r.side === 1 ? r.ovS : r.ovE; grp.add(box3(r.end - r.start, r.bs, 0.75, tm, off + (r.end - r.start) / 2, r.top + r.thick + r.bs / 2, 0.375)); }
+    if (r.bs > 0) { const off = r.side === 1 ? r.ovS : r.ovE; (r.bsSegs || [[r.start, r.end]]).forEach(([s0, s1]) => { const lx = off + (r.side === 1 ? s0 - r.start : r.end - s1); grp.add(box3(s1 - s0, r.bs, 0.75, tm, lx + (s1 - s0) / 2, r.top + r.thick + r.bs / 2, 0.375)); }); }
     // Side splashes where an end butts a wall (0.60.8), in front of the backsplash.
     [['S', ctX0(r)], ['E', ctX1(r) - 0.75]].forEach(([e, x]) => { if (!r['ss' + e]) return; const lx = r.side === 1 ? x - a : b - x - 0.75, bd = r.bs > 0 ? 0.75 : 0; grp.add(box3(0.75, r.bs, r.depth - bd, tm, lx + 0.375, r.top + r.thick + r.bs / 2, bd + (r.depth - bd) / 2)); });
     // Waterfall ends: a panel the top's thickness from the floor up under the top, flush with its end.

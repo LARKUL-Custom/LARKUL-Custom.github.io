@@ -105,12 +105,13 @@ function edTab(c, tab, qr) {
         <div class="grid4">${fld('From left', 'cabpos:' + id, 'L', r3(fromEnd(c, 'L')), 'len')}${fld('From right', 'cabpos:' + id, 'R', r3(fromEnd(c, 'R')), 'len')}${fld('Outset', R, 'outset', c.outset || 0, 'len')}</div>
         <div class="row-actions"><button class="btn sm" data-act="cab-center" data-id="${id}">${icon('ends')}Center on wall</button><button class="btn sm" data-act="cab-center-open" data-id="${id}">${icon('ends')}Center in opening</button></div></div>${typeof qSizeExtras === 'function' ? qSizeExtras(c) : ''}`;
     case 'face': {
+      if (typeof fsFaceTab === 'function') return fsFaceTab(c);
       return `${qeOpening(c, qr, 'face')}
         <div class="psec box">${secHead('door', 'Doors and drawers', 'violet')}
           <div class="grid2">${fld('Door template', R, 'doorT', c.doorT || '', 'select', { options: setOpts('doorT', opts(S.doorTemplates), 'cab') })}${fld('Pulls', R, 'pull', c.pull || '', 'select', { options: setOpts('pull', opts(hwOf('pull')), 'cab') })}
           ${fld('Grain match', R, 'grainMatch', c.grainMatch || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'v', l: 'Vertical (fronts stacked)' }, { v: 'h', l: 'Horizontal (fronts side by side)' }] })}${typeof pocketBtn === 'function' && pocketBtn(c) ? fld('Pocket doors', R, 'pocket', c.pocket || '', 'select', { options: [{ v: '', l: 'Off' }, { v: 'on', l: 'On (swing open, slide back in)' }] }) : ''}</div></div>${ffBox(c)}${edFrontList(c, qr)}`;
     }
-    case 'interior': return `${qeOpening(c, qr, 'inside')}${intLibrary(c, qr)}<div class="psec box">${intWhole(c)}</div>${typeof qInteriorExtras === 'function' ? qInteriorExtras(c) : ''}`;
+    case 'interior': if (typeof fsInteriorTab === 'function') return fsInteriorTab(c); return `${qeOpening(c, qr, 'inside')}${intLibrary(c, qr)}<div class="psec box">${intWhole(c)}</div>${typeof qInteriorExtras === 'function' ? qInteriorExtras(c) : ''}`;
     case 'materials': return `${finishedBox(c)}<div class="psec box">${secHead('palette', 'Materials and hardware', 'amber')}${dockBody('cab-tpl')}
         <div class="grid2">${fld('Joints, unfinished ends', R, 'jointU', c.jointU || '', 'select', { options: setOpts('jointU', opts(hwOf('joint')), 'cab') })}${fld('Joints, finished ends', R, 'jointF', c.jointF || '', 'select', { options: setOpts('jointF', opts(hwOf('joint')), 'cab') })}</div></div>`;
     case 'ends': return `<div class="psec box">${secHead('ends', 'End panels and fillers', 'amber')}${endRows(c)}
@@ -132,7 +133,7 @@ function edTab(c, tab, qr) {
   return '';
 }
 // Tabs with their own big drawing or table: no picture beside them.
-const ED_WIDE = ['shape', 'parts'];
+const ED_WIDE = ['shape', 'parts', 'face', 'interior'];
 // Mozaik's product log: what's wrong with the cabinet and what was changed by hand, always in sight.
 function edLog(c, b) {
   const L = [], E = c.partEdits || {}, n = f => Object.values(E).filter(f).length;

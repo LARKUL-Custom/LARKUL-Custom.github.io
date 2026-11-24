@@ -186,6 +186,15 @@ function realLight(v) {
   v.renderer.toneMappingExposure = 0.75 + 0.2 * d;
   if (typeof realCeil3 === 'function') realCeil3().emissive.copy(mixHex(0x141418, 0x5a5854, d));
   v.envK = 0.25 + 0.75 * d;
+  // Only through windows (Lights tab): no fill from overhead, almost no sky everywhere, a dark ceiling, and the sky
+  // light at each window (windowSky3 in lights.js) follows the daylight. The sun still comes in where walls let it.
+  if (typeof lay === 'function' && lay().winOnly) {
+    v.hemi.intensity = (v.winBounce || 0) * d; v.hemi.color.set(0xf4efe6); v.hemi.groundColor.set(0xb8a894); v.fill.intensity = 0;
+    v.renderer.toneMappingExposure = 1.05;
+    if (typeof realCeil3 === 'function') realCeil3().emissive.set(0x000000);
+    v.envK = 0;
+    v.root.traverse(o => { if (o.isSpotLight && o.userData.winSky) o.intensity = o.userData.winSky * 3.2 * d; });
+  }
   v.scene.traverse(o => { if (!o.isMesh) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
     if (!m || !m.isMeshStandardMaterial) return;
     if (m.userData.env0 === undefined) m.userData.env0 = m.envMapIntensity;

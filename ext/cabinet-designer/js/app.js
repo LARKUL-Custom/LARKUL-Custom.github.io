@@ -366,9 +366,10 @@ function wallProps(w) {
   return `<div class="psec"><div class="pshead"><h2 class="ph2">${icon('wall')}${wallName(w)}</h2><button class="btn danger" data-act="wall-del" data-id="${w.id}">${icon('trash')}Delete wall</button></div>
     <div class="note">${nCab(cs.length)} on this wall${cs.length ? '. Deleting the wall removes them.' : ''}</div></div>
   ${ptabs('wall', [['size', 'Wall settings', 'ruler']])}
-  <div class="psec box">${secHead('ruler', 'Size and angle', 'teal')}${fld('Length', 'wall:' + w.id, 'len', g.L, 'len')}${fld('Thickness', 'wall:' + w.id, 'thick', w.thick, 'len')}${fld('Ceiling height', 'wall:' + w.id, 'height', w.height, 'len')}
+  <div class="psec box">${secHead('ruler', 'Size and angle', 'teal')}${fld('Inside length', 'wall:' + w.id, 'len', insideLen(w), 'len')}${fld('Thickness', 'wall:' + w.id, 'thick', w.thick, 'len')}${fld('Ceiling height', 'wall:' + w.id, 'height', w.height, 'len')}
     ${fld('Angle (degrees)', 'wall:' + w.id, 'angle', wallAngle(w), 'num')}${angleDial(w)}
-    <div class="note">A new length moves the far end, and a new angle turns the wall around the corner it shares with another wall. Walls joined at the end that moves follow it. 0° points right, 90° points up the plan.</div></div>
+    <div class="note">Inside length is the room side, face to face between the walls at its ends. A new length moves the far end, and a new angle turns the wall around the corner it shares with another wall. Walls joined at the end that moves follow it. 0° points right, 90° points up the plan.</div></div>
+  ${typeof wallDetailBox === 'function' && !w.hidden && !w.island ? wallDetailBox(w) : ''}
   <div class="psec box">${secHead('wall', 'End caps', 'slate')}<div class="note">A short return off this wall. Cabinets and countertops stop against it like a wall. Left and right are as you face the cabinets. Right-click the wall to put one anywhere along it.</div>${capRows(w)}</div>`;
 }
 // Wall direction in degrees, counterclockwise from pointing right on the plan (plan y grows downward).
@@ -603,7 +604,7 @@ function dockBody(k) {
   if (k === 'layout') {
     const L = lay();
     // Automatic fillers and panels are switched on the Item tab.
-    return `<div class="dockgrid">${LAYOUT_FIELDS.filter(f => !['autoFillers', 'autoPanels', 'autoLights'].includes(f.k)).map(f => `<div class="dockfld">${f.type === 'bool'
+    return `<div class="dockgrid">${LAYOUT_FIELDS.filter(f => !['autoFillers', 'autoPanels', 'autoLights', 'winOnly'].includes(f.k)).map(f => `<div class="dockfld">${f.type === 'bool'
       ? `<label class="checkrow">${ctl('layout', f.k, L[f.k], 'bool', { label: f.label })} <b>${f.label}</b></label>`
       : fld(f.label, 'layout', f.k, L[f.k], f.type, { options: f.options })}${f.note ? `<div class="note">${f.note}</div>` : ''}</div>`).join('')}</div>
       <div class="row-actions"><button class="btn sm" data-act="refit-fillers">Fit fillers to cabinets at walls now</button><span class="note">These apply to the whole job.</span></div>`;
@@ -941,6 +942,7 @@ document.addEventListener('click', e => {
     case 'light-del': mutate(() => { S.lights = S.lights.filter(l => l.id !== id); }); break;
     case 'light-clear': mutate(() => { S.lights = S.lights.filter(l => l.kind !== id); }); break;
     case 'light-grid': case 'light-regen': regenCeilLights(); break;
+    case 'light-winonly': mutate(() => { S.job.layout = { ...(S.job.layout || {}), winOnly: !lay().winOnly }; }); break;
     case 'light-list': ui.lightList = ui.lightList === id ? null : id; render(); break;
     case 'light-place': startLightPlace(); break;
     case 'light-draw': startStripDraw(); break;

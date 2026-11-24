@@ -50,13 +50,15 @@ function renderPlan(pr) {
     else s += `<polygon class="wallpoly nss${isSel ? ' sel' : ''}" data-wall="${w.id}" points="${polyPts([P(-h, -h), P(g.L + h, -h), P(g.L + h, h), P(-h, h)])}"/>`;
     capsOf(w).forEach(cp => { s += `<polygon class="wallpoly cap nss${isSel ? ' sel' : ''}" points="${polyPts(capPoly(w, cp))}"/>`; });
     const out = -elevSide(w);
-    const m = P(g.L / 2, out * (h + 15 * px)); let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;
+    // 0.63.1: the length shown is the inside of the room, face to face between the walls at its ends (Mozaik shows it so).
+    const fc = w.hidden ? { lo: 0, hi: g.L } : wallFaces(w.id, elevSide(w)), ok = fc.hi > fc.lo, lo = ok ? fc.lo : 0, hi = ok ? fc.hi : g.L;
+    const m = P((lo + hi) / 2, out * (h + 15 * px)); let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;
     if (ui.dims.cab) {
       // Dimension line along the outside of the wall, Mozaik style.
-      const o = out * (h + 6 * px), a = P(0, o), b = P(g.L, o), t = 4 * px;
-      s += `<path class="dimln nss" d="M${a.x} ${a.y}L${b.x} ${b.y}M${P(0, o - t).x} ${P(0, o - t).y}L${P(0, o + t).x} ${P(0, o + t).y}M${P(g.L, o - t).x} ${P(g.L, o - t).y}L${P(g.L, o + t).x} ${P(g.L, o + t).y}"/>`;
+      const o = out * (h + 6 * px), a = P(lo, o), b = P(hi, o), t = 4 * px;
+      s += `<path class="dimln nss" d="M${a.x} ${a.y}L${b.x} ${b.y}M${P(lo, o - t).x} ${P(lo, o - t).y}L${P(lo, o + t).x} ${P(lo, o + t).y}M${P(hi, o - t).x} ${P(hi, o - t).y}L${P(hi, o + t).x} ${P(hi, o + t).y}"/>`;
     }
-    s += `<text class="lbl dimtxt walltxt" x="${m.x}" y="${m.y}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${m.x} ${m.y})"><tspan font-weight="600">${wallName(w)}</tspan> · ${fmtLen(g.L, 1)}</text>`;
+    s += `<text class="lbl dimtxt walltxt" x="${m.x}" y="${m.y}" font-size="${fs}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${m.x} ${m.y})"><tspan font-weight="600">${wallName(w)}</tspan> · ${fmtLen(hi - lo, 1)}</text>`;
     if (isSel) [[w.x1, w.y1], [w.x2, w.y2]].forEach(([x, y]) => { s += `<circle class="handle nss" cx="${x}" cy="${y}" r="${7 * px}"/>`; });
   });
   s = s.replace('%%PWALL%%', pwalls && pwalls.length ? `<g class="pwall-o">${pwalls.map(p => `<polygon class="nss" points="${p}"/>`).join('')}</g>` : '');
@@ -92,8 +94,10 @@ function wallDrawSVG(fs, px) {
     const e = wallPreviewEnd();
     if (e) {
       e.guides.forEach(q => { s += `<line class="guide nss" x1="${q.x}" y1="${q.y}" x2="${e.x}" y2="${e.y}"/>`; });
-      const L = Math.hypot(e.x - ui.drawing.x, e.y - ui.drawing.y), mx = (ui.drawing.x + e.x) / 2, my = (ui.drawing.y + e.y) / 2;
-      s += `<line class="prev-wall nss" x1="${ui.drawing.x}" y1="${ui.drawing.y}" x2="${e.x}" y2="${e.y}" stroke-width="${Math.max(2, (curRoom().wallThick ?? S.job.wallThick) / px)}"/>`;
+      const L0 = Math.hypot(e.x - ui.drawing.x, e.y - ui.drawing.y), L = L0 - (L0 > 0.01 ? pinStartGap((e.x - ui.drawing.x) / L0, (e.y - ui.drawing.y) / L0) : 0), mx = (ui.drawing.x + e.x) / 2, my = (ui.drawing.y + e.y) / 2;
+      const band = wallPreviewBand(e) || { x1: ui.drawing.x, y1: ui.drawing.y, x2: e.x, y2: e.y, t: curRoom().wallThick ?? S.job.wallThick };
+      s += `<line class="prev-wall nss" x1="${band.x1}" y1="${band.y1}" x2="${band.x2}" y2="${band.y2}" stroke-width="${Math.max(2, band.t / px)}"/>`;
+      s += `<line class="prev-face nss" x1="${ui.drawing.x}" y1="${ui.drawing.y}" x2="${e.x}" y2="${e.y}"/>`;
       s += `<text class="lbl dimtxt" x="${mx}" y="${my - 12 * px}" font-size="${fs * 1.2}" font-weight="600" text-anchor="middle">${ui.typed ? esc(ui.typed) + '_' : fmtLen(L, 1)}</text>`;
       s += `<circle class="snapdot${e.at ? ' at' : ''}" cx="${e.x}" cy="${e.y}" r="${(e.at ? 7 : 4.5) * px}"/>`;
     }
@@ -188,17 +192,17 @@ function wallPreviewEnd() {
   let ang = Math.atan2(m.y - st.y, m.x - st.x), L = Math.hypot(m.x - st.x, m.y - st.y);
   if (!ui.shift) { const k = (ly.angleSnap || 90) * Math.PI / 180; ang = Math.round(ang / k) * k; }
   const ux = Math.cos(ang), uy = Math.sin(ang), guides = [];
-  if (ui.typed) { const t = parseLen(ui.typed); if (isFinite(t) && t > 0) return { x: st.x + ux * t, y: st.y + uy * t, guides }; }
+  if (ui.typed) { const t = parseLen(ui.typed); if (isFinite(t) && t > 0) { const k = pinStartGap(ux, uy); return { x: st.x + ux * (t + k), y: st.y + uy * (t + k), guides }; } }
   L = Math.round(L / g) * g;
   // Stop level with another wall end when the line passes close to it.
   const reach = 10 * ui.px; let best = reach;
-  S.walls.forEach(w => [[w.x1, w.y1], [w.x2, w.y2]].forEach(([x, y]) => {
+  drawEnds().forEach(({ x, y }) => {
     [[Math.abs(ux) > 0.01 ? (x - st.x) / ux : null, 'x'], [Math.abs(uy) > 0.01 ? (y - st.y) / uy : null, 'y']].forEach(([t, ax]) => {
       if (t === null || t <= 0) return;
       const ex = st.x + ux * t, ey = st.y + uy * t, d = Math.abs(t - Math.hypot(m.x - st.x, m.y - st.y));
       if (d < best && Math.abs(ax === 'x' ? ex - x : ey - y) < 1e-6) { best = d; L = t; guides.length = 0; guides.push({ x, y }); }
     });
-  }));
+  });
   return { x: st.x + ux * L, y: st.y + uy * L, guides };
 }
 // Touch: the Length box's arrow buttons draw a wall of that length to the right, up, left or down.
@@ -214,13 +218,106 @@ function wallByLength(deg) {
 function commitWallSegment() {
   const e = wallPreviewEnd(); if (!e) return;
   const st = ui.drawing; if (Math.hypot(e.x - st.x, e.y - st.y) < 1) return;
-  const rm = curRoom(), first = st.first || { x: st.x, y: st.y };
-  mutate(() => S.walls.push({ id: uid('w'), x1: r3(st.x), y1: r3(st.y), x2: r3(e.x), y2: r3(e.y), thick: rm.wallThick ?? S.job.wallThick, height: rm.wallHeight ?? S.job.wallHeight }));
-  ui.elevWall = S.walls[S.walls.length - 1].id;
+  const rm = curRoom(), first = st.first || { x: st.x, y: st.y }, ch = st.chain || { pts: [{ x: r3(st.x), y: r3(st.y) }], ids: [], pins: [null] };
+  const ex = r3(e.x), ey = r3(e.y), id = uid('w');
+  mutate(() => {
+    S.walls.push({ id, x1: r3(st.x), y1: r3(st.y), x2: ex, y2: ey, thick: rm.wallThick ?? S.job.wallThick, height: rm.wallHeight ?? S.job.wallHeight });
+    ch.pts.push({ x: ex, y: ey }); ch.ids.push(id); ch.pins.push(e.at ? wallEndAt({ x: ex, y: ey }, ch.ids) : null);
+    applyWallChain(ch);
+  });
+  ui.elevWall = id;
   ui.typed = '';
   // Back at the first corner: the room is closed, so drawing ends.
-  if (samePt(r3(e.x), r3(e.y), first)) { stopWalls(); flash('Room closed'); return; }
-  ui.drawing = { x: r3(e.x), y: r3(e.y), first }; renderRoom();
+  if (samePt(ex, ey, first)) { stopWalls(); flash('Room closed'); return; }
+  ui.drawing = { x: ex, y: ey, first, chain: ch }; renderRoom();
+}
+/* ---------- Drawing walls from the inside face ----------
+   0.63.1 (Ayden): the line you draw is the room side of the wall and the thickness goes behind it, so the inside
+   sizes are what you draw (Mozaik draws walls the same way). Walls are still saved on their centerline, so each
+   wall of the chain being drawn moves back half its thickness and the corners meet where the moved lines cross.
+   The outside is the side the chain turns away from; a straight run puts it away from the room's other walls,
+   or above/left of the line when there are none (drawing clockwise, like Mozaik). Saved rooms are not touched. */
+// Starting on the open end of a wall: that point is the wall's centerline, so a typed length counts from the
+// other wall's inside face, half its thickness further on.
+function pinStartGap(ux, uy) {
+  const ch = ui.drawing && ui.drawing.chain, pin = ch && !ch.ids.length && ch.pins[0], w = pin && wall(pin.wid); if (!w) return 0;
+  const g = wg(w), sn = Math.abs(ux * g.u.y - uy * g.u.x); return sn < 0.2 ? 0 : w.thick / 2 / sn;
+}
+function startWallChain(sp) {
+  const p = { x: r3(sp.x), y: r3(sp.y) };
+  ui.drawing = { x: p.x, y: p.y, first: { ...p }, chain: { pts: [p], ids: [], pins: [sp.at ? wallEndAt(p, []) : null] } };
+  ui.typed = '';
+}
+// An existing wall (not one being drawn) whose start or end sits at p, to join the new wall onto. A corner that
+// already joins two walls is left alone.
+function wallEndAt(p, skip) {
+  for (const w of S.walls) {
+    if (skip.includes(w.id)) continue;
+    const end = samePt(w.x1, w.y1, p) ? 1 : samePt(w.x2, w.y2, p) ? 2 : 0;
+    if (end && !wallEndJoined(w, end === 1 ? 'S' : 'E')) return { wid: w.id, end, ox: p.x, oy: p.y };
+  }
+  return null;
+}
+// Points wall ends snap to while drawing: other walls' ends, and the drawn (inside face) corners of this chain.
+function drawEnds() {
+  const ch = ui.drawing && ui.drawing.chain, skip = ch ? ch.ids : [], out = [];
+  S.walls.forEach(w => { if (!skip.includes(w.id)) out.push({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }); });
+  if (ch) ch.pts.forEach(q => out.push({ x: q.x, y: q.y }));
+  return out;
+}
+const lineCross = (p, u, q, v) => { const d = u.x * v.y - u.y * v.x; if (Math.abs(d) < 1e-6) return null; const k = ((q.x - p.x) * v.y - (q.y - p.y) * v.x) / d; return { x: p.x + u.x * k, y: p.y + u.y * k }; };
+// Centerlines for a chain of inside-face points pts. t[i] is wall i's thickness. Returns segs and where pinned walls' ends go.
+function wallChainGeom(pts, t, pins, skip) {
+  const n = pts.length - 1; if (n < 1) return null;
+  const closed = n >= 2 && samePt(pts[n].x, pts[n].y, pts[0]);
+  let area = 0; for (let i = 0; i < n; i++) area += pts[i].x * pts[i + 1].y - pts[i + 1].x * pts[i].y;
+  if (!closed) area += pts[n].x * pts[0].y - pts[0].x * pts[n].y;
+  const U = [], N = [];
+  for (let i = 0; i < n; i++) { const dx = pts[i + 1].x - pts[i].x, dy = pts[i + 1].y - pts[i].y, L = Math.hypot(dx, dy) || 1; U.push({ x: dx / L, y: dy / L }); N.push({ x: -dy / L, y: dx / L }); }
+  // sg = 1 when the room is on the n side of each segment (screen y runs down, so a clockwise chain has area > 0).
+  let sg = area > 1e-6 ? 1 : area < -1e-6 ? -1 : 0;
+  if (!sg) {
+    const others = S.walls.filter(w => !skip.includes(w.id));
+    if (others.length) {
+      const c = others.reduce((a, w) => ({ x: a.x + (w.x1 + w.x2) / 2 / others.length, y: a.y + (w.y1 + w.y2) / 2 / others.length }), { x: 0, y: 0 });
+      const d = (c.x - pts[0].x) * N[0].x + (c.y - pts[0].y) * N[0].y; sg = d < -0.01 ? -1 : 1;
+    } else sg = 1;
+  }
+  const Q = U.map((u, i) => ({ x: pts[i].x - N[i].x * sg * t[i] / 2, y: pts[i].y - N[i].y * sg * t[i] / 2 }));
+  const V = [], moves = [];
+  for (let i = 1; i < n; i++) V[i] = lineCross(Q[i - 1], U[i - 1], Q[i], U[i]) || Q[i];
+  const pinTo = (pin, i) => {
+    const w = pin && wall(pin.wid); if (!w) return null;
+    const g = wg(w), p = lineCross(Q[i], U[i], { x: w.x1, y: w.y1 }, g.u); if (!p) return null;
+    moves.push({ ...pin, x: p.x, y: p.y }); return p;
+  };
+  if (closed) V[0] = V[n] = lineCross(Q[n - 1], U[n - 1], Q[0], U[0]) || Q[0];
+  else {
+    V[0] = pinTo(pins[0], 0) || Q[0];
+    V[n] = pinTo(pins[n], n - 1) || { x: pts[n].x - N[n - 1].x * sg * t[n - 1] / 2, y: pts[n].y - N[n - 1].y * sg * t[n - 1] / 2 };
+  }
+  return { segs: U.map((u, i) => ({ x1: V[i].x, y1: V[i].y, x2: V[i + 1].x, y2: V[i + 1].y })), moves, sg };
+}
+// Puts the chain's walls on their centerlines and joins its ends onto the walls it started or ended on.
+function applyWallChain(ch) {
+  // Pinned walls go back where they were first, so a pin that is no longer at an end of the chain lets go.
+  ch.pins.forEach(pin => { const w = pin && wall(pin.wid); if (!w) return; setWallEndAt(w, pin.end, { x: pin.ox, y: pin.oy }); });
+  const ws = ch.ids.map(id => wall(id)); if (ws.some(w => !w)) return;
+  const G = wallChainGeom(ch.pts, ws.map(w => w.thick), ch.pins, ch.ids); if (!G) return;
+  G.segs.forEach((g, i) => Object.assign(ws[i], { x1: r3(g.x1), y1: r3(g.y1), x2: r3(g.x2), y2: r3(g.y2) }));
+  G.moves.forEach(m => { const w = wall(m.wid); if (w) setWallEndAt(w, m.end, { x: r3(m.x), y: r3(m.y) }); });
+}
+// Moves one end of a wall to p; cabinets on it keep their place when its start moves.
+function setWallEndAt(w, end, p) {
+  if (end === 1) { const d = { x: p.x - w.x1, y: p.y - w.y1 }; if (Math.hypot(d.x, d.y) < 1e-9) return; startMoved(w, d); w.x1 = p.x; w.y1 = p.y; }
+  else { w.x2 = p.x; w.y2 = p.y; }
+}
+// Where the wall being drawn would sit (its centerline) with the end at e.
+function wallPreviewBand(e) {
+  const st = ui.drawing, ch = st.chain; if (!ch) return null;
+  const t = curRoom().wallThick ?? S.job.wallThick, ts = ch.ids.map(id => (wall(id) || { thick: t }).thick).concat([t]);
+  const G = wallChainGeom(ch.pts.concat([{ x: e.x, y: e.y }]), ts, ch.pins.concat([null]), ch.ids);
+  return G ? { ...G.segs[G.segs.length - 1], t } : null;
 }
 function startWalls() { ui.placeLight = false; ui.drawMold = false; ui.moldFrom = null; ui.drawWalls = true; ui.placing = null; ui.ghost = null; ui.drawing = null; ui.typed = ''; if (ui.viewMode !== 'plan') setView('plan'); else renderRoom(); }
 function stopWalls() { ui.drawWalls = false; ui.drawing = null; ui.typed = ''; renderRoom(); }
@@ -336,7 +433,7 @@ function renderHint() {
   if (ui.placeLight) { h.innerHTML = 'Click where each ceiling light goes. <b>Right-click</b> or <b>Esc</b> to stop.'; return; }
   if (ui.drawMold) { h.innerHTML = ui.moldFrom ? `Click where the ${ui.drawMold === 'top' ? 'top' : 'run'} ends. Keep clicking to add more. <b>Right-click</b> or <b>Esc</b> to stop.` : `Click on a wall face where the ${ui.drawMold === 'top' ? 'top' : 'molding'} starts.`; return; }
   if (ui.drawWalls) {
-    if (!ui.drawing) h.innerHTML = 'Click to start a wall. Ends snap to other walls, to lines through them and to the grid.';
+    if (!ui.drawing) h.innerHTML = 'Click to start a wall. The line is the inside of the room; the wall thickness goes behind it. Ends snap to other walls, to lines through them and to the grid.';
     else h.innerHTML = `Type a length and press <b>Enter</b>, or click. Click the first corner to close the room. <b>Shift</b> for any angle. <b>Right-click</b> or <b>Esc</b> to stop.`;
   } else if (ui.placing && String(ui.placing).startsWith('fixt:')) {
     const l = fixtPreset(ui.placing.slice(5));
@@ -480,7 +577,7 @@ function initPlan() {
     if (e.button === 1 || e.button === 2) { ui.drag = { mode: 'pan', vx: ui.view.x, vy: ui.view.y }; return; }
     // Touch: a corner goes down when the finger lifts after a tap, so dragging pans and pinching zooms without adding walls.
     if (ui.drawWalls && e.pointerType === 'touch') { ui.drag = { mode: 'walltap', vx: ui.view.x, vy: ui.view.y }; return; }
-    if (ui.drawWalls) { if (!ui.drawing) { const sp = wallSnap(p); ui.drawing = { x: sp.x, y: sp.y }; ui.drawing.first = { x: sp.x, y: sp.y }; ui.typed = ''; renderPlan(); } else commitWallSegment(); return; }
+    if (ui.drawWalls) { if (!ui.drawing) { startWallChain(wallSnap(p)); renderPlan(); } else commitWallSegment(); return; }
     if (ui.placing && String(ui.placing).startsWith('fixt:')) {
       const keep = e.shiftKey ? ui.placing : null;
       if (fixtPlace(ui.placing.slice(5), p)) { ui.placing = keep; renderRoom(); }
@@ -634,7 +731,7 @@ function initPlan() {
     if (d.mode === 'topnode') { if (d.live) { undoStack.push(d.snap); redoStack = []; save(); render(); } return; }
     if (d.mode === 'box') { finishBox(d); return; }
     if (d.mode === 'walltap' && ui.drawWalls) {
-      if (!ui.drawing) { const sp = wallSnap(ui.mouse); ui.drawing = { x: sp.x, y: sp.y, first: { x: sp.x, y: sp.y } }; ui.typed = ''; renderPlan(); }
+      if (!ui.drawing) { startWallChain(wallSnap(ui.mouse)); renderPlan(); }
       else commitWallSegment();
       return;
     }
@@ -716,6 +813,11 @@ function frontsSVG(c, ex, by, opts = {}) {
   s += `<rect class="ev-cavity nss" x="${X(t)}" y="${Y(lay.zIn1)}" width="${c.w - 2 * t}" height="${lay.zIn1 - lay.zIn0}"/>`;
   const spans = lay.divX !== null ? [[t, lay.divX - t / 2], [lay.divX + t / 2, c.w - t]] : [[t, c.w - t]];
   shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => spans.forEach(([a, b]) => { s += `<rect class="ev-shelf nss" x="${X(a)}" y="${Y(z + t)}" width="${b - a}" height="${t}"/>`; }));
+  colShelves(lay).forEach(q => { s += `<rect class="ev-shelf nss" x="${X(q.x0)}" y="${Y(q.z + t)}" width="${q.x1 - q.x0}" height="${t}"/>`; });
+  // 0.63.0: the partitions behind side-by-side sections and the fixed shelves over and under them.
+  if (fr.some(f => f.cell !== undefined)) { const rl = caseRails(c, p, fr, t);
+    rl.shelves.filter(q => q.cols).forEach(q => { s += `<rect class="ev-shelf nss" x="${X(t)}" y="${Y(q.z + t / 2)}" width="${c.w - 2 * t}" height="${t}"/>`; });
+    drawerPartitions(c, p, fr, t, rl).filter(q => q.cols).forEach(q => { s += `<rect class="ev-shelf nss" x="${X(q.x)}" y="${Y(q.z1)}" width="${t}" height="${q.z1 - q.z0}"/>`; }); }
   if (lay.divX !== null) s += `<rect class="ev-shelf nss" x="${X(lay.divX - t / 2)}" y="${Y(lay.zIn1)}" width="${t}" height="${lay.zIn1 - lay.zIn0}"/>`;
   lay.rollouts.forEach(ro => { s += `<rect class="ev-dbox nss" x="${X(t + lay.spacer + 0.5)}" y="${Y(ro.z + ro.h)}" width="${c.w - 2 * (t + lay.spacer + 0.5)}" height="${ro.h}"/>`; });
   lay.trays.forEach(tr => { for (let i = 1; i <= tr.n; i++) { const xx = t + (c.w - 2 * t) * i / (tr.n + 1); s += `<line class="ev-inner nss" x1="${X(xx)}" x2="${X(xx)}" y1="${Y(tr.z1 - 0.5)}" y2="${Y(tr.z0 + 0.5)}" stroke-width="2"/>`; } });
@@ -796,6 +898,8 @@ function renderElev(pr) {
   let body = `<rect class="ev-wall nss"${wallFill2d()} x="0" y="${-H}" width="${L}" height="${H}"/><line class="ev-floor nss" x1="-8" x2="${L + 8}" y1="0" y2="0" stroke-width="2"/>`;
   // The walls that meet this one at its ends, cut through: 0 for "From left wall" is their inside face, so the room starts
   // where they stop (0.57.3; before, the drawing started at the wall's centerline end, half a wall early).
+  // 0.63.4: the wall's stone or panels (walldetail.js), behind everything on it.
+  if (typeof wdElevSVG === 'function') body += wdElevSVG(w, side);
   { const f = wallFaces(w.id, side), eL = side === 1 ? f.lo : L - f.hi, eR = side === 1 ? L - f.hi : f.lo;
     if (eL > 0.01) body += `<rect class="ev-cap ev-endwall nss" x="0" y="${-H}" width="${eL}" height="${H}"><title>The wall at this end</title></rect>`;
     if (eR > 0.01) body += `<rect class="ev-cap ev-endwall nss" x="${L - eR}" y="${-H}" width="${eR}" height="${H}"><title>The wall at this end</title></rect>`; }
@@ -853,7 +957,7 @@ function renderElev(pr) {
   countertopRuns().filter(rn => rn.on && rn.wall === w.id && rn.side === side).forEach(rn => {
     const a = side === 1 ? ctX0(rn) : L - ctX1(rn), m = texLook(mat(rn.tpl.mat), 'tops'); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-top')} x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}"/>`;
-    if (rn.bs > 0) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? rn.start : L - rn.end}" y="${-(rn.top + rn.thick + rn.bs)}" width="${rn.end - rn.start}" height="${rn.bs}" opacity=".75"/>`;
+    if (rn.bs > 0) (rn.bsSegs || [[rn.start, rn.end]]).forEach(([s0, s1]) => { body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? s0 : L - s1}" y="${-(rn.top + rn.thick + rn.bs)}" width="${s1 - s0}" height="${rn.bs}" opacity=".75"/>`; });
     [['S', ctX0(rn)], ['E', ctX1(rn) - 0.75]].forEach(([e, x]) => { if (rn['ss' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - 0.75}" y="${-(rn.top + rn.thick + rn.bs)}" width="0.75" height="${rn.bs}"/>`; });
     // Waterfall ends: the top turns down to the floor.
     [['S', ctX0(rn)], ['E', ctX1(rn) - rn.thick]].forEach(([e, x]) => { if (rn['wf' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - rn.thick}" y="${-rn.top}" width="${rn.thick}" height="${rn.top}"/>`; });

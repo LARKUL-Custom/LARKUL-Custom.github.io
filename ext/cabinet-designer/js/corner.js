@@ -76,6 +76,9 @@ function cornerFronts(c, p, rows, zs) {
     faces.forEach((fc, i) => {
       const x0 = faces.length > 1 && i === 1 ? ft + gap : rv, x1 = r3(fc.len - rv);
       let hinge = null;
+      // A 90° corner set to two separate doors (0.62.6) hinges like the bi-fold too (Ayden 2026-11-24, 0.63.2: "the
+      // continuing door should be seen as a continuation"): the hinge-side door on its outside end, the other on the
+      // inside corner, so its pull sits out at its own outside end. Swapping the hinge side swaps both.
       if (r.type === 'door') hinge = faces.length > 1 ? cornerSide(c) : (r.hinge === 'L' || r.hinge === 'R' ? r.hinge : p.hingeSide);
       out.push({ type: r.type, row: ri, idx: i, n: faces.length, x0, x1, z0, z1, hinge, style: r.style || '', face: fc });
     });
@@ -99,8 +102,12 @@ function cornerHingeHw(c, f) {
   const h = hw(cornerMainDoor(c, f) ? c.corner.hingeMain : c.corner.hingeFold);
   return h && h.kind === 'hinge' ? h : null;
 }
+// A 90° corner with two separate doors (not a bi-fold): c.corner.doors 'pair'.
+const cornerPair = c => !!(c && c.corner && c.corner.type === 'l' && c.corner.doors === 'pair');
 function cornerHinge(c, f, hg) {
   if (!f.face) return { name: hg.name, plate: true };
+  // Two separate doors: each hangs on the cabinet (plates on its end), the second on its own pick or the cabinet hinge.
+  if (cornerPair(c)) { const own = cornerHingeHw(c, f); return { name: own ? own.name : hg.name, plate: true }; }
   const own = cornerHingeHw(c, f); if (own) return { name: own.name, plate: cornerMainDoor(c, f) };
   const blum = /blum/i.test(hg.name || '');
   if (c.corner.type === 'diag') return { name: blum ? 'Blum CLIP top BLUMOTION 110° diagonal 45°' : `${hg.name} (45° diagonal)`, plate: true };
@@ -222,8 +229,9 @@ function cornerBox(c) {
   return `<div class="psec box">${secHead('plan', CORNER_KINDS[c.corner.type], 'violet')}
     <div class="grid4"><label class="f"><span>${blind ? 'Blind side' : 'Corner on the'}</span>${seg}</label>
     ${blind ? fld('Blind width', K, 'blind', blindWidth(c), 'len') : fld('Leg depth', K, 'leg', cornerLeg(c), 'len')}
-    ${c.corner.type === 'l' ? fld('Door on the cabinet', K, 'hingeMain', c.corner.hingeMain || '', 'select', { options: [{ v: '', l: 'Cabinet hinge' }, ...opts(hwOf('hinge'))] })
-      + fld('Folding door', K, 'hingeFold', c.corner.hingeFold || '', 'select', { options: [{ v: '', l: 'Bi-fold hinge' }, ...opts(hwOf('hinge'))] }) : ''}</div>
+    ${c.corner.type === 'l' ? fld('Doors', K, 'doors', c.corner.doors || '', 'select', { options: [{ v: '', l: 'Bi-fold' }, { v: 'pair', l: 'Two separate doors' }] })
+      + fld(cornerPair(c) ? 'First door' : 'Door on the cabinet', K, 'hingeMain', c.corner.hingeMain || '', 'select', { options: [{ v: '', l: 'Cabinet hinge' }, ...opts(hwOf('hinge'))] })
+      + fld(cornerPair(c) ? 'Second door' : 'Folding door', K, 'hingeFold', c.corner.hingeFold || '', 'select', { options: [{ v: '', l: cornerPair(c) ? 'Cabinet hinge' : 'Bi-fold hinge' }, ...opts(hwOf('hinge'))] }) : ''}</div>
     <div class="note">${blind ? 'The blind side goes into the corner, behind the cabinet on the other wall. A blind panel covers it; the doors and drawers fill the rest.' : 'Width runs along this wall and depth runs out along the other wall. Both legs are the leg depth.'}${c.corner.type === 'l' ? ' The two doors are a bi-fold: one hangs on the cabinet, the other folds on it. Pick the hinge each one takes.' : ''}</div></div>`;
 }
 // The Left/Right switch on the bar under the drawing.

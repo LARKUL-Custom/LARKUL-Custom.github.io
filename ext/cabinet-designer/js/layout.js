@@ -2,7 +2,7 @@
 'use strict';
 
 /* ---------- Settings ---------- */
-const LAYOUT_DEFAULTS = { snapReach: 4, grid: 1, angleSnap: 45, autoFillers: true, fillerW: 1.5, fillerReach: 3, autoPanels: true, panelReach: 1, autoLights: true, fridgePanels: true, fitOpenings: true, fitMin: 9, fitMax: 36 };
+const LAYOUT_DEFAULTS = { snapReach: 4, grid: 1, angleSnap: 45, autoFillers: true, fillerW: 1.5, fillerReach: 3, autoPanels: true, panelReach: 1, autoLights: true, winOnly: false, fridgePanels: true, fitOpenings: true, fitMin: 9, fitMax: 36 };
 const LAYOUT_FIELDS = [
   { k: 'snapReach', label: 'Snap reach', type: 'len', note: 'Cabinets jump to walls, other cabinets and lined-up edges inside this distance.' },
   { k: 'grid', label: 'Wall grid', type: 'len', note: 'Wall ends and lengths round to this.' },
@@ -244,7 +244,7 @@ function nearestAtNow(c, dir) {
   obstacles(c.wall, c.side, c, c.id).forEach(o => {
     if (Math.min(o.a1, hi) - Math.max(o.a0, lo) > 0.01) return;
     const gap = dir < 0 ? lo - o.a1 : o.a0 - hi;
-    if (gap > -0.01 && (!best || gap < best.gap)) best = { gap: Math.max(0, gap), kind: o.kind };
+    if (gap > -0.01 && (!best || gap < best.gap)) best = { gap: Math.max(0, gap), kind: o.kind, id: o.id };
   });
   return best;
 }
@@ -283,7 +283,7 @@ function fillersOf(c) {
       // Automatic fills small gaps; "Always" fills whatever gap there is, as when the cabinet was set a distance off the wall.
       if (mode !== 'on' && n.gap > Math.max(ly.fillerReach, ly.fillerW) + 0.01) return;
       const a0 = dir < 0 ? c.off - n.gap : c.off + c.w;
-      out.push({ end, gap: n.gap, a0, a1: a0 + n.gap });
+      out.push({ end, gap: n.gap, a0, a1: a0 + n.gap, wallId: n.id });
     });
     return out;
   });
@@ -519,8 +519,11 @@ function tidyWalls() { S.walls.forEach(k => ['x1', 'y1', 'x2', 'y2'].forEach(f =
 // Snaps a free point for wall drawing: wall ends first, then lines through other wall ends, then the grid.
 function wallSnap(p, skip) {
   const px = ui.px, ly = lay(), reach = 14 * px, pts = [];
-  S.walls.forEach(w => [[w.x1, w.y1], [w.x2, w.y2]].forEach(([x, y]) => { if (!skip || !samePt(x, y, skip)) pts.push({ x, y }); }));
-  if (ui.drawing && ui.drawing.first && !samePt(ui.drawing.first.x, ui.drawing.first.y, ui.drawing)) pts.push(ui.drawing.first);
+  // 0.63.1: while drawing, the chain's own corners are its drawn (inside face) points, not its centerline ends.
+  const ch = ui.drawing && ui.drawing.chain, own = ch ? ch.ids : [];
+  S.walls.forEach(w => { if (!own.includes(w.id)) [[w.x1, w.y1], [w.x2, w.y2]].forEach(([x, y]) => { if (!skip || !samePt(x, y, skip)) pts.push({ x, y }); }); });
+  if (ch) ch.pts.forEach(q => { if (!samePt(q.x, q.y, ui.drawing)) pts.push({ x: q.x, y: q.y }); });
+  else if (ui.drawing && ui.drawing.first && !samePt(ui.drawing.first.x, ui.drawing.first.y, ui.drawing)) pts.push(ui.drawing.first);
   let best = null, bd = reach;
   pts.forEach(q => { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < bd) { bd = d; best = q; } });
   if (best) return { x: best.x, y: best.y, at: true };
@@ -568,6 +571,8 @@ function bidFaceFix(st) {
   }));
 }
 // The along-the-wall offset for something w wide that sits x from the viewer's left wall face.
+// 0.63.1: a wall's length on the room side, face to face between the walls at its ends (its centerline length when nothing meets it).
+function insideLen(w) { const L = wg(w).L; if (w.hidden) return L; const f = wallFaces(w.id, elevSide(w)); return r3(f.hi > f.lo ? f.hi - f.lo : L); }
 function offFromLeft(wallId, side, x, w) { const { lo, hi } = wallFaces(wallId, side); return r3(side === -1 ? hi - x - w : lo + x); }
 // Centers a cabinet between the wall faces, or in the open space between its nearest neighbors.
 function centerCab(c, inOpening) {

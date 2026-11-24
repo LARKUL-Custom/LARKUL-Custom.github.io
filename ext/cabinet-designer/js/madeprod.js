@@ -280,8 +280,24 @@ function apFrontFit(c, f) {
   const want = { wall: f.wall, side: f.side, off: f.off, w: f.w, h: r3(Math.max(1, f.h - toe)), elev: r3((f.elev || 0) + toe), outset: r3((f.outset || 0) + f.d), d: r3(fm.thick) };
   Object.keys(want).forEach(k => { if (c[k] !== want[k]) c[k] = want[k]; });
 }
+// 0.63.0 (Ayden 2026-11-24, Dishwasher (Double) panel: "cant actually edit the face"): once its face is edited in the
+// cabinet editor (facesec.js) an Appliance Panel Front has rows like a cabinet, split into sections the same way; its
+// panels are laid out from them edge to edge, 1/8" apart. Returns fronts like computeFronts'.
+function apRowFronts(c) {
+  const rows = c.rows || [], gap = 0.125, out = [], hs = secSizes(rows.map(r => r.h), c.h, gap);
+  let z = c.h;
+  rows.forEach((r, ri) => {
+    const z1 = z, z0 = z - hs.sizes[ri]; z = z0 - gap;
+    const cols = Array.isArray(r.cols) && r.cols.length > 1 ? r.cols : null;
+    if (cols) return colFronts(c, { hingeSide: 'L' }, r, ri, cols, 0, c.w, z0, z1, gap, out);
+    const type = r.type === 'drawer' ? 'drawer' : r.type === 'false' ? 'false' : 'door', n = type === 'door' ? Math.max(1, r.count | 0) : 1, fw = (c.w - gap * (n - 1)) / n;
+    for (let i = 0; i < n; i++) out.push({ type, row: ri, idx: i, n, x0: i * (fw + gap), x1: i * (fw + gap) + fw, z0, z1, hinge: type === 'door' ? (n === 1 ? r.hinge || '' : i % 2 ? 'R' : 'L') : null, style: r.style || '' });
+  });
+  return out;
+}
 // The fronts of an Appliance Panel Front that fit on it, top first; none = one front the whole size.
 function apFronts(c, mp = madeMp(c)) {
+  if ((c.rows || []).length) return apRowFronts(c).map(f => ({ z: r3(f.z0), h: r3(f.z1 - f.z0), x: r3(f.x0), w: r3(f.x1 - f.x0), hinge: f.hinge || '', type: f.type === 'drawer' ? 'drawer' : 'door', ...(f.style ? { style: f.style } : {}) }));
   const fr = (Array.isArray(mp.fr) ? mp.fr : []).filter(q => +q.h > 0 && +q.z >= -0.01 && +q.z + +q.h <= c.h + 0.01);
   // 0.61.5: x and w across the front (a pair of doors); none = the whole width. hinge L/R when Mozaik says.
   // 0.62.4: jobs brought in before 0.61.5 have a pair as two fronts the same height with no x or w (both the whole
@@ -504,7 +520,7 @@ function topCoreParts() {
         part(`Countertop core${layers > 1 ? ', layer ' + (k + 1) : ''}${s.n > 1 ? `, piece ${j + 1} of ${s.n}` : ''}`, s.len, r.depth, { ops });
       }
     }
-    if (r.bs > 0) { const b = splitLen(r.len, cm); part('Backsplash core', b.len, r.bs, { kind: 'filler', qty: b.n }); }
+    if (r.bs > 0) (r.bsSegs && !(r.bsSegs.length === 1 && r.bsSegs[0][0] <= r.start + 0.01 && r.bsSegs[0][1] >= r.end - 0.01) ? r.bsSegs : [[0, r.len]]).forEach(([s0, s1]) => { const b = splitLen(r3(s1 - s0), cm); part('Backsplash core', b.len, r.bs, { kind: 'filler', qty: b.n }); });
     // Waterfall ends: a core panel per layer from the floor up under the top.
     ['S', 'E'].forEach(e => { if (r['wf' + e]) part(`Waterfall end (${e === 'S' ? 'start' : 'end'})${layers > 1 ? `, ${layers} layers` : ''}`, r.top, r.depth, { kind: 'filler', qty: layers }); });
     const sideAt = t.sideSplash === 'ends' || (t.sideSplash === 'sinks' && sinks.length);

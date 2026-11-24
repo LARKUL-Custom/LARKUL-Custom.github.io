@@ -431,11 +431,27 @@ function mozRooms(data) {
       if (angledCorner(c)) {
         const ys = p.fronts.map(f => sz(f.y)).filter(y => y > 3 && y < Math.min(p.w, p.d) - 3);
         if (ys.length) c.corner = { ...c.corner, leg: Math.round(Math.max(...ys) * 4) / 4 };
+        // 0.62.6 (Ayden 2026-11-24: "its two separate doors"): a Mozaik 90° corner's doors are two doors, each hung on
+        // the cabinet, not a bi-fold.
+        if (c.corner.type === 'l' && new Set(p.fronts.map(f => f.face)).size > 1) c.corner = { ...c.corner, doors: 'pair' };
         const faces = [...new Set(p.fronts.map(f => f.face))], one = p.fronts.filter(f => f.face === faces[0]);
         if (one.length) { rows = mozRows({ ...p, fronts: one }, sz); if (rows) rows.forEach(r => { if (r.count) r.count = 1; }); }
       } else rows = mozRows(p, sz);
       if (rows) c.rows = rows;
       if (/oven/i.test(p.name) && !(rows || []).some(r => r.type === 'open')) flag(p, 'check the oven opening');
+      // 0.62.6 (Ayden 2026-11-24: "the tall cabinet in the butler pantry is a double oven"): an oven cabinet gets its wall
+      // oven (or two, one over the other for a "double") standing in the opening between its fronts, front flush with the
+      // cabinet's face.
+      if (/oven/i.test(p.name) && (rows || []).some(r => r.type === 'open') && typeof fixtNew === 'function') {
+        const fr = p.fronts.map(f => ({ z0: sz(f.z), z1: sz(f.z + f.h) })).sort((a, b) => a.z0 - b.z0);
+        let gap = null; for (let i = 1; i < fr.length; i++) { const g0 = Math.max(...fr.slice(0, i).map(q => q.z1)), g1 = fr[i].z0; if (g1 - g0 > 3 && (!gap || g1 - g0 > gap.h)) gap = { z: g0, h: g1 - g0 }; }
+        if (gap) {
+          const dbl = /double|\b2\b|two/i.test(p.name + ' ' + (p.desc || '')) || gap.h > 40, ow = r3(Math.max(10, c.w - 1.5)), od = Math.min(23.5, c.d - 0.5);
+          const f = fixtNew(dbl ? (c.w < 29 ? 'ov-d27' : 'ov-d30') : (c.w < 29 ? 'ov-s27' : 'ov-s30'));
+          Object.assign(f, { w: ow, h: r3(gap.h - 0.25), elev: r3((c.elev || 0) + gap.z + 0.125), wall: at.wall, side: at.side, off: r3(at.off + (c.w - ow) / 2), outset: r3((c.outset || 0) + c.d - od), d: od, ovens: dbl ? 2 : 1, fromMozaik: true });
+          rm.fixtures.push(f);
+        }
+      }
       if (p.outset) c.outset = p.outset;
       if (p.num) c.num = p.num;
       if (p.inserts.length) c.inserts = p.inserts.map(mozInsert);

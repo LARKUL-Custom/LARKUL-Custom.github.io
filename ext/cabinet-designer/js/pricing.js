@@ -6,7 +6,7 @@ const NF0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const NF2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), NF1 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const money = v => '$' + NF2.format(Math.round(v * 100) / 100);
 // Inserts, doors and fronts, and materials are priced in their own libraries; the sheet keeps labor adders only.
-const PRICE_ADDERS = [['perDrawer', 'Each drawer, extra (box and labor are in the box price below; slides are hardware)'], ['perShelf', 'Each adjustable shelf'], ['perLamBottom', 'Each laminated wall cabinet bottom, labor'], ['lamSq', 'Laminate for laminated bottoms, $ per sq ft (waste added)'], ['perFiller', 'Each filler, on top of its material (cutting to fit)'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
+const PRICE_ADDERS = [['scribeWall', 'Each wall marked Scribe (fillers and panels scribed to it)'], ['perDrawer', 'Each drawer, extra (box and labor are in the box price below; slides are hardware)'], ['perShelf', 'Each adjustable shelf'], ['perLamBottom', 'Each laminated wall cabinet bottom, labor'], ['lamSq', 'Laminate for laminated bottoms, $ per sq ft (waste added)'], ['perFiller', 'Each filler, on top of its material (cutting to fit)'], ['perPull', 'Each pull or knob (drilling and putting on)'], ['perBracket', 'Each concealed floating shelf bracket'], ['perBlocking', 'In-wall blocking, each floating shelf']];
 // Each panel, by height: applied end panels on top of their door style's price, loose panels on top of their material.
 const PANEL_CATS = [['Base', 'Base height panel'], ['Wall', 'Wall height panel'], ['Tall', 'Tall panel']];
 // Paint: square feet of painted surface, counting only the surfaces the sheet turns on.
@@ -96,7 +96,7 @@ function defaultPriceSheet(name = 'Standard pricing') {
     groupMarkup: { ...MZK.groupMarkup }, payments: MZK.payments.map(x => ({ ...x })),
     cab: { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } },
     products: {},
-    adders: { perDrawer: 0, perShelf: 12, perFiller: 35, perPull: 3 },
+    adders: { scribeWall: 50, perDrawer: 0, perShelf: 12, perFiller: 35, perPull: 3 },
     panelAdd: { Base: 25, Wall: 25, Tall: 25 },
     doors: { on: true },
     materials: { on: false, waste: 15 },
@@ -487,6 +487,8 @@ function ensureLibPrices(ps) {
     savePrices();
   }
   // 0.59.22: fillers are material plus a charge each; sheets still on the old $25 go to $35 once.
+  // 0.63.4: scribing to a wall marked Scribe starts at $50 a wall, once per sheet.
+  if (ps && ps.adders && ps.adders.scribeWall === undefined) { ps.adders.scribeWall = 50; savePrices(); }
   if (ps && ps.adders && !ps.fillMat) { if (+ps.adders.perFiller === 25) ps.adders.perFiller = 35; ps.fillMat = 1; savePrices(); }
   // 0.59.21: panels are priced by material plus a charge each; sheets with no charge yet get $25 once.
   if (ps && !ps.panelMat) { const pa = ps.panelAdd || (ps.panelAdd = { Base: 0, Wall: 0, Tall: 0 }); if (['Base', 'Wall', 'Tall'].every(k => !+pa[k])) Object.assign(pa, { Base: 25, Wall: 25, Tall: 25 }); ps.panelMat = 1; savePrices(); }
@@ -518,7 +520,10 @@ function priceJob(ps) {
       inst.push({ name: `Installation, ${(it.name || label).replace(/^./, ch => ch.toLowerCase())} (${INST_EST[it.per] ? 'est. ' : ''}${q} × ${money(+it.amount)}${['per 8 sq ft', 'per 4 sq ft', 'per 48"'].includes(unit) ? ' ' + unit : ''})`, amount: q * +it.amount, inst: true }); }); }
     const lb = cabs.map(k => lamBottomOf(k.c)).filter(Boolean), ad = ps.adders || {}, lbRate = (+ad.lamSq || 0) * (1 + (+((ps.materials || {}).waste) || 0) / 100);
     const lamB = lb.length ? [{ name: `Laminated wall cabinet bottoms (${lb.length} × ${money(+ad.perLamBottom || 0)} labor, ${sqft(lb.reduce((a, x) => a + x, 0))} sq ft laminate)`, amount: lb.length * (+ad.perLamBottom || 0) + lb.reduce((a, x) => a + x, 0) * lbRate, cost: lb.reduce((a, x) => a + x, 0) * lbRate }] : [];
-    const pre = [...own, ...lamB, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : [])];
+    // 0.63.4: each wall in the room marked Scribe (Wall finish box on the wall).
+    const scrN = typeof scribedWalls === 'function' ? scribedWalls().length : 0, scrR = +ad.scribeWall || 0;
+    const scr = scrN && scrR ? [{ name: `Scribe to walls (${scrN} × ${money(scrR)})`, amount: scrN * scrR }] : [];
+    const pre = [...own, ...lamB, ...scr, ...tops, ...molds, ...priceShapes(ps), ...(typeof bidPriceLines === 'function' ? bidPriceLines(r) : [])];
     if (pctI) { const amt = (cabs.reduce((a, k) => a + k.total, 0) + pre.reduce((a, l) => a + l.amount, 0) + xs.reduce((a, l) => a + l.amount, 0)) * pctI / 100; if (amt) inst.push({ name: `Installation (${pctI}% of the room)`, amount: amt, inst: true }); }
     if (who) inst.forEach(l => { l.instId = who.id; });
     const lines = [...pre, ...inst, ...xs];
