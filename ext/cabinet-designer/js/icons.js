@@ -16,6 +16,7 @@ const ICON_PATHS = {
   chevl: '<path d="M12.5 4.5L7 10l5.5 5.5"/>',
   chevr: '<path d="M7.5 4.5L13 10l-5.5 5.5"/>',
   chevd: '<path d="M4.5 7.5L10 13l5.5-5.5"/>',
+  chevu: '<path d="M4.5 12.5L10 7l5.5 5.5"/>',
   back: '<path d="M8.5 5L3.5 10l5 5M4 10h12.5"/>',
   search: '<circle cx="8.5" cy="8.5" r="5"/><path d="M12.3 12.3L17 17"/>',
   close: '<path d="M5 5l10 10M15 5L5 15"/>',

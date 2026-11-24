@@ -206,6 +206,12 @@ function fitDock(el = document.getElementById('dock')) {
   // up to half the room, so Edit, Copy and Delete never hide behind a scroll bar.
   const saved = 0;
   const room = document.getElementById('tab-room');
+  // Hidden panel: just the thin strip.
+  if (el.isConnected && room && el.classList.contains('dmin')) {
+    const h = 36;
+    if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof redrawView === 'function') requestAnimationFrame(redrawView); }
+    return;
+  }
   if (el.isConnected && body && room && !saved) {
     // Nothing picked on the Item tab: the panel drops to a thin strip (Ayden 2026-11-24: "less of the screen when
     // nothing is selected") and grows back to the item bar's height when something is picked.
@@ -223,7 +229,11 @@ function fitDock(el = document.getElementById('dock')) {
       need = dockKeep.h = Math.max(dockKeep.h, need);
     }
     room.style.setProperty('--dockh', was || DOCK_H + 'px');
-    const h = Math.round(Math.min(room.getBoundingClientRect().height * 0.6, Math.max(base, need)));
+    // Every other tab stays about as short as the item bar (Ayden 2026-11-24: the tabs "take up so much of the
+    // screen its insane"): at most 30% of the room (never under 200px); anything longer scrolls inside the panel.
+    const rh = room.getBoundingClientRect().height;
+    const cap = body.classList.contains('dock-item') ? rh * 0.6 : Math.min(rh * 0.6, Math.max(200, rh * 0.3));
+    const h = Math.round(Math.min(cap, Math.max(base, need)));
     if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof redrawView === 'function') requestAnimationFrame(redrawView); }
   }
 }

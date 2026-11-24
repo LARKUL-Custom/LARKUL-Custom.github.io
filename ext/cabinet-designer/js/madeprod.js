@@ -524,7 +524,7 @@ function topCoreParts() {
     // Waterfall ends: a core panel per layer from the floor up under the top.
     ['S', 'E'].forEach(e => { if (r['wf' + e]) part(`Waterfall end (${e === 'S' ? 'start' : 'end'})${layers > 1 ? `, ${layers} layers` : ''}`, r.top, r.depth, { kind: 'filler', qty: layers }); });
     const sideAt = t.sideSplash === 'ends' || (t.sideSplash === 'sinks' && sinks.length);
-    if (r.bs > 0) [['S', r.blockS], ['E', r.blockE]].forEach(([e, blocked]) => { if (r['ss' + e] || (sideAt && blocked)) part(`Side splash (${e === 'S' ? 'start' : 'end'})`, r.depth - cm.thick, r.bs, { kind: 'filler' }); });
+    [['S', r.blockS], ['E', r.blockE]].forEach(([e, blocked]) => { if (r['ss' + e] || (r.bs > 0 && sideAt && blocked)) part(`Side splash (${e === 'S' ? 'start' : 'end'})`, r.depth - cm.thick, r.ssH || r.bs, { kind: 'filler' }); });
     if (notes.length) out.filter(p => p.cab === lbl).forEach(p => { p.note = notes.join('; '); });
   });
   return out;

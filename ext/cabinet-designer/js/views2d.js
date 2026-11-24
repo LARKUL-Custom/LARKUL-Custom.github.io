@@ -958,11 +958,13 @@ function renderElev(pr) {
   // countertops and moldings on this wall side
   countertopRuns().filter(rn => rn.on && rn.wall === w.id && rn.side === side).forEach(rn => {
     const a = side === 1 ? ctX0(rn) : L - ctX1(rn), m = texLook(mat(rn.tpl.mat), 'tops'); mats.push(m && m.id);
-    body += `<rect ${fillFor(m, 'ev-top')} x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}"/>`;
-    if (rn.bs > 0) (rn.bsSegs || [[rn.start, rn.end]]).forEach(([s0, s1]) => { body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? s0 : L - s1}" y="${-(rn.top + rn.thick + rn.bs)}" width="${s1 - s0}" height="${rn.bs}" opacity=".75"/>`; });
-    [['S', ctX0(rn)], ['E', ctX1(rn) - 0.75]].forEach(([e, x]) => { if (rn['ss' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - 0.75}" y="${-(rn.top + rn.thick + rn.bs)}" width="0.75" height="${rn.bs}"/>`; });
+    // 0.63.12: right-click the top (its ends or front), its backsplash, side splash or waterfall for that side's menu.
+    const ce = part => ui.printing ? '' : ` data-ctedge="${esc(rn.key + '|' + part)}"`;
+    body += `<rect ${fillFor(m, 'ev-top')} x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}"${ui.printing ? '' : ` data-cttop="${esc(rn.key)}"`}/>`;
+    if (rn.bs > 0) (rn.bsSegs || [[rn.start, rn.end]]).forEach(([s0, s1]) => { body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? s0 : L - s1}" y="${-(rn.top + rn.thick + rn.bs)}" width="${s1 - s0}" height="${rn.bs}" opacity=".75"${ce('back')}/>`; });
+    [['S', ctX0(rn)], ['E', ctX1(rn) - 0.75]].forEach(([e, x]) => { if (rn['ss' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - 0.75}" y="${-(rn.top + rn.thick + (rn.ssH || rn.bs))}" width="0.75" height="${rn.ssH || rn.bs}"${ce(e)}/>`; });
     // Waterfall ends: the top turns down to the floor.
-    [['S', ctX0(rn)], ['E', ctX1(rn) - rn.thick]].forEach(([e, x]) => { if (rn['wf' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - rn.thick}" y="${-rn.top}" width="${rn.thick}" height="${rn.top}"/>`; });
+    [['S', ctX0(rn)], ['E', ctX1(rn) - rn.thick]].forEach(([e, x]) => { if (rn['wf' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - rn.thick}" y="${-rn.top}" width="${rn.thick}" height="${rn.top}"${ce(e)}/>`; });
   });
   moldingRuns().filter(rn => rn.wall === w.id && rn.side === side).forEach(rn => {
     const a = side === 1 ? rn.start - rn.extS : L - rn.end - rn.extE, m = typeof moldLook === 'function' ? moldLook(rn) : mat(rn.m.mat); mats.push(m && m.id);

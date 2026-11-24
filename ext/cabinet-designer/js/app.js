@@ -582,7 +582,19 @@ function renderDock() {
     if (was !== ui.dockOpen) requestAnimationFrame(() => { if (typeof redrawView === 'function') redrawView(); });
   }
   if (!tabs.some(([k]) => k === ui.dock)) ui.dock = tabs[0][0];
-  const head = `<div class="dockhead"><div class="docktabs" role="tablist">${tabs.map(([k, l, ic]) => `<button role="tab" data-act="dock" data-id="${k}" aria-selected="${ui.dock === k}">${icon(ic)}${l}</button>`).join('')}</div>
+  // Hidden panel (desktop, Ayden 2026-11-24 "a collapsible option for when you just want to view the program"):
+  // a thin strip with the tab names and Show panel; clicking any of them opens it again. Remembered on this computer.
+  if (ui.dockMin === undefined) { try { ui.dockMin = localStorage.getItem(KEY + '.dockmin') === '1'; } catch (_) { ui.dockMin = false; } }
+  const mini = deskUI() && ui.dockMin;
+  el.classList.toggle('dmin', !!mini);
+  if (mini) {
+    const tmp = el.cloneNode(false); tmp.removeAttribute('id');
+    tmp.innerHTML = `<div class="dockmini">${tabs.map(([k, l, ic]) => `<button data-act="dock" data-id="${k}" title="Show the ${l} tab">${icon(ic)}${l}</button>`).join('')}<button class="dm-show" data-act="dock-min" title="Show the panel under the drawing">${icon('chevu')}Show panel</button></div>`;
+    if (typeof dockExtras === 'function') dockExtras(tmp, el);
+    setHTML(el, tmp);
+    return;
+  }
+  const head = `<div class="dockhead"><div class="docktabs" role="tablist">${tabs.map(([k, l, ic]) => `<button role="tab" data-act="dock" data-id="${k}" aria-selected="${ui.dock === k}">${icon(ic)}${l}</button>`).join('')}${deskUI() ? `<button class="dm-hide" data-act="dock-min" title="Hide this panel to see more of the drawing">${icon('chevd')}Hide</button>` : ''}</div>
     <button class="btn" data-act="dock-toggle" aria-expanded="${ui.dockOpen}">${icon(ui.dockOpen ? 'close' : 'eye')}${ui.dockOpen ? 'Hide' : 'Show'}</button></div>`;
   // On the desktop main screen the panel under the drawing is always open.
   const open = ui.dockOpen || deskUI();
@@ -753,9 +765,10 @@ function showCtx(id, x, y) {
     + (openable(c) ? item('open-toggle', ui.open[id] ? 'Close doors and drawers' : 'Open doors and drawers', ' data-kb="O"') : '')
     + item('light-draw-one', cabStrips(id).some(x => x.where === stripWhereFor(c)) ? 'Remove LED strip' : 'Add LED strip', ` data-kb="${esc((STRIP_SPOTS.find(x => x.v === stripWhereFor(c)) || {}).l || '')}"`) + (cabStrips(id).length ? item('light-copy', 'Copy its lights') : '') + (lightClip && lightClip.length ? item('light-paste', `Paste lights (${lightClip.length})`) : '')
     + item('q-copyset', 'Copy settings') + (typeof setClip !== 'undefined' && setClip ? item('q-pasteset', 'Paste settings') : '')
+    + (ui.ctxTop && typeof ctjSideName === 'function' ? (() => { const [k, p] = ui.ctxTop.split('|'), r = countertopRuns().find(q => q.key === k); return r ? `<button role="menuitem" data-act="ctj-side" data-id="${esc(ui.ctxTop)}">Countertop: ${ctjSideName(r, p).toLowerCase()}</button>` : ''; })() : '')
     + item('te-start', 'Edit top shape here') + item('cab-zoom3d', 'Zoom to it in 3D') + item('clip-copy', 'Copy', ' data-kb="Ctrl+C"') + item('clip-cut', 'Cut', ' data-kb="Ctrl+X"') + item('cab-dup', 'Duplicate', ' data-kb="Ctrl+D"') + item('cab-to-designer', 'Open in Designer')
     + item('cab-del', 'Delete', ' class="danger"');
-  m.hidden = false;
+  m.hidden = false; m.dataset.ctxAt = `${x},${y}`;
   const r = m.getBoundingClientRect();
   m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
   m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
@@ -803,16 +816,23 @@ document.addEventListener('pointerup', e => {
   if (ui.topEdit && ui.teCtxAt && Date.now() - ui.teCtxAt < 1500) return;
   // A countertop corner in the plan: Mitered or which top runs through.
   const cj = e.target.closest && e.target.closest('[data-ctj]'); if (cj && typeof ctjShowCtx === 'function') { ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); return; }
-  const id = cabAt(e); if (id) { showCtx(id, e.clientX, e.clientY); return; }
+  // 0.63.12: a countertop's side (its edge in the plan, the top in elevation or 3D): backsplash, splash, waterfall, overhang.
+  const tp = typeof ctjTopAt === 'function' && !ui.topEdit ? ctjTopAt(e) : null;
+  if (tp && tp.direct) { ctjEdgeCtx(tp.id, e.clientX, e.clientY); return; }
+  ui.ctxTop = tp ? tp.id : null;
+  const id = cabAt(e); ui.ctxTop = id ? ui.ctxTop : null; if (id) { showCtx(id, e.clientX, e.clientY); ui.ctxTop = null; return; }
   ui.ctxPt = e.target.closest && e.target.closest('#plan') ? toWorld(e) : null;
   const wa = wallAt(e); if (wa) showWallCtx(wa.wid, wa.a, e.clientX, e.clientY);
   else if (clip && ui.ctxPt) showPasteCtx(e.clientX, e.clientY);
 }, true);
 document.addEventListener('contextmenu', e => { if (e.target.closest('#plan,#elev,#room3d,#ctxmenu')) e.preventDefault(); });
-// Tops tab: right-click (or click) a corner of the tops for its joint.
+// Tops tab: right-click (or click) a corner of the tops for its joint; right-click anywhere on a top for its nearest side.
 document.addEventListener('contextmenu', e => {
   const cj = e.target.closest && e.target.closest('.ctp-svg [data-ctj]'), ce = !cj && e.target.closest && e.target.closest('.ctp-svg [data-ctedge]');
-  if (cj) { e.preventDefault(); ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); } else if (ce) { e.preventDefault(); ctjEdgeCtx(ce.dataset.ctedge, e.clientX, e.clientY); }
+  if (cj) { e.preventDefault(); ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); return; }
+  if (ce) { e.preventDefault(); ctjEdgeCtx(ce.dataset.ctedge, e.clientX, e.clientY); return; }
+  const tp = e.target.closest && e.target.closest('.ctp-svg:not(.ctp-print)') && ctjTopAt(e);
+  if (tp) { e.preventDefault(); ctjEdgeCtx(tp.id, e.clientX, e.clientY); }
 });
 document.addEventListener('click', e => { const cj = e.target.closest && e.target.closest('.ctp-svg [data-ctj]'); if (!cj) return; e.stopPropagation(); ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); }, true);
 window.addEventListener('blur', hideCtx);
@@ -825,10 +845,14 @@ document.addEventListener('pointerdown', e => {
   const at = { clientX: e.clientX, clientY: e.clientY };
   hold = { x: e.clientX, y: e.clientY, t: setTimeout(() => {
     hold = null;
+    const tp = typeof ctjTopAt === 'function' && !ui.topEdit ? ctjTopAt(at) : null;
+    if (tp && tp.direct) { ui.drag = null; if (navigator.vibrate) navigator.vibrate(12); ctjEdgeCtx(tp.id, at.clientX, at.clientY); return; }
     const id = cabAt(at), wa = !id && wallAt(at);
     if (!id && !wa) return;
     ui.drag = null; if (navigator.vibrate) navigator.vibrate(12);
+    ui.ctxTop = id && tp ? tp.id : null;
     if (id) showCtx(id, at.clientX, at.clientY); else showWallCtx(wa.wid, wa.a, at.clientX, at.clientY);
+    ui.ctxTop = null;
   }, 550) };
 }, true);
 document.addEventListener('pointermove', e => { if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) dropHold(); }, true);
@@ -883,7 +907,8 @@ document.addEventListener('click', e => {
     case 'walls-draw': if (ui.drawWalls) stopWalls(); else startWalls(); break;
     case 'ptab': { const [kind, k] = id.split(':'); ui.ptab[kind] = k; try { localStorage.setItem(KEY + '.ptab', JSON.stringify(ui.ptab)); } catch (_) {} render(); break; }
     case 'wall-angle': { const [wid, d] = id.split(':'), w = wall(wid); if (w) mutate(() => setWallAngle(w, +d)); break; }
-    case 'dock': ui.dock = id; ui.dockOpen = true; renderDock(); break;
+    case 'dock': ui.dock = id; ui.dockOpen = true; if (ui.dockMin) { ui.dockMin = false; try { localStorage.setItem(KEY + '.dockmin', '0'); } catch (_) {} } renderDock(); break;
+    case 'dock-min': ui.dockMin = !ui.dockMin; try { localStorage.setItem(KEY + '.dockmin', ui.dockMin ? '1' : '0'); } catch (_) {} renderDock(); requestAnimationFrame(() => { if (typeof dockRefit === 'function') dockRefit(); }); break;
     case 'dock-open': ui.dock = id; ui.dockOpen = true; renderDock(); $('#dock').scrollIntoView({ block: 'nearest' }); break;
     case 'dock-toggle': ui.dockOpen = !ui.dockOpen; ui.dockWas = undefined; try { localStorage.setItem(KEY + '.dock', ui.dockOpen ? '1' : '0'); } catch (_) {} renderDock(); requestAnimationFrame(redrawView); break;
     case 'rail-toggle': if (isPhone()) { ui.libOpen = !ui.libOpen; renderRail(); break; } ui.railShut = !ui.railShut; try { localStorage.setItem(KEY + '.rail', ui.railShut ? '1' : '0'); } catch (_) {} renderRail(); requestAnimationFrame(redrawView); break;

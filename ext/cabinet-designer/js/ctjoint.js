@@ -96,7 +96,7 @@ function ctjDiagFill(k) {
   if (!c) return;
   const w = wall(c.wall), g = wg(w), f = w.thick / 2 + (c.outset || 0), fc = cornerFaces(c)[0];
   const pt = (x, z) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, f + z);
-  const ov = r.tpl.frontOverhang || 0, p0 = facePt(fc, 0, ov), p1 = facePt(fc, fc.len, ov);
+  const ov = has(r, 'ovF') ? r.ovF : r.tpl.frontOverhang || 0, p0 = facePt(fc, 0, ov), p1 = facePt(fc, fc.len, ov);
   const D0 = pt(p0.x, p0.z), D1 = pt(p1.x, p1.z), du = { x: D1.x - D0.x, y: D1.y - D0.y };
   // Only when the inside corner of the two tops is behind the angled front (on the wall side of it).
   const side = q => ctjCross(du, { x: q.x - D0.x, y: q.y - D0.y });
@@ -144,35 +144,139 @@ function ctjShowCtx(id, x, y) {
   m.hidden = false;
   const rc = m.getBoundingClientRect(); m.style.left = Math.min(x, innerWidth - rc.width - 8) + 'px'; m.style.top = Math.min(y, innerHeight - rc.height - 8) + 'px';
 }
-// A top's back edge or end, right-clicked on the Tops tab (0.59.1): backsplash on, off or a height; waterfall an end.
+// Right-click any side of a top (0.59.1 Tops tab back edge and open ends; 0.63.12 Ayden 2026-11-24, "right click and
+// adjust that side that i right clicked", like Mozaik: every side, in the Tops tab, plan, elevation and 3D).
+// Sides: 'back' (backsplash), 'front' (overhang), 'S' / 'E' the top's ends (side splash, waterfall, end overhang, or the
+// corner joint where another top meets it). The menu's bottom row jumps to the top's other sides.
+const ctjSideName = (r, part) => part === 'back' ? 'Back edge' : part === 'front' ? 'Front edge' : (part === 'S') === (r.side === 1) ? 'Left end' : 'Right end';
+// Distance from p to the segment a-b.
+function ctjSegD(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy, t = L2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2)) : 0;
+  return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+}
+// The top under a plan point and the side of it nearest the point: { r, part, d } (d: how far from that side), or null.
+// tol: how far outside a top still counts.
+function ctjSideAt(p, tol = 0, runs = countertopRuns()) {
+  let best = null;
+  runs.forEach(r => {
+    if (!r.on || !wall(r.wall)) return;
+    const fr = ctjFrame(r), q = r.poly || [fr.at(ctX0(r), fr.f), fr.at(ctX1(r), fr.f), fr.at(ctX1(r), fr.f + r.depth), fr.at(ctX0(r), fr.f + r.depth)];
+    const n = q.length, sides = [['back', q[0], q[1]], ['E', q[1], q[2]], ['S', q[n - 1], q[0]]];
+    for (let i = 2; i < n - 1; i++) sides.push(['front', q[i], q[i + 1]]);
+    const ds = sides.map(([part, a, b]) => ({ part, d: ctjSegD(p, a, b) })).sort((x, y) => x.d - y.d), inside = inPoly(p, q);
+    if (!inside && ds[0].d > tol) return;
+    const k = inside ? -1 : ds[0].d;
+    if (!best || k < best.k) best = { r, part: ds[0].part, d: ds[0].d, k };
+  });
+  return best;
+}
+// The corner a top's end meets, if any.
+const ctjCornerAt = (r, e) => (countertopRuns().corners || []).find(k => (k.A.r.key === r.key && k.eA === e) || (k.B.r.key === r.key && k.eB === e));
 function ctjEdgeCtx(id, x, y) {
   const [key, part] = id.split('|'), runs = countertopRuns(), i = runs.findIndex(r => r.key === key), r = runs[i]; if (!r) return;
   const m = $('#ctxmenu'), b = (v, label, on) => `<button role="menuitem" data-act="ctj-edge" data-id="${esc(key + '|' + v)}">${on ? '✓ ' : ''}${label}</button>`;
+  const num = (k, v, label) => `<label class="ctx-in"><span>${label}</span><input type="text" class="num cte-num" data-id="${esc(key)}" data-k="${k}" value="${esc(fmtLen(r3(v)))}" aria-label="${esc(label)}"></label>`;
   const st = ctjStore(r), def = Math.max(0, +r.tpl.backsplash || 0), own = has(st, 'bs') && st.bs !== '';
-  let h = `<div class="ctxhead">Top ${i + 1} · ${esc(wallName(wall(r.wall)))}</div>`;
+  let h = `<div class="ctxhead">Top ${i + 1} · ${esc(wallName(wall(r.wall)))} · ${ctjSideName(r, part)}</div>`;
   if (part === 'back') {
     h += b('bs=0', 'No backsplash', r.bs === 0);
     [4, 6, 18].forEach(v => { h += b('bs=' + v, `${fmtLen(v)} backsplash`, own && r.bs === v); });
     h += b('bs=', r.island ? 'Island default (none)' : `Style's backsplash${def ? ` (${fmtLen(def)})` : ' (none)'}`, !own);
-    h += `<label class="ctx-in"><span>Height</span><input type="text" class="num cte-bs" data-id="${esc(key)}" value="${esc(fmtLen(r.bs))}" aria-label="Backsplash height"></label>`;
+    h += num('bs', r.bs, 'Height');
+  } else if (part === 'front') {
+    if (r.generic) h += num('depth', r.depth, 'Depth');
+    else {
+      const sd = +r.tpl.frontOverhang || 0;
+      h += num('ovF', r.ovF, 'Overhang');
+      if (has(st, 'ovF')) h += b('ovF=', `Style's overhang (${fmtLen(sd)})`, false);
+    }
   } else {
-    const on = !!r['wf' + part], side = (part === 'S') === (r.side === 1) ? 'left' : 'right', ss = !!r['ss' + part];
-    if (r.bs > 0 && !on) h += b('ss' + part + '=' + (ss ? 0 : 1), ss ? `Take the side splash off the ${side} end` : `Side splash on the ${side} end`, false);
-    h += b('wf' + part + '=' + (on ? 0 : 1), on ? `Take the waterfall off the ${side} end` : `Waterfall the ${side} end to the floor`, false);
+    const k = ctjCornerAt(r, part);
+    if (k) {
+      const cur = k.type, nA = wallName(k.A.w), nB = wallName(k.B.w), cb = (v, label) => `<button role="menuitem" data-act="ctj-set" data-id="${esc(k.id)}#${v}">${cur === v ? '✓ ' : ''}${label}</button>`;
+      h += `<div class="ctx-note">Meets the ${esc(wallName(k.A.r === r ? k.B.w : k.A.w))} top</div>${cb('m', 'Mitered')}${cb('A', `${nA} top runs through`)}${cb('B', `${nB} top runs through`)}`;
+    } else {
+      const wf = !!r['wf' + part], ss = !!r['ss' + part];
+      if (!wf) h += b('ss' + part + '=' + (ss ? 0 : 1), ss ? 'Take the side splash off' : `Side splash (${fmtLen(r.ssH)})`, false);
+      h += b('wf' + part + '=' + (wf ? 0 : 1), wf ? 'Take the waterfall off' : 'Waterfall to the floor', false);
+      if (!r.generic && !wf) h += num('ov' + part, r['ov' + part] || 0, 'Overhang');
+      if (!r.generic && has(st, 'ov' + part)) h += b('ov' + part + '=', 'Overhang back to normal', false);
+    }
   }
-  m.innerHTML = h; m.hidden = false;
-  const rc = m.getBoundingClientRect(); m.style.left = Math.min(x, innerWidth - rc.width - 8) + 'px'; m.style.top = Math.min(y, innerHeight - rc.height - 8) + 'px';
+  // The top's other sides, left to right as you face the wall.
+  const order = r.side === 1 ? ['S', 'back', 'front', 'E'] : ['E', 'back', 'front', 'S'];
+  h += `<div class="ctx-sides" role="group" aria-label="Sides of this top">${order.map(p => `<button data-act="ctj-side" data-id="${esc(key + '|' + p)}" aria-pressed="${p === part}">${{ back: 'Back', front: 'Front' }[p] || ((p === 'S') === (r.side === 1) ? 'Left' : 'Right')}</button>`).join('')}</div>`;
+  if (!r.generic) h += b('off=1', 'Leave this top off', false);
+  m.innerHTML = h; m.hidden = false; m.dataset.ctxAt = `${x},${y}`;
+  const rc = m.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(x, innerWidth - rc.width - 8)) + 'px'; m.style.top = Math.max(8, Math.min(y, innerHeight - rc.height - 8)) + 'px';
+  ctjHot(r, part);
+}
+// The top side a right-click in the Room views (or the Tops tab drawing) lands on: { id: 'key|side', direct }.
+// direct: the top itself was clicked, so its menu opens; otherwise (plan, inside a cabinet) the cabinet menu offers it.
+function ctjTopAt(e) {
+  if (!(S.walls || []).length) return null;
+  const el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return null;
+  const at = (hit, direct) => hit ? { id: hit.r.key + '|' + hit.part, direct } : null;
+  const ed = el.closest('#elev [data-ctedge]'); if (ed) return { id: ed.dataset.ctedge, direct: true };
+  const tp = el.closest('#elev [data-cttop]');
+  if (tp) {
+    const r = countertopRuns().find(q => q.key === tp.dataset.cttop), ctm = tp.getScreenCTM(); if (!r || !ctm) return null;
+    const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse()), L = wg(wall(r.wall)).L, a = r.side === 1 ? q.x : L - q.x;
+    const x0 = ctX0(r), x1 = ctX1(r), near = Math.min(12, (x1 - x0) / 4);
+    return { id: r.key + '|' + (a - x0 < near ? 'S' : x1 - a < near ? 'E' : 'front'), direct: true };
+  }
+  const tv = el.closest('.ctp-svg:not(.ctp-print)');
+  if (tv) {
+    const ctm = tv.getScreenCTM(); if (!ctm) return null;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse()), px = 1 / Math.max(1e-6, ctm.a);
+    return at(ctjSideAt(p, 10 * px), true);
+  }
+  if (el.closest('#plan')) {
+    const p = toWorld(e), sz = planSize(), px = ui.view.w / Math.max(1, sz.w), hit = ctjSideAt(p, 6 * px); if (!hit) return null;
+    const onCab = typeof hitCabs === 'function' && hitCabs(p).length > 0;
+    return at(hit, !onCab || (/back|front/.test(hit.part) && hit.d <= 5 * px));
+  }
+  if (el.closest('#room3d') && typeof roomViewer !== 'undefined' && roomViewer && roomViewer.ok && roomViewer.hitTop) {
+    const h = roomViewer.hitTop(e.clientX, e.clientY); if (!h) return null;
+    if (h.part) return { id: h.key + '|' + h.part, direct: true };
+    const runs = countertopRuns(), hit = ctjSideAt(h.p, 3, runs.filter(r => r.key === h.key).concat(runs.filter(r => r.key !== h.key)));
+    return at(hit, true);
+  }
+  return null;
+}
+// Marks the side the menu is for on the Tops tab drawing and the plan, until the menu closes.
+function ctjHot(r, part) {
+  document.querySelectorAll('.ctj-hot').forEach(e => e.remove());
+  const fr = ctjFrame(r), q = r.poly || [fr.at(ctX0(r), fr.f), fr.at(ctX1(r), fr.f), fr.at(ctX1(r), fr.f + r.depth), fr.at(ctX0(r), fr.f + r.depth)], n = q.length;
+  const pts = part === 'back' ? [q[0], q[1]] : part === 'E' ? [q[1], q[2]] : part === 'S' ? [q[n - 1], q[0]] : q.slice(2);
+  const d = 'M' + pts.map(p => `${r3(p.x)} ${r3(p.y)}`).join('L');
+  [document.querySelector('.ctp-svg:not(.ctp-print)'), ui.tab === 'room' && ui.viewMode === 'plan' && document.querySelector('#plan')].forEach(svg => {
+    if (!svg || svg.offsetParent === null) return;
+    const host = svg.id === 'plan' ? svg.querySelector('#world') || svg : svg, el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    el.setAttribute('class', 'ctj-hot'); el.setAttribute('d', d); el.setAttribute('pointer-events', 'none');
+    host.appendChild(el);
+  });
+  const m = $('#ctxmenu');
+  if (!ctjHot.watch) { ctjHot.watch = new MutationObserver(() => { if (m.hidden) document.querySelectorAll('.ctj-hot').forEach(e => e.remove()); }); ctjHot.watch.observe(m, { attributes: true, attributeFilter: ['hidden'] }); }
 }
 function ctjEdgeSet(key, k, v) {
   const r = countertopRuns().find(q => q.key === key); if (!r) return;
-  mutate(() => { const o = ctjStore(r, true); if (k === 'bs' && v === '') delete o.bs; else if (k === 'bs') o.bs = Math.max(0, +v || 0); else if (/^ss/.test(k)) o[k] = !!+v; else if (+v) o[k] = true; else delete o[k]; });
+  mutate(() => {
+    const o = ctjStore(r, true);
+    if (v === '') delete o[k];
+    else if (k === 'bs' || /^ov[SEF]$/.test(k) || k === 'depth') o[k] = Math.max(0, +v || 0);
+    else if (/^ss/.test(k)) o[k] = !!+v;
+    else if (+v) o[k] = true; else delete o[k];
+  });
+  if (k === 'off' && +v) flash('Top left off. Turn it back on in the Tops tab (Leave off).');
 }
 document.addEventListener('change', e => {
-  const t = e.target; if (!t.classList || !t.classList.contains('cte-bs')) return;
+  const t = e.target; if (!t.classList || !(t.classList.contains('cte-num') || t.classList.contains('cte-bs'))) return;
   const n = parseLen(t.value); if (!isFinite(n)) return;
-  hideCtx(); ctjEdgeSet(t.dataset.id, 'bs', r3(n));
+  hideCtx(); ctjEdgeSet(t.dataset.id, t.dataset.k || 'bs', r3(n));
 });
 function ctjAct(a, id) {
+  if (a === 'ctj-side') { const m = $('#ctxmenu'), [x, y] = (m.dataset.ctxAt || '0,0').split(',').map(Number); ctjEdgeCtx(id, x, y); return true; }
   if (a === 'ctj-edge') { const i = id.lastIndexOf('|'), key = id.slice(0, i), [k, v] = id.slice(i + 1).split('='); hideCtx(); ctjEdgeSet(key, k, v); return true; }
   if (a !== 'ctj-set') return false;
   const i = id.lastIndexOf('#'), cid = id.slice(0, i), v = id.slice(i + 1), k = ctjCorners().find(q => q.id === cid);

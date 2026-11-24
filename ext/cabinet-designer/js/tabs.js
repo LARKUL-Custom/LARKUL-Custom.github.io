@@ -950,7 +950,7 @@ function topsSpecRows(runs) {
   return runs.filter(r => r.on && wall(r.wall)).map(r => {
     const i = runs.indexOf(r), t = r.tpl || {}, m = mat(t.mat) || {}, w = wall(r.wall), j = r.joints || {};
     const lName = r.side === 1 ? 'S' : 'E', rName = r.side === 1 ? 'E' : 'S';
-    const endTxt = e => r['wf' + e] ? `waterfall to the floor (${fmtLen(r3(r.top + r.thick), 1)} tall)` : j[e] ? (j[e] === 'mitered' ? 'mitered corner' : j[e] === 'runs through' ? 'runs through the corner' : 'butts the other top') : r['ss' + e] ? `against the wall, ${fmtLen(r.bs, 1)} side splash` : r['block' + e] ? 'wall / tall cabinet' : `open, ${fmtLen(r['ov' + e] || 0, 1)} overhang, finished`;
+    const endTxt = e => r['wf' + e] ? `waterfall to the floor (${fmtLen(r3(r.top + r.thick), 1)} tall)` : j[e] ? (j[e] === 'mitered' ? 'mitered corner' : j[e] === 'runs through' ? 'runs through the corner' : 'butts the other top') : r['ss' + e] ? `${fmtLen(r.ssH || r.bs, 1)} side splash` : r['block' + e] ? 'wall / tall cabinet' : `open, ${fmtLen(r['ov' + e] || 0, 1)} overhang, finished`;
     const sinks = (typeof runSinks === 'function' ? runSinks(r) : []).map(({ f, k }) => {
       const cx = (k.x0 + k.x1) / 2, left = r.side === 1 ? ctX0(r) : ctX1(r);
       return `${esc(fixtName(f))}: ${{ under: 'undermount', drop: 'drop-in', apron: 'apron front' }[k.mount]}, cutout ${fmtLen(k.w, 1)} × ${fmtLen(k.d, 1)}${k.oval ? ' oval' : k.r ? `, R ${fmtLen(k.r, 1)} corners` : ''}, centre line ${fmtLen(r3(Math.abs(cx - left)), 1)} from the left end${k.open ? ', open at the front' : `, ${fmtLen(k.front, 1)} back from the front edge`}`;

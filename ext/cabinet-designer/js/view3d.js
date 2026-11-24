@@ -641,6 +641,16 @@ class Viewer3D {
     const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && (h.object.userData.cabId || h.object.userData.shapeId || h.object.userData.fixtId));
     return hit ? hit.object.userData.cabId || hit.object.userData.shapeId || hit.object.userData.fixtId : null;
   }
+  // 0.63.12: the countertop piece nearest under the cursor (nothing in front of it): { key, part, p } with p the plan
+  // point hit; part only when a backsplash, side splash or waterfall was hit. null when something else is in front.
+  hitTop(cx, cy) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const v = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    const rc = new THREE.Raycaster(); rc.setFromCamera(v, this.cam);
+    const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && h.object.visible && !h.object.userData.noBounds && !(h.object.material && h.object.material.transparent && h.object.material.opacity < 0.5));
+    if (!hit || !hit.object.userData.ctKey) return null;
+    return { key: hit.object.userData.ctKey, part: hit.object.userData.ctPart || '', p: { x: hit.point.x, y: hit.point.z } };
+  }
   // Floor point under the cursor, as a plan point.
   floorPoint(cx, cy) {
     const r = this.renderer.domElement.getBoundingClientRect();
@@ -801,15 +811,17 @@ function buildRoomScene(v) {
     const grp = wallGroup(w, r.side, r.side === 1 ? a : b), tm = mat3(texLook(mat(r.tpl.mat), 'tops'));
     // A top with sinks gets the real cutouts through it (undermount and drop-in holes, apron notches).
     const ts = typeof topWithSinks === 'function' ? topWithSinks(r) : null, isl = islTops.get(r);
-    if (isl) { if (isl.first === r) v.root.add(ctTop3(r, tm, isl.outline, isl.holes)); }
-    else if (ts && ts.sinks.length) v.root.add(ctTop3(r, tm, ts.outline, ts.holes));
-    else if (r.poly) v.root.add(ctTop3(r, tm));
-    else grp.add(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2));
-    if (r.bs > 0) { const off = r.side === 1 ? r.ovS : r.ovE; (r.bsSegs || [[r.start, r.end]]).forEach(([s0, s1]) => { const lx = off + (r.side === 1 ? s0 - r.start : r.end - s1); grp.add(box3(s1 - s0, r.bs, 0.75, tm, lx + (s1 - s0) / 2, r.top + r.thick + r.bs / 2, 0.375)); }); }
+    // 0.63.12: every piece of a top knows its top (and the side it stands on), so a right-click in 3D opens that side's menu.
+    const tag = (o, part) => { o.traverse(x => { x.userData.ctKey = r.key; if (part) x.userData.ctPart = part; }); return o; };
+    if (isl) { if (isl.first === r) v.root.add(tag(ctTop3(r, tm, isl.outline, isl.holes))); }
+    else if (ts && ts.sinks.length) v.root.add(tag(ctTop3(r, tm, ts.outline, ts.holes)));
+    else if (r.poly) v.root.add(tag(ctTop3(r, tm)));
+    else grp.add(tag(box3(r.len, r.thick, r.depth, tm, r.len / 2, r.top + r.thick / 2, r.depth / 2)));
+    if (r.bs > 0) { const off = r.side === 1 ? r.ovS : r.ovE; (r.bsSegs || [[r.start, r.end]]).forEach(([s0, s1]) => { const lx = off + (r.side === 1 ? s0 - r.start : r.end - s1); grp.add(tag(box3(s1 - s0, r.bs, 0.75, tm, lx + (s1 - s0) / 2, r.top + r.thick + r.bs / 2, 0.375), 'back')); }); }
     // Side splashes where an end butts a wall (0.60.8), in front of the backsplash.
-    [['S', ctX0(r)], ['E', ctX1(r) - 0.75]].forEach(([e, x]) => { if (!r['ss' + e]) return; const lx = r.side === 1 ? x - a : b - x - 0.75, bd = r.bs > 0 ? 0.75 : 0; grp.add(box3(0.75, r.bs, r.depth - bd, tm, lx + 0.375, r.top + r.thick + r.bs / 2, bd + (r.depth - bd) / 2)); });
+    [['S', ctX0(r)], ['E', ctX1(r) - 0.75]].forEach(([e, x]) => { if (!r['ss' + e]) return; const lx = r.side === 1 ? x - a : b - x - 0.75, bd = r.bs > 0 ? 0.75 : 0, sh = r.ssH || r.bs; grp.add(tag(box3(0.75, sh, r.depth - bd, tm, lx + 0.375, r.top + r.thick + sh / 2, bd + (r.depth - bd) / 2), e)); });
     // Waterfall ends: a panel the top's thickness from the floor up under the top, flush with its end.
-    [['S', ctX0(r)], ['E', ctX1(r) - r.thick]].forEach(([e, x]) => { if (!r['wf' + e]) return; const lx = r.side === 1 ? x - a : b - x - r.thick; grp.add(box3(r.thick, r.top, r.depth, tm, lx + r.thick / 2, r.top / 2, r.depth / 2)); });
+    [['S', ctX0(r)], ['E', ctX1(r) - r.thick]].forEach(([e, x]) => { if (!r['wf' + e]) return; const lx = r.side === 1 ? x - a : b - x - r.thick; grp.add(tag(box3(r.thick, r.top, r.depth, tm, lx + r.thick / 2, r.top / 2, r.depth / 2), e)); });
     v.root.add(grp);
   });
   if (L.molding) moldingRuns().forEach(r => {

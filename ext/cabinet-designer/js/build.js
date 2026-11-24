@@ -1507,7 +1507,9 @@ function countertopRunsAll() {
     // 0.63.5: in front of a wall's stone or panels the top starts at their face (r.back off the wall face).
     const wdw = typeof wdDepthAt === 'function' && wall(r.wall);
     r.back = wdw && wdw.detail ? wdDepthAt(wdw, r.side, r.top, r.top + r.thick) : 0;
-    r.depth = r.d + r.tpl.frontOverhang - r.back;
+    // 0.63.12: a front overhang set on this top by right-clicking its front edge (ovF), else the style's.
+    r.ovF = has(o, 'ovF') ? Math.max(0, +o.ovF || 0) : +r.tpl.frontOverhang || 0;
+    r.depth = r.d + r.ovF - r.back;
   });
   (S.genTops || []).forEach(g => {
     if (!wall(g.wall)) return;
@@ -1531,7 +1533,10 @@ function countertopRunsAll() {
     // 0.60.8 (Ayden 2026-11-20: "if a countertop is against a wall give it backsplash on the left or right or whatever side
     // touches"): an end that butts a wall (no corner joint, no waterfall) gets a side splash as tall as the backsplash.
     // Right-click the end on the Tops tab to take it off (ssS / ssE false) or put one on.
-    ['S', 'E'].forEach(e => { r['ss' + e] = r.bs > 0 && !j[e] && !r['wf' + e] && (has(st, 'ss' + e) ? !!st['ss' + e] : ctWallEnd(r, e)); });
+    // 0.63.12 (Ayden 2026-11-24, right-click any side of a top): a side splash put on by hand stays even with no backsplash;
+    // ssH is its height, the backsplash's, else the style's, else 4".
+    ['S', 'E'].forEach(e => { r['ss' + e] = !j[e] && !r['wf' + e] && (has(st, 'ss' + e) ? !!st['ss' + e] : r.bs > 0 && ctWallEnd(r, e)); });
+    r.ssH = r.bs > 0 ? r.bs : Math.max(0, +r.tpl.backsplash || 0) || 4;
     r.area = r.len * r.depth + ((r.wfS ? 1 : 0) + (r.wfE ? 1 : 0)) * wfH * r.depth;
     // 0.62.6 (Ayden 2026-11-24, Argil butler's pantry: "backsplash into cabinet"): the backsplash stops at a cabinet standing
     // on the countertop against the wall (an open tall on the counter); bsSegs are the stretches along the wall it runs.

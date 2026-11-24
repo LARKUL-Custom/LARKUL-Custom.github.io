@@ -3839,3 +3839,49 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 @media (min-width: 961px) and (max-width: 1499px){
   .room .dock .ib-empty .ib-hint:not(:has(button)){display:none}
 }
+
+/* 0.63.11: every bottom-panel tab is compact (Ayden 2026-11-24: the tabs "take up so much of the screen its insane").
+   The panel is capped near the item bar's height (fitDock) and anything longer scrolls inside it; explanations are
+   left out unless help text is on; cards, fields and table rows are tighter. */
+@media (min-width: 961px){
+  :root:not([data-help="show"]) .room .dock .dockbody .note:not(:has(button,input,select)),
+  :root:not([data-help="show"]) .room .dock .dockbody .dockfld .note{display:none}
+  .room .dock .dockbody .card{padding:6px 10px;border-radius:8px}
+  .room .dock .dockbody .card + .card{margin-top:6px}
+  .room .dock .dockbody .cardhead,.room .dock .dockbody .card > .row-actions{padding-top:0;padding-bottom:4px;min-height:0}
+  .room .dock .dockbody table th,.room .dock .dockbody table td{padding-top:3px;padding-bottom:3px}
+  .room .dock .dockbody table select,.room .dock .dockbody table input:not([type=checkbox]){height:28px;padding-top:2px;padding-bottom:2px}
+  .room .dock .dockbody .row-actions{margin-top:6px}
+  .room .dock .dockgrid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:6px}
+  .room .dock .dockfld{padding:5px 10px;gap:2px}
+  .room .dock .dockfld input:not([type=checkbox]),.room .dock .dockfld select{height:28px}
+  .room .dock .dockbody .cardhead{padding:0 4px 4px;min-height:0;align-items:center}
+  .room .dock .dockbody .cardhead h3,.room .dock .dockbody .cardhead h2{font-size:15px;margin:0}
+  .room .dock .dockbody .cardhead .btn{min-height:0;height:30px;padding:0 10px;font-size:13.5px}
+  .room .dock .roomdock{gap:8px}
+  .room .dock .roomdock .psec.box{padding:6px 10px}
+  .room .dock .tx-dock{gap:6px}
+  /* Hide button at the end of the tab list */
+  .room .dock .docktabs .dm-hide{color:var(--muted)}
+  /* Hidden panel: one thin strip of tab names, right side, and Show panel */
+  .room .dock.dmin{flex-direction:row}
+  .room .dock .dockmini{display:flex;align-items:center;justify-content:flex-end;gap:2px;width:100%;padding:2px 8px;overflow:hidden}
+  .room .dock .dockmini button{display:inline-flex;align-items:center;gap:5px;font:500 13px/1.2 var(--f-ui);padding:4px 8px;border:0;background:none;color:var(--ink);border-radius:6px;cursor:pointer;white-space:nowrap}
+  .room .dock .dockmini button:hover{background:var(--accent-soft)}
+  .room .dock .dockmini button .ic{width:15px;height:15px}
+  .room .dock .dockmini .dm-show{background:var(--accent);color:var(--accent-ink);margin-left:8px}
+  .room .dock .dockmini .dm-show:hover{background:var(--accent)}
+}
+/* No open space under the panel (Ayden 2026-11-24, Item tab): the 56px gap kept under the Room screen since
+   0.31.1 is gone on desktop; only a real safe-area inset stays. */
+@media (min-width: 961px){
+  main.is-room{padding-bottom:env(safe-area-inset-bottom,0px)}
+  .room .dock .dockbody.dock-item:not(:has(.ib-empty)){padding-bottom:4px}
+}
+/* 0.63.12: right-click any side of a countertop */
+.ctj-hot{fill:none;stroke:var(--accent);stroke-width:5px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;opacity:.9}
+.ctxmenu .ctx-note{padding:4px 10px;font-size:12px;color:var(--muted)}
+.ctxmenu .ctx-sides{display:flex;gap:2px;padding:6px 8px 4px;margin-top:3px;border-top:1px solid var(--line)}
+.ctxmenu .ctx-sides button{flex:1;min-width:0;padding:4px 6px;font-size:12px;border:1px solid var(--line);border-radius:4px;background:none;color:inherit;cursor:pointer;justify-content:center}
+.ctxmenu .ctx-sides button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
+.ctp-top{cursor:context-menu}
