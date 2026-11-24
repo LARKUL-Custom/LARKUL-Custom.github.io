@@ -1211,6 +1211,7 @@ document.addEventListener('click', e => {
       if (Math.abs(c.off - was) < 0.001) flash('It is already against that side'); break;
     }
     case 'cab-pocket': { const c = cab(id); if (!c) break; const on = c.pocket !== 'on'; mutate(() => { if (on) c.pocket = 'on'; else delete c.pocket; }); flash(on ? 'Pocket doors on' : 'Pocket doors off'); break; }
+    case 'cab-false': { const c = cab(id); if (!c) break; const on = c.falseFront !== 'on'; mutate(() => { if (on) c.falseFront = 'on'; else delete c.falseFront; }); flash(on ? 'False fronts on: every front is glued on, no hinges, slides, drawer boxes, shelves or inserts' : 'False fronts off'); break; }
     case 'cab-finint': { const c = cab(id); if (!c) break; const on = !c.finInt; mutate(() => { if (on) c.finInt = true; else delete c.finInt; }); flash(on ? 'Finished interior on' : 'Finished interior off'); break; }
     case 'cab-flip': {
       if ((cab(id) || {}).noMirror) { flash('Flip is turned off for this cabinet (Info tab).'); break; }

@@ -913,7 +913,7 @@ function showQuoteSheet() {
   let st = $('#quotecss'); if (!st) { st = document.createElement('style'); st.id = 'quotecss'; st.textContent = QUOTE_CSS; document.head.appendChild(st); }
   const [detail, paint] = quoteOpts(), el = $('#quotesheet');
   el.innerHTML = `<div class="lbbar"><b>Quote for ${esc(S.job.name)}</b><span class="note">Letter size, black on white. Print it, or pick Save as PDF in the print window.</span>
-    <div class="row-actions">${toggleBtn('qs-detail', detail, detail ? 'Shop copy, full breakdown' : 'Show the shop copy')}${detail ? toggleBtn('qs-paint', paint, 'Paint sq ft') : ''}<button class="btn primary" data-act="qs-print">${icon('print')}Print</button><button class="btn" data-act="qs-save">${icon('download')}Save quote file</button><button class="btn" data-act="qs-close">Close</button></div></div>
+    <div class="row-actions">${toggleBtn('qs-detail', detail, detail ? 'Shop copy, full breakdown' : 'Show the shop copy')}${detail ? toggleBtn('qs-paint', paint, 'Paint sq ft') : ''}<button class="btn primary" data-act="qs-print">${icon('print')}Print</button><button class="btn" data-act="qs-save">${icon('download')}Save quote file</button><button class="btn" data-act="qs-close">Close</button></div>${typeof overlapsNote === 'function' ? overlapsNote() : ''}</div>
   ${quoteDoc(priceSheet(), detail, paint)}`;
   el.hidden = false; document.body.classList.add('printing-quote');
 }

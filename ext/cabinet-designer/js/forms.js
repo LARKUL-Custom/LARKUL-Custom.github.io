@@ -216,7 +216,7 @@ document.addEventListener('change', e => {
     // Space to the next cabinet: with only the wall on that side it is the same as From left / From right.
     if (ref.startsWith('cabgap:') && !gapIsWall(o, field)) {
       const was = o.off; setOpenGap(o, field, v); const want = o.off;
-      if (!settle(o)) { o.off = was; note = 'There is no room for that here. It would overlap a wall or another cabinet.'; }
+      if (!settle(o)) { o.off = want; note = overlapSay(o); }
       else if (Math.abs(o.off - want) > 0.01) note = 'Another cabinet or wall is in the way, so it moved to the nearest free spot.';
       return;
     }
@@ -224,7 +224,7 @@ document.addEventListener('change', e => {
       const was = o.off, wasFill = o['fill' + field]; setFromEnd(o, field, v); const want = o.off;
       // A cabinet set a distance off a wall gets a filler that fills that gap; flush to the wall it needs none.
       if (o['fill' + field] !== 'off') o['fill' + field] = v > 0.01 ? 'on' : '';
-      if (!settle(o)) { o.off = was; o['fill' + field] = wasFill; note = 'There is no room for that here. It would overlap a wall or another cabinet.'; }
+      if (!settle(o)) { o.off = want; note = overlapSay(o); }
       else if (Math.abs(o.off - want) > 0.01) note = 'Another cabinet or wall is in the way, so it moved to the nearest free spot.';
       else if (v > 0.01 && fillersOf(o).some(f => f.end === field)) note = `Filler set to ${fmtLen(fromEnd(o, field))}`;
       return;
@@ -232,8 +232,13 @@ document.addEventListener('change', e => {
     // A cabinet can never overlap: a new size or spot slides it to the nearest free place, or is refused.
     if (ref.startsWith('cab:') && ['w', 'h', 'd', 'elev', 'off', 'outset'].includes(field)) {
       if (typeof qSizeRule === 'function' && ['w', 'h', 'd'].includes(field)) { const r = qSizeRule(o, field, v); if (r.refuse) { if (keepFx) setFormula(ref, field, prevFx); note = r.note; return; } v = r.v; note = r.note || ''; }
-      const was = o[field], wasOff = o.off; if (field === 'w' && typeof qGrow === 'function') qGrow(o, v); o[field] = v;
-      if (o.wall && !settle(o)) { o[field] = was; o.off = wasOff; if (keepFx) setFormula(ref, field, prevFx); note = 'There is no room for that here. It would overlap a wall or another cabinet.'; }
+      // 0.62.4 (Ayden 2026-11-24): an edit is never refused. Height, depth, elevation and outset stay where they are
+      // (a cabinet doesn't jump sideways because it got taller); a new width or spot still slides to free space when
+      // there is some. Whatever overlaps is kept, shown red and listed before Print, CNC and the quote.
+      if (field === 'w' && typeof qGrow === 'function') qGrow(o, v); o[field] = v;
+      const want = o.off;
+      if (o.wall && (field === 'w' || field === 'off') && !settle(o)) o.off = want;
+      if (o.wall && conflicts(o)) note = overlapSay(o);
       return;
     }
     if (ref.startsWith('cvar:') && field === 'v' && typeof fxParamClamp === 'function') v = fxParamClamp(o, v);
@@ -246,6 +251,14 @@ document.addEventListener('change', e => {
 });
 
 /* ---------- Shared editors ---------- */
+// What an edit now runs into (0.62.4): the edit stays; this says so.
+function overlapSay(o) {
+  const w = typeof wall === 'function' && wall(o.wall); if (!w) return '';
+  const hit = obstacles(o.wall, o.side, o, o.id).filter(k => Math.min(k.a1, o.off + o.w) - Math.max(k.a0, o.off) > 0.01);
+  if (!hit.length) return '';
+  const k = hit[0], c2 = k.kind === 'cab' && cab(k.id);
+  return `Done, but it now overlaps ${k.kind === 'wall' ? 'a wall' : c2 ? `${c2.name} ${cabTag(c2)}`.trim() : 'something'}${hit.length > 1 ? ` and ${hit.length - 1} more` : ''}. It shows red until you fix it.`;
+}
 const ROW_TYPES = [{ v: 'door', l: 'Door' }, { v: 'drawer', l: 'Drawer' }, { v: 'false', l: 'False front' }, { v: 'open', l: 'Open' }];
 function rowsEditor(ref, rows) {
   const r = 'sub:rows|' + ref;

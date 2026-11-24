@@ -118,6 +118,7 @@ function capPoly(w, cp) {
 // Viewer-facing x of a cabinet in its wall's elevation.
 const elevX = (c, L) => c.side === 1 ? c.off : L - c.off - c.w;
 /* ---------- Fronts ---------- */
+const falseOn = c => !!c && c.falseFront === 'on';
 function computeFronts(c, p) {
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return [];
   if (c.made && typeof madeDef === 'function' && madeDef(c)) return [];
@@ -125,8 +126,14 @@ function computeFronts(c, p) {
   // Face frame cabinets: fronts overlay the frame's openings.
   const ffr = faceFrame(c); if (ffr) return ffFronts(c, p, ffr);
   const tk = hasToe(c) ? p.toeKickHeight : 0;
-  const zb = tk + p.frontBottomReveal, zt = c.h - p.frontTopReveal;
-  const gap = p.frontGap, bw = blindCorner(c) ? blindWidth(c) : 0;
+  const zb = tk + p.frontBottomReveal, gap = p.frontGap;
+  // 0.62.4 (Ayden 2026-11-24, Argil: "the farm sink has two drawers that open, you can't even see the top drawer"):
+  // under an apron (farm house) sink the fronts start below the sink's apron, like Mozaik's sink bases; the apron
+  // fills the top of the face, so nothing hides or opens behind it.
+  const apS = c.cat === 'Base' && typeof apronSinkOn === 'function' ? apronSinkOn(c) : null;
+  const apTop = apS ? ((typeof apronTop === 'function' && apronTop(c)) || c.elev + c.h) - c.elev : 0;
+  const zt = Math.min(c.h - p.frontTopReveal, apS ? apTop - (+apS.h || 0) - gap : Infinity);
+  const bw = blindCorner(c) ? blindWidth(c) : 0;
   // A blind corner's fronts only cover the open part; the blind side has its blind panel.
   const xl = bw && cornerSide(c) === 'L' ? bw + gap : p.frontSideReveal, xr = bw && cornerSide(c) === 'R' ? c.w - bw - gap : c.w - p.frontSideReveal;
   // A row holding an appliance (bidprod.js) is as tall as the appliance's cutout needs.
@@ -150,7 +157,11 @@ function computeFronts(c, p) {
       let hinge = null;
       // A blind corner's single door hinges at the blind edge unless the row says otherwise (Mozaik, Ayden 2026-11-13).
       if (r.type === 'door') hinge = n === 1 ? (r.hinge === 'L' || r.hinge === 'R' ? r.hinge : bw && !faceFrame(c) ? cornerSide(c) : p.hingeSide) : n === 2 ? (i === 0 ? 'L' : 'R') : (i % 2 ? 'R' : 'L');
-      out.push({ type: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', ...(r.pull ? { pull: true } : {}) });
+      // 0.62.4 (Ayden 2026-11-24: "a false front option so it stays like the design but is false front and removes all
+      // interior parts that aren't needed"): with False front on, every door and drawer front stays where it is, in its
+      // own style and with its pull, but is glued on (no hinges, slides or drawer box). f.was keeps what it looked like.
+      if (falseOn(c) && (r.type === 'door' || r.type === 'drawer')) out.push({ type: 'false', was: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', pull: true });
+      else out.push({ type: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', ...(r.pull ? { pull: true } : {}) });
     }
     z = z0 - gap;
   });
@@ -307,7 +318,8 @@ function sizeRuleStyle(ds, fw, fh) {
 // The style a front gets before size rules: an opening can pick its own style; otherwise the door template decides.
 function frontBaseStyle(c, f, dt) {
   dt = dt || doorTpl(cabSet(c, 'doorT'));
-  return doorStyle(f.style && S.doorStyles.some(d => d.id === f.style) ? f.style : f.type === 'door' ? (c.cat === 'Wall' && dt.wallDoor) || dt.door : f.type === 'drawer' ? drawerSlotStyle(c, f, dt) : dt.falseFront);
+  const ty = f.was || f.type;
+  return doorStyle(f.style && S.doorStyles.some(d => d.id === f.style) ? f.style : ty === 'door' ? (c.cat === 'Wall' && dt.wallDoor) || dt.door : ty === 'drawer' ? drawerSlotStyle(c, f, dt) : dt.falseFront);
 }
 function frontStyle(c, f) {
   const dt = doorTpl(cabSet(c, 'doorT'));
@@ -316,7 +328,7 @@ function frontStyle(c, f) {
   ds = withFinish(sizeRuleStyle(ds, fw, fh), c);
   const { nR, nS, mrs, mss } = doorMids(ds, fw, fh), sum = a => a.reduce((x, y) => x + y, 0);
   const mp = +ds.minPanel > 0 ? +ds.minPanel : 2, needH = 2 * ds.rail + sum(mrs) + (nR + 1) * mp, needW = 2 * ds.stile + sum(mss) + (nS + 1) * mp;
-  const framed = ds.type !== 'slab' && fh >= Math.max(needH, f.type === 'door' ? 0 : dt.minFrameHeight || 0) && fw >= needW;
+  const framed = ds.type !== 'slab' && fh >= Math.max(needH, (f.was || f.type) === 'door' ? 0 : dt.minFrameHeight || 0) && fw >= needW;
   return { ds, framed, dt };
 }
 // Frame members and panel openings of one front, in front-local inches (x from the left edge, z up from the bottom).
@@ -388,9 +400,10 @@ function pullPlacement(c, f) {
   // A false front gets a pull only when its row asks for one (glued-on drawer fronts that should look like drawers).
   if (f.type !== 'door' && f.type !== 'drawer' && !(f.type === 'false' && f.pull)) return null;
   const dt = doorTpl(cabSet(c, 'doorT'));
-  const p = hwPick(cabSet(c, 'pull') || (f.type === 'door' ? dt.pull : dt.drawerPull), 'pull'); if (!p) return null;
+  const asDoor = (f.was || f.type) === 'door';
+  const p = hwPick(cabSet(c, 'pull') || (asDoor ? dt.pull : dt.drawerPull), 'pull'); if (!p) return null;
   const fh = f.z1 - f.z0, fw = f.x1 - f.x0, len = p.lengthMM * MM;
-  if (f.type !== 'door') {
+  if (!asDoor) {
     const z = dt.drawerPullFromTop > 0 ? fh - dt.drawerPullFromTop : fh / 2;
     return { hw: p, x: fw / 2, z, vertical: false };
   }
@@ -444,7 +457,7 @@ function interiorLayout(c, p, fronts) {
   const doorZones = fronts.filter(f => (f.type === 'door' || f.type === 'open') && f.idx === 0 && !mwRow(f.row))
     .map(f => Object.assign([Math.max(f.z0, zIn0, mwRow(f.row + 1) ? f.z0 - p.frontGap / 2 + t : -1e9), Math.min(f.z1, zIn1)], { row: f.row }));
   const zones = doorZones.length ? doorZones : (fronts.length ? [] : [[zIn0, zIn1]]);
-  const low = zones.length ? zones[zones.length - 1] : null, ins = c.inserts || [];
+  const low = zones.length ? zones[zones.length - 1] : null, ins = falseOn(c) ? [] : c.inserts || [];
   const hasDoors = fronts.some(f => f.type === 'door');
   // Pocket doors: each pocket (slot + pocket panel) takes its width out of the inside (pocket.js).
   const pk = typeof pocketInfo === 'function' ? pocketInfo(c, p, fronts, t, zIn0, zIn1) : null;
@@ -888,7 +901,7 @@ function buildParts(c) {
   if (typeof dpBuild === 'function') dpBuild(c, part, addB, warn);
 
   // Shelf pins over the door openings that have no roll-outs
-  let shelves = lay.perRow ? lay.perRow.reduce((a, r) => a + r.k, 0) : Math.max(0, p.shelfCount | 0);
+  let shelves = falseOn(c) ? 0 : lay.perRow ? lay.perRow.reduce((a, r) => a + r.k, 0) : Math.max(0, p.shelfCount | 0);
   const zones = lay.perRow ? lay.perRow.filter(r => r.k).map(r => r.z) : lay.shelfZones;
   if (shelves && !zones.length) { warn.push(lay.zones.length ? 'Inserts fill the door opening, so adjustable shelves were skipped.' : 'Shelves are set but this cabinet has no door opening. Shelves skipped.'); shelves = 0; }
   if (lay.divX !== null && (lay.rollouts.length || lay.bins.length || lay.lazy.length)) warn.push('The divider runs through the roll-outs or pull-out. Remove one of them, or check the sizes by hand.');

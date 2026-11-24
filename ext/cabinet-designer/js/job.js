@@ -143,12 +143,14 @@ const TPL_CATS = [
   ['drawers', 'Drawers', ['drawerMatT', 'slide']],
   ['box', 'Cabinet and panels', ['faceFrame', 'cabMatT', 'finish', 'panelDoor', 'panelStyle', 'shelfpin', 'jointU', 'jointF', 'leg', 'partT']],
   ['tops', 'Tops and molding', ['countertop', 'molding']],
-  ['walls', 'Walls', ['wallThick', 'wallHeight']],
+  ['walls', 'Walls', ['wallPaint', 'wallFin', 'ceilPaint', 'wallThick', 'wallHeight']],
 ];
+// Look-only wall tiles (0.62.5): paint colors are Textures picks (walls, ceiling), the drywall finish is job.wallFin / room.wallFin.
+const TPL_PAINT = { wallPaint: ['Wall paint', 'walls'], ceilPaint: ['Ceiling paint', 'ceiling'] };
 const TPL_WALL = { wallThick: 'New wall thickness', wallHeight: 'Ceiling height' };
 // Styles inside the picked door template, shown as their own tiles like Mozaik's base door, wall door and drawer fronts.
 const TPL_DT = { door: ['Base door'], wallDoor: ['Wall door', 'Same as base door'], drawerTop: ['Top drawer front', 'Same as mid drawer fronts'], drawer: ['Mid drawer fronts'], drawerBot: ['Bottom drawer front', 'Same as mid drawer fronts'], falseFront: ['False front'] };
-const dtKeys = ks => ks.filter(k => !k.startsWith('dt.'));
+const dtKeys = ks => ks.filter(k => !k.startsWith('dt.') && !TPL_PAINT[k] && k !== 'wallFin');
 function stylePic(id, drawer, lc) {
   const ds = doorStyle(id), c = lc || (mat(ds.mat) || {}).color || '#d8d2c4';
   return `<svg viewBox="0 0 120 90" aria-hidden="true">${drawer ? frontPic(ds, c, 14, 26, 92, 38, 24, 9.5) : frontPic(ds, c, 33, 5, 54, 80, 15, 22)}</svg>`;
@@ -215,6 +217,13 @@ function tplPic(k, id, lc) {
   if (k === 'jointU' || k === 'jointF') { const h = hw(id) || {}, dowel = /dowel/i.test(h.name || '');
     return svg(`<rect x="14" y="10" width="16" height="72" fill="#e8e1d2" stroke="#555"/><rect x="30" y="56" width="80" height="16" fill="#e8e1d2" stroke="#555"/>${dowel ? '<rect x="22" y="61" width="22" height="6" rx="3" fill="#c9a77a" stroke="#7a5c33"/>' : '<rect x="6" y="61" width="6" height="6" fill="#666"/><path d="M12 64 H58" stroke="#666" stroke-width="3" stroke-dasharray="3 2"/>'}${k === 'jointF' ? '<path d="M8 16 L14 10" stroke="#2563eb" stroke-width="3"/>' : ''}`); }
   if (k === 'leg') return svg('<rect x="14" y="20" width="92" height="14" fill="#e8e1d2" stroke="#555"/><rect x="26" y="34" width="12" height="40" rx="2" fill="#3a3f47"/><rect x="82" y="34" width="12" height="40" rx="2" fill="#3a3f47"/><rect x="21" y="72" width="22" height="6" rx="2" fill="#3a3f47"/><rect x="77" y="72" width="22" height="6" rx="2" fill="#3a3f47"/>');
+  if (k === 'wallPaint') return svg(`<rect x="8" y="6" width="104" height="70" fill="${lc}" stroke="#555"/><rect x="8" y="76" width="104" height="10" fill="#c9b08e" stroke="#555"/><rect x="30" y="50" width="60" height="26" fill="#fff" fill-opacity=".55" stroke="#555"/>`);
+  if (k === 'ceilPaint') return svg(`<path d="M8 6 H112 L92 30 H28 Z" fill="${lc}" stroke="#555"/><rect x="28" y="30" width="64" height="56" fill="#eceae5" stroke="#555"/><circle cx="60" cy="18" r="4" fill="#fff8e0" stroke="#999"/>`);
+  if (k === 'wallFin') {
+    const dots = id === 'knock' ? [[24, 22, 9], [58, 30, 12], [92, 20, 8], [36, 58, 11], [80, 62, 10], [104, 46, 6], [14, 74, 6]].map(([x, y, r]) => `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r * 0.7}" fill="#d8d5ce" stroke="#b9b5ac"/>`).join('')
+      : id === 'orange' ? Array.from({ length: 90 }, (_, i) => `<circle cx="${(i * 37) % 104 + 8}" cy="${(i * 53) % 76 + 7}" r="1.4" fill="#bdb9b0"/>`).join('') : '';
+    return svg(`<rect x="8" y="6" width="104" height="80" fill="#eceae5" stroke="#555"/>${dots}`);
+  }
   if (k === 'wallThick') return svg('<rect x="44" y="8" width="32" height="76" fill="#3a4250"/><path d="M40 92 L80 92" stroke="currentColor"/>');
   if (k === 'wallHeight') return svg('<rect x="30" y="8" width="60" height="76" fill="#d9dcd8" stroke="#555"/><path d="M100 8 L100 84 M96 8 L104 8 M96 84 L104 84" stroke="currentColor"/>');
   return svg('');
@@ -266,6 +275,19 @@ function renderTplTab() {
       const eff = v || (f === 'wallDoor' ? dt.door : dt.drawer);
       return `<div class="tpltile"><div class="tt-h">${label}</div><div class="tt-pic">${stylePic(eff, /drawer|false/i.test(f), typeof txqColor === 'function' ? txqColor('doorT', scope ? scope.id : '') : '')}</div>${ctl('dtpl:' + dt.id, f, v, 'select', { options: [...(blank ? [{ v: '', l: blank }] : []), ...opts(S.doorStyles)], label })}
         <div class="tt-f"><span class="tt-in">in ${esc(dt.name)}</span><button class="linkbtn" data-act="tab" data-id="doors">Door designer</button></div></div>`;
+    }
+    if (TPL_PAINT[k]) {
+      const [label, surf] = TPL_PAINT[k], col = (typeof txqColor === 'function' && txqColor(k, scope ? scope.id : '')) || (surf === 'ceiling' ? '#f2f0ec' : '#eceae5');
+      const own = scope && (scope.tex || {})[surf];
+      return `<div class="tpltile${own ? ' own' : ''}"><div class="tt-h">${label}</div><div class="tt-pic">${tplPic(k, '', col)}</div>${txqBtn(k, scope ? scope.id : '')}
+        <div class="tt-f">${own ? '<span class="tt-own">This room</span>' : ''}<span class="tt-in">Look only</span></div></div>`;
+    }
+    if (k === 'wallFin') {
+      const own = scope && scope.wallFin;
+      const sel = scope ? ctl('room:' + scope.id, 'wallFin', scope.wallFin || '', 'select', { options: [{ v: '', l: 'Same as job (' + WALL_FINS.find(f => f[0] === (S.job.wallFin || 'smooth'))[1] + ')' }, ...WALL_FINS.map(([v, l]) => ({ v, l }))], label: 'Drywall finish for ' + scope.name })
+        : ctl('job', 'wallFin', S.job.wallFin || 'smooth', 'select', { options: WALL_FINS.map(([v, l]) => ({ v, l })), label: 'Drywall finish' });
+      return `<div class="tpltile${own ? ' own' : ''}"><div class="tt-h">Drywall finish</div><div class="tt-pic">${tplPic(k, wallFinOf(scope || null))}</div>${sel}
+        <div class="tt-f">${own ? '<span class="tt-own">This room</span>' : ''}<span class="tt-in">Shows in Realistic 3D</span></div></div>`;
     }
     if (TPL_WALL[k]) {
       const own = scope && scope[k] !== undefined && scope[k] !== S.job[k];

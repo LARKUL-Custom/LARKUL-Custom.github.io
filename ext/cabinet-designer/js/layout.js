@@ -181,6 +181,32 @@ function conflicts(c, o) {
   if (!wall(wl) || c.made === 'pocketdoors') return false;
   return obstacles(wl, sd, c, c.id).some(k => Math.min(k.a1, off + c.w) - Math.max(k.a0, off) > 0.01);
 }
+// 0.62.4 (Ayden 2026-11-24: "I don't care if it overlaps as long as it tells me in some way so I can fix it before it
+// gets sent out"): every piece in the job that runs into a wall, a cabinet or an appliance, room by room, each pair once.
+// [{ room, c, what: 'the wall' | other piece's name }]. Shown red in the plan, on the item, and on Print, CNC and the quote.
+const cabTag = c => (c.num ? '#' + c.num : LBL[c.id] || '');
+function jobOverlaps() {
+  const out = [], seen = new Set();
+  (S.rooms || []).forEach(r => withRoom(r, () => S.cabinets.forEach(c => {
+    if (!c.wall || !wall(c.wall) || c.made === 'pocketdoors') return;
+    obstacles(c.wall, c.side, c, c.id).forEach(k => {
+      if (Math.min(k.a1, c.off + c.w) - Math.max(k.a0, c.off) <= 0.01) return;
+      const key = r.id + '|' + [c.id, k.kind + ':' + k.id].sort().join('|'), key2 = r.id + '|' + [k.id, 'cab:' + c.id].sort().join('|');
+      if (seen.has(key) || seen.has(key2)) return; seen.add(key); seen.add(r.id + '|' + ['cab:' + c.id, k.id].sort().join('|'));
+      const o = k.kind === 'cab' && S.cabinets.find(x => x.id === k.id), f = k.kind !== 'cab' && k.kind !== 'wall' && (S.fixtures || []).find(x => x.id === k.id);
+      // An automatic end panel piece (0.61.3) stands where its cabinet's own panel is: that is the same panel, not an overlap.
+      if (o && (o.autoOf === c.id || c.autoOf === o.id)) return;
+      out.push({ room: r, c, what: k.kind === 'wall' ? 'a wall' : o ? `${o.name} ${cabTag(o)}`.trim() : f ? fixtName(f) : 'something' });
+    });
+  })));
+  return out;
+}
+// The warning box listing them (empty when there are none).
+function overlapsNote(list) {
+  const L = list || jobOverlaps(); if (!L.length) return '';
+  const many = S.rooms.length > 1, show = L.slice(0, 8);
+  return `<div class="warnbox ovl-note"><b>${L.length} overlap${L.length === 1 ? '' : 's'} to fix before this goes out:</b> ${show.map(o => esc(`${many ? o.room.name + ': ' : ''}${o.c.name} ${cabTag(o.c)} runs into ${o.what}`)).join('; ')}${L.length > show.length ? `; and ${L.length - show.length} more` : ''}. They show red in the plan.</div>`;
+}
 // Moves a cabinet to the nearest free spot on its wall side. Returns false when there is no room for it.
 function settle(c) {
   const off = findFree(c, c.wall, c.side, c.off, c.id);

@@ -739,9 +739,9 @@ function buildRoomScene(v) {
   if (pts.length && L.ceiling && S.walls.length) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), hgt = Math.max(...S.walls.map(w => w.height || 96));
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    const vc = typeof vCeiling3d === 'function' ? vCeiling3d(v, wallLook3(1, R3 ? realCeil3() : flat3(cssVar('--wall3d')))) : null;
+    const vc = typeof vCeiling3d === 'function' ? vCeiling3d(v, ceilLook3(R3 ? realCeil3() : flat3(cssVar('--wall3d')))) : null;
     if (vc) v.root.add(vc);
-    else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), wallLook3(1, R3 ? realCeil3() : flat3(cssVar('--wall3d'))));
+    else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), ceilLook3(R3 ? realCeil3() : flat3(cssVar('--wall3d'))));
       cl.rotation.x = Math.PI / 2; cl.position.set((x0 + x1) / 2, hgt, (y0 + y1) / 2); cl.userData.noBounds = true; cl.userData.wall = true; v.root.add(cl); }
   }
   if (pts.length && L.floor) {

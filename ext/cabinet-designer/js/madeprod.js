@@ -159,7 +159,7 @@ const MADE = {
         x.bom[POCKET_HW] = (x.bom[POCKET_HW] || 0) + 1;
         // The room's pull, upright near the edge the door opens from, at hand height.
         const len = pl ? Math.max(1, (pl.lengthMM || 128) * MM) : 5, zc = r3(Math.min(c.h - len / 2 - 2, Math.max(len / 2 + 2, 42 - c.elev)));
-        const pull = pl ? { name: pl.name, vert: true, x: r3(R ? x0 + 2 : x0 + fw - 2), z: zc, len: r3(len), slim: true } : null;
+        const pull = pl ? { name: pl.name, vert: true, x: r3(R ? x0 + 2 : x0 + fw - 2), z: zc, len: r3(len), slim: true, hw: pl } : null;
         if (pull) x.bom[pull.name] = (x.bom[pull.name] || 0) + 1;
         // Where it goes open: its outside face (and pull) toward the end, its back riding by the inside of the slot.
         const slot = Math.max(fm0(dm) + 0.25, +(R ? mp.slotR : mp.slotL) || 4), ft = fm0(dm), cl = 0.0625, hx = R ? c.w : 0;
@@ -284,36 +284,70 @@ function apFrontFit(c, f) {
 function apFronts(c, mp = madeMp(c)) {
   const fr = (Array.isArray(mp.fr) ? mp.fr : []).filter(q => +q.h > 0 && +q.z >= -0.01 && +q.z + +q.h <= c.h + 0.01);
   // 0.61.5: x and w across the front (a pair of doors); none = the whole width. hinge L/R when Mozaik says.
-  const one = q => { const x0 = Math.max(0, +q.x || 0), w = +q.w > 0 ? Math.min(+q.w, c.w - x0) : c.w - x0; return { z: +q.z, h: +q.h, x: r3(x0), w: r3(w), hinge: q.hinge || '', type: q.type || 'door' }; };
-  return fr.length ? fr.map(one) : [{ z: 0, h: c.h, x: 0, w: c.w, hinge: '', type: 'door' }];
+  // 0.62.4: jobs brought in before 0.61.5 have a pair as two fronts the same height with no x or w (both the whole
+  // width, one over the other); they share the width side by side.
+  const row = q => fr.filter(o => !(+o.w > 0) && Math.abs(+o.z - +q.z) < 0.5 && Math.abs(+o.h - +q.h) < 0.5);
+  const one = q => {
+    const mates = +q.w > 0 ? [] : row(q), k = mates.length > 1 ? mates.indexOf(q) : -1, ew = k >= 0 ? (c.w - 0.125 * (mates.length - 1)) / mates.length : 0;
+    const x0 = k >= 0 ? k * (ew + 0.125) : Math.max(0, +q.x || 0), w = k >= 0 ? ew : +q.w > 0 ? Math.min(+q.w, c.w - x0) : c.w - x0;
+    return { z: +q.z, h: +q.h, x: r3(x0), w: r3(w), hinge: q.hinge || '', type: q.type || 'door' };
+  };
+  // A single front with nothing saved has its hinge in mp.hinge (Rehinge, 0.62.4).
+  return fr.length ? fr.map(one) : [{ z: 0, h: c.h, x: 0, w: c.w, hinge: mp.hinge || '', type: 'door' }];
 }
 const apFixt = c => c.fixt && typeof fixtList === 'function' ? fixtList().find(f => f.id === c.fixt) || (S.rooms || []).flatMap(r => r.fixtures || []).find(f => f.id === c.fixt) : null;
 // 0.61.5 (Ayden 2026-11-23: "the fridge doors need tall handles in the center where you would pull the handle on a normal
-// fridge"): a fridge's panel doors get a tall upright appliance pull on the edge they open from: the meeting edges of a pair
-// (French doors, in the middle), the side away from the hinge on a single door. A drawer front, a dishwasher or an
-// under-counter fridge gets a pull across near its top. Returns { name, vert, x, z, len } in the front's terms
-// (x across from the appliance's left, z up), or null.
+// fridge"): a fridge's panel doors get an upright pull on the edge they open from: the meeting edges of a pair (French
+// doors, in the middle), the side away from the hinge on a single door. A drawer front, a dishwasher or an under-counter
+// fridge gets a pull across near its top. Returns { name, vert, x, z, len, hw } in the front's terms (x across from the
+// appliance's left, z up), or null.
+// 0.62.4 (Ayden 2026-11-24: "handles don't match on the fridge"): it is the room's own pull (the cabinets' door pull on
+// a door, their drawer pull across a drawer front or dishwasher), drawn and placed like theirs, as Mozaik does. Only with
+// no pull picked does it fall back to a plain appliance bar.
+function apHw(c, drawer) {
+  if (typeof hwPick !== 'function') return null;
+  const dt = typeof doorTpl === 'function' ? doorTpl(cabSet(c, 'doorT')) : {};
+  return hwPick(cabSet(c, 'pull') || (drawer ? dt.drawerPull : dt.pull), 'pull') || null;
+}
 function apPull(c, fx, q, fr) {
   const kind = fx ? fx.kind : 'fridge';
   if (kind === 'fridge' && q.type !== 'drawer' && q.h >= 20) {
-    const len = q.h >= 48 ? 24 : q.h >= 30 ? 18 : 12, inset = 2;
+    const hw = apHw(c, false), len = hw ? Math.max(hw.lengthMM * MM, 1) : q.h >= 48 ? 24 : q.h >= 30 ? 18 : 12;
+    const dt = typeof doorTpl === 'function' ? doorTpl(cabSet(c, 'doorT')) : {}, inset = hw && +dt.pullFromEdge > 0 ? +dt.pullFromEdge : 2;
     const mate = fr.find(o => o !== q && Math.abs(o.z - q.z) < 0.5 && Math.abs(o.h - q.h) < 0.5);
     let side = q.hinge === 'R' ? 'L' : q.hinge === 'L' ? 'R' : '';
     if (mate) side = mate.x > q.x ? 'R' : 'L';
     if (!side) side = 'R';
     const x = side === 'R' ? q.x + q.w - inset : q.x + inset;
-    // On a tall door the pull sits where a hand reaches it: low on an upper door, high on a lower one, else centered.
-    const mid = q.z + q.h / 2, reach = 40, zc = q.h > len + 8 ? Math.min(q.z + q.h - len / 2 - 3, Math.max(q.z + len / 2 + 3, mid > reach ? q.z + len / 2 + 3 : mid)) : mid;
-    return { name: `Appliance pull ${len}" (fridge)`, vert: true, x: r3(x), z: r3(zc), len };
+    // The pull sits where a hand reaches it, 40" off the floor like a tall cabinet's: low on an upper door, high on a
+    // lower one (as Mozaik draws them), at 40" on a full-height door.
+    const mid = q.z + q.h / 2, reach = 40 - (c.elev || 0), zc = q.h > len + 6 ? Math.min(q.z + q.h - len / 2 - 3, Math.max(q.z + len / 2 + 3, reach)) : mid;
+    return { name: hw ? hw.name : `Appliance pull ${len}" (fridge)`, vert: true, x: r3(x), z: r3(zc), len: r3(len), hw };
   }
-  const len = q.w >= 24 ? 18 : 12;
-  return { name: `Appliance pull ${len}"`, vert: false, x: r3(q.x + q.w / 2), z: r3(q.z + q.h - Math.min(3, q.h / 4)), len };
+  const hw = apHw(c, true), len = hw ? Math.max(hw.lengthMM * MM, 1) : q.w >= 24 ? 18 : 12;
+  const dt = typeof doorTpl === 'function' ? doorTpl(cabSet(c, 'doorT')) : {}, down = hw && +dt.drawerPullFromTop > 0 ? +dt.drawerPullFromTop : hw ? q.h / 2 : Math.min(3, q.h / 4);
+  return { name: hw ? hw.name : `Appliance pull ${len}"`, vert: false, x: r3(q.x + q.w / 2), z: r3(q.z + q.h - Math.min(down, q.h / 2)), len: r3(len), hw };
 }
-// A pull's bar and posts in 3D, standing off the front face (at depth d).
-function apPullMeshes(p, d, M, add) {
+// A pull in 3D. The room's pull (p.hw) is drawn like the cabinets' pulls (pullColor, metal in the Realistic look);
+// otherwise a plain bar on posts standing off the front face (at depth d).
+function apPullMeshes(p, d, M, add, c) {
+  if (p.hw) {
+    const pm = (typeof R3 !== 'undefined' && R3 ? metal3 : flat3)(typeof pullColor === 'function' ? pullColor(c, p.hw) : p.hw.finish || '#333333'), L = p.len, z = d + 0.55;
+    if (!p.hw.ccMM) add(box3(L, L, 0.9, pm, p.x, p.z, z - 0.1, false));
+    else add(box3(p.vert ? 0.45 : L, p.vert ? L : 0.45, 0.45, pm, p.x, p.z, z, false));
+    return;
+  }
   const t = 0.75, off = 1.25, post = 0.5;
   if (p.vert) { add(box3(t, p.len, t, M, p.x, p.z, d + off + t / 2)); [-1, 1].forEach(s => add(box3(post, post, off, M, p.x, p.z + s * (p.len / 2 - 1), d + off / 2))); }
   else { add(box3(p.len, t, t, M, p.x, p.z, d + off + t / 2)); [-1, 1].forEach(s => add(box3(post, post, off, M, p.x + s * (p.len / 2 - 1), p.z, d + off / 2))); }
+}
+// The pull in the elevation, like a cabinet's (views2d.js).
+function apPullSVG(p, ex, by) {
+  const fill = p.hw ? esc(p.hw.finish || '#2f3236') : '#2f3236', px = ex + p.x, py = by - p.z;
+  if (p.hw && !p.hw.ccMM) return `<circle class="ev-pull" cx="${r3(px)}" cy="${r3(py)}" r="${r3(p.len / 2)}" style="fill:${fill}"/>`;
+  const th = p.hw || p.slim ? 0.5 : 0.75;
+  return p.vert ? `<rect class="ev-pull" style="fill:${fill}" x="${r3(px - th / 2)}" y="${r3(py - p.len / 2)}" width="${th}" height="${r3(p.len)}" rx="${th / 2}"/>`
+    : `<rect class="ev-pull" style="fill:${fill}" x="${r3(px - p.len / 2)}" y="${r3(py - th / 2)}" width="${r3(p.len)}" height="${th}" rx="${th / 2}"/>`;
 }
 function madeSync(c) {
   const d = madeDef(c); if (!d) return;
@@ -384,8 +418,8 @@ function madeMeshes(c, opts = {}) {
       pivot.userData.open = { kind: 'pocket', sign: o.f.hinge === 'R' ? 1 : -1, f: o.f, base: { x: hx, z: pz }, dx: o.pocket.dx, dz: o.pocket.dz };
     }
     doorMeshes(o.ds, o.framed, o.f, c.d, M, M, 0, m => into.add(m));
-    if (o.pull && o.pull.slim) into.add(box3(0.45, o.pull.len, 0.45, pullM, o.pull.x, o.pull.z, c.d + 0.55));
-    else if (o.pull) apPullMeshes(o.pull, c.d, pullM, m => into.add(m));
+    if (o.pull && o.pull.slim && !o.pull.hw) into.add(box3(0.45, o.pull.len, 0.45, pullM, o.pull.x, o.pull.z, c.d + 0.55));
+    else if (o.pull) apPullMeshes(o.pull, c.d, pullM, m => into.add(m), c);
   });
   [...b.parts, ...(b.show || [])].forEach(q => {
     if (q.front) return;
@@ -412,8 +446,7 @@ function madeFrontSVG(c, ex, by, opts = {}) {
     let svg = `<rect ${fillFor(m, 'ev-box')} x="${r3(ex + f.x0)}" y="${r3(by - f.z1)}" width="${r3(fw)}" height="${r3(fh)}"/>`;
     if (o.framed) svg += `<rect class="ev-inner nss" fill="none" x="${r3(ex + f.x0 + ds.stile)}" y="${r3(by - f.z1 + ds.rail)}" width="${r3(Math.max(0, fw - 2 * ds.stile))}" height="${r3(Math.max(0, fh - 2 * ds.rail))}"/>`;
     // 0.61.5: the appliance pull.
-    const p = o.pull; if (p && p.slim) svg += `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - 0.225)}" y="${r3(by - p.z - p.len / 2)}" width="0.45" height="${r3(p.len)}" rx="0.2"/>`;
-    else if (p) svg += p.vert ? `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - 0.375)}" y="${r3(by - p.z - p.len / 2)}" width="0.75" height="${r3(p.len)}" rx="0.3"/>` : `<rect class="ev-pull" fill="#2f3236" x="${r3(ex + p.x - p.len / 2)}" y="${r3(by - p.z - 0.375)}" width="${r3(p.len)}" height="0.75" rx="0.3"/>`;
+    const p = o.pull; if (p) svg += apPullSVG(p, ex, by);
     faces.push({ z: c.d + 1, m, svg });
   });
   [...b.parts, ...(b.show || [])].forEach(q => {

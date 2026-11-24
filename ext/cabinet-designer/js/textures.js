@@ -8,15 +8,53 @@
 const TEX_SURF = [
   ['doors', 'Doors'], ['drawers', 'Drawer fronts'], ['finished', 'Finished ends'], ['inside', 'Cabinet inside'],
   ['toe', 'Toe skin'], ['drawerBox', 'Drawer boxes'], ['pulls', 'Pulls'], ['tops', 'Countertops'], ['molding', 'Molding'],
-  ['walls', 'Walls'], ['floor', 'Floor'],
+  ['walls', 'Walls'], ['ceiling', 'Ceiling'], ['floor', 'Floor'],
 ];
-// Surfaces a single cabinet can have its own pick for; tops, walls and floor belong to the room. A cabinet's molding
+// Surfaces a single cabinet can have its own pick for; tops, walls, ceiling and floor belong to the room. A cabinet's molding
 // pick colors the molding run it is in (0.58.16).
 const TEX_CAB = ['doors', 'drawers', 'finished', 'inside', 'toe', 'drawerBox', 'pulls', 'molding'];
 // The first tile sets these three at once, for a one-color job.
 const TEX_ALL = ['doors', 'drawers', 'finished'];
 const TEX_PAINTS = [['#ffffff', 'White'], ['#f3efe6', 'Off-white'], ['#ece3cf', 'Cream'], ['#d9d6cf', 'Light grey'], ['#a9a8a3', 'Grey'], ['#5f6266', 'Charcoal'],
   ['#232427', 'Black'], ['#2a3a55', 'Navy'], ['#4f6f8f', 'Blue'], ['#8f9f86', 'Sage'], ['#3f5a45', 'Green'], ['#b5a48c', 'Taupe'], ['#7a4b32', 'Brown'], ['#c9a77a', 'Natural oak']];
+// Wall paints (0.62.5, Ayden 2026-11-24: "a wall texture setting in job settings, so we can adjust color of paints"):
+// common soft house paints for walls and ceilings, shown in place of the cabinet paints when the walls or ceiling are picked.
+const WALL_PAINTS = [['#f4f2ec', 'White'], ['#efe9dc', 'Warm white'], ['#e6dccb', 'Cream'], ['#ddd3c2', 'Beige'], ['#cfc6b8', 'Greige'], ['#d6d6d2', 'Light grey'],
+  ['#bdbcb6', 'Grey'], ['#8e8f8c', 'Dark grey'], ['#b9ab97', 'Taupe'], ['#b7bfa8', 'Sage'], ['#b9c7cf', 'Soft blue'], ['#5d7180', 'Slate blue'], ['#2e3a4e', 'Navy'], ['#4a4c4f', 'Charcoal']];
+const isRoomSurf = k => k === 'walls' || k === 'ceiling';
+const paintsFor = k => isRoomSurf(k) ? WALL_PAINTS : TEX_PAINTS;
+// Drywall finish of the walls: the room's own, else the job's. Look only (Realistic 3D, Walk and the walk file).
+const WALL_FINS = [['smooth', 'Smooth'], ['orange', 'Orange peel'], ['knock', 'Knockdown']];
+function wallFinOf(r) { r = r || curRoom(); return (r && r.wallFin) || S.job.wallFin || 'smooth'; }
+// A bump picture for the finish over a 24 in square (tiles without seams). Orange peel: fine even speckle. Knockdown:
+// flat raised splats about an inch or two across with a little speckle on top.
+function drywallCanvas(fin) {
+  const c = drywallCanvas.c || (drywallCanvas.c = {}); if (c[fin]) return c[fin];
+  const N = 512, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data, n1 = noise2(5), n2 = noise2(17), n3 = noise2(41);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N, w = y / N; let h;
+    if (fin === 'knock') {
+      const v = 0.55 * n1(u * 12, w * 12, 12, 12) + 0.3 * n2(u * 30, w * 30, 30, 30) + 0.15 * n3(u * 70, w * 70, 70, 70), t = Math.min(1, Math.max(0, (v - 0.5) / 0.16));
+      h = 0.3 + 0.5 * t * t * (3 - 2 * t) + 0.08 * (n3(u * 200, w * 200, 200, 200) - 0.5);
+    } else h = 0.5 + 0.6 * (n3(u * 150, w * 150, 150, 150) - 0.5) + 0.4 * (n2(u * 290, w * 290, 290, 290) - 0.5);
+    const i = (y * N + x) * 4, b = Math.max(0, Math.min(255, Math.round(h * 255))); d[i] = d[i + 1] = d[i + 2] = b; d[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return (c[fin] = cv);
+}
+// Painted drywall for Realistic 3D: the paint color with the finish as a bump map (UVs are inches / 24, see box3).
+function paint3(color, fin, op = 1) {
+  const k = op >= 0.98 ? 1 : Math.round(op * 50) / 50, key = color + '|' + fin + '|' + k, c = paint3.c || (paint3.c = {});
+  if (c[key]) return c[key];
+  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.95, envMapIntensity: 0.3, transparent: k < 1, opacity: k, depthWrite: k >= 1 });
+  if (fin !== 'smooth' && k >= 1) {
+    const t = new THREE.CanvasTexture(drywallCanvas(fin)); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+    m.bumpMap = t; m.bumpScale = fin === 'knock' ? 0.05 : 0.03;
+  }
+  m.userData.texScale = 24;
+  return (c[key] = m);
+}
 
 // The pick that shows on surface k of cabinet c (or of the open room when c is not given).
 function texPickOf(k, c) {
@@ -65,9 +103,19 @@ const pickColor = (p, m) => !p ? '' : p[0] === '#' ? p : ((skinOf(p, m) || {}).c
 function pullColor(c, h) { return pickColor(texPickOf('pulls', c)) || (h && h.finish) || '#333333'; }
 // Walls and floor (3D and the elevation's wall).
 function wallLook3(op, def) {
-  const p = texPickOf('walls'); if (!p) return def;
-  if (p[0] === '#' || op < 0.98) return flat3(pickColor(p), op);
+  const p = texPickOf('walls'), fin = wallFinOf();
+  if (!p) return R3 && fin !== 'smooth' ? paint3('#eceae5', fin, op) : def;
+  if (p[0] === '#') return R3 ? paint3(p, fin, op) : flat3(p, op);
+  if (op < 0.98) return flat3(pickColor(p), op);
   return mat3(skinOf(p, { kind: 'sheet' }));
+}
+// The ceiling has its own paint (0.62.5); before, it took the wall pick. In Realistic it keeps the soft bounce glow.
+function ceilLook3(def) {
+  const p = texPickOf('ceiling'); if (!p) return def;
+  if (p[0] !== '#') return mat3(skinOf(p, { kind: 'sheet' }));
+  if (!R3) return flat3(p);
+  const c = ceilLook3.c || (ceilLook3.c = {});
+  return c[p] || (c[p] = new THREE.MeshStandardMaterial({ color: new THREE.Color(p), emissive: new THREE.Color(p).multiplyScalar(0.36), roughness: 0.95, envMapIntensity: 0.3 }));
 }
 function floorLook3(def, geo, w, h) {
   const p = texPickOf('floor'); if (!p) return def;
@@ -89,6 +137,7 @@ function texBase(k, c) {
   if (k === 'molding') { const m = S.moldings.find(x => x.id === roomSet('molding')) || S.moldings[0]; return moldFinishLook(m && mat(m.mat), c); }
   if (k === 'pulls') { const t = doorTpl(cabSet(c, 'doorT')), h = hw(t.pull); return { id: '_pull', color: (h && h.finish) || '#333333' }; }
   if (k === 'walls') return { id: '_wall', name: 'Wall', color: cssVar('--wall3d') || '#ece9e2' };
+  if (k === 'ceiling') return { id: '_ceil', name: 'Ceiling', color: '#f2f0ec' };
   if (k === 'floor') return { id: '_floor', name: 'Wood floor', color: '#b98d5f', procedural: 'oak' };
   return null;
 }
@@ -106,7 +155,7 @@ function texAbove(k, lv) {
   if (lv.s === 'room') return (S.job.tex && S.job.tex[k]) || '';
   return '';
 }
-const texName = p => !p ? '' : p[0] === '#' ? ((TEX_PAINTS.find(([c]) => c === p.toLowerCase()) || [])[1] || p.toUpperCase()) : (skinOf(p) || {}).name || 'Texture';
+const texName = p => !p ? '' : p[0] === '#' ? (([...TEX_PAINTS, ...WALL_PAINTS].find(([c]) => c === p.toLowerCase()) || [])[1] || p.toUpperCase()) : (skinOf(p) || {}).name || 'Texture';
 function texDock() {
   const lv = texLevel(), own = (lv.obj && lv.obj.tex) || {}, surfs = lv.s === 'cab' ? TEX_CAB : TEX_SURF.map(([k]) => k);
   const label = k => k === 'all' ? 'All fronts' : (TEX_SURF.find(([x]) => x === k) || [])[1];
@@ -130,8 +179,8 @@ function texDock() {
   return `<div class="tx-dock">
     <div class="tx-picks"><div class="seg" role="group" aria-label="Where the textures apply">${scope.map(([s, l]) => `<button data-act="tx-scope" data-id="${s}" aria-pressed="${lv.s === s}">${l}</button>`).join('')}</div>
       <b class="tx-for">${esc(label(k))}</b>
-      <button class="btn sm${cur ? '' : ' on'}" data-act="tx-clear" aria-pressed="${!cur}">${lv.s === 'job' ? 'Material' : 'Same as ' + (lv.s === 'cab' ? 'room' : 'job')}</button>
-      <div class="swatches">${TEX_PAINTS.map(([p, n]) => chip(p, n)).join('')}<label class="accsw custom" title="Any color"><input type="color" id="tx-color" value="${esc(cur && cur[0] === '#' ? cur : '#8f9f86')}" aria-label="Any color"></label></div>
+      <button class="btn sm${cur ? '' : ' on'}" data-act="tx-clear" aria-pressed="${!cur}">${lv.s === 'job' ? (isRoomSurf(k) || k === 'floor' ? 'Default' : 'Material') : 'Same as ' + (lv.s === 'cab' ? 'room' : 'job')}</button>
+      <div class="swatches">${paintsFor(k).map(([p, n]) => chip(p, n)).join('')}<label class="accsw custom" title="Any color"><input type="color" id="tx-color" value="${esc(cur && cur[0] === '#' ? cur : '#8f9f86')}" aria-label="Any color"></label></div>
       ${k === 'pulls' ? '' : `<button class="btn sm" data-act="tx-lib">${icon('palette')}Wood and photos</button>
       <label class="tx-like"><span>Like</span><select id="tx-mat" aria-label="Look like a material"><option value="">a material…</option>${mats.map(o => `<option value="${esc(o.v)}"${cur === 'm:' + o.v ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}</select></label>`}
       ${used.length ? `<span class="tx-used"><span class="tx-src">In this job</span>${used.map(p => chip(p)).join('')}</span>` : ''}
@@ -196,6 +245,8 @@ const TXQ_KEYS = {
   pull: [['pulls'], 'Pulls'],
   countertop: [['tops'], 'Countertops'],
   molding: [['molding'], 'Molding'],
+  wallPaint: [['walls'], 'Wall paint'],
+  ceilPaint: [['ceiling'], 'Ceiling paint'],
 };
 // Where a tile's look is saved: the room it is for, or the whole job.
 const txqObj = rid => (rid && roomById(rid)) || S.job;
@@ -226,7 +277,7 @@ function txqBtn(k, rid) {
   if (!TXQ_KEYS[k] && k !== 'mrun' && k !== 'shape') return '';
   const q = txqPick(k, rid), id = k + ':' + (rid || ''), on = ui.txq && ui.txq.id === id;
   const sw = q.p && q.p !== 'mixed' ? `<span class="sw" style="background:${esc(pickColor(q.p))}${isLibTex(q.p) || q.p.startsWith('m:') ? `;background-image:url('${esc(texURL(skinOf(q.p)) || '')}');background-size:cover` : ''}"></span>` : '<span class="sw none"></span>';
-  const txt = q.p === 'mixed' ? 'Mixed' : q.p ? texName(q.p) + (q.from === 'job' ? ' (job)' : q.from === 'room' ? ' (room)' : '') : q.from === 'finish' ? 'Finish' : 'Material';
+  const txt = q.p === 'mixed' ? 'Mixed' : q.p ? texName(q.p) + (q.from === 'job' ? ' (job)' : q.from === 'room' ? ' (room)' : '') : q.from === 'finish' ? 'Finish' : k === 'wallPaint' || k === 'ceilPaint' ? 'Default' : 'Material';
   return `<button class="tt-look${q.from === 'own' ? ' set' : ''}" data-act="tx-q" data-id="${esc(id)}" aria-expanded="${on}" aria-haspopup="dialog" title="Change the look only">${sw}<span class="tt-lk">Look</span><span class="tt-lv">${esc(txt)}</span></button>`;
 }
 function renderTxq() {
@@ -238,14 +289,14 @@ function renderTxq() {
   if (k === 'shape' && !shp) { ui.txq = null; el.remove(); return; }
   const title = shp ? 'Panel: ' + (shp.name || 'Shape') : run ? 'Molding: ' + mrunName(run) : TXQ_KEYS[k][1];
   const jobHas = keys => room && !run && !shp && keys.some(x => (S.job.tex || {})[x]);
-  const clear = shp ? (shp.mat === SHAPE_FIN ? 'Same as finished ends' : 'Material') : run ? (texPickOf('molding') ? 'Same as the room' : 'Same as finish') : jobHas(TXQ_KEYS[k][0]) ? 'Same as job' : k === 'molding' ? 'Same as finish' : 'Material';
+  const clear = shp ? (shp.mat === SHAPE_FIN ? 'Same as finished ends' : 'Material') : run ? (texPickOf('molding') ? 'Same as the room' : 'Same as finish') : jobHas(TXQ_KEYS[k][0]) ? 'Same as job' : k === 'molding' ? 'Same as finish' : k === 'wallPaint' || k === 'ceilPaint' ? 'Default' : 'Material';
   const chip = (p, ttl) => `<button class="accsw${own === p ? ' on' : ''}" data-act="tx-qset" data-id="${esc(p)}" title="${esc(ttl || texName(p))}" aria-label="${esc(ttl || texName(p))}" style="${p[0] === '#' ? `--c:${esc(p)}` : `--c:${esc(pickColor(p))};background-image:url('${esc(texURL(skinOf(p)) || '')}');background-size:cover`}"></button>`;
-  const used = [...new Set([S.job, ...S.rooms, ...allCabs()].flatMap(o => Object.values((o && o.tex) || {})).filter(Boolean))].filter(p => !TEX_PAINTS.some(([c]) => c === p)).slice(0, 10);
+  const used = [...new Set([S.job, ...S.rooms, ...allCabs()].flatMap(o => Object.values((o && o.tex) || {})).filter(Boolean))].filter(p => ![...TEX_PAINTS, ...WALL_PAINTS].some(([c]) => c === p)).slice(0, 10);
   const mats = azOpts(S.materials, m => !m.dynamic);
   el.setAttribute('aria-label', 'Look of ' + title);
   el.innerHTML = `<div class="txq-h"><b>${esc(title)}</b><span class="muted">${room ? esc(room.name) : 'Whole job'}</span><button class="btn sm iconbtn" data-act="tx-qclose" aria-label="Close">${icon('close')}</button></div>
     <button class="btn sm${own ? '' : ' on'}" data-act="tx-qset" data-id="" aria-pressed="${!own}">${esc(clear)}</button>
-    <div class="swatches">${TEX_PAINTS.map(([p, n]) => chip(p, n)).join('')}<label class="accsw custom" title="Any color"><input type="color" id="tx-qcolor" value="${esc(own && own[0] === '#' ? own : '#8f9f86')}" aria-label="Any color"></label></div>
+    <div class="swatches">${(TXQ_KEYS[k] ? paintsFor(TXQ_KEYS[k][0][0]) : TEX_PAINTS).map(([p, n]) => chip(p, n)).join('')}<label class="accsw custom" title="Any color"><input type="color" id="tx-qcolor" value="${esc(own && own[0] === '#' ? own : '#8f9f86')}" aria-label="Any color"></label></div>
     ${used.length ? `<div class="txq-used"><span class="muted">In this job</span>${used.map(p => chip(p)).join('')}</div>` : ''}
     ${k === 'pull' ? '' : `<div class="txq-row"><button class="btn sm" data-act="tx-qlib">${icon('palette')}Wood and photos</button>
     <select id="tx-qmat" aria-label="Look like a material"><option value="">Like a material…</option>${mats.map(o => `<option value="${esc(o.v)}"${own === 'm:' + o.v ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}</select></div>`}

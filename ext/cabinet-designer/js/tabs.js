@@ -1425,7 +1425,7 @@ function cncCard() {
   const where = ui.cutRoom === 'all' ? 'the whole job' : esc((roomById(ui.cutRoom) || curRoom()).name);
   return `<div class="psec box cnccard">${secHead('download', 'Send to the CNC', 'blue')}<div class="pshead"><span class="cnc-count">${n} part${n === 1 ? '' : 's'} from ${ui.cutPick ? 'what is picked in ' : ''}${where}</span><span class="note">In millimeters, for CNC Cutlist</span></div>
     <div class="row-actions">${inHub() ? `<button class="btn primary" data-act="cnc-save">${icon('check')}Save CNC parts to Files</button>` : ''}<button class="btn${inHub() ? '' : ' primary'}" data-act="cnc-download">Download parts file</button><button class="btn" data-act="tab" data-id="export">Other exports</button></div>
-    ${cncSkippedNote()}</div>`;
+    ${typeof overlapsNote === 'function' ? overlapsNote() : ''}${cncSkippedNote()}</div>`;
 }
 function cncSkippedNote() {
   const { skipped } = cncPartFile(true);

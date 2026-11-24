@@ -402,7 +402,29 @@ function walkTap(v, cx, cy) {
   rc.far = 144;
   const hit = rc.intersectObjects(v.root.children, true).find(h => h.object.isMesh && !h.object.isSprite && h.object.visible && walkSolid(h.object));
   const fx = hit && hit.object.userData.fixtId && fixtById(hit.object.userData.fixtId);
-  if (fx && fx.kind === 'door' && fx.swing && fx.swing !== 'none') { doorToggle(fx.id); return; }
+  // 0.62.4 (Ayden 2026-11-24: "when walking and opening cabinets it's hard to select the pocket door"): a tap anywhere on
+  // a cabinet's closed front face counts, open or shut, even where the door has slid away into its pocket or something
+  // in front of it (a trim, a filler edge) took the ray first.
+  const fh = walkFrontHit(v, rc, hit ? hit.distance + 2 : 144);
+  if (fx && fx.kind === 'door' && fx.swing && fx.swing !== 'none' && !(fh && fh.d < hit.distance - 0.5)) { doorToggle(fx.id); return; }
+  if (fh) { setOpen([fh.c.id]); walkLoop(); return; }
   const id = hit && hit.object.userData.cabId, c = id && cab(id);
   if (c && openable(c)) { setOpen([c.id]); walkLoop(); }
+}
+// The nearest openable cabinet whose closed front face the ray crosses within maxD: { c, d } or null.
+function walkFrontHit(v, rc, maxD) {
+  if (typeof frontFrame !== 'function' || !v.root) return null;
+  let best = null; const T = new THREE.Vector3();
+  const W = (p, y) => v.root.localToWorld(new THREE.Vector3(p.x, y, p.y));
+  S.cabinets.forEach(c => {
+    if (!c.wall || !openable(c)) return;
+    const fr = frontFrame(c); if (!fr) return;
+    const a = fr.P(0, 0), b = fr.P(c.w, 0), y0 = c.elev || 0, y1 = y0 + c.h;
+    const A = W(a, y0), B = W(b, y0), C = W(b, y1), D = W(a, y1);
+    const p = rc.ray.intersectTriangle(A, B, C, false, T) || rc.ray.intersectTriangle(A, C, D, false, T);
+    if (!p) return;
+    const d = rc.ray.origin.distanceTo(p);
+    if (d <= maxD && d <= (rc.far || 144) && (!best || d < best.d)) best = { c, d };
+  });
+  return best;
 }

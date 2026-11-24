@@ -12,7 +12,7 @@ function blankDesign(cat = 'Base') {
 }
 // What a product carries besides its box, rows and templates: a Mozaik product's key, its folder, and the parts and
 // operations changed by hand. They go into the Designer and back to the library untouched.
-const DES_KEEP = ['pocket', 'moz', 'mozPrm', 'group', 'folder', 'desc', 'vars', 'partEdits', 'addParts', 'shape'];
+const DES_KEEP = ['pocket', 'falseFront', 'moz', 'mozPrm', 'group', 'folder', 'desc', 'vars', 'partEdits', 'addParts', 'shape'];
 const desKeep = (o, copy) => DES_KEEP.reduce((r, k) => (o[k] !== undefined && (r[k] = copy ? clone(o[k]) : o[k]), r), {});
 function designFromLib(l) {
   return { ...blankDesign(l.cat), sourceLib: l.id, name: l.name, cat: l.cat, w: l.w, h: l.h, d: l.d, elev: l.elev, rows: clone(l.rows), params: clone(l.params || {}),

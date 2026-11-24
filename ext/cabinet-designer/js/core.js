@@ -469,7 +469,7 @@ function newCab(S, lib, wallId, side, off) {
     slide: lib.slide || '', hinge: lib.hinge || '', pull: lib.pull || '', panelStyle: lib.panelStyle || '', partT: lib.partT || '',
     panelL: lib.appliedL ? 'on' : '', panelR: lib.appliedR ? 'on' : '', molding: null,
     // Products that bring their own finish, joints, filler rule or no countertop (the dollhouse set) keep them.
-    ...['finish', 'jointU', 'jointF', 'fillL', 'fillR', 'noTop', 'finished', 'finInt', 'wrap', 'appl', 'made', 'pocket'].reduce((o, k) => (lib[k] && (o[k] = lib[k]), o), {}),
+    ...['finish', 'jointU', 'jointF', 'fillL', 'fillR', 'noTop', 'finished', 'finInt', 'wrap', 'appl', 'made', 'pocket', 'falseFront'].reduce((o, k) => (lib[k] && (o[k] = lib[k]), o), {}),
     construction: clone(lib.construction || defaultConstruction(lib.cat)),
     rows: clone(lib.rows), libParams: { ...(lib.params || {}) }, params: {}, custom: clone(lib.custom || []), vars: clone(lib.vars || []), inserts: clone(lib.inserts || []),
     ...(lib.corner ? { corner: clone(lib.corner) } : {}), ...(lib.moz ? { moz: lib.moz } : {}),

@@ -141,7 +141,7 @@ function showMultiPrint() {
     ${pr.items.includes('scope') ? `<label class="f mp-scopef"><span>Scope of work notes (printed under the list; saved with the job)</span><textarea class="mp-scope" rows="2" placeholder="Anything else included or not included, e.g. Removal of old cabinets by others. Plumbing and electrical by others.">${esc(S.job.scope || '')}</textarea></label>` : ''}
     ${typeof PRINT_LAYOUTS !== 'undefined' ? `<div class="mp-lay"><label class="f"><span>Cover</span><select class="mp-lpick" data-k="cover" aria-label="Cover layout">${PRINT_LAYOUTS.filter(l => l.kind === 'cover').map(l => `<option value="${l.id}"${plFor(pr, 'cover') === l ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>
       <label class="f"><span>Title block</span><select class="mp-lpick" data-k="block" aria-label="Title block layout"><option value="none"${pr.block === 'none' ? ' selected' : ''}>Plain strip</option>${PRINT_LAYOUTS.filter(l => l.kind === 'block').map(l => `<option value="${l.id}"${plFor(pr, 'block') === l ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>
-      <button class="btn sm" data-act="pl-open" data-id="${(plFor(pr, 'cover') || {}).id || ''}">${icon('edit')}Edit layouts</button></div>` : ''}</div>
+      <button class="btn sm" data-act="pl-open" data-id="${(plFor(pr, 'cover') || {}).id || ''}">${icon('edit')}Edit layouts</button></div>` : ''}${typeof overlapsNote === 'function' ? overlapsNote() : ''}</div>
     <style id="mp-pagecss">${mpPageCSS(pg)}</style>
     <div class="mp-pages${pr.color ? '' : ' mp-line'}${pg.port ? ' mp-port' : ''}">${mpPages(pr)}</div>`;
   el.hidden = false;

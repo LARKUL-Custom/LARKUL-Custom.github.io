@@ -65,7 +65,7 @@ function itemBar(c) {
     <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}${ceilCell()}${sz('Depth', 'd')}${sz('Outset', 'outset')}${finEndsCell(c)}</div>
     <div class="ib-togs">${tog('autoFillers', 'Fillers')}${tog('autoPanels', 'Panels')}${tog('fridgePanels', 'Fridge panels')}${tog('autoLights', 'Ceiling lights')}</div>
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
-      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side (H)">${icon('flip')}Hinge</button>` : ''}${cornerBtn(c)}${finIntBtn(c)}${typeof pocketBtn === 'function' ? pocketBtn(c) : ''}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button><button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>`
+      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${cornerBtn(c)}${finIntBtn(c)}${falseBtn(c)}${typeof pocketBtn === 'function' ? pocketBtn(c) : ''}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side, so it swings the other way (H)">${icon('door')}Rehinge</button>` : ''}<button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>${c.wall && conflicts(c) ? `<div class="ib-ovl" title="It runs into a wall or another piece. It shows red in the plan and is listed on Print, the CNC card and the quote until it's fixed.">${icon('hint')}Overlaps. Fix before sending.</div>` : ''}`
       : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
   </div>`;
 }
@@ -106,7 +106,7 @@ function itemBarX(x) {
     <div class="ib-size">${sizes}</div>
     <div class="ib-acts"><div class="ib-name"><span class="chip shape">${esc(kind)}</span> <b>${esc(name)}</b></div>
       ${fx ? '' : `<button class="ib-edit" data-act="shape-edit" data-id="${id}" title="Change its outline in the shape editor">${icon('edit')}<span>Edit shape</span></button>`}
-      <div class="ib-small">${fx ? (fixtSink(o) ? sb('fixt-center', 'ends', 'Center', 'Center on the cabinet under it') : sb('fixt-flip', 'flip', o.kind === 'door' ? 'Swing' : 'Flip', 'Flip it to the other side')) + (PANEL_KINDS.includes(o.kind) ? sb('fixt-panels', 'door', o.panels ? 'Panels on' : 'Panels', 'Panel fronts in the room\'s door style, cut from the Finish', o.panels ? 'on' : '') : '') + sb('fixt-dup', 'copy', 'Copy', 'Duplicate') + sb('fixt-del', 'trash', 'Delete', 'Delete')
+      <div class="ib-small">${fx ? (fixtSink(o) ? sb('fixt-center', 'ends', 'Center', 'Center on the cabinet under it') : sb('fixt-flip', 'flip', o.kind === 'door' ? 'Swing' : 'Flip', 'Flip it to the other side')) + (PANEL_KINDS.includes(o.kind) ? sb('fixt-panels', 'door', o.panels ? 'Panels on' : 'Panels', 'Panel fronts in the room\'s door style, cut from the Finish', o.panels ? 'on' : '') : '') + (o.panels && rehingeable(fixtPanelCab(o)) ? `<button data-act="cab-rehinge" data-fixt="${id}" title="Swap its panel door's hinge to the other side">${icon('door')}Rehinge</button>` : '') + sb('fixt-dup', 'copy', 'Copy', 'Duplicate') + sb('fixt-del', 'trash', 'Delete', 'Delete')
         : sb('shape-flip', 'flip', 'Flip', 'Flip it to the other side') + sb('shape-dup', 'copy', 'Copy', 'Duplicate') + sb('shape-del', 'trash', 'Delete', 'Delete')}</div></div>
   </div>`;
 }
@@ -140,7 +140,7 @@ document.addEventListener('change', e => {
   const el = e.target; if (!el.matches || !el.matches('.ib-slide[data-slide]')) return;
   const c = cab(el.dataset.slide); if (!c) return;
   const v = +el.value; if (slideWas && slideWas.id === c.id) c.off = slideWas.off; slideWas = null;
-  mutate(() => { const was = c.off; setFromEnd(c, 'L', v); if (!settle(c)) { c.off = was; flash('There is no room for it there.'); } });
+  mutate(() => { setFromEnd(c, 'L', v); const want = c.off; if (!settle(c)) { c.off = want; const n = overlapSay(c); if (n) flash(n); } });
 });
 // The job name box wraps over two lines; Enter saves it instead of starting a new line.
 document.addEventListener('keydown', e => { if (e.target.id === 'jobname' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
@@ -402,18 +402,41 @@ document.addEventListener('click', e => {
 }, true);
 
 // Rehinge: single doors swap their hinge side. Pairs of doors have nothing to swap.
+// 0.62.4: False front (Ayden 2026-11-24, the cooktop base and sink bases): every front stays as drawn but is glued on.
+function falseBtn(c) {
+  if (!c || c.moz || c.made || !(c.rows || []).some(r => r.type === 'door' || r.type === 'drawer')) return '';
+  const on = c.falseFront === 'on';
+  return `<button data-act="cab-false" data-id="${c.id}" aria-pressed="${on}" title="${on ? 'False fronts are on: the fronts look the same but are glued on, with no hinges, slides, drawer boxes, shelves or inserts. Click to turn them off.' : 'Make every front a false front: it looks the same, but hinges, slides, drawer boxes, shelves and inserts come out of the cut list, hardware and price.'}">${icon('box')}False front</button>`;
+}
 function hingeRows(c) { return (c && c.rows || []).filter(r => r.type === 'door' && (r.count | 0) <= 1); }
-function rehingeable(c) { return hingeRows(c).length > 0; }
-function hingeNow(c) { const r = hingeRows(c)[0]; return r && (r.hinge === 'L' || r.hinge === 'R') ? r.hinge : effParams(c).hingeSide; }
+// 0.62.4 (Ayden 2026-11-24: "a rehinge option so it can swap what side the door swings from"): appliance panel fronts
+// (fridges) rehinge too: every single door on them (not one of a pair). Their pull moves to the other edge.
+function apSingles(c) {
+  if (!c || c.made !== 'apfront' || typeof apFronts !== 'function') return [];
+  const fr = apFronts(c);
+  return fr.map((q, i) => ({ q, i })).filter(({ q }) => q.type !== 'drawer' && q.h >= 20 && !fr.some(o => o !== q && Math.abs(o.z - q.z) < 0.5 && Math.abs(o.h - q.h) < 0.5));
+}
+function rehingeable(c) { return hingeRows(c).length > 0 || apSingles(c).length > 0; }
+function hingeNow(c) {
+  const a = apSingles(c)[0]; if (a) return a.q.hinge === 'R' ? 'R' : 'L';
+  const r = hingeRows(c)[0]; return r && (r.hinge === 'L' || r.hinge === 'R') ? r.hinge : effParams(c).hingeSide;
+}
 function rehinge(c) {
-  if (!rehingeable(c)) { flash('This cabinet has no single doors to rehinge.'); return; }
+  if (!rehingeable(c)) { flash('This has no single doors to rehinge.'); return; }
   const to = hingeNow(c) === 'L' ? 'R' : 'L';
-  mutate(() => hingeRows(c).forEach(r => { r.hinge = to; }));
+  mutate(() => {
+    hingeRows(c).forEach(r => { r.hinge = to; });
+    const sg = apSingles(c); if (!sg.length) return;
+    c.mp = c.mp || {};
+    if (!(c.mp.fr || []).length) c.mp.hinge = to; else sg.forEach(({ i }) => { if (c.mp.fr[i]) c.mp.fr[i].hinge = to; });
+  });
   flash(`Hinged on the ${to === 'L' ? 'left' : 'right'}`);
 }
+// A fridge's panel front, for Rehinge on the fridge itself.
+const fixtPanelCab = f => f && S.cabinets.find(k => k.made === 'apfront' && k.fixt === f.id);
 document.addEventListener('click', e => {
   const b = e.target.closest && e.target.closest('[data-act="cab-rehinge"]'); if (!b) return;
-  e.stopPropagation(); rehinge(cab(b.dataset.id));
+  e.stopPropagation(); rehinge(b.dataset.fixt ? fixtPanelCab(fixtById(b.dataset.fixt)) : cab(b.dataset.id));
 }, true);
 document.addEventListener('keydown', e => {
   if ((e.key !== 'h' && e.key !== 'H') || e.ctrlKey || e.metaKey || e.altKey || !ui.sel || ui.sel.type !== 'cab') return;
