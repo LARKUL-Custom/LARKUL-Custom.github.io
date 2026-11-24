@@ -944,8 +944,10 @@ function cabPic3D(c, onLate) {
 // way the room draws it, on a stand-in wall that is swapped in only while the picture is taken.
 function fixtPeek3D(d, onLate) {
   if (!has3D() || !d) return null;
-  if (d.model) modelLoad(d.model);
-  const key = 'fixt|' + d.id + '|' + document.documentElement.dataset.theme + (d.model ? (modelReady(d.model) ? '|m' : '|w') : '');
+  // 0.62.0: built-in presets draw with their built-in model (and a sink with its faucet).
+  const mk = d.model || (typeof fixtStdOf === 'function' && fixtStdOf(d.id)), fk = d.kind === 'sink' && !d.cooktop && typeof fixtFaucet === 'function' ? 'std:' + fixtFaucet(d) : null;
+  if (mk) modelLoad(mk); if (fk && fk !== 'std:none') modelLoad(fk);
+  const key = 'fixt|' + d.id + '|' + document.documentElement.dataset.theme + (mk ? (modelReady(mk) ? '|m' : '|w') : '') + (fk ? (modelReady(fk) ? '|f' : '|g') : '');
   if (peekPics[key]) return peekPics[key];
   if (!libPeek3D({ id: '_warm', w: 1, h: 1, d: 1 }) && !peekViewer) return null;
   const v = peekViewer; if (!v || !v.ok) return null;

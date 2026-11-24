@@ -44,26 +44,82 @@ function modelTreeItems(lib) {
 }
 const modelGroups = lib => [...new Set(modelTreeItems(lib).map(x => x.g))].map(g => [g, g.slice(4)]);
 
+/* ---------- Built-in models (0.62.0) ---------- */
+// Ayden 2026-11-23: "I still want better appliances overall". The appliance, sink, faucet and hood models from his
+// SketchUp export ship with Cabinet Designer in models/ (packed small by tools/std-models.py), so every computer draws
+// them with nothing to import. Keys are 'std:<model name>'. A job's imported model that isn't in this browser falls
+// back to the built-in one of the same name.
+const STD_MODELS = ['Standard Fridge (L)', 'French Door Fridge', 'French Door Fridge w Ice', 'Side by Side Fridge', 'Bottom Drawer Fridge (L)',
+  'Pro French Door', 'Pro Column (L)', 'Pro Side By Side', 'Undercounter Glass Door (L)', 'Wine Cooler (L)', 'Dishwasher', 'Pro Dishwasher',
+  'Slide In Range', 'Floor Mount Range', 'Pro Range 30', 'Pro Range 36', 'Pro Range 48', 'Pro Range 60', 'Cooktop', 'Gas Range',
+  'Pro Rangetop 30', 'Pro Rangetop 36', 'Pro Rangetop 48', 'Microwave', 'Over the Range Microwave', 'Front Load Washer', 'Front Load Dryer',
+  'Top Load Washer', 'Top Load Dryer', 'Washer_Dryer_Combo', 'Undermount Single Sink', 'Undermount Double Sink', 'Undermount Triple Sink',
+  'Undermount Zero Radius Single', 'Undermount Zero Radius Double', 'Single Drop In Sink', 'Double Drop In Sink', 'Farmhouse', 'Apron Stainless',
+  'Undermount Bar Sink', 'Drop In Vanity Oval', 'Undermount Vanity Oval', 'Faucet_Kitchen 1', 'Faucet_Kitchen 4', 'Faucet_Kitchen 5',
+  'Faucet_Kitchen 7', 'Faucet_Pot Filler 1', 'Faucet_Vanity 1', 'Faucet_Vanity 5', 'Chimney Hood', 'Glass Hood', 'Contemorary Hood',
+  'Metal Hood_Taper 3s', 'Professional Hood w Full Extention', 'Standard Hood'];
+const STD_BY_LOW = new Map(STD_MODELS.map(n => [n.toLowerCase(), n]));
+const stdSlug = n => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+// The built-in model for an imported model key ("products/standard fridge (l)"), by its file name.
+const stdFor = key => { const n = STD_BY_LOW.get(String(key || '').split('/').pop().toLowerCase()); return n ? 'std:' + n : null; };
+// Reads a packed model (format in tools/std-models.py) into the shape an imported model has.
+function stdDecode(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  if (String.fromCharCode(u8[0], u8[1], u8[2], u8[3]) !== 'CDB1') throw new Error('not a model');
+  const hl = dv.getUint32(4, true), h = JSON.parse(new TextDecoder().decode(u8.subarray(8, 8 + hl)).replace(/[\0 ]+$/, ''));
+  const [x0, y0, z0, x1, y1, z1] = h.box, sc = [(x1 - x0) / 65535, (y1 - y0) / 65535, (z1 - z0) / 65535];
+  const pts = (off, n) => { const q = new Uint16Array(buf, off, n * 3), out = new Float32Array(n * 3); for (let k = 0; k < n * 3; k += 3) { out[k] = x0 + q[k] * sc[0]; out[k + 1] = y0 + q[k + 1] * sc[1]; out[k + 2] = z0 + q[k + 2] * sc[2]; } return out; };
+  return { box: h.box, e: h.e ? pts(h.e[0], h.e[1]) : null, std: true, name: h.name, mats: h.mats.map(m => ({
+    c: m.c, o: +m.o || 1, p: pts(m.p, m.n), i: Uint32Array.from(m.i32 ? new Uint32Array(buf, m.i, m.ni) : new Uint16Array(buf, m.i, m.ni)),
+    ...(m.tex && m.u != null ? { u: new Float32Array(buf.slice(m.u, m.u + m.n * 8)), tex: new Blob([u8.subarray(m.tex[0], m.tex[0] + m.tex[1])], { type: m.tex[2] }) } : {}),
+  })) };
+}
+function stdFetch(key) {
+  const n = key.slice(4);
+  if (!STD_BY_LOW.has(n.toLowerCase())) return Promise.resolve(null);
+  return fetch('models/' + stdSlug(n) + '.cdb').then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? stdDecode(b) : null);
+}
+
 /* ---------- 3D ---------- */
-const modelReady = key => !!(modelGeo[key] && !modelGeo[key].then);
-// Starts reading a model from storage; redraws the room and the preview once it's in.
+const modelReady = key => !!(modelGeo[key] && !modelGeo[key].then && !modelGeo[key].missing);
+// Starts reading a model (from this browser's storage, or a built-in one); redraws the room and the preview once it's in.
+// An imported model missing here draws with the built-in model of the same name, when there is one.
 function modelLoad(key) {
   if (!key || modelGeo[key]) return;
-  modelGeo[key] = mdb('geo', 'readonly', s => s.get(key)).then(g => {
+  const got = g => {
     modelGeo[key] = g || { missing: true };
     if (g) {
       if (typeof roomViewer !== 'undefined' && roomViewer && ui.viewMode === '3d') buildRoom3D();
+      for (const k in peekPics) if (k.startsWith('fixt|')) delete peekPics[k];
       const el = document.getElementById('libpeek'); if (el && ui.libPeek) el.innerHTML = libPeekHTML(ui.libPeek);
     }
-  }).catch(() => { modelGeo[key] = { missing: true }; });
+  };
+  if (key.startsWith('std:')) { modelGeo[key] = stdFetch(key).then(got).catch(() => { modelGeo[key] = { missing: true }; }); return; }
+  modelGeo[key] = mdb('geo', 'readonly', s => s.get(key)).catch(() => null)
+    .then(g => g || (stdFor(key) ? stdFetch(stdFor(key)) : null)).then(got).catch(() => { modelGeo[key] = { missing: true }; });
 }
+// The model's own size in inches [w, d, h] once loaded (SketchUp's x, y, z), else null.
+const modelSize = key => { const g = modelGeo[key]; if (!g || g.then || g.missing) return null; const b = g.box; return [b[3] - b[0], b[4] - b[1], b[5] - b[2]]; };
 const mdlMats = {};
-function mdlMat(c, o, tex) {
-  const k = c + '|' + o + '|' + (tex ? tex.uuid : '');
+function mdlMat(c, o, tex, steel) {
+  const k = c + '|' + o + '|' + (tex ? tex.uuid : '') + (steel ? '|s' : '');
   if (mdlMats[k]) return mdlMats[k];
-  // A textured material's picture already carries SketchUp's colour, so it isn't tinted again.
-  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(tex ? '#ffffff' : c), map: tex || null, roughness: 0.6, metalness: 0.05, side: THREE.DoubleSide, transparent: o < 1, opacity: o, depthWrite: !(o < 1) });
+  // A textured material's picture already carries SketchUp's colour, so it isn't tinted again (steel is toned down a little
+  // so it doesn't read as white). Stainless steel
+  // (0.62.0) is a little metallic, so Realistic shows the room in it.
+  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(steel ? (tex ? '#a4a8ad' : '#aeb2b7') : tex ? '#ffffff' : c), map: tex || null, roughness: steel ? 0.4 : 0.6, metalness: steel ? 0.5 : 0.05, envMapIntensity: steel ? 0.35 : 1, side: THREE.DoubleSide, transparent: o < 1, opacity: o, depthWrite: !(o < 1) });
   return mdlMats[k] = m;
+}
+// Which parts of a built-in model are stainless steel: SketchUp's brushed-metal pictures (light, colourless), and
+// the plain faces (SketchUp's default material, which the fridge doors, range bodies, hoods and faucets are drawn in)
+// of everything but the laundry and the white fireclay and vanity sinks.
+const STEEL_NAMES = /^(?!.*(washer|dryer|farmhouse|vanity)).*/i;
+function mdlSteel(g, m) {
+  if (!g.std) return false;
+  const v = parseInt(String(m.c).slice(1), 16), r = v >> 16 & 255, gg = v >> 8 & 255, b = v & 255;
+  const grey = Math.max(r, gg, b) - Math.min(r, gg, b) < 12;
+  if (m.tex) return grey && r >= 0xa0 && r <= 0xe0;
+  return grey && m.c.toLowerCase() === '#e8e8e8' && STEEL_NAMES.test(g.name || '');
 }
 // Pictures for textured materials, read once from storage and shared.
 const mdlTex = new Map();
@@ -131,7 +187,7 @@ function modelTemplate(key) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nm, 3));
     if (uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    grp.add(new THREE.Mesh(geo, mdlMat(m.c, m.o, uv ? mdlTexture(m.tex) : null))); tris += idx.length / 3;
+    grp.add(new THREE.Mesh(geo, mdlMat(m.c, m.o, uv ? mdlTexture(m.tex) : null, mdlSteel(g, m)))); tris += idx.length / 3;
   });
   // SketchUp's own edge lines (the hard ones), like the rest of the drawing.
   if (g.e && g.e.length) {

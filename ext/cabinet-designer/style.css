@@ -1917,6 +1917,8 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 /* ---------- Appliances and fixtures (0.42.0) ---------- */
 .fixt{fill:var(--sunk);stroke:var(--line-strong);stroke-width:1.4}
 .fixt.fx-washer,.fixt.fx-dryer{fill:var(--panel)}
+/* 0.62.0: hoods and microwaves hang over the range; the plan shows them dashed so the range stays readable. */
+#plan .fixt.fx-hood,#plan .fixt.fx-mw{fill:transparent;pointer-events:all;stroke-dasharray:6 3;stroke-width:1.1}
 .fixt.fx-door,.fixt.fx-window,.fixt.fx-opening{fill:var(--panel);stroke:var(--ink);stroke-width:1.2}
 .fixt.sel{stroke:var(--sel);stroke-width:2.6}
 .fixt.ghost{fill:var(--accent);fill-opacity:.25;stroke:var(--accent);stroke-dasharray:4 3}

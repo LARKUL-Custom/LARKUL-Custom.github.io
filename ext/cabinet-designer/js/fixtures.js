@@ -16,6 +16,9 @@ const FIXT_KINDS = [
   { k: 'range', name: 'Range', ab: 'RANGE' },
   { k: 'washer', name: 'Washer', ab: 'W' },
   { k: 'dryer', name: 'Dryer', ab: 'D' },
+  // 0.62.0: on the wall above the range, off the floor (they keep wall cabinets out of their space, not base cabinets).
+  { k: 'hood', name: 'Range hood', ab: 'HOOD', wallHung: true },
+  { k: 'mw', name: 'Microwave', ab: 'MW', wallHung: true },
   // An imported model that is only there to look at (decor, lights, art): it keeps nothing out of its space.
   { k: 'model', name: '3D model', loose: true },
 ];
@@ -34,16 +37,25 @@ const FIXT_LIB = [
   FX('sk-apron', 'sink', 'Kitchen sinks', 'Stainless Apron Sink', 33, 9, 22.25, { apron: true }),
   FX('sk-bar', 'sink', 'Kitchen sinks', 'Bar Undermount', 16, 8, 16),
   FX('sk-bath', 'sink', 'Kitchen sinks', 'Bath Drop In Oval', 22, 5, 15),
+  FX('sk-vum', 'sink', 'Kitchen sinks', 'Bath Undermount Oval', 20.25, 4.75, 14),
+  FX('sk-um3070', 'sink', 'Kitchen sinks', 'Undermount Double 70-30', 33, 8, 18, { bowls: 2 }),
   // 0.61.0: cooktops sit in the countertop like a drop-in sink (a cutout in the top), with no bowl or faucet.
   FX('ck-gas30', 'sink', 'Cooktops', 'Gas Cooktop 30', 30, 4, 21, { cooktop: true, mount: 'drop' }),
   FX('ck-gas36', 'sink', 'Cooktops', 'Gas Cooktop 36', 36, 4, 21, { cooktop: true, mount: 'drop' }),
   FX('ck-ind30', 'sink', 'Cooktops', 'Induction Cooktop 30', 30, 4, 21, { cooktop: true, mount: 'drop' }),
   FX('ck-ind36', 'sink', 'Cooktops', 'Induction Cooktop 36', 36, 4, 21, { cooktop: true, mount: 'drop' }),
+  // 0.62.0: pro rangetops sit in a notch cut into the top's front edge (like an apron sink), so the knob panel shows.
+  FX('ck-rt30', 'sink', 'Cooktops', 'Pro Rangetop 30', 30, 8.75, 24, { cooktop: true, mount: 'apron' }),
+  FX('ck-rt36', 'sink', 'Cooktops', 'Pro Rangetop 36', 36, 8.75, 24, { cooktop: true, mount: 'apron' }),
+  FX('ck-rt48', 'sink', 'Cooktops', 'Pro Rangetop 48', 48, 8.75, 24, { cooktop: true, mount: 'apron' }),
   FX('dw', 'dw', 'Dishwashers', 'Dishwasher', 24, 34.5, 26),
   FX('dw-pr', 'dw', 'Dishwashers', 'Dishwasher (PR)', 24, 34.5, 24, { pr: true }),
+  FX('dw-pro', 'dw', 'Dishwashers', 'Pro Dishwasher', 24, 34.5, 25),
   FX('fr-std', 'fridge', 'Refrigerators', 'Standard Fridge', 30, 68, 33),
   FX('fr-fd', 'fridge', 'Refrigerators', 'French Door Fridge', 33, 69, 31),
   FX('fr-sbs', 'fridge', 'Refrigerators', 'Side by Side Fridge', 36, 69, 30),
+  FX('fr-bf', 'fridge', 'Refrigerators', 'Bottom Freezer Fridge', 30, 69.5, 31),
+  FX('fr-fdice', 'fridge', 'Refrigerators', 'French Door Fridge w Ice', 36, 70, 31),
   FX('fr-fd36', 'fridge', 'Refrigerators', '36in French Door (PR)', 36, 84, 24, { pr: true }),
   FX('fr-fd42', 'fridge', 'Refrigerators', '42in French Door (PR)', 42, 84, 24, { pr: true }),
   FX('fr-profd', 'fridge', 'Refrigerators', 'Pro French Door', 36, 84, 27),
@@ -59,6 +71,18 @@ const FIXT_LIB = [
   FX('rg-pro30', 'range', 'Ranges', 'Pro Range 30', 30, 38.25, 30.75),
   FX('rg-pro36', 'range', 'Ranges', 'Pro Range 36', 36, 38.25, 30.75),
   FX('rg-pro48', 'range', 'Ranges', 'Pro Range 48', 48, 38.25, 30.75),
+  FX('rg-pro60', 'range', 'Ranges', 'Pro Range 60', 60, 38.25, 30.75),
+  // 0.62.0: hoods and microwaves hang on the wall. Bottom 30" over a 36" top (a microwave 18" over it).
+  FX('hd-chim30', 'hood', 'Range hoods', 'Chimney Hood 30', 30, 30, 20, { elev: 66 }),
+  FX('hd-chim36', 'hood', 'Range hoods', 'Chimney Hood 36', 36, 30, 20, { elev: 66 }),
+  FX('hd-glass36', 'hood', 'Range hoods', 'Glass Hood 36', 36, 30, 23.5, { elev: 66 }),
+  FX('hd-cont36', 'hood', 'Range hoods', 'Contemporary Hood 36', 36, 30, 20, { elev: 66 }),
+  FX('hd-taper48', 'hood', 'Range hoods', 'Metal Hood Tapered 48', 48, 33, 22.5, { elev: 66 }),
+  FX('hd-pro48', 'hood', 'Range hoods', 'Pro Hood 48', 48, 30, 27, { elev: 66 }),
+  FX('hd-under30', 'hood', 'Range hoods', 'Under Cabinet Hood 30', 30, 8, 18, { elev: 66 }),
+  FX('hd-under36', 'hood', 'Range hoods', 'Under Cabinet Hood 36', 36, 8, 18, { elev: 66 }),
+  FX('mw-otr', 'mw', 'Microwaves', 'Over the Range Microwave', 30, 16.25, 18, { elev: 54 }),
+  FX('mw-ctr', 'model', 'Microwaves', 'Countertop Microwave', 21.25, 11.5, 17, { elev: 36 }),
   FX('ld-fw', 'washer', 'Laundry', 'Front Load Washer', 27, 38.75, 31),
   FX('ld-fd', 'dryer', 'Laundry', 'Front Load Dryer', 27, 38.75, 31),
   FX('ld-tw', 'washer', 'Laundry', 'Washer (top load)', 27, 42, 27, { topLoad: true }),
@@ -80,18 +104,44 @@ const FIXT_LIB = [
   FX('wn-sh2', 'window', 'Windows', 'Single Hung 2', 54, 48, 0, { hung: true }),
   FX('wn-pic', 'window', 'Windows', 'Picture Window', 90, 60, 0),
 ];
-const FIXT_FOLDERS = ['Kitchen sinks', 'Cooktops', 'Dishwashers', 'Refrigerators', 'Under-counter fridges', 'Ranges', 'Laundry', 'Doors', 'Doorways and openings', 'Windows'];
+const FIXT_FOLDERS = ['Kitchen sinks', 'Cooktops', 'Dishwashers', 'Refrigerators', 'Under-counter fridges', 'Ranges', 'Range hoods', 'Microwaves', 'Laundry', 'Doors', 'Doorways and openings', 'Windows'];
+// 0.62.0: the SketchUp model (built in, models/) each preset draws with. Mozaik stretches a model to the product's
+// size, and so do we.
+const STD_OF = {
+  'sk-um1': 'Undermount Single Sink', 'sk-um2': 'Undermount Double Sink', 'sk-um3': 'Undermount Triple Sink', 'sk-um3070': 'Undermount Double Sink',
+  'sk-zr1': 'Undermount Zero Radius Single', 'sk-zr2': 'Undermount Zero Radius Double', 'sk-di1': 'Single Drop In Sink', 'sk-di2': 'Double Drop In Sink',
+  'sk-farm': 'Farmhouse', 'sk-apron': 'Apron Stainless', 'sk-bar': 'Undermount Bar Sink', 'sk-bath': 'Drop In Vanity Oval', 'sk-vum': 'Undermount Vanity Oval',
+  'ck-gas30': 'Gas Range', 'ck-gas36': 'Gas Range', 'ck-ind30': 'Cooktop', 'ck-ind36': 'Cooktop', 'ck-rt30': 'Pro Rangetop 30', 'ck-rt36': 'Pro Rangetop 36', 'ck-rt48': 'Pro Rangetop 48',
+  'dw': 'Dishwasher', 'dw-pr': 'Dishwasher', 'dw-pro': 'Pro Dishwasher',
+  'fr-std': 'Standard Fridge (L)', 'fr-fd': 'French Door Fridge', 'fr-sbs': 'Side by Side Fridge', 'fr-bf': 'Bottom Drawer Fridge (L)', 'fr-fdice': 'French Door Fridge w Ice',
+  'fr-fd36': 'Pro French Door', 'fr-fd42': 'Pro Side By Side', 'fr-profd': 'Pro French Door', 'fr-col36': 'Pro Column (L)', 'fr-col30': 'Pro Column (L)', 'fr-col24': 'Pro Column (L)',
+  'uc-fr24': 'Undercounter Glass Door (L)', 'uc-fr18': 'Undercounter Glass Door (L)', 'uc-bev': 'Undercounter Glass Door (L)', 'uc-wine': 'Wine Cooler (L)',
+  'rg-slide': 'Slide In Range', 'rg-free': 'Floor Mount Range', 'rg-pro30': 'Pro Range 30', 'rg-pro36': 'Pro Range 36', 'rg-pro48': 'Pro Range 48', 'rg-pro60': 'Pro Range 60',
+  'hd-chim30': 'Chimney Hood', 'hd-chim36': 'Chimney Hood', 'hd-glass36': 'Glass Hood', 'hd-cont36': 'Contemorary Hood', 'hd-taper48': 'Metal Hood_Taper 3s',
+  'hd-pro48': 'Professional Hood w Full Extention', 'hd-under30': 'Standard Hood', 'hd-under36': 'Standard Hood',
+  'mw-otr': 'Over the Range Microwave', 'mw-ctr': 'Microwave',
+  'ld-fw': 'Front Load Washer', 'ld-fd': 'Front Load Dryer', 'ld-tw': 'Top Load Washer', 'ld-td': 'Top Load Dryer', 'ld-combo': 'Washer_Dryer_Combo',
+};
+const fixtStdOf = id => STD_OF[id] ? 'std:' + STD_OF[id] : null;
+// Faucets for sinks (0.62.0), drawn at their own size behind the bowl. A sink can pick one or none.
+const FAUCETS = [['Faucet_Kitchen 1', 'Pull-down'], ['Faucet_Kitchen 4', 'Gooseneck'], ['Faucet_Kitchen 7', 'Single handle'], ['Faucet_Kitchen 5', 'Bar'], ['Faucet_Pot Filler 1', 'Bridge'], ['Faucet_Vanity 1', 'Vanity'], ['Faucet_Vanity 5', 'Vanity widespread'], ['none', 'No faucet']];
+const fixtFaucet = f => f.faucet || (/^sk-(bath|vum)$/.test(f.lib || '') ? 'Faucet_Vanity 1' : f.lib === 'sk-bar' ? 'Faucet_Kitchen 5' : 'Faucet_Kitchen 1');
 const fixtPreset = id => FIXT_LIB.find(x => x.id === id) || (typeof modelItem === 'function' ? modelItem(id) : null);
 // A built-in appliance already placed in a job draws with the imported Mozaik model of the same name, when that
 // library is imported here. Names that differ in Mozaik's library are listed (with the folder they're in).
 const FIXT_ALIAS = { 'sk-di1': ['Single', /drop in/i], 'sk-di2': ['Double', /drop in/i], 'sk-bath': ['Drop In Oval'], 'fr-std': ['Standard Fridge (L)'], 'uc-bev': ['Beverage U-C (L)'], 'ld-tw': ['Washer', /top load/i], 'ld-td': ['Dryer', /top load/i] };
 function fixtModelOf(f) {
   if (f.model) return f;
-  const d = FIXT_LIB.find(x => x.id === f.lib); if (!d || typeof MODEL_LIB === 'undefined' || !MODEL_LIB.length) return null;
-  const [n, fold] = FIXT_ALIAS[d.id] || [d.name], want = n.toLowerCase();
-  const hit = MODEL_LIB.filter(x => x.name.toLowerCase() === want && (!fold || fold.test(x.path || x.folder || '')));
-  const m = hit.find(x => x.lib === 'Appliances and Graphics') || hit[0];
-  return m ? { model: m.model, md: m.md } : null;
+  const d = FIXT_LIB.find(x => x.id === f.lib); if (!d) return null;
+  if (typeof MODEL_LIB !== 'undefined' && MODEL_LIB.length) {
+    const [n, fold] = FIXT_ALIAS[d.id] || [d.name], want = n.toLowerCase();
+    const hit = MODEL_LIB.filter(x => x.name.toLowerCase() === want && (!fold || fold.test(x.path || x.folder || '')));
+    const m = hit.find(x => x.lib === 'Appliances and Graphics') || hit[0];
+    if (m) return { model: m.model, md: m.md };
+  }
+  // 0.62.0: else the built-in model.
+  const k = fixtStdOf(d.id);
+  return k ? { model: k } : null;
 }
 const CASE = 2.5;
 // Appliances that can take panel fronts in the room's door style (0.61.3).
@@ -105,6 +155,7 @@ const fixtSink = f => !!fixtDef(f).top;
 const fixtFloor = f => !fixtHole(f) && !fixtSink(f);
 const fixtLoose = f => !!fixtDef(f).loose;
 const fixtUnder = f => !!fixtDef(f).under;
+const fixtHung = f => !!fixtDef(f).wallHung;
 const fixtName = f => f.name || fixtDef(f).name;
 // The hole in the wall inside the casing: [a0, a1, z0, z1].
 const fixtInner = f => { const c = f.bare ? 0 : CASE; return [f.off + c, f.off + f.w - c, f.kind === 'door' || f.kind === 'opening' && !f.elev ? f.elev : f.elev + c, f.elev + f.h - c]; };
@@ -253,7 +304,14 @@ function fixtSpot(f, p, px) {
   S.walls.forEach(w => { const r = segDist(p, w), lim = w.thick / 2 + (f.d || 0) + 30; if (r.d < lim && (!best || r.d < best.r.d)) best = { w, r }; });
   if (!best) return null;
   const gr = lay().grid > 0 ? lay().grid : 1;
-  const want = Math.round((best.r.t - f.w / 2) / gr) * gr, off = fixtFree(f, best.w.id, best.r.side, want, px);
+  let want = Math.round((best.r.t - f.w / 2) / gr) * gr;
+  // 0.62.0: a hood or microwave dropped near a range or cooktop centres over it.
+  if (fixtHung(f)) {
+    const rg = fixtList().filter(o => o.wall === best.w.id && o.side === best.r.side && (o.kind === 'range' || o.cooktop))
+      .find(o => Math.abs(o.off + o.w / 2 - best.r.t) < Math.max(o.w, f.w) / 2 + 6);
+    if (rg) want = r3(rg.off + (rg.w - f.w) / 2);
+  }
+  const off = fixtFree(f, best.w.id, best.r.side, want, px);
   return off === null ? null : { wall: best.w.id, side: best.r.side, off: r3(off) };
 }
 // Where a fixture lands for a point on the elevation being shown (a sink centers on the base cabinet under it).
@@ -269,7 +327,7 @@ function fixtElevSpot(f, p, cabId) {
   const off = fixtFree(f, w.id, side, Math.round((a - f.w / 2) / gr) * gr, ui.elevPx);
   if (off === null) return null;
   const at = { wall: w.id, side, off: r3(off) };
-  if (f.kind === 'window' || fixtLoose(f)) at.elev = Math.max(0, Math.round((-p.y - f.h / 2) * 4) / 4);
+  if (f.kind === 'window' || fixtLoose(f) || fixtHung(f)) at.elev = Math.max(0, Math.round((-p.y - f.h / 2) * 4) / 4);
   return at;
 }
 function fixtNew(pid) {
@@ -277,7 +335,7 @@ function fixtNew(pid) {
   const f = { id: uid('fx'), kind: d.kind, lib: d.id, name: d.name, w: d.w, h: d.h, d: d.d, elev: d.elev };
   // 0.61.3: a panel-ready appliance gets its panel fronts when placed (Panel fronts in its item bar turns them off).
   if (d.pr && PANEL_KINDS.includes(d.kind)) f.panels = true;
-  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md', 'cooktop', 'mount'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
+  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md', 'cooktop', 'mount', 'faucet'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
   return f;
 }
 function fixtPlace(k, p) {
@@ -399,7 +457,7 @@ function fixtElevMove(d, p) {
   d.live = true;
   const off = fixtFree(f, f.wall, f.side, Math.round((d.off + (side === 1 ? dx : -dx)) * 4) / 4, ui.elevPx);
   if (off !== null) f.off = r3(off);
-  if (f.kind === 'window' || fixtLoose(f)) f.elev = Math.max(0, Math.round((d.elev + dz) * 4) / 4);
+  if (f.kind === 'window' || fixtLoose(f) || fixtHung(f)) f.elev = Math.max(0, Math.round((d.elev + dz) * 4) / 4);
   renderElev(); renderPlan();
 }
 
@@ -426,6 +484,16 @@ function flatSlab3(pts, holes, y, t, material) {
   const me = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.01, t), bevelEnabled: false, curveSegments: 1 }), material);
   me.rotation.x = Math.PI / 2; me.position.y = y;
   return me;
+}
+// A sink's faucet model at its own size: centred on the sink, its back 1/2" off the back of the top's cutout space
+// (never past the wall), standing on the top. Null until the model is in.
+function fixtFaucetMesh(f, k, c, selCol) {
+  const key = 'std:' + fixtFaucet(f); modelLoad(key);
+  const ms = modelSize(key); if (!ms) return null;
+  const [mw, md, mh] = ms, mm = modelMesh(key, mw, mh, md, selCol); if (!mm) return null;
+  const back = k.open ? Math.max(0.5, k.y0 - 3) : Math.max(0.5, Math.min(k.sy0, k.y0 - 0.5) - 2.25);
+  mm.position.set(f.w / 2 - mw / 2, c.top, Math.max(0.5, back - 0.5));
+  return mm;
 }
 function fixt3d(v, selCol) {
   const metal = flat3('#c3c7cc'), white = flat3('#f3f3f1'), dark = flat3('#3b3f44'), glass = flat3('#a8cfe6', 0.35), wood = flat3('#d9c3a0'), trim = flat3('#ffffff');
@@ -456,9 +524,20 @@ function fixt3d(v, selCol) {
       const c = fixtCounter(f), k = sinkCut(f, c), under = k.mount !== 'drop';
       // Wall frame (x along, y out) to the group's x and z.
       const lx = x => f.side === 1 ? x - f.off : f.off + f.w - x, L2 = pts => pts.map(q => ({ x: lx(q.x), y: q.y }));
-      // An imported sink model hangs from the countertop by its rim, lined up with the cutout.
-      const fm = fixtModelOf(f), mm = fm && modelMesh(fm.model, f.w, f.h, f.d, sel && selCol);
-      if (mm) { mm.position.set(0, c.top - f.h + 0.2, k.sy0); grp.add(mm); v.root.add(tag(grp)); return; }
+      // The faucet (0.62.0): a SketchUp model at its own size, standing on the top behind the bowl, spout to the front.
+      const fau = !f.cooktop && fixtFaucet(f) !== 'none' && fixtFaucetMesh(f, k, c, sel && selCol);
+      if (fau) grp.add(fau);
+      // A sink model lined up with the cutout: an undermount's rim is glued under the top, a drop-in's lies on it.
+      // A cooktop or rangetop keeps its own height (the model is the part above the top).
+      const fm = fixtModelOf(f);
+      if (fm && f.cooktop) {
+        modelLoad(fm.model); const ms = modelSize(fm.model);
+        const mh = ms ? ms[2] : 0, rt = mh > 4, mm = ms && modelMesh(fm.model, f.w, mh, rt ? f.d : k.sy1 - k.sy0, sel && selCol);
+        // A rangetop's knob panel lines up with the top's front edge; its body sinks into the cabinet under it.
+        if (mm) { mm.position.set(0, rt ? c.top + 1.25 - mh : c.top, rt ? Math.max(0, k.depth - f.d) : k.sy0); grp.add(mm); v.root.add(tag(grp)); return; }
+      }
+      const mm = fm && !f.cooktop && modelMesh(fm.model, f.w, f.h, k.sy1 - k.sy0, sel && selCol);
+      if (mm) { mm.position.set(0, (under ? c.top - c.thick : c.top + 0.15) - f.h, k.sy0); grp.add(mm); v.root.add(tag(grp)); return; }
       // A cooktop: black glass on the top over its cutout, with its burner box hanging under it.
       if (f.cooktop) {
         grp.add(box3(f.w, 0.25, k.sy1 - k.sy0, hot || dark, f.w / 2, c.top + 0.125, (k.sy0 + k.sy1) / 2));
@@ -480,9 +559,11 @@ function fixt3d(v, selCol) {
       if (k.mount === 'drop') grp.add(flatSlab3(L2(roundRectPts(f.off, k.sy0, f.off + f.w, k.sy1, k.oval ? 0 : k.r + 0.5, k.oval)), [L2(sinkCutPts(k))], c.top + 0.15, 0.15, steel));
       // Apron sink: the front shows from the cabinet below up to the countertop, at the countertop's front edge.
       if (ap) { const bot = ap.elev + ap.h, ah = c.top - bot; if (ah > 0.5) grp.add(box3(f.w, ah, 0.6, steel, f.w / 2, bot + ah / 2, k.y1 - 0.3)); }
-      const fy = Math.max(1.2, Math.min(k.sy0, k.y0 - 0.5) - 1.25);
-      grp.add(box3(1.2, 13, 1.2, steel, f.w / 2, c.top + 6.5, fy));
-      grp.add(box3(1, 1, 7, steel, f.w / 2, c.top + 13, fy + 3.25));
+      if (!fau && fixtFaucet(f) !== 'none') {
+        const fy = Math.max(1.2, Math.min(k.sy0, k.y0 - 0.5) - 1.25);
+        grp.add(box3(1.2, 13, 1.2, steel, f.w / 2, c.top + 6.5, fy));
+        grp.add(box3(1, 1, 7, steel, f.w / 2, c.top + 13, fy + 3.25));
+      }
       v.root.add(tag(grp)); return;
     }
     // 0.61.4 (Ayden 2026-11-23: "the fridge is peeking through when it should just be the false doors"): with panel fronts
@@ -521,6 +602,8 @@ const FIXT_ICON = {
   range: '<rect x="4" y="5" width="12" height="13" rx="1"/><path d="M4 8h12"/><rect x="6" y="10" width="8" height="5"/>',
   washer: '<rect x="4" y="3" width="12" height="15" rx="1"/><path d="M4 6h12"/><circle cx="10" cy="11.5" r="3.6"/>',
   model: '<path d="M10 2.5l6.5 3.7v7.6L10 17.5l-6.5-3.7V6.2z"/><path d="M3.5 6.2L10 10l6.5-3.8M10 10v7.5"/>',
+  hood: '<path d="M8 2.5h4v6l5 5v2H3v-2l5-5z"/><path d="M3 15.5h14"/>',
+  mw: '<rect x="2.5" y="5" width="15" height="10" rx="1"/><rect x="4.5" y="7" width="8.5" height="6"/><path d="M15.2 7.5v5"/>',
   dryer: '<rect x="4" y="3" width="12" height="15" rx="1"/><path d="M4 6h12"/><circle cx="10" cy="11.5" r="3.6"/><path d="M8.2 11.5h3.6"/>',
 };
 function fixtButton(d) {
@@ -529,20 +612,21 @@ function fixtButton(d) {
 }
 // Entries for the Products tree, in their own group at the bottom, foldered like Mozaik's library.
 const FIXT_GROUP = ['fixt', 'Appliances and Fixtures'];
-// Once an appliance library (like Mozaik's Appliances and Graphics) is imported, its real models take the place of
-// these drawn ones in the tree. Ones already placed keep working.
-const fixtTreeItems = () => (typeof MODEL_LIB !== 'undefined' && MODEL_LIB.some(x => x.kind !== 'model') ? [] : FIXT_LIB).map(d => ({ key: 'fixt:' + d.id, g: 'fixt', f: d.folder, name: d.name, html: fixtButton(d) }));
+// 0.62.0: they draw with the SketchUp models now, so they stay in the tree when a library is imported too (the
+// imported library is its own entry on the library switch).
+const fixtTreeItems = () => FIXT_LIB.map(d => ({ key: 'fixt:' + d.id, g: 'fixt', f: d.folder, name: d.name, html: fixtButton(d) }));
 function fixtProps(f) {
   const id = f.id, R = 'fixt:' + id, d = fixtDef(f), pre = fixtPreset(f.lib) || {}, w = wall(f.wall), L = w ? wg(w).L : 0;
   const from = fixtHole(f) ? 'From the wall start' : 'Along the wall';
   return `<div class="psec"><div class="pshead"><div class="cabtitle"><span class="chip shape">${esc(String(pre.folder || d.name).split(' › ').pop())}</span> <b>${esc(fixtName(f))}</b></div></div>
     <div class="row-actions">${fixtSink(f) ? '' : `<button class="btn" data-act="fixt-flip" data-id="${id}">${icon('flip')}${f.kind === 'door' ? 'Swing to the other side' : fixtHole(f) ? 'Other side' : 'Flip'}</button>`}${PANEL_KINDS.includes(f.kind) ? `<button class="btn${f.panels ? ' on' : ''}" data-act="fixt-panels" data-id="${id}" aria-pressed="${!!f.panels}" title="Panel fronts in the room's door style, cut from the Finish">${icon('door')}Panel fronts${f.panels ? ' on' : ''}</button>` : ''}<button class="btn" data-act="fixt-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn danger" data-act="fixt-del" data-id="${id}">${icon('trash')}Delete</button></div>${f.model && modelItem(f.lib) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-unlib" data-id="${id}" title="Takes this model out of the Imported models list. Ones already in jobs stay.">${icon('trash')}Remove from Imported models</button></div>` : ''}
     <div class="sizeline">${fixtHole(f) && !f.bare ? 'With casing: ' : ''}${fmtLen(f.w, 1)} wide × ${fmtLen(f.h, 1)} high${f.d ? ` × ${fmtLen(f.d, 1)} deep` : ''}</div>
-    <div class="note">${w ? esc(wallName(w)) : ''}${fixtSink(f) ? ' · sits in the countertop' : fixtUnder(f) ? ' · the countertop runs over it' : fixtHole(f) ? ' · cabinets stay out of it where they would overlap' : fixtLoose(f) ? ' · just to look at, cabinets can go over it' : ' · cabinets stay out of its space'}. Not on the cut list.</div></div>
+    <div class="note">${w ? esc(wallName(w)) : ''}${fixtSink(f) ? ' · sits in the countertop' : fixtUnder(f) ? ' · the countertop runs over it' : fixtHole(f) ? ' · cabinets stay out of it where they would overlap' : fixtLoose(f) ? ' · just to look at, cabinets can go over it' : fixtHung(f) ? ' · on the wall, wall cabinets stay out of its space' : ' · cabinets stay out of its space'}. Not on the cut list.</div></div>
   <div class="psec box">${secHead('ruler', 'Size and position', 'teal')}
-    <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtLoose(f) ? fld('Off the floor', R, 'elev', f.elev || 0, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
+    <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtLoose(f) || fixtHung(f) ? fld(fixtHung(f) ? 'Bottom off the floor' : 'Off the floor', R, 'elev', f.elev || 0, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
     ${f.kind === 'door' ? fld('Door', R, 'swing', f.swing || 'L', 'select', { options: [{ v: 'L', l: 'LH, hinge on the left' }, { v: 'R', l: 'RH, hinge on the right' }, { v: 'both', l: 'Double door' }, { v: 'none', l: 'No door (open doorway)' }] }) : ''}
     ${fixtSink(f) ? fld('Bowls', R, 'bowls', f.bowls || 1, 'selnum', { options: [{ v: 1, l: 'Single bowl' }, { v: 2, l: 'Double bowl' }, { v: 3, l: 'Triple bowl' }] }) : ''}
+    ${fixtSink(f) && !f.cooktop ? fld('Faucet', R, 'faucet', fixtFaucet(f), 'select', { options: FAUCETS.map(([v, l]) => ({ v, l })), wide: true }) : ''}
     ${fixtSink(f) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-center" data-id="${id}">${icon('ends')}Center on the cabinet under it</button></div>` : ''}
     ${fld('Name', R, 'name', f.name || '', 'text', { ph: d.name, wide: true })}</div>${fixtSink(f) ? sinkCutBox(f) : ''}`;
 }
