@@ -714,6 +714,7 @@ function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY)
 // The shop library (shoplib.js) loads first, so the job that opens gets the items saved in other jobs.
 const loadState = async () => { if (typeof shopLibLoad === 'function') await shopLibLoad(); const s = await bootJobs(); return typeof shopLibOpen === 'function' ? shopLibOpen(s) : s; };
 function save() {
+  if (typeof wdSync === 'function') wdSync(); // 0.63.5: cabinets stand out from a wall's stone or panels
   if (typeof keepAllOffCeiling === 'function') keepAllOffCeiling();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {

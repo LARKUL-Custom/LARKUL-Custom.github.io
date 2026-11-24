@@ -1451,12 +1451,14 @@ function ctWallEnd(r, e) {
   const L = wg(w).L, at = e === 'S' ? r.start : r.end, f = w.thick / 2;
   if (e === 'S' && at <= f + 0.5) return wallEndJoined(w, 'S');
   if (e === 'E' && at >= L - f - 0.5) return wallEndJoined(w, 'E');
+  if (typeof wdEndAt === 'function' && wdEndAt(r, at)) return true;
   return capsOf(w).some(cp => cp.side === r.side && Math.abs((e === 'S' ? cp.a1 : cp.a0) - at) < 0.5 && cp.height > r.top + 0.01);
 }
 // Is a run end against a wall or another cabinet? "at" is the along-wall position of that end.
 function endBlocked(r, at, dir) {
   const w = wall(r.wall), L = wg(w).L;
   if (at <= w.thick / 2 + 0.5 || at >= L - w.thick / 2 - 0.5) return true;
+  if (typeof wdEndAt === 'function' && wdEndAt(r, at)) return true;
   if (capsOf(w).some(cp => cp.side === r.side && (Math.abs(cp.a0 - at) < 0.5 || Math.abs(cp.a1 - at) < 0.5) && cp.height > r.bottom + 0.01)) return true;
   if (typeof fixtBlocksEnd === 'function' && fixtBlocksEnd(r, at, dir)) return true;
   return S.cabinets.some(k => k.wall === r.wall && k.side === r.side && !r.cabs.includes(k.id) &&
@@ -1501,8 +1503,11 @@ function countertopRunsAll() {
     r.ovS = has(o, 'ovS') ? o.ovS : (r.blockS ? 0 : r.tpl.endOverhang);
     r.ovE = has(o, 'ovE') ? o.ovE : (r.blockE ? 0 : r.tpl.endOverhang);
     r.len = (r.end - r.start) + r.ovS + r.ovE;
-    r.depth = r.d + r.tpl.frontOverhang;
     r.thick = r.tpl.thick;
+    // 0.63.5: in front of a wall's stone or panels the top starts at their face (r.back off the wall face).
+    const wdw = typeof wdDepthAt === 'function' && wall(r.wall);
+    r.back = wdw && wdw.detail ? wdDepthAt(wdw, r.side, r.top, r.top + r.thick) : 0;
+    r.depth = r.d + r.tpl.frontOverhang - r.back;
   });
   (S.genTops || []).forEach(g => {
     if (!wall(g.wall)) return;
@@ -1520,7 +1525,7 @@ function countertopRunsAll() {
     // by right-click (Ayden 2026-11-19: "it wont ever be there"); every job, old ones too, since it is worked out here.
     const wl = wall(r.wall), island = !!(wl && (wl.island || wl.hidden));
     r.island = island;
-    r.bs = has(st, 'bs') && st.bs !== '' ? Math.max(0, +st.bs || 0) : island ? 0 : Math.max(0, +r.tpl.backsplash || 0);
+    r.bs = has(st, 'bs') && st.bs !== '' ? Math.max(0, +st.bs || 0) : island || r.back ? 0 : Math.max(0, +r.tpl.backsplash || 0);
     const j = r.joints || {}, wfH = r.top + r.thick;
     r.wfS = !!st.wfS && !j.S; r.wfE = !!st.wfE && !j.E;
     // 0.60.8 (Ayden 2026-11-20: "if a countertop is against a wall give it backsplash on the left or right or whatever side

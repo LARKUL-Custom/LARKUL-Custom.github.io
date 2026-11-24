@@ -14,7 +14,7 @@ function ctjMeet(p1, u1, p2, u2) {
 }
 // A run's frame: along and out from its wall, and its back and front edge lines.
 function ctjFrame(r) {
-  const w = wall(r.wall), g = wg(w), f = w.thick / 2, s = r.side;
+  const w = wall(r.wall), g = wg(w), f = w.thick / 2 + (r.back || 0), s = r.side; // r.back: 0.63.5, a top in front of a wall's stone
   const at = (a, b) => wallPt(w, g, s, a, b);
   return {
     r, w, g, f, at, u: g.u,

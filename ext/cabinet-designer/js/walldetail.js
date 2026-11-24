@@ -2,7 +2,7 @@
 // depth based wall details to walls, i can select an option for things to be able to be scribed to the wall like fillers
 // and panels, this would cost extra to scribe to those walls, like $50 each wall").
 //
-// w.detail = { kind: 'stone'|'shiplap'|'batten'|'wainscot', stone: 'ledge'|'field', h, depth, color } on a wall: real depth
+// w.detail = { kind: 'stone'|'shiplap'|'batten'|'wainscot', stone: tile|sand|ledge|field, h, depth, color } on a wall: real depth
 // on the room side of the wall (3D, Realistic, Walk and the walk file, and drawn in the elevation). It stops round cabinets,
 // appliances, doors and windows. Look only: cabinets keep their places, and nothing is cut or priced for it.
 // w.scribe (with w.scribeX, the extra width, 1/2" to start): fillers against the wall and end panels backed by it are cut
@@ -11,27 +11,92 @@
 // Stone photos from Poly Haven (CC0): Rustic Stone Wall 02 (Amal Kumar) and Stone Wall (Charlotte Baglioni, Dario Barresi).
 // The color picture has its ambient occlusion multiplied in; the depth picture is the height (white = stone face).
 // size: inches one copy of the picture covers (1.5 m and 2 m in real life).
+// Tiles and fireplace stone (0.63.6, Ayden 2026-11-24: "make it look more like tileing type of stone", "look for more
+// backsplash tile and like fireplace stone"), all Poly Haven CC0: Stone tile = stone_tile_wall (Rob Tuytel, made grey so it
+// takes a Color well), Sandstone tile = seaworn_sandstone_brick (Rob Tuytel), Subway = long_white_tiles (Jenelle van
+// Heerden, Sergej Majboroda), Square mosaic = rounded_square_tiled_wall, Herringbone =
+// herringbone_concrete_tile, White brick = whitewashed_brick (Charlotte Baglioni), Stacked stone = stacked_stone_wall,
+// Stacked granite = granite_wall (Dimitrios Savva), Slate = castle_wall_slates, White sandstone = white_sandstone_bricks,
+// Red brick = red_brick_03 (Rob Tuytel). g: the group in the Stone list; depth: starting depth off the wall (tile is thin).
+// New stone details start on Stone tile; saved ones with no pick stay Ledgestone.
+const WD_T = (name, f, size, color, g, depth) => ({ name, col: `textures/walls/${f}.jpg`, disp: `textures/walls/${f}-depth.jpg`, size, color, g, depth });
 const WALL_STONES = {
-  ledge: { name: 'Ledgestone', col: 'textures/walls/ledgestone.jpg', disp: 'textures/walls/ledgestone-depth.jpg', size: 59, color: '#a8977f' },
-  field: { name: 'Fieldstone', col: 'textures/walls/fieldstone.jpg', disp: 'textures/walls/fieldstone-depth.jpg', size: 78.75, color: '#b4a993' },
+  subway: WD_T('Stacked subway', 'subway', 90, '#c4beaf', 'Backsplash tile', 0.5),
+  square: WD_T('Square mosaic', 'squaretile', 78.75, '#7a6c5c', 'Backsplash tile', 0.5),
+  herring: WD_T('Herringbone', 'herringbone', 70.9, '#847d72', 'Backsplash tile', 0.5),
+  tile: WD_T('Stone tile', 'stonetile', 78.75, '#aaaaaa', 'Backsplash tile', 0.75),
+  sand: WD_T('Sandstone tile', 'sandstonetile', 66.5, '#7b6a56', 'Backsplash tile', 0.75),
+  stacked: WD_T('Stacked stone', 'stacked', 78.75, '#58402c', 'Fireplace stone'),
+  granite: WD_T('Stacked granite', 'granite', 74.8, '#6a5944', 'Fireplace stone'),
+  slate: WD_T('Slate', 'slate', 98.4, '#564e3f', 'Fireplace stone'),
+  whitesand: WD_T('White sandstone', 'whitesand', 78.75, '#837b6a', 'Fireplace stone'),
+  ledge: { ...WD_T('Ledgestone', 'ledgestone', 59, '#a8977f', 'Fireplace stone') },
+  field: { ...WD_T('Fieldstone', 'fieldstone', 78.75, '#b4a993', 'Fireplace stone') },
+  whitebrick: WD_T('White brick', 'whitebrick', 78.75, '#978c80', 'Fireplace stone', 1),
+  redbrick: WD_T('Red brick', 'redbrick', 39.4, '#5a463f', 'Fireplace stone', 1),
 };
+// Colors offered for stone and tile (any other from the color picker).
+const WD_TINTS = [['#f2efe8', 'White'], ['#e6dccb', 'Cream'], ['#d4c6ad', 'Beige'], ['#c8c8c4', 'Light grey'], ['#9a9a96', 'Grey'], ['#5a5b5e', 'Charcoal'],
+  ['#2a2a2c', 'Black'], ['#a3ad92', 'Sage'], ['#7f9aa6', 'Blue grey'], ['#2e3a4e', 'Navy'], ['#3f5a4a', 'Green'], ['#b5694a', 'Terracotta']];
 const WALL_DETAILS = [['', 'None'], ['stone', 'Stone'], ['shiplap', 'Shiplap'], ['batten', 'Board and batten'], ['wainscot', 'Wainscot panels']];
 // Starting height (0 = to the ceiling) and depth off the wall of each kind.
 const WD_DEF = { stone: { h: 0, depth: 1.5 }, shiplap: { h: 0, depth: 0.75 }, batten: { h: 60, depth: 0.75 }, wainscot: { h: 36, depth: 0.75 } };
 function wallDetail(w) {
   const d = w && !w.hidden && !w.island && w.detail; if (!d || !WD_DEF[d.kind]) return null;
   const def = WD_DEF[d.kind], H = +w.height || 96, h = +d.h > 0 ? Math.min(+d.h, H) : def.h > 0 ? Math.min(def.h, H) : H;
-  return { kind: d.kind, stone: WALL_STONES[d.stone] ? d.stone : 'ledge', h, full: h >= H - 0.01, depth: +d.depth > 0 ? Math.min(+d.depth, 6) : def.depth, color: d.color || '#f4f2ec' };
+  const stone = WALL_STONES[d.stone] ? d.stone : 'ledge', dd = d.kind === 'stone' && WALL_STONES[stone].depth || def.depth;
+  return { kind: d.kind, stone, h, full: h >= H - 0.01, depth: +d.depth > 0 ? Math.min(+d.depth, 6) : dd, color: d.color || '#f4f2ec', tint: d.kind === 'stone' && /^#[0-9a-f]{6}$/i.test(d.tint || '') ? d.tint.toLowerCase() : '' };
 }
 // Scribe: the extra width cut on fillers and panels that meet this wall.
 const wallScribeX = w => (w && w.scribe && !w.hidden && !w.island ? (+w.scribeX >= 0 && w.scribeX !== '' && w.scribeX != null ? +w.scribeX : 0.5) : 0);
 const scribedWalls = () => (S.walls || []).filter(w => w.scribe && !w.hidden && !w.island);
 
+/* ---------- Real depth: the detail is part of the wall ---------- */
+// 0.63.5 (Ayden 2026-11-24: "I would like for it to actually have depth"): the detail's face is the wall face for
+// everything that stands against it. Cabinets on the wall stand out by its depth (c.wdOut, added to their Outset and kept
+// in step by wdSync), cabinets, fillers and tops on the walls beside it stop at its face (a slab in obstacles), and tops
+// in front of it start at its face (r.back). Walls with no detail are untouched.
+const WD = { raw: 0 };
+function wdRaw(fn) { WD.raw++; try { return fn(); } finally { WD.raw--; } }
+// How far the detail on wall w stands off its face over heights z0..z1 on side `side` (0 where there is none).
+function wdDepthAt(w, side, z0, z1) {
+  const d = wallDetail(w); if (!d || side !== elevSide(w) || z1 <= 0.01) return 0;
+  const ledge = !d.full && d.kind !== 'shiplap', top = d.h + (ledge ? 1 : 0);
+  if (z0 >= top - 0.01) return 0;
+  return d.depth + (ledge && z1 > d.h + 0.01 ? 0.75 : 0);
+}
+// The detail on wall k as a plan outline, for what stands beside it at spec's heights; null for none.
+function wdSlabPoly(k, spec) {
+  if (WD.raw || !k || !k.detail || !k.detail.kind) return null;
+  const s = elevSide(k), z0 = +spec.elev || 0, D = wdDepthAt(k, s, z0, z0 + (+spec.h || 0)); if (!D) return null;
+  const F = wdFrame(k, s), g = wg(k), t = k.thick / 2;
+  return [wallPt(k, g, s, F.lo, t), wallPt(k, g, s, F.hi, t), wallPt(k, g, s, F.hi, t + D), wallPt(k, g, s, F.lo, t + D)];
+}
+// Cabinets stand out from a wall with a detail by its depth where they overlap it (Outset grows by it; taken back off
+// when the detail goes). Run on every save.
+function wdSync() {
+  (S.rooms || []).forEach(r => { if (!(r.walls || []).some(w => w.detail && w.detail.kind) && !(r.cabinets || []).some(c => c.wdOut)) return;
+    withRoom(r, () => (r.cabinets || []).forEach(c => {
+      const w = c.wall && wall(c.wall), t = w && c.made !== 'pocketdoors' ? wdDepthAt(w, c.side, +c.elev || 0, (+c.elev || 0) + (+c.h || 0)) : 0, was = +c.wdOut || 0;
+      if (Math.abs(t - was) < 1e-6) return;
+      c.outset = Math.round(((+c.outset || 0) - was + t) * 1000) / 1000; if (t) c.wdOut = t; else delete c.wdOut;
+    }));
+  });
+}
+// Does a top's end at `at` (along its wall) stop against the detail of a wall beside it?
+function wdEndAt(r, at) {
+  const w = wall(r.wall); if (!w) return false;
+  const fr = wallFrame(w, r.side), spec = { elev: r.bottom, h: r.top - r.bottom + 2 };
+  return (S.walls || []).some(k => { if (k.id === w.id) return false; const p = wdSlabPoly(k, spec); if (!p) return false;
+    const as = p.map(q => fr(q).a), bs = p.map(q => fr(q).b), a0 = Math.min(...as), a1 = Math.max(...as);
+    return Math.max(...bs) > w.thick / 2 + 0.5 && Math.min(...bs) < w.thick / 2 + r.d && (Math.abs(a0 - at) < 0.5 || Math.abs(a1 - at) < 0.5); });
+}
+
 /* ---------- Where the detail goes ---------- */
-// The wall's room-side span between the walls at its ends, and a function from along-the-wall a to the detail's own x
-// (from the viewer's left, like the elevation).
+// The wall's room-side span between the walls at its ends (the drywall faces, details left out), and a function from
+// along-the-wall a to the detail's own x (from the viewer's left, like the elevation).
 function wdFrame(w, side) {
-  const f = wallFaces(w.id, side), L = wg(w).L, lo = f.hi > f.lo ? f.lo : 0, hi = f.hi > f.lo ? f.hi : L;
+  const f = wdRaw(() => wallFaces(w.id, side)), L = wg(w).L, lo = f.hi > f.lo ? f.lo : 0, hi = f.hi > f.lo ? f.hi : L;
   return { lo, hi, len: hi - lo, x: a => side === 1 ? a - lo : hi - a, ex0: side === 1 ? lo : L - hi };
 }
 // Rectangles [x0, x1, z0, z1] (detail x, height) the detail may cover: the wall up to top, less what stands against it.
@@ -42,7 +107,7 @@ function wdFree(w, side, top, depth) {
   const near = (poly, z0, z1) => {
     if (!poly) return; let al = Infinity, ah = -Infinity, bl = Infinity, bh = -Infinity;
     poly.forEach(p => { const q = fr(p); al = Math.min(al, q.a); ah = Math.max(ah, q.a); bl = Math.min(bl, q.b); bh = Math.max(bh, q.b); });
-    if (bh > face + 0.01 && bl < face + depth + 0.01) add(al, ah, z0, z1);
+    if (bh > face + 0.01 && bl < face + depth - 0.01) add(al, ah, z0, z1);
   };
   (S.cabinets || []).forEach(c => { if (c.made === 'pocketdoors' || !c.wall) return; near(cabPoly(c), c.elev, c.elev + c.h); if (typeof panelPolys === 'function') panelPolys(c, true).forEach(pp => near(pp, c.elev, c.elev + c.h)); });
   if (typeof fixtList === 'function') fixtList().forEach(f => {
@@ -130,9 +195,31 @@ function wdTex(url, srgb) {
   if (srgb && 'encoding' in t && THREE.sRGBEncoding) t.encoding = THREE.sRGBEncoding;
   return (c[url] = t);
 }
-function wdStoneMat(key) {
-  const k = key + (R3 ? '|r' : ''), c = wdStoneMat.c || (wdStoneMat.c = {}); if (c[k]) return c[k];
-  const st = WALL_STONES[key], m = new THREE.MeshStandardMaterial({ map: wdTex(st.col, true), roughness: 0.92, metalness: 0, envMapIntensity: 0.25 });
+// The color picture in greys (for a Color), made once per picture; drawn plain grey until the picture loads.
+function wdGreyTex(url) {
+  const c = wdGreyTex.c || (wdGreyTex.c = {}); if (c[url]) return c[url];
+  const cv = document.createElement('canvas'); cv.width = cv.height = 4; cv.getContext('2d').fillStyle = '#aaa'; cv.getContext('2d').fillRect(0, 0, 4, 4);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+  if ('encoding' in t && THREE.sRGBEncoding) t.encoding = THREE.sRGBEncoding;
+  const im = new Image();
+  im.onload = () => {
+    const N = im.width, g = document.createElement('canvas'); g.width = g.height = N; const x = g.getContext('2d'); x.drawImage(im, 0, 0);
+    const D = x.getImageData(0, 0, N, N), p = D.data; let sum = 0;
+    for (let i = 0; i < p.length; i += 4) { const v = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; sum += v; }
+    // Evened to a mid-light grey (average 200) so the Color comes out close to itself.
+    const k = 200 / Math.max(1, sum / (p.length / 4));
+    for (let i = 0; i < p.length; i += 4) { const v = Math.min(255, (0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]) * k); p[i] = p[i + 1] = p[i + 2] = v; }
+    x.putImageData(D, 0, 0); t.image = g; t.needsUpdate = true;
+    if (typeof viewers !== 'undefined') viewers.forEach(v => v.requestRender());
+  };
+  im.src = url;
+  return (c[url] = t);
+}
+// Stone tile is grey already; a Color tints the stone (the color on the faces, the grout and shading kept).
+function wdStoneMat(key, tint) {
+  const k = key + (R3 ? '|r' : '') + (tint ? '|' + tint : ''), c = wdStoneMat.c || (wdStoneMat.c = {}); if (c[k]) return c[k];
+  const st = WALL_STONES[key], m = new THREE.MeshStandardMaterial({ map: tint ? wdGreyTex(st.col) : wdTex(st.col, true), roughness: 0.92, metalness: 0, envMapIntensity: 0.25 });
+  if (tint) { m.color.set(tint); m.color.multiplyScalar(255 / 200); }
   // Fine detail past what the shape holds (the mortar edges, the stone's grain) as a bump.
   if (R3) { m.bumpMap = wdTex(st.disp, false); m.bumpScale = 0.6; }
   return (c[k] = m);
@@ -185,7 +272,7 @@ function wdMeshes3(w, side) {
   if (!rects.length || F.len < 0.5) return null;
   const grp = wallGroup(w, side, side === 1 ? F.lo : F.hi);
   if (d.kind === 'stone') {
-    const m = wdStoneMat(d.stone);
+    const m = wdStoneMat(d.stone, d.tint);
     const rs = rects.map(r => [r[0], r[1], r[2], Math.min(r[3], d.h)]).filter(r => r[3] - r[2] > 0.01), g = rs.length && wdStoneGeo(rs, d);
     if (g) { const me = new THREE.Mesh(g, m); me.userData.wallDetail = w.id; grp.add(me); }
   } else {
@@ -203,8 +290,9 @@ function wdElevSVG(w, side) {
   if (!rects.length) return '';
   let s = '<g class="ev-wdetail" pointer-events="none">';
   if (d.kind === 'stone') {
-    const st = WALL_STONES[d.stone], id = 'wd-' + d.stone;
-    s += `<defs><pattern id="${id}" patternUnits="userSpaceOnUse" x="${F.ex0}" y="0" width="${st.size}" height="${st.size}"><image href="${st.col}" width="${st.size}" height="${st.size}" preserveAspectRatio="none" opacity=".85"/></pattern></defs>`;
+    const st = WALL_STONES[d.stone], id = 'wd-' + d.stone + (d.tint ? d.tint.slice(1) : ''), T = d.tint;
+    const img = `<image href="${st.col}" width="${st.size}" height="${st.size}" preserveAspectRatio="none"${T ? ` filter="url(#${id}f)"` : ' opacity=".85"'}/>`;
+    s += `<defs>${T ? `<filter id="${id}f" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncR type="linear" slope="${(parseInt(T.slice(1, 3), 16) / 200).toFixed(3)}"/><feFuncG type="linear" slope="${(parseInt(T.slice(3, 5), 16) / 200).toFixed(3)}"/><feFuncB type="linear" slope="${(parseInt(T.slice(5, 7), 16) / 200).toFixed(3)}"/></feComponentTransfer></filter>` : ''}<pattern id="${id}" patternUnits="userSpaceOnUse" x="${F.ex0}" y="0" width="${st.size}" height="${st.size}">${img}</pattern></defs>`;
     rects.forEach(r => { const z1 = Math.min(r[3], d.h); if (z1 - r[2] > 0.01) s += `<rect x="${X(r[0])}" y="${-z1}" width="${r[1] - r[0]}" height="${z1 - r[2]}" fill="url(#${id})" stroke="#6d6458" stroke-width=".25"/>`; });
   } else {
     wdCut(wdPieces(d, F.len, d.h), rects).forEach(q => { s += `<rect x="${X(q[0])}" y="${-q[3]}" width="${q[1] - q[0]}" height="${q[3] - q[2]}" fill="${esc(d.color)}" stroke="#8a8a86" stroke-width=".2"/>`; });
@@ -214,9 +302,13 @@ function wdElevSVG(w, side) {
 
 /* ---------- Wall panel ---------- */
 function wallDetailBox(w) {
-  const d = w.detail || {}, k = WD_DEF[d.kind] ? d.kind : '', R = 'wdet:' + w.id, W = 'wall:' + w.id, def = WD_DEF[k] || {};
-  const pic = k === 'stone' ? `<div class="wd-pic" style="background-image:url('${WALL_STONES[WALL_STONES[d.stone] ? d.stone : 'ledge'].col}')"></div>` : '';
-  const body = !k ? '' : `${k === 'stone' ? fld('Stone', R, 'stone', WALL_STONES[d.stone] ? d.stone : 'ledge', 'select', { options: Object.entries(WALL_STONES).map(([v, s]) => ({ v, l: s.name })) }) + pic
+  const d = w.detail || {}, k = WD_DEF[d.kind] ? d.kind : '', R = 'wdet:' + w.id, W = 'wall:' + w.id, def = { ...(WD_DEF[k] || {}) };
+  const sk = WALL_STONES[d.stone] ? d.stone : 'ledge', st = WALL_STONES[sk], tint = wallDetail(w)?.tint || '';
+  const pic = k === 'stone' ? `<div class="wd-pic"><b style="background-image:url('${st.col}')${tint ? ';filter:grayscale(1) brightness(1.25)' : ''}"></b>${tint ? `<i style="background:${tint}"></i>` : ''}</div>` : '';
+  const tints = [{ v: '', l: 'Natural' }, ...WD_TINTS.map(([v, l]) => ({ v, l }))]; if (tint && !WD_TINTS.some(t => t[0] === tint)) tints.push({ v: tint, l: 'Custom' });
+  const colorRow = `<label class="f"><span>Color</span><span class="wd-tint">${ctl(R, 'tint', tint, 'select', { options: tints, label: 'Color' })}${ctl(R, 'tint', tint || st.color, 'color', { label: 'Pick a color' })}</span></label>`;
+  if (k === 'stone') def.depth = st.depth || def.depth;
+  const body = !k ? '' : `${k === 'stone' ? fld('Stone', R, 'stone', sk, 'select', { options: Object.entries(WALL_STONES).map(([v, s]) => ({ v, l: s.name, g: s.g })) }) + colorRow + pic
       : fld('Paint', R, 'color', d.color || '#f4f2ec', 'select', { options: (typeof WALL_PAINTS !== 'undefined' ? WALL_PAINTS : [['#f4f2ec', 'White']]).map(([v, l]) => ({ v, l })) })}
     <div class="grid2">${fld('Height', R, 'h', d.h ?? '', 'len', { blank: true, ph: def.h ? fmtLen(def.h) : 'Ceiling' })}${fld('Depth', R, 'depth', d.depth ?? '', 'len', { blank: true, ph: fmtLen(def.depth) })}</div>`;
   const sx = wallScribeX(w);
@@ -224,5 +316,15 @@ function wallDetailBox(w) {
     ${fld('Detail', R, 'kind', k, 'select', { options: WALL_DETAILS.map(([v, l]) => ({ v, l })) })}${body}
     <label class="checkrow">${ctl(W, 'scribe', !!w.scribe, 'bool', { label: 'Scribe to this wall' })} <b>Scribe to this wall</b></label>
     ${w.scribe ? fld('Scribe extra', W, 'scribeX', w.scribeX ?? '', 'len', { blank: true, ph: fmtLen(0.5) }) : ''}
-    <div class="note">${k ? 'Shows in 3D, Realistic, Walk and the elevation, and stops round cabinets, doors and windows. Look only. ' : ''}Scribe cuts fillers and end panels against this wall ${sx ? fmtLen(sx) : '1/2"'} wider and adds the scribe charge to the quote (Pricing › Adders).</div></div>`;
+    <div class="note">${k ? 'Real depth: cabinets on this wall stand out by it, cabinets and tops beside it stop at its face. Shows in 3D, Realistic, Walk, the plan and the elevation. ' : ''}Scribe cuts fillers and end panels against this wall ${sx ? fmtLen(sx) : '1/2"'} wider and adds the scribe charge to the quote (Pricing › Adders).</div></div>`;
+}
+
+/* ---------- Plan ---------- */
+// The detail's depth on the plan, a band on the room side of each wall that has one.
+function wdPlanSVG() {
+  let s = '';
+  (S.walls || []).forEach(w => { const d = wallDetail(w); if (!d) return; const side = elevSide(w), F = wdFrame(w, side), g = wg(w), t = w.thick / 2;
+    const p = [wallPt(w, g, side, F.lo, t), wallPt(w, g, side, F.hi, t), wallPt(w, g, side, F.hi, t + d.depth), wallPt(w, g, side, F.lo, t + d.depth)];
+    s += `<polygon class="wdplan wd-${d.kind} nss" points="${p.map(q => q.x + ',' + q.y).join(' ')}"><title>${esc(d.kind === 'stone' ? WALL_STONES[d.stone].name : (WALL_DETAILS.find(x => x[0] === d.kind) || [])[1] || '')}, ${fmtLen(d.depth)} deep</title></polygon>`; });
+  return s;
 }

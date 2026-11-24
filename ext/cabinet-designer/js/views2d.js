@@ -41,6 +41,8 @@ function renderPlan(pr) {
   // walls. On paper they get one dark outline round all of them (drawn wide underneath, the fills cover the joints),
   // so corners read as one wall like an architect's plan instead of grey bars laid over each other.
   const pwalls = ui.printing ? [] : null; s += '%%PWALL%%';
+  // 0.63.5: stone and panel details, their depth as a band on the room side (walldetail.js).
+  if (typeof wdPlanSVG === 'function') s += wdPlanSVG();
   S.walls.forEach(w => {
     const g = wg(w), h = w.thick / 2, P = (a, b) => ({ x: w.x1 + g.u.x * a + g.n.x * b, y: w.y1 + g.u.y * a + g.n.y * b });
     const isSel = ui.sel && ui.sel.type === 'wall' && ui.sel.id === w.id;
@@ -51,7 +53,7 @@ function renderPlan(pr) {
     capsOf(w).forEach(cp => { s += `<polygon class="wallpoly cap nss${isSel ? ' sel' : ''}" points="${polyPts(capPoly(w, cp))}"/>`; });
     const out = -elevSide(w);
     // 0.63.1: the length shown is the inside of the room, face to face between the walls at its ends (Mozaik shows it so).
-    const fc = w.hidden ? { lo: 0, hi: g.L } : wallFaces(w.id, elevSide(w)), ok = fc.hi > fc.lo, lo = ok ? fc.lo : 0, hi = ok ? fc.hi : g.L;
+    const fc = w.hidden ? { lo: 0, hi: g.L } : typeof wdRaw === 'function' ? wdRaw(() => wallFaces(w.id, elevSide(w))) : wallFaces(w.id, elevSide(w)), ok = fc.hi > fc.lo, lo = ok ? fc.lo : 0, hi = ok ? fc.hi : g.L;
     const m = P((lo + hi) / 2, out * (h + 15 * px)); let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;
     if (ui.dims.cab) {
       // Dimension line along the outside of the wall, Mozaik style.

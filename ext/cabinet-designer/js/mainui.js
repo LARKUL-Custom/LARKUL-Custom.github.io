@@ -52,8 +52,8 @@ function itemBar(c) {
   if (!c) {
     const n = multiIds().length;
     return `<div class="itembar none ib-empty">
-    <div class="ib-hint">${n > 1 ? `<b>${n} items picked.</b> Edit them together in the side panel. <button class="btn sm" data-act="cab-shift-up" data-id="" title="Move every picked cabinet up to the ceiling, ${fmtLen(ceilGap())}&quot; below it">Shift all up</button>` : S.cabinets.length ? '<b>Click a cabinet</b> to size and place it, or <b>drag a product</b> from the library onto the drawing.' : (S.walls.length ? '<b>Drag a product</b> from the library onto a wall to start.' : '<b>Draw the walls</b> first (W), then drag products from the library onto them.')}</div>
-    <div class="ib-togs">${tog('autoFillers', 'Automatic fillers')}${tog('autoPanels', 'Automatic panels')}${tog('fridgePanels', 'Automatic fridge panels')}${tog('autoLights', 'Automatic ceiling lights')}</div>
+    <div class="ib-hint">${n > 1 ? `<b>${n} items picked.</b> Edit them together in the side panel. <button class="btn sm" data-act="cab-shift-up" data-id="" title="Move every picked cabinet up to the ceiling, ${fmtLen(ceilGap())}&quot; below it">Shift all up</button>` : S.cabinets.length ? '<b>Click a cabinet</b> to edit it, or <b>drag a product</b> onto the drawing.' : (S.walls.length ? '<b>Drag a product</b> from the library onto a wall to start.' : '<b>Draw the walls</b> first (W), then drag products from the library onto them.')}</div>
+    <div class="ib-togs">${tog('autoFillers', 'Fillers')}${tog('autoPanels', 'Panels')}${tog('fridgePanels', 'Fridge panels')}${tog('autoLights', 'Ceiling lights')}</div>
   </div>`;
   }
   return `<div class="itembar">
@@ -207,28 +207,23 @@ function fitDock(el = document.getElementById('dock')) {
   const saved = 0;
   const room = document.getElementById('tab-room');
   if (el.isConnected && body && room && !saved) {
-    const was = room.style.getPropertyValue('--dockh'); room.style.setProperty('--dockh', DOCK_H + 'px');
+    // Nothing picked on the Item tab: the panel drops to a thin strip (Ayden 2026-11-24: "less of the screen when
+    // nothing is selected") and grows back to the item bar's height when something is picked.
+    const slim = body.classList.contains('dock-item') && !!body.querySelector('.ib-empty');
+    const base = slim ? dockMinH() : DOCK_H;
+    const was = room.style.getPropertyValue('--dockh'); room.style.setProperty('--dockh', base + 'px');
     const head = el.querySelector('.dockhead'), r = el.getBoundingClientRect().height;
     // The tab list beside it must fit too (all nine tabs, no scroll bar).
     let need = Math.max(r + body.scrollHeight - body.clientHeight, head ? r + head.scrollHeight - head.clientHeight : 0);
-    // Item tab: the same height with or without something picked (Ayden 2026-11-20: picking something made the
-    // drawing slightly smaller). With nothing picked, a hidden item bar for a cabinet is measured, and the tallest
-    // height seen at this panel size is kept, so picking, unpicking and switching items never move the drawing.
-    if (body.classList.contains('dock-item')) {
+    // Item tab with something picked: the tallest height seen at this panel size is kept, so switching from one
+    // item to another never moves the drawing (Ayden 2026-11-20).
+    if (body.classList.contains('dock-item') && !slim) {
       const key = Math.round(body.clientWidth) + 'x' + Math.round(room.getBoundingClientRect().height);
       if (dockKeep.k !== key) dockKeep = { k: key, h: 0 };
-      if (body.querySelector('.ib-empty') && S.cabinets.length) {
-        const cs = getComputedStyle(body), pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-        const c0 = S.cabinets.find(c => typeof isCorner === 'function' && isCorner(c)) || S.cabinets[0];
-        const pr = document.createElement('div');
-        pr.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;width:${body.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)}px`;
-        try { pr.innerHTML = itemBar(c0); body.appendChild(pr); need = Math.max(need, r - body.clientHeight + pad + pr.offsetHeight); } catch (_) {}
-        pr.remove();
-      }
       need = dockKeep.h = Math.max(dockKeep.h, need);
     }
     room.style.setProperty('--dockh', was || DOCK_H + 'px');
-    const h = Math.round(Math.min(room.getBoundingClientRect().height * 0.6, Math.max(DOCK_H, need)));
+    const h = Math.round(Math.min(room.getBoundingClientRect().height * 0.6, Math.max(base, need)));
     if (Math.abs(h - el.getBoundingClientRect().height) > 2) { room.style.setProperty('--dockh', h + 'px'); if (typeof redrawView === 'function') requestAnimationFrame(redrawView); }
   }
 }

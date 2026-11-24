@@ -80,27 +80,31 @@ function print3DShot(room, vw, o = {}) {
   v.host.style.width = W + 'px'; v.host.style.height = H + 'px';
   return withRoom(room, () => printQuiet(() => {
     // Printed 3D keeps the walls but cuts away the ones between the camera and the cabinets, and drops the ceiling.
-    const keep = [ui.layers, ui.cutaway, ui.wallOp]; ui.layers = { ...(ui.layers || {}), walls: true, ceiling: false }; ui.cutaway = true; ui.wallOp = 1;
+    const keep = [ui.layers, ui.cutaway, ui.wallOp]; ui.layers = { ...(ui.layers || {}), walls: true, ceiling: false, ...(o.wall ? { labels: true, fasteners: false } : {}) }; ui.cutaway = true; ui.wallOp = 1;
     const real = o.real ?? !!ui.render3d;
     R3 = real;
     try { buildRoomScene(v); } finally { R3 = false; [ui.layers, ui.cutaway, ui.wallOp] = keep; }
     if (!real) v.setBackground('#ffffff');
-    printCutaway(v);
+    if (!o.wall) printCutaway(v);
     v.resize();
-    if (vw.pos) v.setView(vw); else view3dPreset(v, 'iso');
+    // o.wall (installer drawings): straight at one wall side, turned a little, framed on that wall's cabinets.
+    if (o.wall) printWallCam(v, o.wall, o.aspect || 1.5);
+    else if (vw.pos) v.setView(vw); else view3dPreset(v, 'iso');
     // o.fit (the cover): with no saved view, frame the whole kitchen (cabinets, tops and the walls left after the
     // cutaway, not the floor) so all of it fits the picture with a small margin and nothing is cut off.
     if (o.fit && !vw.pos) printFitAll(v, o.aspect || 1.5);
     if (real) v.fitShadow();
     v.draw();
-    return v.renderer.domElement.toDataURL('image/jpeg', 0.9);
+    const url = v.renderer.domElement.toDataURL('image/jpeg', 0.9);
+    if (v.afterShot) { v.afterShot(); v.afterShot = null; }
+    return url;
   }));
 }
 // Printed 3D: besides the walls whose room side faces away from the camera, hide any wall that stands between the
 // camera and the cabinets (the line from the camera to the middle of the cabinets crosses it), whatever the room's shape.
-function printCutaway(v) {
+function printCutaway(v, only) {
   const base = v.beforeDraw;
-  const cb = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && m.userData.cabId) cb.expandByObject(m); });
+  const cb = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && m.userData.cabId && (!only || only.has(m.userData.cabId))) cb.expandByObject(m); });
   if (cb.isEmpty()) return;
   const c = cb.getCenter(new THREE.Vector3());
   v.beforeDraw = () => {
@@ -140,6 +144,111 @@ function printFitAll(v, aspect) {
   v.orthoH = Math.max(y1 - y0, (x1 - x0) / aspect) * 1.08; v.ortho.zoom = 1;
   cam.lookAt(v.controls.target); v.controls.update(); v.resize();
 }
+// One wall side in 3D for the installers: the camera in front of the wall, turned a little and looking down a little,
+// framed on that wall's cabinets and appliances; walls between the camera and them are cut away.
+function printWallCam(v, ws, aspect) {
+  const { w, side } = ws, ids = new Set(S.cabinets.filter(c => c.wall === w.id && c.side === side).map(c => c.id));
+  const fx = new Set(fixtList().filter(f => f.wall === w.id && f.side === side && !fixtHole(f)).map(f => f.id));
+  v.root.updateMatrixWorld(true);
+  const box = new THREE.Box3(); v.root.traverse(m => { if (m.isMesh && (ids.has(m.userData.cabId) || fx.has(m.userData.fixtId))) box.expandByObject(m); });
+  if (box.isEmpty()) { view3dPreset(v, 'iso'); return; }
+  // Taken from inside the room, standing back from the wall at about eye height (Ayden 2026-11-24: the 3D pictures need
+  // the walls), so the wall and the walls at its ends show as they will be. Walls between the camera and the cabinets
+  // (a room shallower than the camera needs) are cut away.
+  const g = wg(w), nx = g.n.x * side, nz = g.n.y * side, c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  const W = Math.abs(g.u.x) * sz.x + Math.abs(g.u.y) * sz.z + 12, H = sz.y + 14, front = (Math.abs(nx) * sz.x + Math.abs(nz) * sz.z) / 2;
+  // How deep the room is in front of this wall: the first wall the line out from the cabinets meets.
+  let depth = Infinity;
+  const walls = []; v.root.children.forEach(o => { if (o.userData.cut) walls.push(o); });
+  const rc = new THREE.Raycaster(new THREE.Vector3(c.x + nx * (front + 1), Math.min(60, c.y), c.z + nz * (front + 1)), new THREE.Vector3(nx, 0, nz).normalize());
+  const hit = rc.intersectObjects(walls, true)[0]; if (hit) depth = hit.distance + front + 1;
+  const p = v.persp, keepFov = p.fov; let fov = 50;
+  const need = f => { const t = Math.tan(f * Math.PI / 360); return Math.max(H / 2 / t, W / 2 / (t * aspect)) + front; };
+  // Stand back far enough to see the whole wall; in a tight room, widen the view (up to 75°) before going outside it.
+  while (need(fov) > depth - 8 && fov < 75) fov += 5;
+  const D = need(fov);
+  v.setMode('persp'); p.fov = fov; p.updateProjectionMatrix();
+  const eye = Math.max(c.y, 54);
+  v.cam = p; v.controls.object = p;
+  v.controls.target.set(c.x, c.y + 3, c.z);
+  p.position.set(c.x + nx * D, eye, c.z + nz * D);
+  p.lookAt(v.controls.target); v.controls.update(); v.resize();
+  // Cabinets and appliances standing near or behind the camera (the run across the room) would block the picture: left out.
+  const ob = new THREE.Box3(), mine = o => { let y = false; o.traverse(m => { if (ids.has(m.userData.cabId) || fx.has(m.userData.fixtId)) y = true; }); return y; };
+  v.root.children.forEach(o => {
+    if (o.userData.cut || o.userData.noBounds || o.isLight || !o.visible || mine(o)) return;
+    ob.setFromObject(o); if (ob.isEmpty()) return;
+    const s3 = ob.getSize(new THREE.Vector3()); if (s3.y < 1 && ob.min.y < 0.3) return; // the floor
+    const far = Math.max(...[ob.min.x, ob.max.x].flatMap(x => [ob.min.z, ob.max.z].map(z => (x - c.x) * nx + (z - c.z) * nz)));
+    if (far > D - 30) o.visible = false;
+  });
+  printCutaway(v, ids.size ? ids : null);
+  v.afterShot = () => { p.fov = keepFov; p.updateProjectionMatrix(); };
+}
+function printWall3DPage(room, ws, head) {
+  const PA = printArea('plan'), aspect = PA.w / PA.h, key = room.id + '|wall|' + ws.w.id + '|' + ws.side + '|' + aspect.toFixed(2);
+  const url = printPic(key, () => print3DShot(room, { id: 'wall' }, { aspect, real: false, wall: ws }));
+  if (!url) return '';
+  return `<section class="mp-page land mp-draw">${head(room.name, ws.name + ' · 3D')}<div class="mp-pic"><img src="${url}" alt="${esc(room.name)} ${esc(ws.name)} in 3D" data-pic="${esc(key)}"></div></section>`;
+}
+
+/* ----- Install list (Installer drawings): every cabinet to hang or set, wall by wall, with where it goes and what goes
+   with it, a box to tick, then the appliances, molding and tops. No prices. ----- */
+function printInstallPage(room, head) {
+  // In the order they go in (Ayden 2026-11-24): base and tall cabinets, uppers, fillers, panels, molding, then the rest
+  // (appliances, shelves and other products, countertops). Each section is sorted wall by wall, left to right.
+  return withRoom(room, () => {
+    const tbl = (h, rows) => `<table class="t mp-t mp-inst"><thead><tr>${h.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+    const ps = typeof priceSheet === 'function' ? priceSheet() : null, who = ps && typeof roomInstaller === 'function' ? roomInstaller(ps, room) : null;
+    const wn = id => wall(id) ? wallName(wall(id)) + '' : 'Not on a wall', wi = id => { const i = S.walls.findIndex(w => w.id === id); return i < 0 ? 999 : i; };
+    // Where a thing starts from the left end of its wall as you face it (the inside face of the wall at that end).
+    const fromLeft = (wallId, side, x0, w) => { const ww = wall(wallId); if (!ww) return null; const L = wg(ww).L, f = wallFaces(wallId, side), eL = side === 1 ? f.lo : L - f.hi; return Math.max(0, (side === 1 ? x0 : L - x0 - w) - eL); };
+    const cl = c => fromLeft(c.wall, c.side, c.off, c.w);
+    const order = (a, b) => wi(a.wall) - wi(b.wall) || (a.side || 1) - (b.side || 1) || (cl(a) ?? 0) - (cl(b) ?? 0);
+    // By the product's classification (Products page), then by name for cabinets without a library product.
+    const grp = c => { const l = c.libId && typeof libItem === 'function' && libItem(c.libId); return l && typeof libGroup === 'function' ? libGroup(l) : ''; };
+    const isTrim = c => grp(c) === 'filler' && /mold|trim/i.test(c.name || '') || grp(c) === 'molding';
+    const isFiller = c => !isTrim(c) && (grp(c) === 'filler' || /filler/i.test(c.name || ''));
+    const isPanel = c => !isTrim(c) && !isFiller(c) && (!!c.autoOf || grp(c) === 'panel' || /panel/i.test(c.name || '') && !/door/i.test(c.name || ''));
+    const isOther = c => !isTrim(c) && !isFiller(c) && !isPanel(c) && ((typeof isSpecialty === 'function' && isSpecialty(c)) || c.made || c.noCount);
+    const all = S.cabinets.slice().sort(order), cabs = all.filter(c => !isTrim(c) && !isFiller(c) && !isPanel(c) && !isOther(c));
+    const box = '<td class="mp-box"></td>', H8 = ['✓', '#', 'Cabinet', 'Wall', 'W × H × D', 'From left', 'Bottom', 'Top', 'Notes'];
+    const cabRow = (c, note) => `<tr>${box}<td><b>${esc(LBL[c.id] || '')}</b></td><td>${esc(c.name)}</td><td>${esc(wn(c.wall))}</td><td>${fmtLen(c.w)} × ${fmtLen(c.h)} × ${fmtLen(c.d)}</td><td>${cl(c) == null ? '' : fmtLen(cl(c))}</td><td>${c.elev > 0.01 ? fmtLen(c.elev) : 'Floor'}</td><td>${fmtLen((c.elev || 0) + c.h)}</td><td>${esc(note ?? printNote(c.notes).split('\n')[0])}</td></tr>`;
+    // Heading and table in one block, so a heading never sits alone at the bottom of a sheet (mpPaginate keeps it with its rows).
+    const sec = (h, rows, cols = H8) => rows.length ? `<div class="mp-instsec"><h4 class="mp-muh mp-insth">${h}</h4>${tbl(cols, rows)}</div>` : '';
+    const base = cabs.filter(c => c.cat !== 'Wall').map(c => cabRow(c)), upper = cabs.filter(c => c.cat === 'Wall').map(c => cabRow(c));
+    // Fillers: the automatic ones beside cabinets, then filler products placed on their own.
+    const fl = [];
+    all.filter(c => !c.autoOf && wall(c.wall)).forEach(c => {
+      const ftk = c.cat === 'Wall' || !hasToe(c) ? 0 : effParams(c).toeKickHeight;
+      fillersOf(c).forEach(f => fl.push(`<tr>${box}<td></td><td>Filler ${f.end === 'L' ? 'left' : 'right'} of <b>${esc(LBL[c.id] || '')}</b></td><td>${esc(wn(c.wall))}</td><td>${fmtLen(f.gap)} W × ${fmtLen(c.h - ftk)} H</td><td>${fmtLen(fromLeft(c.wall, c.side, f.a0, f.gap) ?? 0)}</td><td>${c.elev > 0.01 ? fmtLen(c.elev) : 'Floor'}</td><td>${fmtLen((c.elev || 0) + c.h)}</td><td></td></tr>`));
+    });
+    all.filter(isFiller).forEach(c => fl.push(cabRow(c)));
+    // Panels: end panel pieces, panels drawn on a cabinet's end, and panel products.
+    const pn = [];
+    all.filter(c => !c.autoOf && !isPanel(c)).forEach(c => ['L', 'R'].forEach(e => { if (!S.cabinets.some(k => k.autoOf === c.id && k.autoEnd === e) && hasPanel(c, e)) pn.push(`<tr>${box}<td></td><td>End panel ${e === 'L' ? 'left' : 'right'} of <b>${esc(LBL[c.id] || '')}</b></td><td>${esc(wn(c.wall))}</td><td>${fmtLen(c.h)} H × ${fmtLen(c.d)} D</td><td></td><td>${c.elev > 0.01 ? fmtLen(c.elev) : 'Floor'}</td><td>${fmtLen((c.elev || 0) + c.h)}</td><td></td></tr>`); }));
+    all.filter(isPanel).forEach(c => pn.push(cabRow(c, c.autoOf ? `End panel ${c.autoEnd === 'L' ? 'left' : 'right'} of ${LBL[c.autoOf] || ''}` : undefined)));
+    // Molding in feet (Ayden 2026-11-24), each run and the total of each kind.
+    const ft = n => `${(n / 12).toFixed(1)} ft`, runs = moldingRuns().slice().sort((a, b) => wi(a.wall) - wi(b.wall)), mTot = {};
+    runs.forEach(r => { const k = r.m.name || 'Molding'; mTot[k] = (mTot[k] || 0) + r.len; });
+    const md = runs.map(r => `<tr>${box}<td>${esc(r.m.name || 'Molding')}</td><td>${esc(wn(r.wall))}</td><td><b>${ft(r.len)}</b> <span class="muted">(${fmtLen(r.len)}${r.retS || r.retE ? `, ${[r.retS, r.retE].filter(Boolean).length === 2 ? 'both ends return' : 'one end returns'}` : ''})</span></td></tr>`)
+      .concat(Object.entries(mTot).map(([k, n]) => `<tr class="mp-insttot"><td></td><td>Total ${esc(k)}</td><td></td><td><b>${ft(n)}</b></td></tr>`));
+    // The rest: shelves, hoods and other products, appliances, countertops.
+    const other = all.filter(isOther).map(c => cabRow(c));
+    const fx = fixtList().filter(f => wall(f.wall) && !fixtHole(f)).sort((a, b) => wi(a.wall) - wi(b.wall)).map(f => `<tr>${box}<td>${esc(fixtName(f))}</td><td>${esc(wn(f.wall))}</td><td>${fmtLen(f.w)} W × ${fmtLen(f.h)} H${f.d ? ' × ' + fmtLen(f.d) + ' D' : ''}</td></tr>`);
+    const tp = countertopRuns().filter(t => t.on).sort((a, b) => wi(a.wall) - wi(b.wall)).map(t => `<tr>${box}<td>Countertop${t.tpl && mat(t.tpl.mat) ? ' · ' + esc(mat(t.tpl.mat).name) : ''}</td><td>${esc(wn(t.wall))}</td><td>${fmtLen(t.len)} long${t.bs > 0 ? `, ${fmtLen(t.bs)} backsplash` : ''}</td></tr>`);
+    const H4 = ['✓', 'What', 'Wall', 'Size'];
+    // Trim products (C mold, ceiling trim) go with the molding.
+    all.filter(isTrim).forEach(c => md.unshift(`<tr>${box}<td><b>${esc(LBL[c.id] || '')}</b> ${esc(c.name)}</td><td>${esc(wn(c.wall))}</td><td><b>${ft(c.w)}</b> <span class="muted">(${fmtLen(c.w)}, ${fmtLen(c.elev || 0)} off the floor)</span></td></tr>`));
+    if (!base.length && !upper.length && !fl.length && !pn.length && !other.length) return '';
+    return `<section class="mp-page mp-flow mp-draw mp-instp">${head(room.name, 'Install list')}
+      <h3 class="mp-nh">Install list${who ? ` <span class="muted">· ${esc(who.name)}</span>` : ''}</h3>
+      <div class="mp-instnote muted">From left is measured from the left end of the wall as you face it (the inside face of the wall at that end). Heights are off the finished floor.</div>
+      ${sec('1. Base and tall cabinets', base)}${sec('2. Upper cabinets', upper)}${sec('3. Fillers', fl)}${sec('4. Panels', pn)}${sec('5. Molding', md, H4)}
+      ${sec('6. Hoods, shelves and other products', other)}${sec('7. Appliances', fx, H4)}${sec('8. Countertops', tp, H4)}</section>`;
+  });
+}
+
 // Pictures are kept while Print is open; each remembers how to take itself again once textures have loaded.
 const printShots = {};
 function printPic(key, shot) {
@@ -176,11 +285,15 @@ function print3DFirst(pr, rooms, head) {
 }
 function printDrawings(pr, rooms, head) {
   const want = k => pr.items.includes(k);
-  if (!want('plan') && !want('elev') && !want('tops')) return [];
+  if (!want('plan') && !want('elev') && !want('tops') && !want('install') && !want('wall3d')) return [];
   const out = [];
   rooms.forEach(room => {
-    if (want('elev')) printWallSides(room).forEach(ws => out.push(printElevPage(room, ws, head)));
-    if (want('plan')) out.push(printPlanPage(room, head));
+    // Installer drawings: the plan and the install list first, then each wall's elevation with its 3D picture next to it.
+    const inst = want('install');
+    if (inst && want('plan')) out.push(printPlanPage(room, head));
+    if (inst) out.push(printInstallPage(room, head));
+    printWallSides(room).forEach(ws => { if (want('elev')) out.push(printElevPage(room, ws, head)); if (want('wall3d')) out.push(printWall3DPage(room, ws, head)); });
+    if (!inst && want('plan')) out.push(printPlanPage(room, head));
     if (want('tops') && typeof printTopsPage === 'function') out.push(printTopsPage(room, head));
   });
   return out.filter(Boolean);

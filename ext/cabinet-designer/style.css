@@ -3806,4 +3806,36 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 @media (max-width:1100px){.fs-work{grid-template-columns:minmax(0,1fr) 240px}}
 @media (max-width:760px){.fs-work{grid-template-columns:1fr}.fs-draw{min-height:260px}}
 /* 0.63.4: Wall finish box, a swatch of the picked stone */
+.wd-pic{position:relative;height:54px;border:1px solid var(--line);border-radius:6px;margin:4px 0 8px;overflow:hidden}
+.wd-pic b{position:absolute;inset:0;background-size:160px 160px}
+.wd-pic i{position:absolute;inset:0;mix-blend-mode:multiply}
+.wd-tint{display:flex;gap:6px;align-items:center}.wd-tint select{flex:1;min-width:0}.wd-tint input[type=color]{width:34px;height:28px;padding:0;border:1px solid var(--line);border-radius:6px;flex:none}
+.wdplan{fill:#c9b79c;stroke:#7d6d58;stroke-width:.4}
+.wdplan.wd-shiplap,.wdplan.wd-batten,.wdplan.wd-wainscot{fill:#e6e1d6}
+/* Installer drawings: the install list (0.63.7) */
+.mp-inst{font-size:8.5pt;width:100%}
+.mp-inst td,.mp-inst th{padding:3px 6px;vertical-align:top}
+.mp-inst .mp-box{width:14px;height:14px}
+.mp-instw td{font-weight:700;background:#f2f2f2;border-top:1px solid #999}
+.mp-instnote{font-size:8pt;margin:0 0 6px}
+.mp-insttot td{border-top:1px solid #999;font-weight:600}
+.mp-insth{font-size:11pt;margin-top:12px}
+
 .wd-pic{height:54px;border:1px solid var(--line);border-radius:6px;background-size:160px 160px;margin:4px 0 8px}
+
+/* 0.63.9: nothing picked = a thin strip (Ayden 2026-11-24: "less of the screen when nothing is selected").
+   One row: the hint, the Automatic switches with their title on the left, and the tabs in two short rows.
+   Picking something grows the panel back to the item bar's height. */
+@media (min-width: 961px){
+  .room .dock:has(.dock-item .ib-empty) .docktabs{grid-template-columns:repeat(4,auto);column-gap:2px}
+  .room .dock .dockbody.dock-item:has(.ib-empty){padding:4px 10px;display:flex;align-items:center}
+  .room .dock .itembar.ib-empty{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:14px;min-width:0;width:100%}
+  .room .dock .ib-empty .ib-hint{flex:1 1 auto;min-width:0;max-width:none;font-size:14px;line-height:1.3}
+  .room .dock .itembar.ib-empty > .ib-togs{flex:none;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:14px;padding:4px 10px 4px 84px;justify-content:flex-start}
+  .room .dock .itembar.ib-empty > .ib-togs::before{top:50%;left:10px;transform:translateY(-50%)}
+  .room .dock .ib-empty .ib-tog{width:auto;height:30px;gap:8px}
+}
+/* Too narrow for the hint beside the switches: leave the hint out, the switches and tabs stay. */
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock .ib-empty .ib-hint:not(:has(button)){display:none}
+}

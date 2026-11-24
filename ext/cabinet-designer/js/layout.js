@@ -94,7 +94,10 @@ function obstacles(wallId, side, spec, excludeId) {
     for (let i = 0; i < poly.length; i++) { const p = F(poly[i]); if (p.a < al) al = p.a; if (p.a > ah) ah = p.a; if (p.b < bl) bl = p.b; if (p.b > bh) bh = p.b; }
     if (Math.min(bh, b1) - Math.max(bl, b0) > 0.01) out.push({ a0: al, a1: ah, kind, id });
   };
-  S.walls.forEach(k => { if (k.id !== w.id) add(wallPoly(k), 'wall', k.id); capsOf(k).forEach(cp => add(capPoly(k, cp), 'wall', k.id)); });
+  S.walls.forEach(k => {
+    // 0.63.5: a wall's stone or panel detail is part of it for what stands beside it (walldetail.js).
+    const sl = k.id !== w.id && k.detail && typeof wdSlabPoly === 'function' ? wdSlabPoly(k, spec) : null;
+    if (k.id !== w.id) add(sl ? wallPoly(k).concat(sl) : wallPoly(k), 'wall', k.id); capsOf(k).forEach(cp => add(capPoly(k, cp), 'wall', k.id)); });
   S.cabinets.forEach(k => {
     if (k.id === excludeId || !vOverlap(k, spec)) return;
     // Pocket Doors (0.61.9) are fronts standing in front of other pieces: nothing is kept out of their space.
@@ -572,7 +575,7 @@ function bidFaceFix(st) {
 }
 // The along-the-wall offset for something w wide that sits x from the viewer's left wall face.
 // 0.63.1: a wall's length on the room side, face to face between the walls at its ends (its centerline length when nothing meets it).
-function insideLen(w) { const L = wg(w).L; if (w.hidden) return L; const f = wallFaces(w.id, elevSide(w)); return r3(f.hi > f.lo ? f.hi - f.lo : L); }
+function insideLen(w) { const L = wg(w).L; if (w.hidden) return L; const f = typeof wdRaw === 'function' ? wdRaw(() => wallFaces(w.id, elevSide(w))) : wallFaces(w.id, elevSide(w)); return r3(f.hi > f.lo ? f.hi - f.lo : L); }
 function offFromLeft(wallId, side, x, w) { const { lo, hi } = wallFaces(wallId, side); return r3(side === -1 ? hi - x - w : lo + x); }
 // Centers a cabinet between the wall faces, or in the open space between its nearest neighbors.
 function centerCab(c, inOpening) {

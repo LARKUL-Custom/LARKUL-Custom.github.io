@@ -63,13 +63,17 @@ document.addEventListener('change', e => {
 });
 
 /* ----- L5: multi-print presets: one print of the pages you pick ----- */
-const MP_ITEMS = [['cover', 'Cover page'], ['notes', 'Notes sheet (job notes and lines to write on)'], ['3d', 'Realistic 3D views (saved views, or one per room)'], ['specs', 'Room settings (door style, materials, hardware, color)'], ['scope', 'Scope of work'], ['price', 'Price sheet'], ['elev', 'Wall elevations with cabinet numbers'], ['plan', 'Floor plan (one per room)'], ['tops', 'Countertop layout with sizes (for the countertop shop)'], ['cutlist', 'Cut list'], ['hardware', 'Hardware list'], ['cabinets', 'Cabinet sheets (one per cabinet)'], ['ops', 'Machining per part'], ['recuts', 'Recut list']];
+const MP_ITEMS = [['cover', 'Cover page'], ['notes', 'Notes sheet (job notes and lines to write on)'], ['3d', 'Realistic 3D views (saved views, or one per room)'], ['specs', 'Room settings (door style, materials, hardware, color)'], ['scope', 'Scope of work'], ['price', 'Price sheet'], ['elev', 'Wall elevations with cabinet numbers'], ['wall3d', '3D of each wall with cabinet numbers'], ['install', 'Install list (where each cabinet goes, heights, fillers, panels; no prices)'], ['plan', 'Floor plan (one per room)'], ['tops', 'Countertop layout with sizes (for the countertop shop)'], ['cutlist', 'Cut list'], ['hardware', 'Hardware list'], ['cabinets', 'Cabinet sheets (one per cabinet)'], ['ops', 'Machining per part'], ['recuts', 'Recut list']];
 const PP_BUILD = { id: 'pp-build', name: 'Builder drawings', title: '{JOB}', items: ['cover', 'notes', '3d', 'specs', 'scope', 'elev', 'plan'], v: 2 };
 // The countertop shop's sheet: each room's tops with their sizes and sink cutouts drawn on (Tops tab › Print tops layout).
 const PP_TOPS = { id: 'pp-tops', name: 'Countertop layout', title: '{JOB} countertops', items: ['tops'] };
-let PRINT_PRESETS = [PP_BUILD, PP_TOPS, { id: 'pp-shop', name: 'Shop packet', title: '{JOB}', items: ['cover', 'cutlist', 'hardware', 'cabinets'] }, { id: 'pp-cut', name: 'Cut list only', title: '{JOB} cut list', items: ['cutlist'] }];
+// Installers (Ayden 2026-11-24): exactly what gets installed, room by room: 3D of the room, the plan, the install list,
+// then each wall's elevation with a 3D picture of that wall. Room settings for hinges and pulls. Never prices.
+const PP_INSTALL = { id: 'pp-install', name: 'Installer drawings', title: '{JOB}', items: ['cover', 'notes', '3d', 'specs', 'plan', 'install', 'elev', 'wall3d'] };
+let PRINT_PRESETS = [PP_BUILD, PP_INSTALL, PP_TOPS, { id: 'pp-shop', name: 'Shop packet', title: '{JOB}', items: ['cover', 'cutlist', 'hardware', 'cabinets'] }, { id: 'pp-cut', name: 'Cut list only', title: '{JOB} cut list', items: ['cutlist'] }];
 // Saved preset lists from before drawings could print get the builder preset added at the top.
-shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) { PRINT_PRESETS = v.some(p => p.id === PP_BUILD.id) ? v : [{ ...PP_BUILD }, ...v]; if (!PRINT_PRESETS.some(p => p.id === PP_TOPS.id)) PRINT_PRESETS.splice(1, 0, { ...PP_TOPS }); }
+shopLoad('printPresets', v => { if (Array.isArray(v) && v.length) { PRINT_PRESETS = v.some(p => p.id === PP_BUILD.id) ? v : [{ ...PP_BUILD }, ...v]; if (!PRINT_PRESETS.some(p => p.id === PP_TOPS.id)) PRINT_PRESETS.splice(1, 0, { ...PP_TOPS });
+    if (!PRINT_PRESETS.some(p => p.id === PP_INSTALL.id)) PRINT_PRESETS.splice(1, 0, { ...PP_INSTALL }); }
   // 0.59.7: the saved Builder drawings preset gets the new Notes and Scope of work pages once.
   const b = PRINT_PRESETS.find(p => p.id === PP_BUILD.id); if (b && (b.v || 0) < 2) { b.v = 2; ['notes', 'scope'].forEach(k => { if (!b.items.includes(k)) b.items.push(k); }); } });
 function mpPreset() { return PRINT_PRESETS.find(p => p.id === ui.mpPreset) || PRINT_PRESETS[0]; }
@@ -167,14 +171,18 @@ function mpPaginate(root) {
     const empty = () => cur.children.length === heads.length;
     // Moves the rows of table n (or of the one table inside n) that fit onto this sheet; the rest stay in n.
     const split = n => {
-      const t = n.tagName === 'TABLE' ? n : n.children.length === 1 && n.firstElementChild.tagName === 'TABLE' ? n.firstElementChild : null;
+      // A table, or a block holding one table (with its heading before it: the heading goes with the first rows only).
+      const t = n.tagName === 'TABLE' ? n : n.lastElementChild && n.lastElementChild.tagName === 'TABLE' && n.querySelectorAll(':scope > table').length === 1 ? n.lastElementChild : null;
       const tb = t && t.tBodies[0]; if (!tb || tb.rows.length < 2) return null;
       const t1 = t.cloneNode(false); if (t.tHead) t1.appendChild(t.tHead.cloneNode(true));
       const b1 = document.createElement('tbody'); t1.appendChild(b1);
-      const part = t === n ? t1 : n.cloneNode(false); if (part !== t1) part.appendChild(t1);
+      const part = t === n ? t1 : n.cloneNode(false);
+      const heads = part === t1 ? [] : [...n.children].filter(x => x !== t);
+      if (part !== t1) { heads.forEach(x => part.appendChild(x.cloneNode(true))); part.appendChild(t1); }
       cur.appendChild(part);
       while (tb.rows.length > 1) { const r = tb.rows[0]; b1.appendChild(r); if (over()) { tb.insertBefore(r, tb.firstChild); break; } }
       if (!b1.rows.length) { part.remove(); return null; }
+      heads.forEach(x => x.remove()); // the rest of the table carries on under the header row alone
       if (t1.tFoot) t1.tFoot.remove();
       return part;
     };

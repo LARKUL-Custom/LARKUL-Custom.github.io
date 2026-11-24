@@ -56,7 +56,7 @@ function resolve(ref) {
     case 'cabc': { const c = cab(id); return c && (c.construction = c.construction || defaultConstruction(c.cat)); }
     case 'wall': return wall(id);
     // 0.63.4: a wall's stone or panel detail (walldetail.js).
-    case 'wdet': { const w = wall(id); return w && (w.detail = w.detail || {}); }
+    case 'wdet': { const w = wall(id); if (!w) return null; const d = (w.detail = w.detail || {}); if (!d.kind && !d.stone) d.stone = 'tile'; return d; }
     // A line from the bid on Pricing › Quote: bidi:<room id>:<line id>
     case 'bidi': return bidItemRef(id);
     case 'jline': return typeof jobLineRef === 'function' ? jobLineRef(id) : null;
