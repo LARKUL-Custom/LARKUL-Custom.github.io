@@ -137,7 +137,16 @@ function mozScale(rooms) {
   return l.length && l[l.length >> 1] > 600 ? 1 / 25.4 : 1;
 }
 const isFiller = p => /filler/i.test(p.name + ' ' + p.desc) || p.sub === 7;
-const isEndPanel = p => /end panel/i.test(p.name + ' ' + p.desc) || p.sub === 9;
+// Mozaik's short names for end panels: TEP (tall), BEP (base), VEP (vanity), WEP (wall), as in "TEP-Left" or "Left BEP".
+const EP_SHORT = { T: 'Tall', B: 'Base', V: 'Vanity', W: 'Wall' };
+const EP_RE = /^(?:(left|right)[\s_-]*)?([TBVW])EP\b(?:[\s_-]*(live edge))?[\s_-]*(left|right)?\s*$/i;
+// "TEP-Left" -> "Tall End Panel Left" (Ayden 2026-11-24: "just call them tall end panel"); other names stay as they are.
+function epName(n) {
+  const m = EP_RE.exec(String(n || '').trim()); if (!m) return n;
+  const side = (m[1] || m[4] || '').toLowerCase();
+  return `${EP_SHORT[m[2].toUpperCase()]} End Panel${m[3] ? ' Live Edge' : ''}${side ? ' ' + side[0].toUpperCase() + side.slice(1) : ''}`;
+}
+const isEndPanel = p => /end panel/i.test(p.name + ' ' + p.desc) || EP_RE.test(String(p.name || '').trim()) || p.sub === 9;
 function mozCat(p) {
   const known = Object.keys(MOZ_LIB_CATS).find(k => MOZ_LIB_CATS[k].includes(p.name.trim()));
   if (known) return known;
@@ -472,7 +481,7 @@ function mozRooms(data) {
       // as a Support Panel instead of being left out.
       const sp = !c && isEndPanel(p) && typeof libItem === 'function' && libItem('made-panel');
       if (sp) {
-        const k = put(sp, p, at, { name: p.name && !/^finished panel$/i.test(p.name) ? p.name : sp.name, h: p.h > 0 ? p.h : sp.h, d: p.d > 3 ? p.d : p.w > 3 ? p.w : sp.d, elev: p.elev || 0, outset: p.outset || 0 });
+        const k = put(sp, p, at, { name: p.name && !/^finished panel$/i.test(p.name) ? epName(p.name) : sp.name, h: p.h > 0 ? p.h : sp.h, d: p.d > 3 ? p.d : p.w > 3 ? p.w : sp.d, elev: p.elev || 0, outset: p.outset || 0 });
         return;
       }
       // 0.61.0: a filler with no cabinet beside it (in a washer niche, beside a bench) is placed as the library's filler.
@@ -516,6 +525,19 @@ function mozRooms(data) {
       rm.fixtures.push(f);
     });
     rm.autoTops = true;
+    // 0.63.17 (Ayden 2026-11-24: "in the mozaik drawing the cabinets go to ceiling height, but in this one they dont"):
+    // the room's "Cabinets off the ceiling" gap (3" by default) used to cut imported cabinets that Mozaik ran closer to
+    // the ceiling. A Mozaik room takes the gap its own drawing has: the least room any cabinet leaves under the ceiling,
+    // when that is under the default, and a ceiling raised to the tallest cabinet if one goes past the walls.
+    if (!data.inches) {
+      const H = Math.max(0, ...rm.walls.filter(w => !w.island).map(w => +w.height || 0)), gap0 = ceilGap(rm);
+      const tops = rm.cabinets.map(c => (+c.elev || 0) + (+c.h || 0)).filter(t => H > 0 && t > H - gap0 + 0.001);
+      if (tops.length) {
+        const top = Math.max(...tops);
+        rm.ceiling = { ...(rm.ceiling || {}), gap: r3(Math.max(0, H - top)) };
+        if (top > H + 0.001) rm.ceiling.h = r3(top);
+      }
+    }
     const keepR = S.rooms; S.rooms = [rm];
     try { withRoom(rm, () => mozCornerFit(rm)); } finally { S.rooms = keepR; }
     return rm;

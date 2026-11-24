@@ -194,7 +194,7 @@ function printWall3DPage(room, ws, head) {
 
 /* ----- Install list (Installer drawings): every cabinet to hang or set, wall by wall, with where it goes and what goes
    with it, a box to tick, then the appliances, molding and tops. No prices. ----- */
-function printInstallPage(room, head) {
+function printInstallPage(room, head, pr = {}) {
   // In the order they go in (Ayden 2026-11-24): base and tall cabinets, uppers, fillers, panels, molding, then the rest
   // (appliances, shelves and other products, countertops). Each section is sorted wall by wall, left to right.
   return withRoom(room, () => {
@@ -209,11 +209,12 @@ function printInstallPage(room, head) {
     const grp = c => { const l = c.libId && typeof libItem === 'function' && libItem(c.libId); return l && typeof libGroup === 'function' ? libGroup(l) : ''; };
     const isTrim = c => grp(c) === 'filler' && /mold|trim/i.test(c.name || '') || grp(c) === 'molding';
     const isFiller = c => !isTrim(c) && (grp(c) === 'filler' || /filler/i.test(c.name || ''));
-    const isPanel = c => !isTrim(c) && !isFiller(c) && (!!c.autoOf || grp(c) === 'panel' || /panel/i.test(c.name || '') && !/door/i.test(c.name || ''));
+    // Standing panels (Support Panel, Mozaik's TEP/BEP end panels) are panels, not specialty products.
+    const isPanel = c => !isTrim(c) && !isFiller(c) && (!!c.autoOf || grp(c) === 'panel' || c.libId === 'made-panel' || c.libId === 'made-apfront' || (typeof EP_RE !== 'undefined' && EP_RE.test(String(c.name || '').trim())) || /panel/i.test(c.name || '') && !/door|front/i.test(c.name || ''));
     const isOther = c => !isTrim(c) && !isFiller(c) && !isPanel(c) && ((typeof isSpecialty === 'function' && isSpecialty(c)) || c.made || c.noCount);
     const all = S.cabinets.slice().sort(order), cabs = all.filter(c => !isTrim(c) && !isFiller(c) && !isPanel(c) && !isOther(c));
     const box = '<td class="mp-box"></td>', H8 = ['✓', '#', 'Cabinet', 'Wall', 'W × H × D', 'From left', 'Bottom', 'Top', 'Notes'];
-    const cabRow = (c, note) => `<tr>${box}<td><b>${esc(LBL[c.id] || '')}</b></td><td>${esc(c.name)}</td><td>${esc(wn(c.wall))}</td><td>${fmtLen(c.w)} × ${fmtLen(c.h)} × ${fmtLen(c.d)}</td><td>${cl(c) == null ? '' : fmtLen(cl(c))}</td><td>${c.elev > 0.01 ? fmtLen(c.elev) : 'Floor'}</td><td>${fmtLen((c.elev || 0) + c.h)}</td><td>${esc(note ?? printNote(c.notes).split('\n')[0])}</td></tr>`;
+    const cabRow = (c, note) => `<tr>${box}<td><b>${esc(LBL[c.id] || '')}</b></td><td>${esc(typeof epName === 'function' ? epName(c.name) : c.name)}</td><td>${esc(wn(c.wall))}</td><td>${fmtLen(c.w)} × ${fmtLen(c.h)} × ${fmtLen(c.d)}</td><td>${cl(c) == null ? '' : fmtLen(cl(c))}</td><td>${c.elev > 0.01 ? fmtLen(c.elev) : 'Floor'}</td><td>${fmtLen((c.elev || 0) + c.h)}</td><td>${esc(note ?? printNote(c.notes).split('\n')[0])}</td></tr>`;
     // Heading and table in one block, so a heading never sits alone at the bottom of a sheet (mpPaginate keeps it with its rows).
     const sec = (h, rows, cols = H8) => rows.length ? `<div class="mp-instsec"><h4 class="mp-muh mp-insth">${h}</h4>${tbl(cols, rows)}</div>` : '';
     const base = cabs.filter(c => c.cat !== 'Wall').map(c => cabRow(c)), upper = cabs.filter(c => c.cat === 'Wall').map(c => cabRow(c));
@@ -236,16 +237,22 @@ function printInstallPage(room, head) {
     // The rest: shelves, hoods and other products, appliances, countertops.
     const other = all.filter(isOther).map(c => cabRow(c));
     const fx = fixtList().filter(f => wall(f.wall) && !fixtHole(f)).sort((a, b) => wi(a.wall) - wi(b.wall)).map(f => `<tr>${box}<td>${esc(fixtName(f))}</td><td>${esc(wn(f.wall))}</td><td>${fmtLen(f.w)} W × ${fmtLen(f.h)} H${f.d ? ' × ' + fmtLen(f.d) + ' D' : ''}</td></tr>`);
-    const tp = countertopRuns().filter(t => t.on).sort((a, b) => wi(a.wall) - wi(b.wall)).map(t => `<tr>${box}<td>Countertop${t.tpl && mat(t.tpl.mat) ? ' · ' + esc(mat(t.tpl.mat).name) : ''}</td><td>${esc(wn(t.wall))}</td><td>${fmtLen(t.len)} long${t.bs > 0 ? `, ${fmtLen(t.bs)} backsplash` : ''}</td></tr>`);
+    // Countertops only when the shop makes them (Ayden 2026-11-24): the Print pick 'insttops', and never when the room's
+    // tops are priced at $0 (by others).
+    const topsOurs = (pr.items || []).includes('insttops') && !(ps && typeof topSqFor === 'function' && !(topSqFor(ps, room) > 0));
+    const tp = !topsOurs ? [] : countertopRuns().filter(t => t.on).sort((a, b) => wi(a.wall) - wi(b.wall)).map(t => `<tr>${box}<td>Countertop${t.tpl && mat(t.tpl.mat) ? ' · ' + esc(mat(t.tpl.mat).name) : ''}</td><td>${esc(wn(t.wall))}</td><td>${fmtLen(t.len)} long${t.bs > 0 ? `, ${fmtLen(t.bs)} backsplash` : ''}</td></tr>`);
     const H4 = ['✓', 'What', 'Wall', 'Size'];
     // Trim products (C mold, ceiling trim) go with the molding.
     all.filter(isTrim).forEach(c => md.unshift(`<tr>${box}<td><b>${esc(LBL[c.id] || '')}</b> ${esc(c.name)}</td><td>${esc(wn(c.wall))}</td><td><b>${ft(c.w)}</b> <span class="muted">(${fmtLen(c.w)}, ${fmtLen(c.elev || 0)} off the floor)</span></td></tr>`));
     if (!base.length && !upper.length && !fl.length && !pn.length && !other.length) return '';
-    return `<section class="mp-page mp-flow mp-draw mp-instp">${head(room.name, 'Install list')}
-      <h3 class="mp-nh">Install list${who ? ` <span class="muted">· ${esc(who.name)}</span>` : ''}</h3>
-      <div class="mp-instnote muted">From left is measured from the left end of the wall as you face it (the inside face of the wall at that end). Heights are off the finished floor.</div>
-      ${sec('1. Base and tall cabinets', base)}${sec('2. Upper cabinets', upper)}${sec('3. Fillers', fl)}${sec('4. Panels', pn)}${sec('5. Molding', md, H4)}
-      ${sec('6. Hoods, shelves and other products', other)}${sec('7. Appliances', fx, H4)}${sec('8. Countertops', tp, H4)}</section>`;
+    // Each group on its own sheet (Ayden 2026-11-24: "all base in one page, all uppers in one page dont mix the cabinets");
+    // a group too long for one sheet runs onto the next (mpPaginate). Fillers and panels share a sheet, the rest share one.
+    const sheets = [['Base and tall cabinets', sec('1. Base and tall cabinets', base)], ['Upper cabinets', sec('2. Upper cabinets', upper)],
+      ['Fillers and panels', sec('3. Fillers', fl) + sec('4. Panels', pn)], ['Molding', sec('5. Molding', md, H4)],
+      ['Products, appliances and tops', sec('6. Hoods, shelves and other products', other) + sec('7. Appliances', fx, H4) + sec('8. Countertops', tp, H4)]].filter(([, h]) => h);
+    return sheets.map(([what, body], i) => `<section class="mp-page mp-flow mp-draw mp-instp">${head(room.name, 'Install list · ' + what)}
+      ${i === 0 ? `<h3 class="mp-nh">Install list${who ? ` <span class="muted">· ${esc(who.name)}</span>` : ''}</h3>
+      <div class="mp-instnote muted">From left is measured from the left end of the wall as you face it (the inside face of the wall at that end). Heights are off the finished floor.</div>` : ''}${body}</section>`).join('');
   });
 }
 
@@ -291,7 +298,7 @@ function printDrawings(pr, rooms, head) {
     // Installer drawings: the plan and the install list first, then each wall's elevation with its 3D picture next to it.
     const inst = want('install');
     if (inst && want('plan')) out.push(printPlanPage(room, head));
-    if (inst) out.push(printInstallPage(room, head));
+    if (inst) out.push(printInstallPage(room, head, pr));
     printWallSides(room).forEach(ws => { if (want('elev')) out.push(printElevPage(room, ws, head)); if (want('wall3d')) out.push(printWall3DPage(room, ws, head)); });
     if (!inst && want('plan')) out.push(printPlanPage(room, head));
     if (want('tops') && typeof printTopsPage === 'function') out.push(printTopsPage(room, head));

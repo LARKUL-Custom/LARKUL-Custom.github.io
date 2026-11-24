@@ -640,6 +640,8 @@ function migrate(s) {
   if (s.v !== 3 || !Array.isArray(s.rooms) || !s.rooms.length) return null;
   // Applied panels were yes or no; now each end is automatic, always or never.
   s.rooms.forEach(r => r.cabinets.forEach(c => {
+    // 0.63.16: Mozaik's "TEP-Left" brought in as a standing panel reads "Tall End Panel Left" (Ayden 2026-11-24).
+    if (c.libId === 'made-panel' && c.fromMozaik !== false && typeof epName === 'function') c.name = epName(c.name);
     ['L', 'R'].forEach(e => { if (!('panel' + e in c)) c['panel' + e] = c['applied' + e] ? 'on' : ''; delete c['applied' + e]; });
   }));
   // Feet and toe skin came later: older jobs pick up the shop defaults.
