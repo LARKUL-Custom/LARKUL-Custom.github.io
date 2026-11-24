@@ -221,7 +221,7 @@ function wxWalkCss() {
 }
 function wxPlayerCode(lib) {
   const fns = [Viewer3D, aoSetup, aoTargets, realAO, sunAt, realLight, pocketMove, wg, roomViewDir].map(f => f.toString()).join('\n');
-  const consts = `const AO = { on: true };\nconst aoCoarse = ${aoCoarse.toString()};\nconst AO_VERT = ${JSON.stringify(AO_VERT)};\nconst AO_FRAG = ${JSON.stringify(AO_FRAG)};\nconst AO_BLUR = ${JSON.stringify(AO_BLUR)};\nconst sunLabel = ${sunLabel.toString()};\nconst mixHex = ${mixHex.toString()};\nconst ease = ${ease.toString()};\nconst CASE = ${JSON.stringify(CASE)};\nconst fixtInner = ${fixtInner.toString()};\nconst fixtList = () => S.fixtures || [];\nconst fixtById = id => fixtList().find(f => f.id === id);\n`;
+  const consts = `const AO = { on: true };\nconst aoCoarse = ${aoCoarse.toString()};\nconst AO_VERT = ${JSON.stringify(AO_VERT)};\nconst AO_FRAG = ${JSON.stringify(AO_FRAG)};\nconst AO_BLUR = ${JSON.stringify(AO_BLUR)};\nconst sunLabel = ${sunLabel.toString()};\nconst mixHex = ${mixHex.toString()};\nconst ease = ${ease.toString()};\nconst CASE = ${JSON.stringify(CASE)};\nconst fixtInner = ${fixtInner.toString()};\n${doorType.toString()}\n${doorHasLeaf.toString()}\nconst fixtList = () => S.fixtures || [];\nconst fixtById = id => fixtList().find(f => f.id === id);\n`;
   return [lib.three, lib.orbit, lib.icons, WX_SHIM, consts, fns, lib.walk, wxPlayer.toString(), 'wxPlayer(WXDATA);'].join('\n;\n');
 }
 async function wxFile(rooms, ctx) {
@@ -281,7 +281,7 @@ function switchRoom(id) { if (!roomById(id) || id === S.roomId) return; wxShow(i
 function buildRoom3D() {
   const v = roomViewer; if (!v) return;
   // Door leaves stand as far open as the Walk says (the app redraws them; here they turn in place).
-  if (typeof DOORS === 'object') v.root.traverse(o => { const d = o.userData.doorLeaf; if (d) o.rotation.y = d.k * DOOR_OPEN * ease(doorAjar(d.id)); });
+  if (typeof DOORS === 'object') v.root.traverse(o => { const d = o.userData.doorLeaf; if (d) doorLeafPose(o, ease(doorAjar(d.id))); });
   v.requestRender();
 }
 function wall(id) { return S.walls.find(w => w.id === id); }

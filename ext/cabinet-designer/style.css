@@ -1933,6 +1933,9 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .fx-glass{fill:#9fd0ef;fill-opacity:.45;stroke:var(--line-strong);stroke-width:1}
 .fx-leaf{fill:var(--wood);stroke:var(--wood-edge);stroke-width:1}
 .fx-knob{fill:var(--muted)}
+/* 0.63.30 room doors: plan panels (pocket, barn, bypass) and the barn door track */
+#plan .fixt.fx-leafpl{fill:var(--wood);stroke:var(--wood-edge)}
+.fx-track{fill:var(--ink);stroke:none}
 .fx-line{fill:none;stroke:var(--line-strong);stroke-width:1.2}
 .fx-bowl{fill:var(--panel);stroke:var(--ink);stroke-width:1.2}
 .fixt.fx-sink{fill:var(--panel)}

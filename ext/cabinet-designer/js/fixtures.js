@@ -100,8 +100,15 @@ const FIXT_LIB = [
   FX('dr-ent-l', 'door', 'Doors', 'Entry Door (LH)', 43, 84, 0, { swing: 'L' }),
   FX('dr-ent-r', 'door', 'Doors', 'Entry Door (RH)', 43, 84, 0, { swing: 'R' }),
   FX('dr-dbl', 'door', 'Doors', 'Interior Double Door', 67, 84, 0, { swing: 'both' }),
+  // 0.63.30: the other door types (any doorway's Door type can be changed after it is placed, roomdoors.js).
+  FX('dr-french', 'door', 'Doors', 'French Doors', 67, 84, 0, { swing: 'both', dtype: 'french' }),
+  FX('dr-pocket', 'door', 'Doors', 'Pocket Door', 37, 84, 0, { swing: 'L', dtype: 'pocket' }),
+  FX('dr-barn', 'door', 'Doors', 'Barn Door', 41, 84, 0, { swing: 'L', dtype: 'barn' }),
+  FX('dr-bypass', 'door', 'Doors', 'Sliding Doors (bypass)', 65, 84, 0, { swing: 'L', dtype: 'bypass' }),
+  FX('dr-bifold', 'door', 'Doors', 'Bifold Closet Doors', 41, 84, 0, { swing: 'both', dtype: 'bifold' }),
   FX('op', 'opening', 'Doorways and openings', 'Opening', 30, 84, 0, { bare: true }),
   FX('op-cased', 'opening', 'Doorways and openings', 'Cased Opening', 42, 84, 0),
+  FX('op-arch', 'opening', 'Doorways and openings', 'Arched Opening', 42, 90, 0, { dtype: 'arch' }),
   FX('op-pass', 'opening', 'Doorways and openings', 'Cased Pass Thru', 72, 48, 0, { elev: 36 }),
   FX('wn-1', 'window', 'Windows', 'Window 1', 30, 42, 0),
   FX('wn-2', 'window', 'Windows', 'Window 2', 48, 42, 0),
@@ -342,7 +349,7 @@ function fixtNew(pid) {
   const f = { id: uid('fx'), kind: d.kind, lib: d.id, name: d.name, w: d.w, h: d.h, d: d.d, elev: d.elev };
   // 0.61.3: a panel-ready appliance gets its panel fronts when placed (Panel fronts in its item bar turns them off).
   if (d.pr && PANEL_KINDS.includes(d.kind)) f.panels = true;
-  ['swing', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md', 'cooktop', 'mount', 'faucet', 'ovens'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
+  ['swing', 'dtype', 'bowls', 'apron', 'pr', 'guard', 'topLoad', 'stack', 'hung', 'bare', 'model', 'md', 'cooktop', 'mount', 'faucet', 'ovens'].forEach(k => { if (d[k] !== undefined) f[k] = d[k]; });
   return f;
 }
 function fixtPlace(k, p) {
@@ -368,16 +375,7 @@ function fixtPlanOne(f, ghost) {
     s += `<path class="${cls} nss" d="M${polyPts([P(a0, -h), P(a0, h)]).replace(' ', 'L')}M${polyPts([P(a1, -h), P(a1, h)]).replace(' ', 'L')}"/>`;
     if (!f.bare) [[-h - 0.75, -h], [h, h + 0.75]].forEach(([b0, b1]) => { s += `<polygon class="${cls} fx-case nss" points="${q(f.off, a0, b0, b1)}"/><polygon class="${cls} fx-case nss" points="${q(a1, f.off + f.w, b0, b1)}"/>`; });
     if (f.kind === 'window') [-h / 3, h / 3].forEach(b => { const u = P(a0, b), z = P(a1, b); s += `<line class="${cls} nss" x1="${u.x}" y1="${u.y}" x2="${z.x}" y2="${z.y}"/>`; });
-    if (f.kind === 'door' && f.swing && f.swing !== 'none') {
-      // Seen from the side it swings into, LH means the hinge is on the left. A double door has a leaf on each jamb.
-      const lw = a1 - a0, leaves = f.swing === 'both' ? [[a0, a0 + lw / 2], [a1, a1 - lw / 2]] : (() => { const left = (f.swing !== 'R') === (f.side === 1); return [left ? [a0, a1] : [a1, a0]]; })();
-      leaves.forEach(([ha, fa]) => {
-        const r = Math.abs(fa - ha), hp = P(ha, h), leaf = P(ha, h + r), shut = P(fa, h);
-        s += `<line class="${cls} fx-leafln nss" x1="${hp.x}" y1="${hp.y}" x2="${leaf.x}" y2="${leaf.y}"/>`;
-        const ax = leaf.x - hp.x, ay = leaf.y - hp.y, bx = shut.x - hp.x, by = shut.y - hp.y, gs = ax * by - ay * bx > 0 ? 1 : 0;
-        s += `<path class="fx-swing nss" d="M${leaf.x} ${leaf.y}A${r} ${r} 0 0 ${gs} ${shut.x} ${shut.y}"/>`;
-      });
-    }
+    if (doorHasLeaf(f)) s += doorPlanSVG(f, P, h, a0, a1, cls);
     s += `<polygon class="fx-hit" points="${q(f.off, f.off + f.w, -h - 2, h + 2)}"${id}/>`;
     return s;
   }
@@ -431,16 +429,13 @@ function fixtElevSVG(w, side, L, fs, holes) {
       if (sel) s += `<rect class="ev-halo nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/><rect class="ev-sel nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
     } else {
       const y = -(f.elev + f.h);
-      s += `<rect class="${cls}" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
+      const ad = doorIsArch(f) && archElevD(f, a => side === 1 ? a : L - a);
+      s += ad ? `<path class="${cls}" d="${ad.outer}"/>` : `<rect class="${cls}" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
       if (fixtHole(f)) {
         const [a0, a1, z0, z1] = fixtInner(f), ix = side === 1 ? a0 : L - a1, iw = a1 - a0, iy = -z1, ih = z1 - z0;
-        s += `<rect class="fx-hole nss" x="${ix}" y="${iy}" width="${iw}" height="${ih}"/>`;
+        s += ad ? `<path class="fx-hole nss" d="${ad.hole}"/>` : `<rect class="fx-hole nss" x="${ix}" y="${iy}" width="${iw}" height="${ih}"/>`;
         if (f.kind === 'window') s += `<rect class="fx-glass nss" x="${ix + 1}" y="${iy + 1}" width="${iw - 2}" height="${ih - 2}"/><path class="fx-line nss" d="${f.hung ? `M${ix} ${iy + ih / 2}H${ix + iw}` : iw > 40 ? `M${ix + iw / 2} ${iy}V${iy + ih}` : ''}"/>`;
-        else if (f.kind === 'door' && f.swing && f.swing !== 'none') {
-          const one = (lx, lw, knobRight) => `<rect class="fx-leaf nss" x="${lx + 0.25}" y="${iy + 0.25}" width="${lw - 0.5}" height="${ih - 0.25}"/><circle class="fx-knob nss" cx="${knobRight ? lx + lw - 2.5 : lx + 2.5}" cy="${-(z0 + 36)}" r="1.1"/>`;
-          if (f.swing === 'both') s += one(ix, iw / 2, true) + one(ix + iw / 2, iw / 2, false);
-          else { const left = (f.swing !== 'R') === (f.side === side); s += one(ix, iw, left); }
-        }
+        else if (doorHasLeaf(f)) s += doorElevSVG(f, a => side === 1 ? a : L - a, a0, a1, z0, z1, side);
       }
       else if (f.kind === 'fridge') s += `<path class="fx-line nss" d="M${x} ${y + f.h * 0.32}H${x + f.w}M${x + f.w / 2} ${y}V${y + f.h * 0.32}M${x + f.w / 2 - 2} ${y + f.h * 0.06}V${y + f.h * 0.26}M${x + f.w / 2 + 2} ${y + f.h * 0.06}V${y + f.h * 0.26}M${x + 3} ${y + f.h * 0.38}H${x + f.w - 3}"/>`;
       else if (f.kind === 'dw') s += `<path class="fx-line nss" d="M${x} ${y + 4}H${x + f.w}M${x + 3} ${y + 6}H${x + f.w - 3}"/>`;
@@ -483,6 +478,8 @@ function fixtWall3(w, g, wm, edges, only = fixtHole) {
     piece(at, a0, 0, H); piece(a0, o.a1, 0, o.z0); piece(a0, o.a1, o.z1, H); at = o.a1;
   });
   piece(at, L + t / 2, 0, H);
+  // 0.63.30: an arched opening fills the wall back in above its curve.
+  fixtList().filter(f => f.wall === w.id && fixtHole(f) && only(f) && doorIsArch(f)).forEach(f => out.push(archSpandrel3(f, L, t, wm)));
   return out;
 }
 // A flat piece (outline pts, holes) in a wall group's x/z, top at y, t thick (extruded down).
@@ -514,23 +511,11 @@ function fixt3d(v, selCol) {
       // An imported door or window model fills the opening, through the wall's thickness.
       const fm = fixtModelOf(f), md = fm && Math.max(fm.md || 0, T + 1), mm = md && modelMesh(fm.model, f.w, f.h, md, sel && selCol);
       // Walk can open a door: an opened (or opening) door draws as a plain leaf on its hinge instead of the model.
-      const ajar = f.kind === 'door' && typeof doorAjar === 'function' && doorAjar(f.id) > 0;
-      if (mm && !ajar) { mm.position.set(f.off, f.elev, (T - md) / 2); grp.add(mm); v.root.add(tag(grp)); return; }
+      const ajar = doorHasLeaf(f) && typeof doorAjar === 'function' && doorAjar(f.id) > 0;
+      if (mm && !ajar && !f.dtype) { mm.position.set(f.off, f.elev, (T - md) / 2); grp.add(mm); v.root.add(tag(grp)); return; }
       if (f.kind === 'window') grp.add(box3(iw, ih, 0.25, hot || glass, (a0 + a1) / 2, (z0 + z1) / 2, T / 2, false));
-      if (f.kind === 'door' && f.swing && f.swing !== 'none') {
-        const zc = f.side === 1 ? T - 0.7 : 0.7, lv = f.swing === 'both' ? [[a0, iw / 2], [a0 + iw / 2, iw / 2]] : [[a0, iw]];
-        // Each leaf hangs on its hinge (a pivot at the hinge edge) so Walk can swing it open into the side it swings to.
-        const hingeL = f.swing === 'both' ? null : (f.swing !== 'R') === (f.side === 1);
-        lv.forEach(([x0, lw], i) => {
-          const atLeft = hingeL === null ? i === 0 : hingeL, hx = atLeft ? x0 : x0 + lw, dir = atLeft ? 1 : -1;
-          const piv = new THREE.Group(); piv.position.set(hx, 0, zc);
-          piv.add(box3(lw - 0.2, ih - 0.15, 1.375, hot || wood, dir * lw / 2, z0 + (ih - 0.15) / 2, 0));
-          // Swings toward the side the door opens to (side 1 is +z here).
-          piv.userData.doorLeaf = { id: f.id, k: -(f.side === 1 ? 1 : -1) * dir };
-          if (typeof doorAjar === 'function') piv.rotation.y = piv.userData.doorLeaf.k * DOOR_OPEN * doorAjar(f.id);
-          grp.add(piv);
-        });
-      }
+      if (doorHasLeaf(f)) doorLeaves3(f, grp, T, a0, a1, z0, z1, { wood, glass, dark, hot });
+      if (doorIsArch(f)) { archCasing3(f, grp, T, hot || trim); v.root.add(tag(grp)); return; }
       if (c) [-0.25, T + 0.25].forEach(zc => {
         grp.add(box3(c, f.h - (z0 - f.elev), 0.5, hot || trim, f.off + c / 2, z0 + (f.h - (z0 - f.elev)) / 2, zc));
         grp.add(box3(c, f.h - (z0 - f.elev), 0.5, hot || trim, f.off + f.w - c / 2, z0 + (f.h - (z0 - f.elev)) / 2, zc));
@@ -652,12 +637,12 @@ function fixtProps(f) {
   const id = f.id, R = 'fixt:' + id, d = fixtDef(f), pre = fixtPreset(f.lib) || {}, w = wall(f.wall), L = w ? wg(w).L : 0;
   const from = fixtHole(f) ? 'From the wall start' : 'Along the wall';
   return `<div class="psec"><div class="pshead"><div class="cabtitle"><span class="chip shape">${esc(String(pre.folder || d.name).split(' › ').pop())}</span> <b>${esc(fixtName(f))}</b></div></div>
-    <div class="row-actions">${fixtSink(f) ? '' : `<button class="btn" data-act="fixt-flip" data-id="${id}">${icon('flip')}${f.kind === 'door' ? 'Swing to the other side' : fixtHole(f) ? 'Other side' : 'Flip'}</button>`}${PANEL_KINDS.includes(f.kind) ? `<button class="btn${f.panels ? ' on' : ''}" data-act="fixt-panels" data-id="${id}" aria-pressed="${!!f.panels}" title="Panel fronts in the room's door style, cut from the Finish">${icon('door')}Panel fronts${f.panels ? ' on' : ''}</button>` : ''}<button class="btn" data-act="fixt-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn danger" data-act="fixt-del" data-id="${id}">${icon('trash')}Delete</button></div>${f.model && modelItem(f.lib) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-unlib" data-id="${id}" title="Takes this model out of the Imported models list. Ones already in jobs stay.">${icon('trash')}Remove from Imported models</button></div>` : ''}
+    <div class="row-actions">${fixtSink(f) ? '' : `<button class="btn" data-act="fixt-flip" data-id="${id}">${icon('flip')}${doorHasLeaf(f) && !['pocket', 'bypass'].includes(doorType(f)) ? (doorType(f) === 'barn' ? 'Hang on the other side' : 'Swing to the other side') : fixtHole(f) ? 'Other side' : 'Flip'}</button>`}${PANEL_KINDS.includes(f.kind) ? `<button class="btn${f.panels ? ' on' : ''}" data-act="fixt-panels" data-id="${id}" aria-pressed="${!!f.panels}" title="Panel fronts in the room's door style, cut from the Finish">${icon('door')}Panel fronts${f.panels ? ' on' : ''}</button>` : ''}<button class="btn" data-act="fixt-dup" data-id="${id}">${icon('copy')}Duplicate</button><button class="btn danger" data-act="fixt-del" data-id="${id}">${icon('trash')}Delete</button></div>${f.model && modelItem(f.lib) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-unlib" data-id="${id}" title="Takes this model out of the Imported models list. Ones already in jobs stay.">${icon('trash')}Remove from Imported models</button></div>` : ''}
     <div class="sizeline">${fixtHole(f) && !f.bare ? 'With casing: ' : ''}${fmtLen(f.w, 1)} wide × ${fmtLen(f.h, 1)} high${f.d ? ` × ${fmtLen(f.d, 1)} deep` : ''}</div>
     <div class="note">${w ? esc(wallName(w)) : ''}${fixtSink(f) ? ' · sits in the countertop' : fixtUnder(f) ? ' · the countertop runs over it' : fixtHole(f) ? ' · cabinets stay out of it where they would overlap' : fixtLoose(f) ? ' · just to look at, cabinets can go over it' : fixtHung(f) ? ' · on the wall, wall cabinets stay out of its space' : ' · cabinets stay out of its space'}. Not on the cut list.</div></div>
   <div class="psec box">${secHead('ruler', 'Size and position', 'teal')}
     <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtLoose(f) || fixtHung(f) ? fld(fixtHung(f) ? 'Bottom off the floor' : 'Off the floor', R, 'elev', f.elev || 0, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
-    ${f.kind === 'door' ? fld('Door', R, 'swing', f.swing || 'L', 'select', { options: [{ v: 'L', l: 'LH, hinge on the left' }, { v: 'R', l: 'RH, hinge on the right' }, { v: 'both', l: 'Double door' }, { v: 'none', l: 'No door (open doorway)' }] }) : ''}
+    ${doorType(f) ? `<div class="grid2">${fld('Door type', R, 'dtype', doorType(f), 'select', { options: ROOM_DOOR_TYPES.map(({ v, l }) => ({ v, l })) })}${(o => o ? fld(o.label, R, 'swing', doorSideVal(f), 'select', { options: o.options }) : '')(doorSideOpts(f))}${doorIsArch(f) ? fld('Arch rise', R, 'rise', r3(archRise(f)), 'len') : ''}</div>` : ''}
     ${(f.kind === 'door' || f.kind === 'opening') && S.rooms.length > 1 ? fld('Leads to', R, 'leadsTo', roomById(f.leadsTo) ? f.leadsTo : '', 'select', { options: [{ v: '', l: 'Nowhere' }, ...S.rooms.filter(r => r.id !== S.roomId).map(r => ({ v: r.id, l: r.name }))], wide: true }) : ''}
     ${fixtSink(f) ? fld('Bowls', R, 'bowls', f.bowls || 1, 'selnum', { options: [{ v: 1, l: 'Single bowl' }, { v: 2, l: 'Double bowl' }, { v: 3, l: 'Triple bowl' }] }) : ''}
     ${fixtSink(f) && !f.cooktop ? fld('Faucet', R, 'faucet', fixtFaucet(f), 'select', { options: FAUCETS.map(([v, l]) => ({ v, l })), wide: true }) : ''}

@@ -12,6 +12,16 @@ const WALK = { on: false, eye: 66, r: 9, speed: 54, fast: 120, vx: 0, vz: 0, tur
 // How far each door is open (0 shut, 1 open), for this session only; nothing is saved in the job.
 const DOOR_OPEN = Math.PI / 2, DOORS = { goal: {}, t: {} };
 function doorAjar(id) { return DOORS.t[id] || 0; }
+// 0.63.30: each moving piece of a room door (roomdoors.js) at t (0 shut, 1 open): a swing door turns on its hinge, a
+// pocket, barn or bypass door slides, a bifold's first panel turns on the jamb and its second folds back on it.
+const DOOR_FOLD = Math.PI * 0.42;
+function doorLeafPose(o, t) {
+  const d = o.userData.doorLeaf; if (!d) return;
+  if (d.kind === 'slide') o.position.x = d.x0 + d.dx * t;
+  else if (d.kind === 'fold') o.rotation.y = d.k * DOOR_FOLD * t;
+  else if (d.kind === 'fold2') o.rotation.y = -2 * d.k * DOOR_FOLD * t;
+  else o.rotation.y = d.k * DOOR_OPEN * t;
+}
 function doorToggle(id) { DOORS.goal[id] = DOORS.goal[id] ? 0 : 1; walkLoop(); }
 // Moves the door leaves toward open or shut; true while any is still moving.
 function doorStep(v, dt) {
@@ -23,7 +33,7 @@ function doorStep(v, dt) {
   if (!moving) return false;
   const e = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   let model = false;
-  v.root.traverse(o => { const d = o.userData.doorLeaf; if (d) o.rotation.y = d.k * DOOR_OPEN * e(doorAjar(d.id)); });
+  v.root.traverse(o => { const d = o.userData.doorLeaf; if (d) doorLeafPose(o, e(doorAjar(d.id))); });
   // A door drawn from an imported model has no leaf to turn until the room is drawn again with a plain leaf.
   Object.keys(DOORS.goal).forEach(id => { if (DOORS.goal[id] && !walkLeafOf(v, id)) model = true; });
   if (model) buildRoom3D();
@@ -84,7 +94,7 @@ function walkGoRoom(f) {
     const nx = d.g.n.x * d.inn, ny = d.g.n.y * d.inn, k = d.T / 2 + WALK.r + 14;
     WALK.x = d.cx + nx * k; WALK.z = d.cy + ny * k; WALK.yaw = Math.atan2(-nx, -ny);
     // Its door is open, the way you came through.
-    if (g.kind === 'door' && g.swing && g.swing !== 'none') { DOORS.goal[g.id] = 1; DOORS.t[g.id] = 1; buildRoom3D(); walkSolids(v); }
+    if (doorHasLeaf(g)) { DOORS.goal[g.id] = 1; DOORS.t[g.id] = 1; buildRoom3D(); walkSolids(v); }
     if (walkHits(WALK.x, WALK.z)) for (let s = 6; s < 60 && walkHits(WALK.x, WALK.z); s += 6) { WALK.x = d.cx + nx * (k + s); WALK.z = d.cy + ny * (k + s); }
   } else { walkPlace(v); WALK.yaw = keepYaw; }
   WALK.vx = WALK.vz = 0; WALK.pitch = Math.max(-0.3, Math.min(0.3, WALK.pitch));
@@ -450,7 +460,7 @@ function walkTap(v, cx, cy) {
   // a cabinet's closed front face counts, open or shut, even where the door has slid away into its pocket or something
   // in front of it (a trim, a filler edge) took the ray first.
   const fh = walkFrontHit(v, rc, hit ? hit.distance + 2 : 144);
-  if (fx && fx.kind === 'door' && fx.swing && fx.swing !== 'none' && !(fh && fh.d < hit.distance - 0.5)) { doorToggle(fx.id); return; }
+  if (fx && doorHasLeaf(fx) && !(fh && fh.d < hit.distance - 0.5)) { doorToggle(fx.id); return; }
   if (fh) { setOpen([fh.c.id]); walkLoop(); return; }
   const id = hit && hit.object.userData.cabId, c = id && cab(id);
   if (c && openable(c)) { setOpen([c.id]); walkLoop(); }

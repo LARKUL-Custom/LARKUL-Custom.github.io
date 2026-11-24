@@ -196,6 +196,8 @@ document.addEventListener('change', e => {
     // A sink's mount: apron front sinks also set the apron (the cabinet under it gets its apron build).
     // A doorway that leads to another room (Walk goes through it); links a door in that room back.
     if (ref.startsWith('fixt:') && field === 'leadsTo' && typeof doorLink === 'function') { doorLink(o, v); return; }
+    // 0.63.30: a doorway's Door type (roomdoors.js) also sets its casing and, unless typed, its name.
+    if (ref.startsWith('fixt:') && field === 'dtype' && typeof doorSetType === 'function') { doorSetType(o, v); return; }
     if (ref.startsWith('fixt:') && field === 'mount') { o.mount = v; if (v === 'apron') o.apron = true; else delete o.apron; return; }
     if (ref.startsWith('fixtpos:') || ref.startsWith('shppos:')) { const px = xProxy(o); setFromEnd(px, field, v); o.off = px.off; return; }
     // Classification Base/Wall/Tall also sets how the product is built; other classes keep their Built as pick.

@@ -273,7 +273,9 @@ function wdMeshes3(w, side) {
   const grp = wallGroup(w, side, side === 1 ? F.lo : F.hi);
   if (d.kind === 'stone') {
     const m = wdStoneMat(d.stone, d.tint);
-    const rs = rects.map(r => [r[0], r[1], r[2], Math.min(r[3], d.h)]).filter(r => r[3] - r[2] > 0.01), g = rs.length && wdStoneGeo(rs, d);
+    // Edges that stop at something (a cabinet, appliance, panel, casing) run 1/16" into it, so the stone's edge isn't in the
+    // same plane as that thing's side (they flickered there as white lines, Ayden 2026-11-24). Wall ends and the top stay put.
+    const E = 0.0625, rs = rects.map(r => [r[0] > 0.01 ? r[0] - E : r[0], r[1] < F.len - 0.01 ? r[1] + E : r[1], r[2] > 0.01 ? r[2] - E : r[2], Math.min(r[3], d.h) < d.h - 0.01 ? Math.min(r[3], d.h) + E : Math.min(r[3], d.h)]).filter(r => r[3] - r[2] > 0.01), g = rs.length && wdStoneGeo(rs, d);
     if (g) { const me = new THREE.Mesh(g, m); me.userData.wallDetail = w.id; grp.add(me); }
   } else {
     const m = wdPaintMat(d.color);
