@@ -188,6 +188,8 @@ document.addEventListener('change', e => {
     // An appliance, window or doorway on a wall grows its width the same way a cabinet does (see qGrow).
     if (ref.startsWith('fixt:') && field === 'w' && v > 0 && o.wall && wall(o.wall) && typeof qGrow === 'function') { const px = xProxy(o); qGrow(px, v); o.off = px.off; o.w = v; return; }
     // A sink's mount: apron front sinks also set the apron (the cabinet under it gets its apron build).
+    // A doorway that leads to another room (Walk goes through it); links a door in that room back.
+    if (ref.startsWith('fixt:') && field === 'leadsTo' && typeof doorLink === 'function') { doorLink(o, v); return; }
     if (ref.startsWith('fixt:') && field === 'mount') { o.mount = v; if (v === 'apron') o.apron = true; else delete o.apron; return; }
     if (ref.startsWith('fixtpos:') || ref.startsWith('shppos:')) { const px = xProxy(o); setFromEnd(px, field, v); o.off = px.off; return; }
     // Classification Base/Wall/Tall also sets how the product is built; other classes keep their Built as pick.

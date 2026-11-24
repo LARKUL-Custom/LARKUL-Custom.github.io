@@ -845,7 +845,7 @@ function buildRoomScene(v) {
     v.root.add(grp);
   });
   addLights3d(v, R3, L.lights, L.ceiling);
-  if (!v.fitted) { v.fitted = true; v.look(roomViewDir(0.75)); }
+  if (!v.fitted && !v.walk) { v.fitted = true; v.look(roomViewDir(0.75)); }
   if (R3) {
     v.root.traverse(o => { if (o.isMesh && !o.material.transparent && !o.receiveShadow && o.userData.layer !== 'lights') { o.castShadow = true; o.receiveShadow = true; } });
     // Walls and the ceiling cast shadows too, so daylight only gets in through windows, doorways and open sides.

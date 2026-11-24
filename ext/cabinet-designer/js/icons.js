@@ -40,6 +40,7 @@ const ICON_PATHS = {
   zoomin: '<circle cx="8.5" cy="8.5" r="5"/><path d="M12.3 12.3L17 17M6.5 8.5h4M8.5 6.5v4"/>',
   zoomout: '<circle cx="8.5" cy="8.5" r="5"/><path d="M12.3 12.3L17 17M6.5 8.5h4"/>',
   fit: '<path d="M3 7.5V3h4.5M12.5 3H17v4.5M17 12.5V17h-4.5M7.5 17H3v-4.5"/>',
+  regen: '<path d="M15.5 8A6 6 0 0 0 4.6 6.2"/><path d="M4 3v3.5h3.5"/><path d="M4.5 12a6 6 0 0 0 10.9 1.8"/><path d="M16 17v-3.5h-3.5"/>',
   undo: '<path d="M7 4L3 8l4 4"/><path d="M3.5 8H12a4.5 4.5 0 0 1 0 9H8"/>',
   redo: '<path d="M13 4l4 4-4 4"/><path d="M16.5 8H8a4.5 4.5 0 0 0 0 9h4"/>',
   check: '<path d="M4 10.5l4 4 8-9"/>',

@@ -505,11 +505,23 @@ function fixt3d(v, selCol) {
       const grp = wallGroup(w, 1, 0, -w.thick), T = w.thick, [a0, a1, z0, z1] = fixtInner(f), iw = a1 - a0, ih = z1 - z0, c = f.bare ? 0 : CASE;
       // An imported door or window model fills the opening, through the wall's thickness.
       const fm = fixtModelOf(f), md = fm && Math.max(fm.md || 0, T + 1), mm = md && modelMesh(fm.model, f.w, f.h, md, sel && selCol);
-      if (mm) { mm.position.set(f.off, f.elev, (T - md) / 2); grp.add(mm); v.root.add(tag(grp)); return; }
+      // Walk can open a door: an opened (or opening) door draws as a plain leaf on its hinge instead of the model.
+      const ajar = f.kind === 'door' && typeof doorAjar === 'function' && doorAjar(f.id) > 0;
+      if (mm && !ajar) { mm.position.set(f.off, f.elev, (T - md) / 2); grp.add(mm); v.root.add(tag(grp)); return; }
       if (f.kind === 'window') grp.add(box3(iw, ih, 0.25, hot || glass, (a0 + a1) / 2, (z0 + z1) / 2, T / 2, false));
       if (f.kind === 'door' && f.swing && f.swing !== 'none') {
         const zc = f.side === 1 ? T - 0.7 : 0.7, lv = f.swing === 'both' ? [[a0, iw / 2], [a0 + iw / 2, iw / 2]] : [[a0, iw]];
-        lv.forEach(([x0, lw]) => grp.add(box3(lw - 0.2, ih - 0.15, 1.375, hot || wood, x0 + lw / 2, z0 + (ih - 0.15) / 2, zc)));
+        // Each leaf hangs on its hinge (a pivot at the hinge edge) so Walk can swing it open into the side it swings to.
+        const hingeL = f.swing === 'both' ? null : (f.swing !== 'R') === (f.side === 1);
+        lv.forEach(([x0, lw], i) => {
+          const atLeft = hingeL === null ? i === 0 : hingeL, hx = atLeft ? x0 : x0 + lw, dir = atLeft ? 1 : -1;
+          const piv = new THREE.Group(); piv.position.set(hx, 0, zc);
+          piv.add(box3(lw - 0.2, ih - 0.15, 1.375, hot || wood, dir * lw / 2, z0 + (ih - 0.15) / 2, 0));
+          // Swings toward the side the door opens to (side 1 is +z here).
+          piv.userData.doorLeaf = { id: f.id, k: -(f.side === 1 ? 1 : -1) * dir };
+          if (typeof doorAjar === 'function') piv.rotation.y = piv.userData.doorLeaf.k * DOOR_OPEN * doorAjar(f.id);
+          grp.add(piv);
+        });
       }
       if (c) [-0.25, T + 0.25].forEach(zc => {
         grp.add(box3(c, f.h - (z0 - f.elev), 0.5, hot || trim, f.off + c / 2, z0 + (f.h - (z0 - f.elev)) / 2, zc));
@@ -625,6 +637,7 @@ function fixtProps(f) {
   <div class="psec box">${secHead('ruler', 'Size and position', 'teal')}
     <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtLoose(f) || fixtHung(f) ? fld(fixtHung(f) ? 'Bottom off the floor' : 'Off the floor', R, 'elev', f.elev || 0, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
     ${f.kind === 'door' ? fld('Door', R, 'swing', f.swing || 'L', 'select', { options: [{ v: 'L', l: 'LH, hinge on the left' }, { v: 'R', l: 'RH, hinge on the right' }, { v: 'both', l: 'Double door' }, { v: 'none', l: 'No door (open doorway)' }] }) : ''}
+    ${(f.kind === 'door' || f.kind === 'opening') && S.rooms.length > 1 ? fld('Leads to', R, 'leadsTo', roomById(f.leadsTo) ? f.leadsTo : '', 'select', { options: [{ v: '', l: 'Nowhere' }, ...S.rooms.filter(r => r.id !== S.roomId).map(r => ({ v: r.id, l: r.name }))], wide: true }) : ''}
     ${fixtSink(f) ? fld('Bowls', R, 'bowls', f.bowls || 1, 'selnum', { options: [{ v: 1, l: 'Single bowl' }, { v: 2, l: 'Double bowl' }, { v: 3, l: 'Triple bowl' }] }) : ''}
     ${fixtSink(f) && !f.cooktop ? fld('Faucet', R, 'faucet', fixtFaucet(f), 'select', { options: FAUCETS.map(([v, l]) => ({ v, l })), wide: true }) : ''}
     ${fixtSink(f) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-center" data-id="${id}">${icon('ends')}Center on the cabinet under it</button></div>` : ''}

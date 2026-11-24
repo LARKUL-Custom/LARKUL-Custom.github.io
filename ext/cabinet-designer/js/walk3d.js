@@ -1,9 +1,96 @@
 // Walk: a first-person tour of the room in the 3D view, at eye height (5'6").
 // Keys W A S D or the arrows walk (Shift walks faster), dragging looks around, a click or tap on a cabinet opens
 // or closes its doors and drawers, Esc stops. On a tablet a small stick at the bottom left walks.
+// Full screen (button or F) fills the screen and locks the mouse: moving the mouse looks, a click opens what is
+// under the dot in the middle, Esc leaves full screen (a second Esc stops walking).
+// Walking speeds up and slows down smoothly, at the same pace whatever the frame rate.
 // Walls, cabinets, tops, appliances and shapes all block the way; doorways in walls are open.
 'use strict';
-const WALK = { on: false, eye: 66, r: 10, speed: 48, fast: 110 };
+const WALK = { on: false, eye: 66, r: 9, speed: 54, fast: 120, vx: 0, vz: 0, turnV: 0 };
+
+/* ---------- Doors in doorways (fixtures): open and close while walking ---------- */
+// How far each door is open (0 shut, 1 open), for this session only; nothing is saved in the job.
+const DOOR_OPEN = Math.PI / 2, DOORS = { goal: {}, t: {} };
+function doorAjar(id) { return DOORS.t[id] || 0; }
+function doorToggle(id) { DOORS.goal[id] = DOORS.goal[id] ? 0 : 1; walkLoop(); }
+// Moves the door leaves toward open or shut; true while any is still moving.
+function doorStep(v, dt) {
+  let moving = false;
+  Object.keys(DOORS.goal).forEach(id => {
+    const g = DOORS.goal[id], t = DOORS.t[id] || 0; if (Math.abs(g - t) < 1e-3) { DOORS.t[id] = g; return; }
+    DOORS.t[id] = t + Math.sign(g - t) * Math.min(Math.abs(g - t), dt / 0.7); moving = true;
+  });
+  if (!moving) return false;
+  const e = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  let model = false;
+  v.root.traverse(o => { const d = o.userData.doorLeaf; if (d) o.rotation.y = d.k * DOOR_OPEN * e(doorAjar(d.id)); });
+  // A door drawn from an imported model has no leaf to turn until the room is drawn again with a plain leaf.
+  Object.keys(DOORS.goal).forEach(id => { if (DOORS.goal[id] && !walkLeafOf(v, id)) model = true; });
+  if (model) buildRoom3D();
+  v.requestRender(); return true;
+}
+function walkLeafOf(v, id) { let f = null; v.root.traverse(o => { if (!f && o.userData.doorLeaf && o.userData.doorLeaf.id === id) f = o; }); return f; }
+
+/* ---------- Doorways that lead to another room ---------- */
+// Sets where a doorway leads. The other room gets a door linked back: the one already linked to this door, else one
+// already leading here, else its first door that leads nowhere.
+function doorLink(f, roomId) {
+  const here = S.roomId, old = roomById(f.leadsTo);
+  if (old) (old.fixtures || []).forEach(g => { if (g.leadsDoor === f.id) { delete g.leadsTo; delete g.leadsDoor; } });
+  delete f.leadsTo; delete f.leadsDoor;
+  const r = roomById(roomId); if (!r || roomId === here) return;
+  f.leadsTo = roomId;
+  const doors = (r.fixtures || []).filter(g => g.kind === 'door' || g.kind === 'opening');
+  const g = doors.find(x => x.leadsDoor === f.id) || doors.find(x => x.leadsTo === here && !x.leadsDoor) || doors.find(x => !roomById(x.leadsTo));
+  if (g) { g.leadsTo = here; g.leadsDoor = f.id; f.leadsDoor = g.id; }
+}
+// The room's middle (from its walls), to tell its inside from the other side of a doorway.
+function roomMid(r) {
+  const ws = (r.walls || []).filter(w => !w.hidden); if (!ws.length) return null;
+  const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+}
+// Where a doorway is: its middle on the wall, the way into the room, and how far along/through counts as inside it.
+function doorWhere(r, f) {
+  const w = (r.walls || []).find(x => x.id === f.wall); if (!w) return null;
+  const g = wg(w), [a0, a1] = fixtInner(f), m = roomMid(r), a = (a0 + a1) / 2;
+  const cx = w.x1 + g.u.x * a, cy = w.y1 + g.u.y * a, inn = m && (m.x - cx) * g.n.x + (m.y - cy) * g.n.y < 0 ? -1 : 1;
+  return { w, g, a0, a1, cx, cy, inn, T: w.thick || 4 };
+}
+// Walked out through a linked doorway: on into the room it leads to.
+function walkDoorways(v) {
+  const r = curRoom(); if (!r) return false;
+  for (const f of r.fixtures || []) {
+    if (!roomById(f.leadsTo) || f.leadsTo === r.id) continue;
+    const d = doorWhere(r, f); if (!d) continue;
+    const px = WALK.x - d.w.x1, pz = WALK.z - d.w.y1, along = px * d.g.u.x + pz * d.g.u.y, across = (px * d.g.n.x + pz * d.g.n.y) * d.inn;
+    const out = across < -(d.T / 2 + 6), was = WALK.door && WALK.door[f.id];
+    if (WALK.door) WALK.door[f.id] = out ? 'out' : 'in';
+    if (out && was === 'in' && along > d.a0 - 6 && along < d.a1 + 6) { walkGoRoom(f); return true; }
+  }
+  return false;
+}
+function walkGoRoom(f) {
+  const from = S.roomId, to = roomById(f.leadsTo); if (!to) return;
+  const v = WALK.v, keepYaw = WALK.yaw;
+  switchRoom(to.id); v.fitted = true;
+  if (ui.viewMode !== '3d') return;
+  if (S.roomId !== to.id) return;
+  buildRoom3D(); walkSolids(v); WALK.door = {};
+  // Step in through the door that leads back, a little way into the room, facing in.
+  const g = (to.fixtures || []).find(x => x.id === f.leadsDoor) || (to.fixtures || []).find(x => x.leadsTo === from);
+  const d = g && doorWhere(to, g);
+  if (d) {
+    const nx = d.g.n.x * d.inn, ny = d.g.n.y * d.inn, k = d.T / 2 + WALK.r + 14;
+    WALK.x = d.cx + nx * k; WALK.z = d.cy + ny * k; WALK.yaw = Math.atan2(-nx, -ny);
+    // Its door is open, the way you came through.
+    if (g.kind === 'door' && g.swing && g.swing !== 'none') { DOORS.goal[g.id] = 1; DOORS.t[g.id] = 1; buildRoom3D(); walkSolids(v); }
+    if (walkHits(WALK.x, WALK.z)) for (let s = 6; s < 60 && walkHits(WALK.x, WALK.z); s += 6) { WALK.x = d.cx + nx * (k + s); WALK.z = d.cy + ny * (k + s); }
+  } else { walkPlace(v); WALK.yaw = keepYaw; }
+  WALK.vx = WALK.vz = 0; WALK.pitch = Math.max(-0.3, Math.min(0.3, WALK.pitch));
+  walkCam(v); v.requestRender();
+  walkNote(to.name);
+}
 
 function walkToggle() { if (WALK.on) walkStop(); else walkStart(); }
 
@@ -14,10 +101,10 @@ function walkStart() {
   // The tour is in the Realistic look; it goes back to the plain look after if Walk turned it on.
   WALK.lookWas = { render: !!ui.render3d, hidden: !!ui.hidden3d };
   if (!ui.render3d || ui.hidden3d) { ui.render3d = true; ui.hidden3d = false; renderRoom(); }
-  WALK.v = v; WALK.saved = v.getView(); WALK.fov = v.persp.fov;
+  WALK.v = v; WALK.saved = v.getView(); WALK.fov = v.persp.fov; WALK.room0 = S.roomId; WALK.door = {};
   v.cam = v.persp; v.controls.object = v.persp; v.controls.enabled = false;
   v.persp.fov = 62; v.persp.updateProjectionMatrix();
-  WALK.on = true; v.walk = true; WALK.keys = {}; WALK.stick = null; WALK.solids = null;
+  WALK.on = true; v.walk = true; WALK.keys = {}; WALK.stick = null; WALK.solids = null; WALK.vx = WALK.vz = WALK.turnV = 0;
   walkPlace(v);
   walkUI(v, true);
   walkCam(v); v.requestRender(); walkLoop();
@@ -26,11 +113,16 @@ function walkStart() {
 
 function walkStop() {
   if (!WALK.on) return;
-  const v = WALK.v; WALK.on = false; v.walk = false; WALK.keys = {}; WALK.stick = null;
+  walkFull(false);
+  const v = WALK.v; WALK.on = false; v.walk = false; WALK.keys = {}; WALK.stick = null; WALK.vx = WALK.vz = WALK.turnV = 0;
   if (WALK.raf) cancelAnimationFrame(WALK.raf); WALK.raf = 0;
   walkUI(v, false);
   v.persp.fov = WALK.fov || 40; v.persp.updateProjectionMatrix();
-  v.controls.enabled = true; v.setView(WALK.saved);
+  v.controls.enabled = true;
+  // Walked into another room: show it from the usual corner; else the view from before the walk.
+  if (S.roomId !== WALK.room0) { v.fitted = true; v.look(roomViewDir(0.75)); } else v.setView(WALK.saved);
+  // Doors go back to shut.
+  if (Object.keys(DOORS.goal).length) { DOORS.goal = {}; DOORS.t = {}; if (ui.viewMode === '3d') buildRoom3D(); }
   const lw = WALK.lookWas;
   if (lw && ui.render3d && !ui.hidden3d && (!lw.render || lw.hidden)) { ui.render3d = lw.render; ui.hidden3d = lw.hidden; renderRoom(); }
   renderRoomWalkBtn();
@@ -105,12 +197,31 @@ function walkHits(x, z) {
 // Moves by dx,dz, sliding along whatever is in the way. Someone already touching something (a door swung
 // into them) can always step out.
 function walkMove(dx, dz) {
+  // Rounding leaves tiny sideways bits (1e-16) when walking straight along an axis; they are not a move.
+  if (Math.abs(dx) < 1e-6) dx = 0; if (Math.abs(dz) < 1e-6) dz = 0;
   if (!dx && !dz) return false;
   const x = WALK.x, z = WALK.z, stuck = walkHits(x, z);
   const ok = (nx, nz) => stuck || !walkHits(nx, nz);
-  if (ok(x + dx, z + dz)) { WALK.x += dx; WALK.z += dz; return true; }
+  if (ok(x + dx, z + dz)) { WALK.x += dx; WALK.z += dz; WALK.veer = 0; return true; }
   if (dx && ok(x + dx, z)) { WALK.x += dx; return true; }
   if (dz && ok(x, z + dz)) { WALK.z += dz; return true; }
+  // Head-on into a corner or a door jamb: veer round it, to the side that is open (kept while you push on, so you
+  // don't wobble), which also eases you into a doorway you aren't quite lined up with.
+  if (!WALK.veer) {
+    // The nearer side where a step forward would be clear.
+    const L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L, px = -uz, pz = ux;
+    // None within a foot (a flat wall or cabinet run): just stop, don't drift along it.
+    WALK.veer = 2;
+    for (let k = 2; k <= 12; k += 2) {
+      if (!walkHits(x + ux * 4 + px * k, z + uz * 4 + pz * k)) { WALK.veer = 1; break; }
+      if (!walkHits(x + ux * 4 - px * k, z + uz * 4 - pz * k)) { WALK.veer = -1; break; }
+    }
+  }
+  if (WALK.veer === 2) return false;
+  for (const t0 of [0.45, 0.9, 1.35]) {
+    const t = t0 * WALK.veer, c = Math.cos(t), s = Math.sin(t), nx = (dx * c - dz * s) * 0.8, nz = (dx * s + dz * c) * 0.8;
+    if (ok(x + nx, z + nz)) { WALK.x += nx; WALK.z += nz; return true; }
+  }
   return false;
 }
 
@@ -130,15 +241,30 @@ function walkLoop() {
     const k = WALK.keys, fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0), side = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0), turn = (k.ArrowLeft || k.KeyQ ? 1 : 0) - (k.ArrowRight || k.KeyE ? 1 : 0);
     let f = fwd, s = side;
     if (WALK.stick) { f += -WALK.stick.y; s += WALK.stick.x; }
-    const sp = (k.ShiftLeft || k.ShiftRight ? WALK.fast : WALK.speed) * dt, n = Math.hypot(f, s), go = n > 0.05;
-    if (turn) WALK.yaw += turn * 1.6 * dt;
-    if (go) {
-      const m = Math.min(1, n), fx = -Math.sin(WALK.yaw), fz = -Math.cos(WALK.yaw);
-      const dx = (fx * f - fz * s) / n * m * sp, dz = (fz * f + fx * s) / n * m * sp;
-      walkMove(dx, dz);
+    // The speed you want, as a direction on the floor; the real speed eases toward it (quick to start, a little
+    // softer to stop), so steps blend instead of jerking on and off.
+    const n = Math.hypot(f, s), want = n > 0.05, sp = k.ShiftLeft || k.ShiftRight ? WALK.fast : WALK.speed;
+    let tx = 0, tz = 0;
+    if (want) { const m = Math.min(1, n) * sp / n, fx = -Math.sin(WALK.yaw), fz = -Math.cos(WALK.yaw); tx = (fx * f - fz * s) * m; tz = (fz * f + fx * s) * m; }
+    const ease = 1 - Math.exp(-dt * (want ? 9 : 7));
+    WALK.vx += (tx - WALK.vx) * ease; WALK.vz += (tz - WALK.vz) * ease;
+    WALK.turnV += (turn * 1.7 - WALK.turnV) * (1 - Math.exp(-dt * 10));
+    if (!want && Math.hypot(WALK.vx, WALK.vz) < 0.4) WALK.vx = WALK.vz = 0;
+    if (!turn && Math.abs(WALK.turnV) < 0.005) WALK.turnV = 0;
+    const moving = !!(WALK.vx || WALK.vz), turning = !!WALK.turnV;
+    if (turning) WALK.yaw += WALK.turnV * dt;
+    if (moving) {
+      const x0 = WALK.x, z0 = WALK.z; walkMove(WALK.vx * dt, WALK.vz * dt);
+      // Bumping into something takes the speed out of that direction, so you slide along it and don't stick.
+      if (WALK.x === x0) WALK.vx = 0; if (WALK.z === z0) WALK.vz = 0;
     }
-    if (go || turn || rebuilt) { walkCam(v); v.requestRender(); }
-    if (go || turn || (typeof openAnim !== 'undefined' && openAnim)) WALK.raf = requestAnimationFrame(step);
+    if (moving && walkDoorways(v)) { if (!WALK.on) return; }
+    const doors = doorStep(v, dt);
+    // Doors swinging: read where they are now and then, and once more when they stop.
+    if ((doors && now - WALK.at > 150) || (!doors && WALK.doorsMoving)) walkSolids(v);
+    WALK.doorsMoving = doors;
+    if (moving || turning || rebuilt) { walkCam(v); v.requestRender(); }
+    if (want || turn || moving || turning || doors || (typeof openAnim !== 'undefined' && openAnim)) WALK.raf = requestAnimationFrame(step);
   };
   WALK.raf = requestAnimationFrame(step);
 }
@@ -149,11 +275,57 @@ window.addEventListener('keydown', e => {
   const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   e.stopImmediatePropagation(); e.preventDefault();
-  if (e.key === 'Escape') { walkStop(); return; }
+  if (e.key === 'Escape') {
+    // Esc leaves full screen first (the browser may already have done it with this same press).
+    if (walkIsFull()) { walkFull(false); return; }
+    if (performance.now() - (WALK.fullLeft || 0) < 400) return;
+    walkStop(); return;
+  }
+  if (e.code === 'KeyF' && !e.repeat) { walkFull(!walkIsFull()); return; }
   WALK.keys[e.code] = true; walkLoop();
 }, true);
 window.addEventListener('keyup', e => { if (WALK.on) { delete WALK.keys[e.code]; } }, true);
 window.addEventListener('blur', () => { WALK.keys = {}; WALK.stick = null; });
+
+/* ---------- Full screen with the mouse locked ---------- */
+function walkIsFull() { return !!WALK.on && !!WALK.v && (document.fullscreenElement === WALK.v.host.parentElement || document.pointerLockElement === WALK.v.renderer.domElement); }
+function walkFull(on) {
+  const v = WALK.v; if (!v) return;
+  const card = v.host.parentElement, el = v.renderer.domElement;
+  if (on) {
+    if (!WALK.on) return;
+    try { const p = card.requestFullscreen && card.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+    walkLock();
+  } else {
+    if (document.pointerLockElement === el) try { document.exitPointerLock(); } catch (_) {}
+    if (document.fullscreenElement === card) try { const p = document.exitFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+  }
+}
+function walkLock() {
+  const el = WALK.v && WALK.v.renderer.domElement; if (!el || !el.requestPointerLock) return;
+  try { const p = el.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+}
+// Leaving one leaves the other: the browser's own Esc may only drop the mouse lock or only the full screen.
+document.addEventListener('pointerlockchange', () => {
+  if (!WALK.v) return;
+  const locked = document.pointerLockElement === WALK.v.renderer.domElement;
+  if (WALK.ui) WALK.ui.classList.toggle('locked', locked);
+  if (!locked) { WALK.fullLeft = performance.now(); WALK.keys = {}; if (document.fullscreenElement === WALK.v.host.parentElement) walkFull(false); }
+  else walkNote('Move the mouse to look · click to open · Esc leaves full screen');
+});
+document.addEventListener('fullscreenchange', () => {
+  if (!WALK.v) return;
+  const full = document.fullscreenElement === WALK.v.host.parentElement;
+  if (WALK.ui) WALK.ui.classList.toggle('full', full);
+  if (!full) { WALK.fullLeft = performance.now(); if (document.pointerLockElement === WALK.v.renderer.domElement) try { document.exitPointerLock(); } catch (_) {} }
+  WALK.v.resize();
+});
+// A short note at the top that fades out.
+function walkNote(t) {
+  const h = WALK.ui && WALK.ui.querySelector('.walkhint'); if (!h) return;
+  h.textContent = t; h.classList.remove('gone'); clearTimeout(WALK.hintT);
+  WALK.hintT = setTimeout(() => h.classList.add('gone'), 4000);
+}
 
 /* ---------- Looking, clicking and the touch stick ---------- */
 function walkUI(v, on) {
@@ -166,20 +338,33 @@ function walkUI(v, on) {
   const coarse = matchMedia('(pointer: coarse)').matches;
   const box = document.createElement('div'); box.className = 'walkui';
   box.innerHTML = `<div class="walkbar"><span class="walkhint">${coarse ? 'Stick to walk · drag to look · tap a cabinet to open it' : 'W A S D or arrows to walk · drag to look · click a cabinet to open it'}</span>`
-    + `<button class="btn sm" data-walk="stop">${icon('close')}Stop walking</button></div>`
+    + (coarse ? '' : `<button class="btn sm" data-walk="full" title="Fill the screen and look by moving the mouse (F). Esc comes back.">${icon('expand')}Full screen</button>`)
+    + `<button class="btn sm" data-walk="stop">${icon('close')}Stop walking</button></div><div class="walkdot"></div>`
     + (coarse ? '<div class="walkstick"><i></i></div>' : '');
   v.host.parentElement.appendChild(box); WALK.ui = box;
   WALK.hintT = setTimeout(() => { const h = box.querySelector('.walkhint'); if (h) h.classList.add('gone'); }, 6000);
   box.querySelector('[data-walk=stop]').addEventListener('click', e => { e.stopPropagation(); walkStop(); });
+  const fb = box.querySelector('[data-walk=full]'); if (fb) fb.addEventListener('click', e => { e.stopPropagation(); fb.blur(); walkFull(true); });
 
   // Dragging looks; a short tap or click on a cabinet opens or closes it.
   const drags = new Map();
+  const locked = () => document.pointerLockElement === el;
   const down = e => {
     if (e.target !== el) return;
+    // Mouse locked: a click opens what is under the dot in the middle.
+    if (locked()) { if (e.button === 0) { const r = el.getBoundingClientRect(); walkTap(v, r.left + r.width / 2, r.top + r.height / 2); } return; }
+    // In full screen without the lock (it was refused or lost), a click locks it again.
+    if (document.fullscreenElement === v.host.parentElement && e.pointerType === 'mouse') { walkLock(); return; }
     drags.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: performance.now() });
     try { el.setPointerCapture(e.pointerId); } catch (_) {}
   };
   const move = e => {
+    // Mouse locked: moving the mouse turns your head (right looks right, up looks up), no button needed.
+    if (locked()) {
+      const k = 0.0022, mx = e.movementX || 0, my = e.movementY || 0; if (!mx && !my) return;
+      WALK.yaw -= mx * k; WALK.pitch = Math.max(-1.35, Math.min(1.35, WALK.pitch - my * k));
+      walkCam(v); v.requestRender(); return;
+    }
     const d = drags.get(e.pointerId); if (!d) return;
     const k = e.pointerType === 'touch' ? 0.006 : 0.0045;
     // Grab the view and pull it, like the normal 3D view and street view photos.
@@ -216,6 +401,8 @@ function walkTap(v, cx, cy) {
   const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), v.cam);
   rc.far = 144;
   const hit = rc.intersectObjects(v.root.children, true).find(h => h.object.isMesh && !h.object.isSprite && h.object.visible && walkSolid(h.object));
+  const fx = hit && hit.object.userData.fixtId && fixtById(hit.object.userData.fixtId);
+  if (fx && fx.kind === 'door' && fx.swing && fx.swing !== 'none') { doorToggle(fx.id); return; }
   const id = hit && hit.object.userData.cabId, c = id && cab(id);
   if (c && openable(c)) { setOpen([c.id]); walkLoop(); }
 }

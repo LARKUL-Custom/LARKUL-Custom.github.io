@@ -939,7 +939,8 @@ document.addEventListener('click', e => {
     case 'light-strip-sel': { const c = ui.sel && cab(ui.sel.id); if (c) mutate(() => S.lights.push({ id: uid('lt'), kind: 'strip', cab: c.id, where: c.cat === 'Wall' ? 'under' : 'toe', temp: 'warm' })); break; }
     case 'light-del': mutate(() => { S.lights = S.lights.filter(l => l.id !== id); }); break;
     case 'light-clear': mutate(() => { S.lights = S.lights.filter(l => l.kind !== id); }); break;
-    case 'light-grid': lightGrid(); break;
+    case 'light-grid': case 'light-regen': regenCeilLights(); break;
+    case 'light-list': ui.lightList = ui.lightList === id ? null : id; render(); break;
     case 'light-place': startLightPlace(); break;
     case 'light-draw': startStripDraw(); break;
     case 'light-draw-one': toggleStrip(id); break;

@@ -10,19 +10,25 @@ const stripCab = l => l.kind === 'strip' && S.cabinets.find(c => c.id === l.cab)
 const stripLen = c => Math.max(0, c.w - 2);
 function ceilHeight() { return S.walls.length ? Math.max(...S.walls.map(w => w.height || 96)) : 96; }
 
-/* The Lights tab under the room view. */
+/* The Lights tab under the room view. Kept small (Ayden 2026-11-24: it took up most of the screen): LED strips and
+   ceiling lights side by side, one row of buttons each, and the list of every light only when List is pressed. */
 function lightsCard() {
-  const L = roomLights(), strips = L.filter(stripCab), ceil = L.filter(l => l.kind === 'ceiling');
+  const L = roomLights(), strips = L.filter(stripCab), ceil = L.filter(l => l.kind === 'ceiling'), nAuto = ceil.filter(l => l.auto).length;
   const feet = strips.reduce((a, l) => a + stripLen(stripCab(l)), 0) / 12;
   const cabOpts = S.cabinets.map(c => ({ v: c.id, l: `${LBL[c.id] || ''} ${c.name}` }));
   const temp = (R, l) => ctl(R, 'temp', l.temp || 'warm', 'select', { options: LIGHT_TEMPS, label: 'Light color' });
-  return `<div class="card">${cardHead('LED strips', `<span class="muted">${strips.length} strip${strips.length === 1 ? '' : 's'} · ${feet.toFixed(1)} ft</span>`)}<div class="cardbody">
-    <div class="row-actions"><button class="btn${ui.placeLight === 'strip' ? ' on' : ''}" data-act="${ui.placeLight === 'strip' ? 'light-place-stop' : 'light-draw'}" aria-pressed="${ui.placeLight === 'strip'}">${icon(ui.placeLight === 'strip' ? 'check' : 'plus')}${ui.placeLight === 'strip' ? 'Done drawing' : 'Draw LED strip'}</button><label class="f inl"><span>Where</span>${`<select class="strip-where" aria-label="Where the strip goes"><option value="auto"${(ui.stripWhere || 'auto') === 'auto' ? ' selected' : ''}>Auto (under uppers, toe kick on bases)</option>${STRIP_SPOTS.map(o => `<option value="${o.v}"${ui.stripWhere === o.v ? ' selected' : ''}>${o.l}</option>`).join('')}</select>`}</label></div><div class="row-actions"><button class="btn" data-act="light-strips" data-id="under">${icon('plus')}Under every wall cabinet</button><button class="btn" data-act="light-strips" data-id="top">${icon('plus')}On top of every wall cabinet</button><button class="btn" data-act="light-strips" data-id="toe">${icon('plus')}Toe kick on every base</button>${ui.sel && ui.sel.type === 'cab' ? `<button class="btn" data-act="light-strip-sel">${icon('plus')}Selected cabinet</button>` : ''}${strips.length ? `<button class="btn danger" data-act="light-clear" data-id="strip">Remove all strips</button>` : ''}</div>
-    ${strips.length ? `<div class="tscroll"><table class="t gentab"><thead><tr><th>Cabinet</th><th>Where</th><th>Color</th><th class="r">Length</th><th></th></tr></thead><tbody>${strips.map(l => { const R = 'light:' + l.id; return `<tr><td style="min-width:150px">${ctl(R, 'cab', l.cab, 'select', { options: cabOpts, label: 'Cabinet' })}</td><td style="min-width:150px">${ctl(R, 'where', l.where, 'select', { options: STRIP_SPOTS, label: 'Where' })}</td><td style="min-width:120px">${temp(R, l)}</td><td class="n">${fmtLen(stripLen(stripCab(l)))}</td><td><button class="btn sm danger" data-act="light-del" data-id="${l.id}" aria-label="Delete strip">${icon('trash')}</button></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="note">Strips run the width of the cabinet, less an inch at each end, and glow in 3D and Realistic.</div>'}</div></div>
-  <div class="card">${cardHead('Ceiling lights', `<span class="muted">${ceil.length} light${ceil.length === 1 ? '' : 's'}</span>`)}<div class="cardbody">
-    <div class="row-actions"><button class="btn${ui.placeLight === true ? ' on' : ''}" data-act="${ui.placeLight === true ? 'light-place-stop' : 'light-place'}" aria-pressed="${ui.placeLight === true}">${icon(ui.placeLight === true ? 'check' : 'plus')}${ui.placeLight === true ? 'Done placing' : 'Click to place in the plan'}</button><button class="btn" data-act="light-grid">${icon('gridsplit')}Lay out cans every ${fmtLen((S.job.layout || {}).lightGrid || 48)}</button>${ceil.length ? `<button class="btn danger" data-act="light-clear" data-id="ceiling">Remove all</button>` : ''}</div>
-    ${fld('Spacing for lay out', 'layout', 'lightGrid', (S.job.layout || {}).lightGrid || 48, 'len')}
-    ${ceil.length ? `<div class="tscroll"><table class="t gentab"><thead><tr><th>Light</th><th>Across (X)</th><th>Down (Y)</th><th>Color</th><th>Pendant drop</th><th></th></tr></thead><tbody>${ceil.map(l => { const R = 'light:' + l.id; return `<tr><td style="min-width:140px">${ctl(R, 'style', l.style || 'can', 'select', { options: CEIL_STYLES, label: 'Light style' })}</td><td style="width:90px">${ctl(R, 'x', l.x, 'len', { label: 'X' })}</td><td style="width:90px">${ctl(R, 'y', l.y, 'len', { label: 'Y' })}</td><td style="min-width:120px">${temp(R, l)}</td><td style="width:90px">${l.style === 'pendant' ? ctl(R, 'drop', l.drop || 30, 'len', { label: 'Drop' }) : ''}</td><td><button class="btn sm danger" data-act="light-del" data-id="${l.id}" aria-label="Delete light">${icon('trash')}</button></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="note">Place lights by clicking in the plan, or lay out a grid of cans over the room. They hang from the tallest wall height.</div>'}</div></div>`;
+  const listBtn = (k, n) => n ? `<button class="btn sm${ui.lightList === k ? ' on' : ''}" data-act="light-list" data-id="${k}" aria-pressed="${ui.lightList === k}">${icon('list')}List</button>` : '';
+  const del = (id, what) => `<button class="btn sm danger" data-act="light-del" data-id="${id}" aria-label="Delete ${what}">${icon('trash')}</button>`;
+  const drawing = ui.placeLight === 'strip', placing = ui.placeLight === true;
+  const stripList = ui.lightList === 'strip' && strips.length ? `<div class="tscroll lt-list"><table class="t gentab"><thead><tr><th>Cabinet</th><th>Where</th><th>Color</th><th class="r">Length</th><th></th></tr></thead><tbody>${strips.map(l => { const R = 'light:' + l.id; return `<tr><td>${ctl(R, 'cab', l.cab, 'select', { options: cabOpts, label: 'Cabinet' })}</td><td>${ctl(R, 'where', l.where, 'select', { options: STRIP_SPOTS, label: 'Where' })}</td><td>${temp(R, l)}</td><td class="n">${fmtLen(stripLen(stripCab(l)))}</td><td>${del(l.id, 'strip')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
+  const ceilList = ui.lightList === 'ceiling' && ceil.length ? `<div class="tscroll lt-list"><table class="t gentab"><thead><tr><th>Light</th><th>Across (X)</th><th>Down (Y)</th><th>Color</th><th>Drop</th><th></th></tr></thead><tbody>${ceil.map(l => { const R = 'light:' + l.id; return `<tr><td>${ctl(R, 'style', l.style || 'can', 'select', { options: CEIL_STYLES, label: 'Light style' })}${l.auto ? '<span class="lt-auto" title="Made by Regenerate ceiling lights. Regenerate replaces these and keeps the ones you placed.">auto</span>' : ''}</td><td>${ctl(R, 'x', l.x, 'len', { label: 'X' })}</td><td>${ctl(R, 'y', l.y, 'len', { label: 'Y' })}</td><td>${temp(R, l)}</td><td>${l.style === 'pendant' ? ctl(R, 'drop', l.drop || 30, 'len', { label: 'Drop' }) : ''}</td><td>${del(l.id, 'light')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
+  const ap = !ceil.length ? autoPucks().length : 0;
+  return `<div class="lt-dock">
+  <div class="lt-box"><div class="lt-head"><b>LED strips</b><span class="muted">${strips.length} · ${feet.toFixed(1)} ft</span>${listBtn('strip', strips.length)}</div>
+    <div class="lt-row"><button class="btn sm${drawing ? ' on' : ''}" data-act="${drawing ? 'light-place-stop' : 'light-draw'}" aria-pressed="${drawing}" title="Then click each cabinet. Click again to take it off.">${icon(drawing ? 'check' : 'edit')}${drawing ? 'Done' : 'Draw'}</button><select class="strip-where" aria-label="Where the strip goes" title="Where the strip goes"><option value="auto"${(ui.stripWhere || 'auto') === 'auto' ? ' selected' : ''}>Auto spot</option>${STRIP_SPOTS.map(o => `<option value="${o.v}"${ui.stripWhere === o.v ? ' selected' : ''}>${o.l}</option>`).join('')}</select><button class="btn sm" data-act="light-strips" data-id="under" title="A strip under every wall cabinet">${icon('plus')}Under uppers</button><button class="btn sm" data-act="light-strips" data-id="top" title="A strip on top of every wall cabinet">${icon('plus')}On uppers</button><button class="btn sm" data-act="light-strips" data-id="toe" title="A strip in the toe kick of every base">${icon('plus')}Toe kicks</button>${strips.length ? `<button class="btn sm danger" data-act="light-clear" data-id="strip" title="Remove all strips">${icon('trash')}All</button>` : ''}</div>${stripList}</div>
+  <div class="lt-box"><div class="lt-head"><b>Ceiling lights</b><span class="muted">${ceil.length ? ceil.length + (nAuto ? ` (${nAuto} auto)` : '') : ap ? ap + ' automatic' : 'none'}</span>${listBtn('ceiling', ceil.length)}</div>
+    <div class="lt-row"><button class="btn sm${placing ? ' on' : ''}" data-act="${placing ? 'light-place-stop' : 'light-place'}" aria-pressed="${placing}" title="Click in the plan to place a light">${icon(placing ? 'check' : 'plus')}${placing ? 'Done' : 'Place'}</button><button class="btn sm" data-act="light-regen" title="Lays out recessed cans over the room again. Replaces the automatic ones, keeps lights you placed.">${icon('regen')}Regenerate ceiling lights</button><label class="lt-sp" title="Spacing between cans">${icon('gridsplit')}${ctl('layout', 'lightGrid', (S.job.layout || {}).lightGrid || 48, 'len', { label: 'Spacing between cans' })}</label>${ceil.length ? `<button class="btn sm danger" data-act="light-clear" data-id="ceiling" title="Remove all ceiling lights">${icon('trash')}All</button>` : ''}</div>${ceilList}</div>
+</div>`;
 }
 /* Drawing strips one cabinet at a time: Draw LED strip, then click each cabinet (plan or elevation).
    Clicking a cabinet that already has a strip in that spot takes it off. Lights copy and paste with cabinets,
@@ -53,16 +59,21 @@ function addStrips(where) {
   if (!add.length) { flash(have.size ? 'Those cabinets already have strips.' : 'No cabinets for that here.'); return; }
   mutate(() => add.forEach(c => S.lights.push({ id: uid('lt'), kind: 'strip', cab: c.id, where, temp: 'warm' })));
 }
-// Cans over the space the walls enclose, kept off the walls by half a spacing.
-function lightGrid() {
-  const pts = S.walls.flatMap(w => [[w.x1, w.y1], [w.x2, w.y2]]); if (!pts.length) { flash('Draw the walls first.'); return; }
-  const sp = Math.max(12, +(S.job.layout || {}).lightGrid || 48), xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const nx = Math.max(1, Math.round((x1 - x0) / sp)), ny = Math.max(1, Math.round((y1 - y0) / sp));
+/* Regenerate ceiling lights (Ayden 2026-11-24, for when the automatic ones don't show or land badly): the same
+   layout as the automatic pucks, at the Spacing set beside the button, but forced (any walls, even an open room)
+   and saved as real recessed cans marked auto. Pressing it again replaces the auto ones and keeps every light
+   placed by hand, leaving out any spot within a foot and a half of one. Replaces the old plain Lay out cans grid. */
+function regenCeilLights() {
+  if (!S.walls.length) { flash('Draw the walls first.'); return; }
+  const sp = Math.max(12, +(S.job.layout || {}).lightGrid || 48);
+  const mine = roomLights().filter(l => l.kind === 'ceiling' && !l.auto);
+  const P = puckSpots(true, sp, 60).filter(p => !mine.some(m => Math.hypot((+m.x || 0) - p.x, (+m.y || 0) - p.y) < 18));
+  if (!P.length && !mine.length) { flash('The room is too small for ceiling lights. Walls need to enclose at least 4 ft each way.'); return; }
   mutate(() => {
-    S.lights = S.lights.filter(l => l.kind !== 'ceiling');
-    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) S.lights.push({ id: uid('lt'), kind: 'ceiling', style: 'can', temp: 'warm', x: r3(x0 + (x1 - x0) * (i + 0.5) / nx), y: r3(y0 + (y1 - y0) * (j + 0.5) / ny) });
+    S.lights = S.lights.filter(l => !(l.kind === 'ceiling' && l.auto));
+    P.forEach(p => S.lights.push({ id: uid('lt'), kind: 'ceiling', style: 'can', temp: 'warm', x: Math.round(p.x), y: Math.round(p.y), auto: true }));
   });
+  flash(`${P.length} ceiling light${P.length === 1 ? '' : 's'} laid out${mine.length ? `, kept the ${mine.length} you placed` : ''}.`);
 }
 function startLightPlace() { stopWalls(); if (ui.drawMold) stopMoldDraw(); ui.placing = null; ui.placeLight = true; ui.dock = 'lights'; ui.dockOpen = true; if (ui.viewMode !== 'plan') setView('plan'); else render(); }
 function stopLightPlace() { ui.placeLight = false; render(); }
@@ -112,19 +123,24 @@ function washMat(col, up) {
 const AUTO_CEIL = { n: 0, max: 6 };
 function autoPucks() {
   // 0.58.30: Automatic ceiling lights switch in the bottom bar (on by default).
-  const ws = S.walls; if (lay().autoLights === false || ws.length < 3 || roomLights().some(l => l.kind === 'ceiling')) return [];
+  if (lay().autoLights === false || S.walls.length < 3 || roomLights().some(l => l.kind === 'ceiling')) return [];
+  return puckSpots(false, 48, 12);
+}
+// force (Regenerate ceiling lights): any walls, open rooms too. sp = spacing, max = most lights.
+function puckSpots(force, sp, max) {
+  const ws = S.walls; if (!ws.length) return [];
   const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), W = x1 - x0, D = y1 - y0;
   if (W < 48 || D < 48) return [];
   const loop = typeof roomLoop === 'function' ? roomLoop() : null;
   const wallLen = ws.reduce((a, w) => a + Math.hypot(w.x2 - w.x1, w.y2 - w.y1), 0);
-  if (!loop && wallLen < 0.75 * 2 * (W + D)) return []; // open on more than a quarter: daylight is enough
+  if (!force && !loop && wallLen < 0.75 * 2 * (W + D)) return []; // open on more than a quarter: daylight is enough
   const cl = typeof roomCeiling === 'function' ? roomCeiling() : {}, H = +cl.h > 0 ? +cl.h : ceilHeight();
   const slope = cl.slope && cl.slope !== 'none' ? cl.slope : null, run = +cl.run > 0 ? +cl.run : 60;
-  // About one puck every 4 feet, at most 12, kept 2 ft off the walls.
+  // About one puck every 4 feet (or the spacing given), at most 12 (or max), kept 2 ft off the walls.
   const ins = Math.min(24, W / 4, D / 4), iw = W - 2 * ins, id = D - 2 * ins;
-  let nx = Math.max(1, Math.round(iw / 48)), ny = Math.max(1, Math.round(id / 48));
-  while (nx * ny > 12) { if (iw / nx < id / ny) nx--; else ny--; }
+  let nx = Math.max(1, Math.round(iw / sp)), ny = Math.max(1, Math.round(id / sp));
+  while (nx * ny > max) { if (iw / nx < id / ny) nx--; else ny--; }
   const out = [];
   for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
     // A small fixed nudge per puck so the layout isn't a perfect grid, the same every time.
@@ -169,8 +185,11 @@ function addLights3d(v, R3, layerOn, ceilOn) {
     grp.userData.noBounds = true; v.root.add(grp);
   });
   const hgt = ceilHeight();
+  // Regenerated cans light the room like the automatic pucks (a few real lights for many glowing discs), so the
+  // look stays the same and a big room doesn't add a light per can.
+  const isPuck = l => R3 && l.kind === 'ceiling' && l.auto && (l.style || 'can') === 'can';
   roomLights().forEach(l => {
-    if (l.kind !== 'ceiling') return;
+    if (l.kind !== 'ceiling' || isPuck(l)) return;
     const col = lightColor(l.temp), g = new THREE.Group(); g.position.set(+l.x || 0, 0, +l.y || 0); g.userData.noBounds = true;
     if (l.style === 'pendant') {
       const drop = Math.max(6, +l.drop || 30), bottom = hgt - drop;
@@ -188,16 +207,18 @@ function addLights3d(v, R3, layerOn, ceilOn) {
   });
   // Auto pucks: every puck glows, but only a few carry a real light (each light costs every pixel), turned up to
   // make up for the rest; two cast shadows on computers.
-  if (!R3 || !ceilOn) return;
-  const P = autoPucks(); if (!P.length) return;
+  if (!R3) return;
+  const saved = roomLights().filter(isPuck), H = (() => { const cl = typeof roomCeiling === 'function' ? roomCeiling() : {}; return +cl.h > 0 ? +cl.h : hgt; })();
+  const P = saved.length ? saved.map(l => ({ x: +l.x || 0, y: +l.y || 0, h: H, col: lightColor(l.temp) })) : ceilOn ? autoPucks() : [];
+  if (!P.length) return;
   const lit = Math.min(P.length, AUTO_CEIL.max, MAX_LAMPS - lamps); AUTO_CEIL.n = P.length;
   const step = P.length / Math.max(1, lit), k = 0.9 * Math.sqrt(P.length / Math.max(1, lit)), col = lightColor('warm');
   const g = new THREE.Group(); g.userData.noBounds = true;
   // A disc facing down only, so looking in from above the room shows no floating dots.
   puckGeo3 = puckGeo3 || new THREE.CircleGeometry(2.2, 20).rotateX(Math.PI / 2);
-  P.forEach((p, i) => { const m = new THREE.Mesh(puckGeo3, glowMat(col)); m.position.set(p.x, p.h - 0.05, p.y); g.add(m); });
-  shadows = 2; // no drawn ceiling lights here, so this leaves two shadow casters
-  for (let i = 0; i < lit; i++) { const p = P[Math.floor(i * step + step / 2)]; lamp(g, col, p.x, p.h - 4, p.y, k, 240, true); }
+  P.forEach((p, i) => { const m = new THREE.Mesh(puckGeo3, glowMat(p.col || col)); m.position.set(p.x, p.h - 0.05, p.y); g.add(m); });
+  shadows = Math.max(shadows, 2); // two shadow casters for the pucks (fewer if lights placed by hand took them)
+  for (let i = 0; i < lit; i++) { const p = P[Math.floor(i * step + step / 2)]; lamp(g, p.col || col, p.x, p.h - 4, p.y, k, 240, true); }
   g.traverse(o => { o.userData.layer = 'lights'; o.userData.noBounds = true; });
   v.root.add(g);
 }
