@@ -168,9 +168,10 @@ function productTree() {
       : folders.map(f => { const fk = g + '/' + f, fs = !q && (fk in fold ? fold[fk] : g.startsWith('mdl')), fi = items.filter(x => x.f === f); return `<div class="lfold">${head(fk, esc(f), fi.length, fs, 'lfold-h')}${fs ? '' : `<div class="grp">${fi.map(wrap).join('')}</div>`}</div>`; }).join('');
     return `<div class="lgrp lg-${g}">${head(g, gl, items.length, shut, 'lgrp-h')}${shut ? '' : inner}</div>`;
   }).join('');
-  return `<div class="libpeek" id="libpeek">${libPeekHTML(ui.libPeek || ui.placing)}</div>`
+  // libtop: the picture, library switch and search stay put at the top while the tree under them scrolls.
+  return `<div class="libtop"><div class="libpeek" id="libpeek">${libPeekHTML(ui.libPeek || ui.placing)}</div>`
     + `<select id="libset" aria-label="Product library" title="Which product library to draw from">${PRODUCT_LIBS.map(x => `<option value="${x.id}"${!mv && (S.libSet || 'main') === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}${modelLibs().map(l => `<option value="mdl:${esc(l)}"${mv === l ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
-    + `<input id="libfind" type="search" placeholder="Search…" value="${esc(ui.libFind || '')}" aria-label="Search products">`
+    + `<input id="libfind" type="search" placeholder="Search…" value="${esc(ui.libFind || '')}" aria-label="Search products"></div>`
     + `<div class="ptree">${favGrp}${body || '<div class="note show">No products match.</div>'}</div>`
     + `<div class="row-actions libnew"><button class="btn sm" data-act="designer-new" title="Make a new cabinet for the library">${icon('plus')}Cabinet</button><button class="btn sm" data-act="shape-new" title="Make a new shape for the library">${icon('plus')}Shape</button><button class="btn sm" data-act="models-import" title="Import models: bring in a whole folder of SketchUp models, after the SketchUp export has run on it">${icon('upload')}Import</button></div><div class="note show" id="mdlprog" hidden></div>`;
 }

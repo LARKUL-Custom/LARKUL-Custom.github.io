@@ -3885,3 +3885,62 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .ctxmenu .ctx-sides button{flex:1;min-width:0;padding:4px 6px;font-size:12px;border:1px solid var(--line);border-radius:4px;background:none;color:inherit;cursor:pointer;justify-content:center}
 .ctxmenu .ctx-sides button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
 .ctp-top{cursor:context-menu}
+
+/* 0.63.13: shorter item bar with something picked (Ayden 2026-11-24: "it takes up like 25-40% of the drawing
+   screen", "i do actually like the very bottom edit and copy", "just reduce the size of everything else").
+   Edit, Copy, Delete... always sit in one row along the bottom. Above it, no box titles (the switches say
+   Auto ...), Position labels sit beside their boxes, smaller fields and switches, tight padding. */
+@media (min-width: 961px){
+  .room .dock .dockbody.dock-item:not(:has(.ib-empty)){padding:4px 8px 4px}
+  .room .dock .itembar:not(.ib-empty){flex-wrap:wrap!important;gap:6px 8px!important;align-items:stretch}
+  .room .dock .itembar:not(.ib-empty) > .ib-pos, .room .dock .itembar:not(.ib-empty) > .ib-size, .room .dock .itembar:not(.ib-empty) > .ib-togs{padding:5px 8px}
+  .room .dock .itembar:not(.ib-empty) > .ib-pos::before, .room .dock .itembar:not(.ib-empty) > .ib-size::before, .room .dock .itembar:not(.ib-empty) > .ib-togs::before{content:none;display:none}
+  .room .dock .itembar:not(.ib-empty) .ib-f > span{font-size:12.5px;line-height:1.15;padding:0 0 1px 1px}
+  .room .dock .itembar:not(.ib-empty) .ib-f input, .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f input{height:28px;font-size:15px;padding:0 6px}
+  /* Position: label beside its box, outer side; the four arrows in one row; slider under */
+  .room .dock .itembar:not(.ib-empty) .ib-pos{grid-template-columns:auto auto auto;column-gap:8px;row-gap:4px;align-items:center}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f{flex-direction:row;align-items:center;gap:6px}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f > span{white-space:nowrap;padding:0}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f input{width:72px;flex:none}
+  .room .dock .itembar:not(.ib-empty) .ib-pos > .ib-f:nth-of-type(even){flex-direction:row-reverse}
+  .room .dock .itembar:not(.ib-empty) .ib-pos > .ib-f:nth-of-type(even) > span{display:inline}
+  .room .dock .itembar:not(.ib-empty) .ib-ctrs.ib-ctrs-up{flex-direction:row;align-items:center;gap:3px}
+  .room .dock .itembar:not(.ib-empty) .ib-ctr{width:26px;height:26px;margin:0}
+  .room .dock .itembar:not(.ib-empty) .ib-slidewrap{grid-column:1 / -1;padding:0}
+  .room .dock .itembar:not(.ib-empty) .ib-slide{height:12px}
+  /* Size: labels above, tight rows */
+  .room .dock .itembar:not(.ib-empty) .ib-size{grid-template-columns:repeat(3,76px);column-gap:6px;row-gap:2px}
+  /* Automatic switches: small rows */
+  .room .dock .itembar:not(.ib-empty) > .ib-togs{gap:2px;justify-content:center;padding-top:5px}
+  .room .dock .itembar:not(.ib-empty) .ib-togs .ib-tog{height:22px;gap:10px;font-size:13px}
+  .room .dock .itembar:not(.ib-empty) .ib-togs .ib-tog > span{font-size:13px}
+  .room .dock .itembar:not(.ib-empty) .ib-tog input{width:34px;height:20px}
+  .room .dock .itembar:not(.ib-empty) .ib-tog input::before{top:3px;left:3px;width:14px;height:14px}
+  .room .dock .itembar:not(.ib-empty) .ib-tog input:checked::before{transform:translateX(14px)}
+  /* Bottom row: Edit, then every button beside it */
+  .room .dock .itembar:not(.ib-empty) > .ib-acts{flex:1 0 100%;flex-direction:row!important;align-items:center!important;align-self:stretch;gap:6px;flex-wrap:wrap}
+  .room .dock .itembar:not(.ib-empty) .ib-acts .ib-edit{height:30px;padding-inline:14px;font-size:14.5px}
+  .room .dock .itembar:not(.ib-empty) .ib-small{display:flex!important;flex-wrap:wrap;gap:4px}
+  .room .dock .itembar:not(.ib-empty) .ib-small button{height:30px;padding:2px 8px;font-size:13.5px}
+  /* Tab list beside it: three across so it is no taller than the bar */
+  .room .dock:has(.dock-item .itembar:not(.ib-empty)) .docktabs{grid-template-columns:repeat(3,auto);column-gap:2px}
+  .room .dock:has(.dock-item .itembar:not(.ib-empty)) .docktabs button{min-height:28px;padding:3px 7px}
+}
+/* Laptop windows: tab list back to two across (it fits the bar's height), smaller Position boxes, and the
+   bottom row a little tighter so the Overlaps flag stays on the same line. */
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock:has(.dock-item .itembar:not(.ib-empty)) .docktabs{grid-template-columns:repeat(2,auto);row-gap:0}
+  .room .dock:has(.dock-item .itembar:not(.ib-empty)) .docktabs button{min-height:26px;padding:2px 7px}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f input{width:60px}
+  .room .dock .itembar:not(.ib-empty) .ib-pos{column-gap:6px}
+  .room .dock .itembar:not(.ib-empty) .ib-size{grid-template-columns:repeat(3,70px)}
+  .room .dock .itembar:not(.ib-empty) .ib-acts .ib-edit{padding-inline:10px}
+  .room .dock .itembar:not(.ib-empty) .ib-small button{padding:2px 6px;font-size:13px;gap:4px}
+  .room .dock .itembar:not(.ib-empty) .ib-ovl{font-size:12.5px;white-space:nowrap}
+}
+@media (min-width: 961px) and (max-width: 1499px){ .room .dock .itembar .ib-ovl .ib-ovl2{display:none} }
+
+/* 0.63.15 Products list: the preview, library switch and search stay locked at the top; only the tree under them scrolls. */
+.libtop{position:sticky;top:0;z-index:2;background:var(--panel,#fff);padding-bottom:1px}
+.room .rail .libtop{background:var(--d-tree)}
+@media (max-width: 760px){ .libtop{position:static} }
