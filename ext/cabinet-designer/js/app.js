@@ -297,6 +297,7 @@ function renderRoom() {
   $('#render3d').innerHTML = `${icon('sun')}Realistic`; $('#render3d').setAttribute('aria-pressed', String(!!ui.render3d && !ui.hidden3d));
   { const sp = $('#sunpick'), real = !!ui.render3d && !ui.hidden3d; if (sp) { sp.hidden = !real; const r = $('#sunhour'); if (r && typeof SUN !== 'undefined' && +r.value !== SUN.hour) r.value = SUN.hour; const l = $('#sunlbl'); if (l && typeof sunLabel === 'function') l.textContent = sunLabel(SUN.hour); } }
   if (typeof renderRoomWalkBtn === 'function') renderRoomWalkBtn();
+  { const b = $('#house3d'), n = typeof houseSize === 'function' ? houseSize() : 1; if (b) { b.hidden = n < 2; b.innerHTML = `${icon('home')}House`; b.setAttribute('aria-pressed', String(!!ui.house3d)); b.title = `House: show the ${n} rooms joined at their doorways together`; } }
   $('#hidden3d').innerHTML = `${icon('cube')}Hidden line`; $('#hidden3d').setAttribute('aria-pressed', String(!!ui.hidden3d));
   $('[data-act=snap3d]').innerHTML = `${icon('camera')}Save image`;
   { const b = $('[data-act=walkexp]'); if (b) b.innerHTML = `${icon('walk')}Walk file`; }
@@ -1009,6 +1010,7 @@ document.addEventListener('click', e => {
     case 'snap3d': saveRoomImage(); break;
     case 'walkexp': walkExport(); break;
     case 'walk3d': walkToggle(); break;
+    case 'house3d': ui.house3d = !ui.house3d; if (roomViewer) roomViewer.fitted = false; renderRoom(); break;
     case 'full3d': toggleFull3d(); break;
     case 'layers-all': ui.layers = {}; ui.wallOp = 1; saveLayers3d(); break;
     case 'layers-faces': ui.layers = { box: false, drawerBox: false, tops: false, molding: false, ceiling: false }; saveLayers3d(); break;

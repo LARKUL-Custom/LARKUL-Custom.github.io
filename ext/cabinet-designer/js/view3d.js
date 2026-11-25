@@ -482,9 +482,11 @@ function moveFront(o, t) {
   else o.position.z = ease(t) * drawerOut(o);
 }
 // A door opens as far as it can before it hits something (see doorLimit).
-function doorSwing(o) { const c = cab(o.userData.cabId), f = o.userData.open.f; return c && f ? doorLimit(c, f) : 1.75; }
+// A joined room's cabinet (House, Walk) works out its moves in its own room.
+function inRoomOf3(o, fn) { const id = o.userData.room, r = id && id !== S.roomId && typeof roomById === 'function' && typeof withRoom === 'function' && roomById(id); return r ? withRoom(r, fn) : fn(); }
+function doorSwing(o) { return inRoomOf3(o, () => { const c = cab(o.userData.cabId), f = o.userData.open.f; return c && f ? doorLimit(c, f) : 1.75; }); }
 // A drawer slides out as far as it can; a bigger front in the way gets the room first (see openSolve).
-function drawerOut(o) { const c = cab(o.userData.cabId), f = o.userData.open.f; return c ? (f ? frontTravel(c, f) : drawerTravel(c)) : 0; }
+function drawerOut(o) { return inRoomOf3(o, () => { const c = cab(o.userData.cabId), f = o.userData.open.f; return c ? (f ? frontTravel(c, f) : drawerTravel(c)) : 0; }); }
 let openAnim = 0;
 function animateOpen() {
   if (openAnim) return;
@@ -651,7 +653,7 @@ class Viewer3D {
     const r = this.renderer.domElement.getBoundingClientRect();
     const v = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     const rc = new THREE.Raycaster(); rc.setFromCamera(v, this.cam);
-    const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && (h.object.userData.cabId || h.object.userData.shapeId || h.object.userData.fixtId));
+    const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && (h.object.userData.cabId || h.object.userData.shapeId || h.object.userData.fixtId) && !(h.object.userData.room && h.object.userData.room !== S.roomId));
     return hit ? hit.object.userData.cabId || hit.object.userData.shapeId || hit.object.userData.fixtId : null;
   }
   // 0.63.12: the countertop piece nearest under the cursor (nothing in front of it): { key, part, p } with p the plan
@@ -661,7 +663,7 @@ class Viewer3D {
     const v = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     const rc = new THREE.Raycaster(); rc.setFromCamera(v, this.cam);
     const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && h.object.visible && !h.object.userData.noBounds && !(h.object.material && h.object.material.transparent && h.object.material.opacity < 0.5));
-    if (!hit || !hit.object.userData.ctKey) return null;
+    if (!hit || !hit.object.userData.ctKey || (hit.object.userData.room && hit.object.userData.room !== S.roomId)) return null;
     return { key: hit.object.userData.ctKey, part: hit.object.userData.ctPart || '', p: { x: hit.point.x, y: hit.point.z } };
   }
   // Floor point under the cursor, as a plan point.
@@ -728,13 +730,48 @@ function realFloor3() {
 function buildRoomScene(v) {
   v.setReal(R3);
   v.setBackground(R3 ? '#e4e1db' : cssVar('--paper'));
-  v.clear();
+  v.clear(); v.beforeDraw = null;
+  // 0.63.53: in Walk (and with House on) every room joined to this one through its doorways is drawn round it
+  // (house.js); each room in its own group at its place, and one floor under them all.
+  const H = typeof houseOf === 'function' && houseOn() ? houseOf(houseFrame()) : null;
+  if (H && H.length > 1) {
+    houseBuild3(v, H, () => roomScene3(v, { house: true }));
+    if (layers3d().floor) withRoom(H[0].r, () => floor3(v, houseWallPts(H)));
+    v.houseBuilt = true;
+  } else {
+    if (typeof HOUSE3 === 'object') HOUSE3.M = { [S.roomId]: M2_ID };
+    v.houseBuilt = false;
+    roomScene3(v, {});
+  }
+  if (!v.fitted && !v.walk) { v.fitted = true; v.look(roomViewDir(0.75)); }
+  if (R3) {
+    v.root.traverse(o => { if (o.isMesh && !o.material.transparent && !o.receiveShadow && o.userData.layer !== 'lights') { o.castShadow = true; o.receiveShadow = true; } });
+    // Walls and the ceiling cast shadows too, so daylight only gets in through windows, doorways and open sides.
+    v.fitShadow();
+  }
+  v.requestRender();
+}
+// Floor under the room (pts: its wall ends), well past the walls, so open sides and wide views never run off its edge.
+function floor3(v, pts) {
+  if (!pts.length) return;
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const pad = Math.max(120, 0.6 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)));
+  const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+  const fg = new THREE.PlaneGeometry(x1 - x0, y1 - y0);
+  const fpk = texPickOf('floor');
+  if (R3 && !fpk) { const uv = fg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 96, uv.getY(i) * (y1 - y0) / 96); }
+  const fl = new THREE.Mesh(fg, floorLook3(R3 ? realFloor3() : flat3(cssVar('--floor3d')), fg, x1 - x0, y1 - y0));
+  fl.rotation.x = -Math.PI / 2; fl.position.set((x0 + x1) / 2, -0.02, (y0 + y1) / 2); fl.userData.noBounds = true; fl.receiveShadow = true; v.root.add(fl);
+}
+// One room's walls, cabinets, tops, molding, appliances and lights into v.root. o.house: one room of several (no
+// cutaway and no floor of its own).
+function roomScene3(v, o) {
   // Layers turn whole kinds of things off; walls also have an opacity from the Layers menu.
   const L = layers3d(), op = Math.max(0, Math.min(1, ui.wallOp ?? 1)), wallMode = !L.walls || op <= 0.02 ? 'hidden' : op < 0.98 ? 'faded' : 'solid';
   const pts = []; S.walls.forEach(w => pts.push([w.x1, w.y1], [w.x2, w.y2]));
   const mid = pts.length ? { x: pts.reduce((a, p) => a + p[0], 0) / pts.length, y: pts.reduce((a, p) => a + p[1], 0) / pts.length } : { x: 0, y: 0 };
   // Cutaway (a Layers option): walls between the camera and the room hide, so you see in without lowering the opacity.
-  const cutaway = !!ui.cutaway && wallMode !== 'hidden';
+  const cutaway = !o.house && !!ui.cutaway && wallMode !== 'hidden';
   S.walls.forEach(w => {
     // An island line (a see-through wall from Mozaik) only places cabinets; there's no wall to draw.
     if (wallMode === 'hidden' || w.hidden) return;
@@ -757,10 +794,10 @@ function buildRoomScene(v) {
       v.root.add(cg);
     });
   });
-  v.beforeDraw = cutaway ? () => {
+  if (cutaway) v.beforeDraw = () => {
     const p = v.cam.position;
     v.root.children.forEach(o => { const c = o.userData.cut; if (c) o.visible = (p.x - c.x) * c.nx + (p.z - c.z) * c.nz > -2; });
-  } : null;
+  };
   // floor and a ceiling at the tallest wall. The ceiling faces down, so it shows from inside the room and never blocks a view from above.
   if (pts.length && L.ceiling && S.walls.length) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), hgt = Math.max(...S.walls.map(w => w.height || 96));
@@ -777,25 +814,7 @@ function buildRoomScene(v) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), t = Math.max(4, ...S.walls.map(w => +w.thick || 4));
     landAdd(v, { x0: Math.min(...xs) - t, x1: Math.max(...xs) + t, y0: Math.min(...ys) - t, y1: Math.max(...ys) + t });
   }
-  if (pts.length && L.floor) {
-    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-    // Well past the walls, so open sides and wide views never run off the edge of the floor (a closed room with a landscape: just inside).
-    const pad = landOn ? (loop ? 0 : 24) : Math.max(120, 0.6 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)));
-    const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
-    let fg = new THREE.PlaneGeometry(x1 - x0, y1 - y0);
-    if (loop) {
-      // The room's own outline, with the same UVs a plain floor over its box would have. Built in the plane's own
-      // coordinates (x across, y up the page = -plan y), so the turn and place below stay the same.
-      const cx0 = (x0 + x1) / 2, cy0 = (y0 + y1) / 2;
-      fg = new THREE.ShapeGeometry(new THREE.Shape(loop.map(p => new THREE.Vector2(p[0] - cx0, cy0 - p[1]))));
-      const uv = fg.attributes.uv, ps = fg.attributes.position;
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, (ps.getX(i) + (x1 - x0) / 2) / (x1 - x0), (ps.getY(i) + (y1 - y0) / 2) / (y1 - y0));
-    }
-    const fpk = texPickOf('floor');
-    if (R3 && !fpk) { const uv = fg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 96, uv.getY(i) * (y1 - y0) / 96); }
-    const fl = new THREE.Mesh(fg, floorLook3(R3 ? realFloor3() : flat3(cssVar('--floor3d')), fg, x1 - x0, y1 - y0));
-    fl.rotation.x = -Math.PI / 2; fl.position.set((x0 + x1) / 2, -0.02, (y0 + y1) / 2); fl.userData.noBounds = true; fl.receiveShadow = true; v.root.add(fl);
-  }
+  if (pts.length && L.floor && !o.house) floor3(v, pts);
   const selId = ui.sel && ui.sel.type === 'cab' ? ui.sel.id : null, selCol = cssVar('--sel'), dropCol = cssVar('--drop');
   // Labels grow with the room so they stay readable when the whole room is in view.
   const ext = pts.length ? Math.hypot(Math.max(...pts.map(p => p[0])) - Math.min(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1])) - Math.min(...pts.map(p => p[1]))) : 120;
@@ -888,13 +907,6 @@ function buildRoomScene(v) {
     v.root.add(grp);
   });
   addLights3d(v, R3, L.lights, L.ceiling);
-  if (!v.fitted && !v.walk) { v.fitted = true; v.look(roomViewDir(0.75)); }
-  if (R3) {
-    v.root.traverse(o => { if (o.isMesh && !o.material.transparent && !o.receiveShadow && o.userData.layer !== 'lights') { o.castShadow = true; o.receiveShadow = true; } });
-    // Walls and the ceiling cast shadows too, so daylight only gets in through windows, doorways and open sides.
-    v.fitShadow();
-  }
-  v.requestRender();
 }
 // Presentation picture of the 3D view at about 2400 pixels wide, without the selection highlight.
 function roomImage() {

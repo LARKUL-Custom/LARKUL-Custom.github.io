@@ -18,6 +18,8 @@ function renderPlan(pr) {
     s += `<rect x="${v.x}" y="${v.y}" width="${v.w}" height="${v.h}" fill="url(#gmaj)"/>`;
   }
   const fs = (pr ? 9 : 13) * px;
+  // 0.63.53: the rooms joined to this one at its doorways, in light grey round it (house.js).
+  if (!pr && typeof housePlanSVG === 'function') s += housePlanSVG(fs);
   // Base and tall first, uppers over them; the selected cabinet last so its outline is never hidden.
   const hot = c => (ui.sel && ui.sel.id === c.id) || ui.dropCab === c.id;
   const order = [...S.cabinets].sort((a, b) => ((a.cat === 'Wall') - (b.cat === 'Wall')) || (hot(a) - hot(b)));
@@ -573,6 +575,8 @@ function initPlan() {
     if (ui.placeLight === 'strip' && e.button === 0) { const h = hitCabs(p); if (h.length) toggleStrip(h[0]); return; }
     if (ui.placeLight && e.button === 0) { placeLightAt(p); return; }
     if (e.button === 2 && ui.placing) { placeMode(null); return; }
+    const hr = e.button === 0 && !ui.placing && e.target.closest && e.target.closest('[data-hroom]');
+    if (hr) { switchRoom(hr.dataset.hroom); return; }
     const cj = e.button === 0 && !ui.topEdit && e.target.closest && e.target.closest('[data-ctj]');
     if (cj) { ctjShowCtx(cj.dataset.ctj, e.clientX, e.clientY); return; }
     const teEl = ui.topEdit && e.target.closest && e.target.closest('[data-te]');

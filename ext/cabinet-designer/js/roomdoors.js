@@ -203,7 +203,7 @@ function doorLeafModel(f) {
 // The leaves inside the wall group grp (x along the wall from its start, y up, z through the wall: 0 on the side -1
 // face, T on the side 1 face). Each moving piece carries userData.doorLeaf, which Walk turns, slides or folds.
 function doorLeaves3(f, grp, T, a0, a1, z0, z1, m) {
-  const t = doorType(f), iw = a1 - a0, ih = z1 - z0, st = doorAtStart(f), out = f.side === 1 ? 1 : -1, id = f.id;
+  const t = doorType(f), iw = a1 - a0, ih = z1 - z0, st = doorAtStart(f), out = f.side === 1 ? 1 : -1, id = typeof doorKey === 'function' ? doorKey(f) : f.id;
   const ajar = typeof doorAjar === 'function' ? doorAjar(id) : 0;
   const pose = o => { if (typeof doorLeafPose === 'function') doorLeafPose(o, ajar); return o; };
   // A leaf spanning x 0 → dir*w from its group's origin, from z0 up; French doors get a glass field.

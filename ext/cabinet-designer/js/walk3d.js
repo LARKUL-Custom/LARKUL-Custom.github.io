@@ -8,6 +8,40 @@
 'use strict';
 const WALK = { on: false, eye: 66, r: 9, speed: 54, fast: 120, vx: 0, vz: 0, turnV: 0 };
 
+/* ---------- Rooms joined into one house (0.63.53) ---------- */
+// A doorway that leads to another room joins the two rooms there (unless Joined is unticked): the other room stands
+// against this one with its linked door in the same opening. Walk draws every joined room at once, so walking through
+// the doorway just carries on into the next room. Each room keeps its own plan; M is where a room sits in the scene:
+// its plan point x,y is at (c*x - s*y + x, s*x + c*y + y) there (the scene's x and z).
+const M2_ID = { c: 1, s: 0, x: 0, y: 0 };
+const m2pt = (M, x, y) => ({ x: M.c * x - M.s * y + M.x, y: M.s * x + M.c * y + M.y });
+const m2dir = (M, x, y) => ({ x: M.c * x - M.s * y, y: M.s * x + M.c * y });
+const m2inv = M => ({ c: M.c, s: -M.s, x: -(M.c * M.x + M.s * M.y), y: M.s * M.x - M.c * M.y });
+const m2mul = (A, B) => ({ c: A.c * B.c - A.s * B.s, s: A.s * B.c + A.c * B.s, x: A.c * B.x - A.s * B.y + A.x, y: A.s * B.x + A.c * B.y + A.y });
+const m2ang = M => Math.atan2(M.s, M.c);
+function doorJoined(f) { return !!(f && f.leadsTo && f.leadsDoor && f.join !== false); }
+// The other half of a joined doorway: { r, g } (its room and door), or null.
+function doorPartner(f) {
+  const r = doorJoined(f) && roomById(f.leadsTo), g = r && (r.fixtures || []).find(x => x.id === f.leadsDoor);
+  return g && doorJoined(g) && g.leadsDoor === f.id ? { r, g } : null;
+}
+// Both halves of a joined doorway are one door: it opens and shuts as one, under one name.
+function doorKey(f) { const p = doorPartner(f); return p && p.g.id < f.id ? p.g.id : f.id; }
+// The door of a doorway that has a leaf to open: its own, else its partner's (the one drawn).
+function walkLeafDoor(f) { if (doorHasLeaf(f)) return f; const p = doorPartner(f); return p && doorHasLeaf(p.g) ? p.g : null; }
+// Where a room is in the 3D scene (null when it isn't drawn there); the app and the walk file each answer houseM.
+function walkM(id) { return typeof houseM === 'function' ? houseM(id) : id === S.roomId ? M2_ID : null; }
+// The walker in the open room's own plan: x, z and the way they face.
+function walkLocal() {
+  const M = walkM(S.roomId) || M2_ID, I = m2inv(M), p = m2pt(I, WALK.x, WALK.z);
+  return { x: p.x, z: p.y, yaw: WALK.yaw + m2ang(M), I };
+}
+// Puts the walker at x, z (facing yaw) in the open room's own plan.
+function walkSetLocal(x, z, yaw) {
+  const M = walkM(S.roomId) || M2_ID, p = m2pt(M, x, z);
+  WALK.x = p.x; WALK.z = p.y; if (yaw !== undefined) WALK.yaw = yaw - m2ang(M);
+}
+
 /* ---------- Doors in doorways (fixtures): open and close while walking ---------- */
 // How far each door is open (0 shut, 1 open), for this session only; nothing is saved in the job.
 const DOOR_OPEN = Math.PI / 2, DOORS = { goal: {}, t: {} };
@@ -70,19 +104,29 @@ function doorWhere(r, f) {
 // Walked out through a linked doorway: on into the room it leads to.
 function walkDoorways(v) {
   const r = curRoom(); if (!r) return false;
+  const P = walkLocal();
   for (const f of r.fixtures || []) {
     if (!roomById(f.leadsTo) || f.leadsTo === r.id) continue;
     const d = doorWhere(r, f); if (!d) continue;
-    const px = WALK.x - d.w.x1, pz = WALK.z - d.w.y1, along = px * d.g.u.x + pz * d.g.u.y, across = (px * d.g.n.x + pz * d.g.n.y) * d.inn;
+    const px = P.x - d.w.x1, pz = P.z - d.w.y1, along = px * d.g.u.x + pz * d.g.u.y, across = (px * d.g.n.x + pz * d.g.n.y) * d.inn;
     const out = across < -(d.T / 2 + 6), was = WALK.door && WALK.door[f.id];
     if (WALK.door) WALK.door[f.id] = out ? 'out' : 'in';
-    if (out && was === 'in' && along > d.a0 - 6 && along < d.a1 + 6) { walkGoRoom(f); return true; }
+    if (out && was === 'in' && along > d.a0 - 6 && along < d.a1 + 6) { if (doorPartner(f) && walkM(f.leadsTo)) walkCross(f); else walkGoRoom(f); return true; }
   }
   return false;
+}
+// 0.63.53: through a joined doorway the next room is already there: nothing is drawn again and the walker stays
+// where they are; only the open room changes (for clicks, its doors and the room name).
+function walkCross(f) {
+  const to = roomById(f.leadsTo); if (!to) return;
+  if (typeof roomQuiet === 'function') roomQuiet(to.id); else switchRoom(to.id);
+  WALK.door = {};
+  walkNote(to.name);
 }
 function walkGoRoom(f) {
   const from = S.roomId, to = roomById(f.leadsTo); if (!to) return;
   const v = WALK.v, keepYaw = WALK.yaw;
+  WALK.frame = to.id;
   switchRoom(to.id); v.fitted = true;
   if (ui.viewMode !== '3d') return;
   if (S.roomId !== to.id) return;
@@ -92,10 +136,11 @@ function walkGoRoom(f) {
   const d = g && doorWhere(to, g);
   if (d) {
     const nx = d.g.n.x * d.inn, ny = d.g.n.y * d.inn, k = d.T / 2 + WALK.r + 14;
-    WALK.x = d.cx + nx * k; WALK.z = d.cy + ny * k; WALK.yaw = Math.atan2(-nx, -ny);
+    walkSetLocal(d.cx + nx * k, d.cy + ny * k, Math.atan2(-nx, -ny));
     // Its door is open, the way you came through.
-    if (doorHasLeaf(g)) { DOORS.goal[g.id] = 1; DOORS.t[g.id] = 1; buildRoom3D(); walkSolids(v); }
-    if (walkHits(WALK.x, WALK.z)) for (let s = 6; s < 60 && walkHits(WALK.x, WALK.z); s += 6) { WALK.x = d.cx + nx * (k + s); WALK.z = d.cy + ny * (k + s); }
+    const lg = walkLeafDoor(g);
+    if (lg) { const key = doorKey(lg); DOORS.goal[key] = 1; DOORS.t[key] = 1; buildRoom3D(); walkSolids(v); }
+    if (walkHits(WALK.x, WALK.z)) for (let s = 6; s < 60 && walkHits(WALK.x, WALK.z); s += 6) walkSetLocal(d.cx + nx * (k + s), d.cy + ny * (k + s));
   } else { walkPlace(v); WALK.yaw = keepYaw; }
   WALK.vx = WALK.vz = 0; WALK.pitch = Math.max(-0.3, Math.min(0.3, WALK.pitch));
   walkCam(v); v.requestRender();
@@ -108,9 +153,14 @@ function walkStart() {
   if (ui.viewMode !== '3d') { setView('3d'); requestAnimationFrame(() => walkStart()); return; }
   ensureRoomViewer(); const v = roomViewer; if (!v || !v.ok || WALK.on) return;
   if (ui.sel) select(null);
+  // Every room joined to this one is drawn round it, in this room's plan, for the whole walk (WALK.frame).
+  WALK.frame = S.roomId; WALK.pending = true;
   // The tour is in the Realistic look; it goes back to the plain look after if Walk turned it on.
   WALK.lookWas = { render: !!ui.render3d, hidden: !!ui.hidden3d };
-  if (!ui.render3d || ui.hidden3d) { ui.render3d = true; ui.hidden3d = false; renderRoom(); }
+  try {
+    if (!ui.render3d || ui.hidden3d) { ui.render3d = true; ui.hidden3d = false; renderRoom(); }
+    else if (typeof houseOf === 'function' && !v.houseBuilt && houseOf(S.roomId).length > 1) buildRoom3D();
+  } finally { WALK.pending = false; }
   WALK.v = v; WALK.saved = v.getView(); WALK.fov = v.persp.fov; WALK.room0 = S.roomId; WALK.door = {};
   v.cam = v.persp; v.controls.object = v.persp; v.controls.enabled = false;
   v.persp.fov = 62; v.persp.updateProjectionMatrix();
@@ -131,10 +181,12 @@ function walkStop() {
   walkUI(v, false);
   v.persp.fov = WALK.fov || 40; v.persp.updateProjectionMatrix();
   v.controls.enabled = true;
+  // Doors go back to shut, and the joined rooms go (or are drawn round the room you ended up in, with House on).
+  const doors = Object.keys(DOORS.goal).length; DOORS.goal = {}; DOORS.t = {};
+  if ((doors || v.houseBuilt) && ui.viewMode === '3d') buildRoom3D();
+  WALK.frame = null;
   // Walked into another room: show it from the usual corner; else the view from before the walk.
   if (S.roomId !== WALK.room0) { v.fitted = true; v.look(roomViewDir(0.75)); } else v.setView(WALK.saved);
-  // Doors go back to shut.
-  if (Object.keys(DOORS.goal).length) { DOORS.goal = {}; DOORS.t = {}; if (ui.viewMode === '3d') buildRoom3D(); }
   const lw = WALK.lookWas;
   if (lw && ui.render3d && !ui.hidden3d && (!lw.render || lw.hidden)) { ui.render3d = lw.render; ui.hidden3d = lw.hidden; renderRoom(); }
   renderRoomWalkBtn();
@@ -146,7 +198,7 @@ function renderRoomWalkBtn() { const b = $('#walk3d'); if (b) { b.innerHTML = `$
 function walkPlace(v) {
   const pts = []; S.walls.filter(w => !w.hidden).forEach(w => pts.push([w.x1, w.y1], [w.x2, w.y2]));
   let cx, cz;
-  if (pts.length) { const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]); cx = (Math.min(...xs) + Math.max(...xs)) / 2; cz = (Math.min(...ys) + Math.max(...ys)) / 2; }
+  if (pts.length) { const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), q = m2pt(walkM(S.roomId) || M2_ID, (Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2); cx = q.x; cz = q.y; }
   else { const b = v.bounds(), c = b.getCenter(new THREE.Vector3()); cx = c.x; cz = b.max.z + 60; }
   const d = new THREE.Vector3(); v.persp.getWorldDirection(d);
   if (Math.hypot(d.x, d.z) < 0.05) d.set(0, 0, -1);
@@ -174,7 +226,7 @@ function walkCam(v) {
 // Every solid mesh from knee to head height, kept as its own box and placement so turned walls and cabinets
 // block exactly where they stand (not a big square around them).
 function walkSolids(v) {
-  const out = [], wb = new THREE.Box3(); v.root.updateMatrixWorld(true);
+  const out = [], wb = new THREE.Box3(); v.root.updateMatrixWorld(true); WALK.doorIds = null;
   v.root.traverse(o => {
     if (!o.isMesh || o.isSprite || o.userData.noBounds || o.userData.hlEdge || !walkSolid(o)) return;
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
@@ -189,8 +241,20 @@ function walkSolids(v) {
 function walkSolid(o) {
   const m0 = Array.isArray(o.material) ? o.material[0] : o.material;
   if (!m0 || m0.visible === false || m0.colorWrite === false || !o.geometry) return false;
-  for (let p = o; p; p = p.parent) { if (p.userData.layer === 'lights') return false; if (p.visible === false && !p.userData.cut) return false; }
+  let leaf = false;
+  for (let p = o; p; p = p.parent) { if (p.userData.layer === 'lights') return false; if (p.visible === false && !p.userData.cut) return false; if (p.userData.doorLeaf) leaf = true; if (p.userData.wallDetail) return false; }
+  // Stone and panels on a wall never block (their mesh's box ran across the doorways: an invisible wall, Ayden
+  // 2026-11-24); the wall behind them does. A doorway's casing, jambs or imported model never blocks it (an imported Mozaik door or opening is one mesh whose
+  // box fills the whole opening, which stopped you there like an invisible wall). The wall beside it blocks, and a
+  // door's own leaf does until you walk into it and it opens.
+  if (!leaf && o.userData.fixtId && walkDoorIds().has(o.userData.fixtId)) return false;
   return true;
+}
+// The doors and openings of every room (Walk can draw joined rooms together), read again for each walkSolids.
+function walkDoorIds() {
+  if (WALK.doorIds) return WALK.doorIds;
+  const ids = new Set(); (S.rooms || []).forEach(r => (r.fixtures || []).forEach(f => { if (f.kind === 'door' || f.kind === 'opening') ids.add(f.id); }));
+  return (WALK.doorIds = ids);
 }
 const WALK_TMP = { p: null, q: null };
 // True when a person standing at x,z would touch something (tested at knee, waist and head height).
@@ -240,16 +304,16 @@ function walkMove(dx, dz) {
 // Opens the shut door just ahead (within a foot) of someone walking toward it (dx,dz is the way they push).
 function walkBumpDoor(dx, dz) {
   const r = curRoom(), L = Math.hypot(dx, dz); if (!r || !L) return false;
-  const ux = dx / L, uz = dz / L;
+  const P = walkLocal(), u = m2dir(P.I, dx / L, dz / L), ux = u.x, uz = u.y;
   for (const f of r.fixtures || []) {
-    if (!doorHasLeaf(f) || DOORS.goal[f.id]) continue;
+    const lf = walkLeafDoor(f); if (!lf || DOORS.goal[doorKey(lf)]) continue;
     const d = doorWhere(r, f); if (!d) continue;
     // Heading at the wall, not along it.
     if (Math.abs(ux * d.g.n.x + uz * d.g.n.y) < 0.5) continue;
     for (let k = WALK.r; k <= WALK.r + 12; k += 3) {
-      const px = WALK.x + ux * k - d.w.x1, pz = WALK.z + uz * k - d.w.y1;
+      const px = P.x + ux * k - d.w.x1, pz = P.z + uz * k - d.w.y1;
       const along = px * d.g.u.x + pz * d.g.u.y, across = px * d.g.n.x + pz * d.g.n.y;
-      if (along > d.a0 - 2 && along < d.a1 + 2 && Math.abs(across) < d.T / 2 + 10) { doorToggle(f.id); return true; }
+      if (along > d.a0 - 2 && along < d.a1 + 2 && Math.abs(across) < d.T / 2 + 10) { doorToggle(doorKey(lf)); return true; }
     }
   }
   return false;
@@ -478,20 +542,23 @@ function walkTap(v, cx, cy) {
   rc.far = 144;
   const hit = rc.intersectObjects(v.root.children, true).find(h => h.object.isMesh && !h.object.isSprite && h.object.visible && walkSolid(h.object));
   const fx = hit && hit.object.userData.fixtId && fixtById(hit.object.userData.fixtId);
+  // A door leaf (this room's or a joined room's) opens wherever it is hit; a casing opens its doorway's door.
+  let leaf = null; for (let p = hit && hit.object; p && !leaf; p = p.parent) leaf = p.userData.doorLeaf || null;
+  const lf = fx && walkLeafDoor(fx), key = leaf ? leaf.id : lf ? doorKey(lf) : null;
   // 0.62.4 (Ayden 2026-11-24: "when walking and opening cabinets it's hard to select the pocket door"): a tap anywhere on
   // a cabinet's closed front face counts, open or shut, even where the door has slid away into its pocket or something
   // in front of it (a trim, a filler edge) took the ray first.
   const fh = walkFrontHit(v, rc, hit ? hit.distance + 2 : 144);
-  if (fx && doorHasLeaf(fx) && !(fh && fh.d < hit.distance - 0.5)) { doorToggle(fx.id); return; }
+  if (key && !(fh && fh.d < hit.distance - 0.5)) { doorToggle(key); return; }
   if (fh) { setOpen([fh.c.id]); walkLoop(); return; }
-  const id = hit && hit.object.userData.cabId, c = id && cab(id);
+  const hr = hit && hit.object.userData.room, id = hit && (!hr || hr === S.roomId) && hit.object.userData.cabId, c = id && cab(id);
   if (c && openable(c)) { setOpen([c.id]); walkLoop(); }
 }
 // The nearest openable cabinet whose closed front face the ray crosses within maxD: { c, d } or null.
 function walkFrontHit(v, rc, maxD) {
   if (typeof frontFrame !== 'function' || !v.root) return null;
   let best = null; const T = new THREE.Vector3();
-  const W = (p, y) => v.root.localToWorld(new THREE.Vector3(p.x, y, p.y));
+  const M = walkM(S.roomId) || M2_ID, W = (p, y) => { const q = m2pt(M, p.x, p.y); return v.root.localToWorld(new THREE.Vector3(q.x, y, q.y)); };
   S.cabinets.forEach(c => {
     if (!c.wall || !openable(c)) return;
     const fr = frontFrame(c); if (!fr) return;

@@ -118,6 +118,9 @@ function lightsPlanSVG(px) {
 
 /* 3D: glowing strips and fixtures; in Realistic each also casts light (a limited number, for speed). */
 const MAX_LAMPS = 24;
+// 0.63.53: with joined rooms drawn together (house.js) each room gets a share of the lamps and shadows, and only the
+// first room's bounce light (it lights the whole scene).
+const LAMPS3 = { cap: Infinity, sh: Infinity, amb: true };
 const glow3 = {};
 let shade3 = null;
 const shadeMat = () => shade3 || (shade3 = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.35, metalness: 0.8, side: THREE.DoubleSide }));
@@ -263,12 +266,12 @@ function addLights3d(v, R3, layerOn, ceilOn) {
   let lamps = 0;
   let shadows = 0;
   const lamp = (grp, col, x, y, z, k, dist, ceiling) => {
-    if (!R3 || lamps >= MAX_LAMPS) return;
+    if (!R3 || lamps >= Math.min(MAX_LAMPS, LAMPS3.cap)) return;
     const pl = new THREE.PointLight(new THREE.Color(col), k, dist, 2); pl.position.set(x, y, z); grp.add(pl); lamps++;
     // The first few ceiling lights cast soft shadows (under wall cabinets, beside tall ones), so a room lit by its
     // ceiling lights looks different from one lit by a window. Phones and tablets skip this for speed.
-    if (ceiling && shadows < 4 && !(typeof aoCoarse === 'function' && aoCoarse())) {
-      pl.castShadow = true; pl.shadow.mapSize.set(512, 512); pl.shadow.bias = -0.002; pl.shadow.normalBias = 0.4; pl.shadow.radius = 3; pl.shadow.camera.near = 1; pl.shadow.camera.far = dist; shadows++;
+    if (ceiling && shadows < 4 && LAMPS3.sh > 0 && !(typeof aoCoarse === 'function' && aoCoarse())) {
+      pl.castShadow = true; pl.shadow.mapSize.set(512, 512); pl.shadow.bias = -0.002; pl.shadow.normalBias = 0.4; pl.shadow.radius = 3; pl.shadow.camera.near = 1; pl.shadow.camera.far = dist; shadows++; LAMPS3.sh--;
     }
   };
   roomLights().forEach(l => {
@@ -327,7 +330,7 @@ function addLights3d(v, R3, layerOn, ceilOn) {
     const m = new THREE.Mesh(puckGeo3, glowMat(p.col || col)); m.position.set(p.x, p.h - 0.05, p.y); g.add(m);
     const hl = new THREE.Mesh(haloGeo3(), haloMat3(p.col || col)); hl.position.set(p.x, p.h - 0.1, p.y); hl.renderOrder = 2; g.add(hl);
   });
-  const coarse = typeof aoCoarse === 'function' && aoCoarse(), budget = Math.min(coarse ? 8 : CAN_LAMPS, Math.max(0, MAX_LAMPS - lamps));
+  const coarse = typeof aoCoarse === 'function' && aoCoarse(), budget = Math.min(coarse ? 8 : CAN_LAMPS, Math.max(0, Math.min(MAX_LAMPS, LAMPS3.cap) - lamps));
   const lit = Math.min(P.length, budget), step = P.length / Math.max(1, lit);
   // More cans than lamps (very big rooms): each lamp stands for the cans round it and is that much brighter.
   const k = CAN_K.k * (P.length / Math.max(1, lit));
@@ -337,12 +340,12 @@ function addLights3d(v, R3, layerOn, ceilOn) {
     const sl = new THREE.SpotLight(new THREE.Color(p.col || col), k, dist, 1.4, 1, 1.2);
     sl.position.set(p.x, p.h - 0.6, p.y); sl.target.position.set(p.x, 0, p.y); sl.userData.puck = true;
     // A few cast shadows (under wall cabinets, beside talls); phones and tablets skip it.
-    if (!coarse && sh < 4) { sl.castShadow = true; sl.shadow.mapSize.set(512, 512); sl.shadow.bias = -0.0015; sl.shadow.normalBias = 0.4; sl.shadow.radius = 3; sl.shadow.camera.near = 1; sl.shadow.camera.far = dist; sh++; }
+    if (!coarse && sh < 4 && LAMPS3.sh > 0) { sl.castShadow = true; sl.shadow.mapSize.set(512, 512); sl.shadow.bias = -0.0015; sl.shadow.normalBias = 0.4; sl.shadow.radius = 3; sl.shadow.camera.near = 1; sl.shadow.camera.far = dist; sh++; LAMPS3.sh--; }
     sl.userData.k0 = k; g.add(sl); g.add(sl.target); lamps++;
   }
   // Light from the cans bouncing off the floor and counters lights the ceiling and upper walls a little (a real room
   // with cans on isn't dark above them). Warm, even, and off with the cans (Walk's Lights off).
-  const bo = new THREE.AmbientLight(new THREE.Color(col), Math.min(0.45, 0.16 * Math.sqrt(P.length))); bo.userData.puck = true; bo.userData.k0 = bo.intensity; g.add(bo);
+  const bo = new THREE.AmbientLight(new THREE.Color(col), Math.min(0.45, 0.16 * Math.sqrt(P.length))); bo.userData.puck = true; bo.userData.k0 = bo.intensity; if (LAMPS3.amb) g.add(bo);
   g.traverse(o => { o.userData.layer = 'lights'; o.userData.noBounds = true; });
   v.root.add(g);
 }

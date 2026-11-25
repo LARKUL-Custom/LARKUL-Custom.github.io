@@ -281,6 +281,8 @@ function wdMeshes3(w, side) {
     const m = wdPaintMat(d.color);
     wdCut(wdPieces(d, F.len, d.h), rects).forEach(q => grp.add(box3(q[1] - q[0], q[3] - q[2], q[4], m, (q[0] + q[1]) / 2, (q[2] + q[3]) / 2, q[4] / 2)));
   }
+  // Walk (walk3d.js) lets you pass these: the wall behind already stops you, and the stone's one mesh spans its doorways.
+  grp.userData.wallDetail = w.id;
   return grp.children.length ? grp : null;
 }
 

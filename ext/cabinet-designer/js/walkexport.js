@@ -10,7 +10,7 @@ async function walkExport() {
   if (WX.busy) return;
   if (typeof CompressionStream === 'undefined') { flash('This browser cannot make a walk file (it needs a newer Chrome or Edge)'); return; }
   WX.busy = true;
-  const keep = { tab: ui.tab, view: ui.viewMode, room: S.roomId, render: ui.render3d, hidden: ui.hidden3d, cut: ui.cutaway, op: ui.wallOp, layers: ui.layers, open: ui.open, cam: null };
+  const keep = { tab: ui.tab, view: ui.viewMode, room: S.roomId, render: ui.render3d, hidden: ui.hidden3d, cut: ui.cutaway, op: ui.wallOp, layers: ui.layers, open: ui.open, house: ui.house3d, cam: null };
   const openWas = { ...openT };
   if (typeof WALK !== 'undefined' && WALK.on) walkStop();
   if (ui.sel) select(null);
@@ -25,25 +25,38 @@ async function walkExport() {
     ui.render3d = true; ui.hidden3d = false; ui.cutaway = false; ui.wallOp = 1;
     ui.layers = { ...(ui.layers || {}), walls: true, ceiling: true, floor: true, labels: false, fasteners: false };
     ui.open = {}; Object.keys(openT).forEach(k => delete openT[k]);
-    const ctx = wxCtx(), rooms = [];
+    const ctx = wxCtx(), rooms = [], scenes = [];
     const list = S.rooms.filter(r => (r.walls && r.walls.length) || (r.cabinets && r.cabinets.length));
+    // 0.63.53: rooms joined at their doorways (house.js) go in as one scene, so walking from one into the next is
+    // seamless in the file too. Each room keeps its own plan and its place in the scene (M).
+    ui.house3d = true;
+    const done = new Set();
     for (const r of list) {
+      if (done.has(r.id)) continue;
+      const H = (typeof houseOf === 'function' ? houseOf(r.id) : [{ r, M: { c: 1, s: 0, x: 0, y: 0 } }]).filter(h => !done.has(h.r.id));
+      H.forEach(h => done.add(h.r.id));
       if (S.roomId !== r.id) { S.roomId = r.id; if (v) v.fitted = false; }
       buildRoom3D(); await wxModels(); buildRoom3D(); v.fitShadow(); await wxFrames(1);
-      rooms.push(await wxRoom(v, r, ctx, r.id === keep.room ? keep.cam : null));
+      const k = scenes.length; scenes.push(await wxScene(v, ctx, k));
+      H.forEach(h => { if (list.includes(h.r)) rooms.push(withRoom(h.r, () => wxRoom(h.r, k, h.M, h.r.id === keep.room && h.r.id === r.id ? keep.cam : null))); });
     }
     if (!rooms.length) throw new Error('this job has no rooms to walk');
-    const html = await wxFile(rooms, ctx);
+    const html = await wxFile(rooms, scenes, ctx);
     const clean = t => String(t || '').replace(/[^\w -]/g, '').trim();
     const name = `${clean(S.job.name) || 'Job'} walkthrough.html`, blob = new Blob([html], { type: 'text/html' });
     const mb = (blob.size / 1048576).toFixed(1);
-    if (inHub()) await hubSaveOver(new File([blob], name, { type: 'text/html' }), 'Cabinet Designer').then(() => flash(`Walk file saved to Files › Cabinet Designer (${mb} MB). Send it to the client; it opens in any browser.`));
+    // In the hub: saved to Files › Cabinet Designer and put on the clipboard as a file, so Ctrl+V in an email attaches it.
+    if (inHub()) {
+      await hubSaveOver(new File([blob], name, { type: 'text/html' }), 'Cabinet Designer');
+      const clip = await fetch(`/api/ext/cabinet-designer/walk/clip?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'Content-Type': 'text/html' }, body: blob }).then(r => r.ok).catch(() => false);
+      flash(clip ? `Walk file copied (${mb} MB). Paste it into an email with Ctrl+V. Also saved to Files › Cabinet Designer.` : `Walk file saved to Files › Cabinet Designer (${mb} MB). Send it to the client; it opens in any browser.`);
+    }
     else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); flash(`Walk file downloaded (${mb} MB)`); }
     return blob;
   } catch (e) {
     flash('Could not make the walk file: ' + (e && e.message || e)); console.error(e);
   } finally {
-    S.roomId = keep.room; ui.render3d = keep.render; ui.hidden3d = keep.hidden; ui.cutaway = keep.cut; ui.wallOp = keep.op; ui.layers = keep.layers; ui.open = keep.open;
+    S.roomId = keep.room; ui.house3d = keep.house; ui.render3d = keep.render; ui.hidden3d = keep.hidden; ui.cutaway = keep.cut; ui.wallOp = keep.op; ui.layers = keep.layers; ui.open = keep.open;
     Object.assign(openT, openWas);
     WX.busy = false;
     if (ui.tab === 'room') { renderRoom(); if (keep.cam && roomViewer) requestAnimationFrame(() => roomViewer.setView(keep.cam)); }
@@ -148,7 +161,7 @@ function wxMat(m, ctx) {
 // What the walk file keeps from each object's notes: what blocks the way, what opens, and nothing about parts.
 function wxUserData(o) {
   const u = o.userData || {}, out = {};
-  ['noBounds', 'cut', 'layer', 'fixtId', 'wall', 'land', 'noAO'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
+  ['noBounds', 'cut', 'layer', 'fixtId', 'wall', 'land', 'noAO', 'wallDetail'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
   if (u.cabId) out.cabId = u.cabId;
   if (u.open && u.cabId) {
     const op = u.open;
@@ -184,18 +197,22 @@ function wxNode(o, ctx) {
   if (j.type === 'Group' && !kids.length && !(ud && ud.open)) return null;
   return j;
 }
-async function wxRoom(v, r, ctx, cam) {
+// The 3D scene as it stands (one room, or the rooms joined to it), packed.
+async function wxScene(v, ctx, k) {
   v.root.updateMatrixWorld(true);
   await wxPrepMats(v, ctx);
   const kids = v.root.children.map(c => wxNode(c, ctx)).filter(Boolean);
+  return { uuid: THREE.MathUtils.generateUUID(), type: 'Group', matrix: new THREE.Matrix4().toArray(), userData: { scene: k }, children: kids };
+}
+// One room as the Walk needs it (the open room's own plan), in scene k at place M.
+function wxRoom(r, k, M, cam) {
   const L = typeof roomLights === 'function' ? roomLights() : [];
   return {
-    id: r.id, name: r.name || 'Room', cam: cam && cam.mode !== 'ortho' ? cam : null,
+    id: r.id, name: r.name || 'Room', cam: cam && cam.mode !== 'ortho' ? cam : null, scene: k, M,
     lamps: L.some(l => l.kind === 'ceiling') || (typeof AUTO_CEIL === 'object' && AUTO_CEIL.n > 0),
     walls: S.walls.map(w => ({ id: w.id, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, thick: w.thick, height: w.height, hidden: !!w.hidden })),
     fixtures: (S.fixtures || []).filter(f => /door|opening|window|arch|pass/i.test(f.kind || f.type || '')).map(f => wxFixt(f)),
     cabs: (S.cabinets || []).map(c => ({ wall: c.wall, side: c.side, w: c.w })),
-    node: { uuid: THREE.MathUtils.generateUUID(), type: 'Group', matrix: new THREE.Matrix4().toArray(), userData: { room: r.id }, children: kids },
   };
 }
 // Doorways and windows as the Walk needs them (where they are in the wall and where they lead); nothing else.
@@ -224,13 +241,13 @@ function wxPlayerCode(lib) {
   const consts = `const AO = { on: true };\nconst aoCoarse = ${aoCoarse.toString()};\nconst AO_VERT = ${JSON.stringify(AO_VERT)};\nconst AO_FRAG = ${JSON.stringify(AO_FRAG)};\nconst AO_BLUR = ${JSON.stringify(AO_BLUR)};\nconst sunLabel = ${sunLabel.toString()};\nconst mixHex = ${mixHex.toString()};\nconst ease = ${ease.toString()};\nconst CASE = ${JSON.stringify(CASE)};\nconst fixtInner = ${fixtInner.toString()};\n${doorType.toString()}\n${doorHasLeaf.toString()}\nconst fixtList = () => S.fixtures || [];\nconst fixtById = id => fixtList().find(f => f.id === id);\n`;
   return [lib.three, lib.orbit, lib.icons, WX_SHIM, consts, fns, lib.walk, wxPlayer.toString(), 'wxPlayer(WXDATA);'].join('\n;\n');
 }
-async function wxFile(rooms, ctx) {
+async function wxFile(rooms, scenes, ctx) {
   const [three, orbit, icons, walk, logo] = await Promise.all([wxText('vendor/three.min.js'), wxText('vendor/OrbitControls.js'), wxText('js/icons.js'), wxText('js/walk3d.js'), wxDataUrl('img/logo.png')]);
   const meta = ctx.meta, vals = o => Object.values(o);
   const data = {
     v: 1, name: S.job.name || 'Your job', made: new Date().toISOString().slice(0, 10), sun: typeof SUN === 'object' ? SUN.hour : 15,
-    rooms: rooms.map(r => ({ ...r, node: undefined })),
-    scene: { metadata: { version: 4.5, type: 'Object', generator: 'Cabinet Designer walk file' }, geometries: vals(meta.geometries), materials: vals(meta.materials), textures: vals(meta.textures), images: vals(meta.images), object: { uuid: THREE.MathUtils.generateUUID(), type: 'Group', matrix: new THREE.Matrix4().toArray(), children: rooms.map(r => r.node) } },
+    rooms,
+    scene: { metadata: { version: 4.5, type: 'Object', generator: 'Cabinet Designer walk file' }, geometries: vals(meta.geometries), materials: vals(meta.materials), textures: vals(meta.textures), images: vals(meta.images), object: { uuid: THREE.MathUtils.generateUUID(), type: 'Group', matrix: new THREE.Matrix4().toArray(), children: scenes } },
   };
   const enc = new TextEncoder(), code = enc.encode(wxPlayerCode({ three, orbit, icons, walk })), json = enc.encode(JSON.stringify(data));
   const head = new Uint32Array([code.length, json.length]), pad = new Uint8Array((4 - (8 + code.length + json.length) % 4) % 4);
@@ -271,13 +288,16 @@ const openT = {}, plain3 = {}, metal3 = {}, matCache3 = {}, viewers = [], AUTO_C
 const SUN = { hour: 15 };
 const $ = s => document.querySelector(s);
 const has3D = () => typeof THREE !== 'undefined';
-const WXP = { rooms: {}, opens: new Set(), lamps: false, ceil: null };
+const WXP = { scenes: {}, shown: null, opens: new Set(), lamps: false, ceil: null };
 function setView() {} function select() {} function fixSel() {} function save() {} function view3dPreset() {} function render() {}
 function ensureRoomViewer() {} function renderRoom() {} function fitView() {}
 function flash(t) { const f = document.getElementById('wxflash'); if (!f) return; f.textContent = t; f.hidden = false; clearTimeout(flash.t); flash.t = setTimeout(() => { f.hidden = true; }, 2600); }
 function curRoom() { return S.rooms.find(r => r.id === S.roomId) || S.rooms[0]; }
 function roomById(id) { return S.rooms.find(r => r.id === id); }
 function switchRoom(id) { if (!roomById(id) || id === S.roomId) return; wxShow(id); }
+function roomQuiet(id) { switchRoom(id); }
+// Where a room is in the scene on show: rooms joined to the open one share its scene (see walk3d.js walkM).
+function houseM(id) { const r = roomById(id), c = curRoom(); return r && c && r.scene === c.scene ? r.M || { c: 1, s: 0, x: 0, y: 0 } : null; }
 function buildRoom3D() {
   const v = roomViewer; if (!v) return;
   // Door leaves stand as far open as the Walk says (the app redraws them; here they turn in place).
@@ -309,8 +329,8 @@ function wxPlayer(W) {
   v.setReal(true); SUN.hour = D.sun || 15;
   S.rooms = D.rooms;
   new THREE.ObjectLoader().parseAsync(D.scene).then(all => {
-    all.children.forEach(g => { WXP.rooms[g.userData.room] = g.children.slice(); });
-    Object.values(WXP.rooms).flat().forEach(o => o.traverse(x => {
+    all.children.forEach(g => { WXP.scenes[g.userData.scene] = g.children.slice(); });
+    Object.values(WXP.scenes).flat().forEach(o => o.traverse(x => {
       if (x.userData.open && x.userData.cabId) WXP.opens.add(x.userData.cabId);
       if (x.material) [].concat(x.material).forEach(m => { if (m && m.userData && m.userData.ceil) WXP.ceil = m; });
     }));
@@ -321,11 +341,14 @@ function wxPlayer(W) {
 
   window.wxShow = (id, first) => {
     const r = roomById(id); if (!r) return;
-    while (v.root.children.length) v.root.remove(v.root.children[0]);
-    (WXP.rooms[id] || []).forEach(o => v.root.add(o));
+    // A room joined to the one on show is already in the scene: only the open room changes.
+    const same = WXP.shown === r.scene;
+    if (!same) {
+      while (v.root.children.length) v.root.remove(v.root.children[0]);
+      (WXP.scenes[r.scene] || []).forEach(o => v.root.add(o)); WXP.shown = r.scene;
+    }
     S.roomId = id; S.walls = r.walls || []; S.fixtures = r.fixtures || []; S.cabinets = r.cabs || []; WXP.lamps = !!r.lamps;
-    WXP.ceil = null; v.root.traverse(x => { if (x.material) [].concat(x.material).forEach(m => { if (m && m.userData && m.userData.ceil) WXP.ceil = m; }); });
-    v.fitShadow();
+    if (!same) { WXP.ceil = null; v.root.traverse(x => { if (x.material) [].concat(x.material).forEach(m => { if (m && m.userData && m.userData.ceil) WXP.ceil = m; }); }); v.fitShadow(); }
     if (!(typeof WALK !== 'undefined' && WALK.on)) { if (r.cam) v.setView(r.cam); else v.look(roomViewDir(0.75)); }
     v.requestRender();
     const sel = document.getElementById('wxroom'); if (sel) sel.value = id;

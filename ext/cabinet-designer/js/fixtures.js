@@ -487,7 +487,10 @@ function fixtElevMove(d, p) {
 function fixtWall3(w, g, wm, edges, only = fixtHole) {
   const L = g.L, H = w.height, t = w.thick;
   const holes = fixtList().filter(f => f.wall === w.id && fixtHole(f) && only(f)).map(f => { const [a0, a1, z0, z1] = fixtInner(f); return { a0: Math.max(0, a0), a1: Math.min(L, a1), z0: Math.max(0, z0), z1: Math.min(H, z1) }; })
-    .filter(o => o.a1 - o.a0 > 0.1 && o.z1 - o.z0 > 0.1).sort((a, b) => a.a0 - b.a0);
+    .filter(o => o.a1 - o.a0 > 0.1 && o.z1 - o.z0 > 0.1);
+  // 0.63.53: where a joined room drawn earlier already has its wall on this line, that stretch is left to it (house.js).
+  if (typeof houseCover === 'function') (houseCover(w) || []).forEach(c => holes.push({ a0: c.a0, a1: c.a1, z0: 0, z1: H }));
+  holes.sort((a, b) => a.a0 - b.a0);
   if (!holes.length) return [box3(L + t, H, t, wm, 0, H / 2, 0, edges)];
   const out = [], piece = (a0, a1, z0, z1) => { if (a1 - a0 > 0.01 && z1 - z0 > 0.01) out.push(box3(a1 - a0, z1 - z0, t, wm, (a0 + a1) / 2 - L / 2, (z0 + z1) / 2, 0, edges)); };
   let at = -t / 2;
@@ -497,7 +500,7 @@ function fixtWall3(w, g, wm, edges, only = fixtHole) {
   });
   piece(at, L + t / 2, 0, H);
   // 0.63.30: an arched opening fills the wall back in above its curve.
-  fixtList().filter(f => f.wall === w.id && fixtHole(f) && only(f) && doorIsArch(f)).forEach(f => out.push(archSpandrel3(f, L, t, wm)));
+  fixtList().filter(f => f.wall === w.id && fixtHole(f) && only(f) && doorIsArch(f) && !(typeof houseSkip === 'function' && houseSkip(f))).forEach(f => out.push(archSpandrel3(f, L, t, wm)));
   return out;
 }
 // A flat piece (outline pts, holes) in a wall group's x/z, top at y, t thick (extruded down).
@@ -524,6 +527,8 @@ function fixt3d(v, selCol) {
   const metal = flat3('#c3c7cc'), white = flat3('#f3f3f1'), dark = flat3('#3b3f44'), glass = R3 ? fixtGlass3() : flat3('#a8cfe6', 0.35), wood = flat3('#d9c3a0'), trim = flat3('#ffffff');
   fixtList().forEach(f => {
     const w = wall(f.wall); if (!w) return;
+    // A joined doorway's casing and door are drawn once, by the other half (house.js).
+    if (typeof houseSkip === 'function' && houseSkip(f)) return;
     const sel = fixtSel(f.id), hot = sel ? flat3(selCol) : null, tag = o => { o.traverse(m => { if (m.isMesh) m.userData.fixtId = f.id; }); return o; };
     if (fixtHole(f)) {
       // In the wall: glass for a window, a closed slab for a door, and a thin casing on both faces.
@@ -531,7 +536,7 @@ function fixt3d(v, selCol) {
       // An imported door or window model fills the opening, through the wall's thickness.
       const fm = fixtModelOf(f), md = fm && Math.max(fm.md || 0, T + 1), mm = md && modelMesh(fm.model, f.w, f.h, md, sel && selCol);
       // Walk can open a door: an opened (or opening) door draws as a plain leaf on its hinge instead of the model.
-      const ajar = doorHasLeaf(f) && typeof doorAjar === 'function' && doorAjar(f.id) > 0;
+      const ajar = doorHasLeaf(f) && typeof doorAjar === 'function' && doorAjar(typeof doorKey === 'function' ? doorKey(f) : f.id) > 0;
       if (mm && !ajar && !f.dtype) { mm.position.set(f.off, f.elev, (T - md) / 2); grp.add(mm); v.root.add(tag(grp)); return; }
       if (f.kind === 'window') grp.add(box3(iw, ih, 0.25, hot ? flat3(selCol, 0.35) : glass, (a0 + a1) / 2, (z0 + z1) / 2, T / 2, false));
       if (doorHasLeaf(f)) doorLeaves3(f, grp, T, a0, a1, z0, z1, { wood, glass, dark, hot, selCol: sel && selCol });
@@ -664,6 +669,7 @@ function fixtProps(f) {
     <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtSink(f) && !f.cooktop ? fld('Height', R, 'h', f.h, 'len') + fld('Elevation', R, 'selev', sinkElev(f), 'len') : ''}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtLoose(f) || fixtHung(f) ? fld(fixtHung(f) ? 'Bottom off the floor' : 'Off the floor', R, 'elev', f.elev || 0, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
     ${doorType(f) ? `<div class="grid2">${fld('Door type', R, 'dtype', doorType(f), 'select', { options: ROOM_DOOR_TYPES.map(({ v, l }) => ({ v, l })) })}${(o => o ? fld(o.label, R, 'swing', doorSideVal(f), 'select', { options: o.options }) : '')(doorSideOpts(f))}${doorIsArch(f) ? fld('Arch rise', R, 'rise', r3(archRise(f)), 'len') : ''}${roomDoorStyleOpts(f).length ? fld('Door style', R, 'dstyle', roomDoorStyle(f), 'select', { options: roomDoorStyleOpts(f) }) : ''}</div>` : ''}
     ${(f.kind === 'door' || f.kind === 'opening') && S.rooms.length > 1 ? fld('Leads to', R, 'leadsTo', roomById(f.leadsTo) ? f.leadsTo : '', 'select', { options: [{ v: '', l: 'Nowhere' }, ...S.rooms.filter(r => r.id !== S.roomId).map(r => ({ v: r.id, l: r.name }))], wide: true }) : ''}
+    ${(f.kind === 'door' || f.kind === 'opening') && roomById(f.leadsTo) && f.leadsDoor ? `<div class="grid2" title="The two rooms stand side by side here: Walk goes straight through into the other room, and the plan and House show them together. Untick for rooms that aren't really next to each other (Walk jumps to the other room).">${fld('Joined: the rooms meet here', R, 'join', f.join !== false, 'bool', { wide: true })}</div>` : ''}
     ${fixtSink(f) ? fld('Bowls', R, 'bowls', f.bowls || 1, 'selnum', { options: [{ v: 1, l: 'Single bowl' }, { v: 2, l: 'Double bowl' }, { v: 3, l: 'Triple bowl' }] }) : ''}
     ${fixtSink(f) && !f.cooktop ? fld('Faucet', R, 'faucet', fixtFaucet(f), 'select', { options: FAUCETS.map(([v, l]) => ({ v, l })), wide: true }) : ''}
     ${fixtSink(f) ? `<div class="row-actions"><button class="btn sm" data-act="fixt-center" data-id="${id}">${icon('ends')}Center on the cabinet under it</button></div>` : ''}

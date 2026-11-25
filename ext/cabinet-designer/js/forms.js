@@ -203,6 +203,7 @@ document.addEventListener('change', e => {
     // A sink's mount: apron front sinks also set the apron (the cabinet under it gets its apron build).
     // A doorway that leads to another room (Walk goes through it); links a door in that room back.
     if (ref.startsWith('fixt:') && field === 'leadsTo' && typeof doorLink === 'function') { doorLink(o, v); return; }
+    if (ref.startsWith('fixt:') && field === 'join' && typeof doorSetJoin === 'function') { doorSetJoin(o, !!v); return; }
     // 0.63.30: a doorway's Door type (roomdoors.js) also sets its casing and, unless typed, its name.
     if (ref.startsWith('fixt:') && field === 'dtype' && typeof doorSetType === 'function') { doorSetType(o, v); return; }
     if (ref.startsWith('fixt:') && field === 'selev' && typeof sinkSetElev === 'function') { sinkSetElev(o, v); return; }
