@@ -49,13 +49,18 @@ function walkM(id) { return typeof houseM === 'function' ? houseM(id) : id === S
 function walkRooms(v) {
   if (!v || !v.root || !v.renderer) return;
   const r = curRoom(), planes = {}, M = r && walkM(r.id);
+  // 0.63.62 (Ayden 2026-11-25: "can still see the other side of things through the wall"): the cut is the open room's
+  // whole box (its walls and their thickness) on this side of the doorway's wall, so a joined room drawn overlapping
+  // it disappears anywhere inside it, behind any wall, not just past the doorway (clipIntersection: a point is cut
+  // only when it is inside every plane). Past the doorway's wall it shows, which is what you see through the door.
+  const box = r && M && walkRoomBox(r, M);
   if (r && M) (r.fixtures || []).forEach(f => {
     const p = doorLive(f, r); if (!p || planes[p.r.id]) return;
     const d = doorWhere(r, f); if (!d) return;
     const c = m2pt(M, d.cx, d.cy), n = m2dir(M, d.g.n.x * d.inn, d.g.n.y * d.inn);
     // At this room's face of the doorway wall, so the wall between stays whole (one room draws it) and only what
     // reaches into this room is cut.
-    planes[p.r.id] = new THREE.Plane(new THREE.Vector3(-n.x, 0, -n.y), c.x * n.x + c.y * n.y + d.T / 2 + 0.05);
+    planes[p.r.id] = [new THREE.Plane(new THREE.Vector3(-n.x, 0, -n.y), c.x * n.x + c.y * n.y + d.T / 2 + 0.05), ...(box || [])];
   });
   WALK.planes = planes;
   v.renderer.localClippingEnabled = true;
@@ -63,23 +68,44 @@ function walkRooms(v) {
     const id = g.userData.room; if (!id) return;
     const pl = id === S.roomId ? null : planes[id];
     g.visible = id === S.roomId || !!pl;
+    const bx = new THREE.Box3(), ctr = new THREE.Vector3(); g.updateMatrixWorld(true);
     g.traverse(o => {
       if (!o.material || o.isLight) return;
-      for (let p = o; p; p = p.parent) if (p.userData.layer === 'lights') return;
       const u = o.userData;
+      // A ceiling light's own look stays (Lights off changes it); one inside the cut just hides.
+      let lamp = false; for (let p = o; p; p = p.parent) if (p.userData.layer === 'lights') lamp = true;
+      if (lamp) {
+        if (u.cutHide) { o.visible = true; delete u.cutHide; }
+        if (pl && g.visible && o.visible && walkCutPt(pl, bx.setFromObject(o).getCenter(ctr))) { o.visible = false; u.cutHide = true; }
+        return;
+      }
       if (u.mat0) { [].concat(o.material).forEach(m => m.dispose && m.dispose()); o.material = u.mat0; delete u.mat0; }
       if (!pl || !g.visible) return;
       u.mat0 = o.material;
-      const cl = m => { const k = m.clone(); k.clippingPlanes = [pl]; return k; };
+      const cl = m => { const k = m.clone(); k.clippingPlanes = pl; k.clipIntersection = true; return k; };
       o.material = Array.isArray(o.material) ? o.material.map(cl) : cl(o.material);
     });
   });
   v.requestRender();
 }
+// The open room's box in the scene as 4 planes facing out (inside the box = behind all four): its walls' ends, out
+// past their thickness.
+function walkRoomBox(r, M) {
+  const ws = (r.walls || []).filter(w => !w.hidden); if (!ws.length) return null;
+  const T = Math.max(...ws.map(w => w.thick || 4)) + 0.5, xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
+  const x0 = Math.min(...xs) - T, x1 = Math.max(...xs) + T, y0 = Math.min(...ys) - T, y1 = Math.max(...ys) + T;
+  return [[-1, 0, x0, 0], [1, 0, x1, 0], [0, -1, 0, y0], [0, 1, 0, y1]].map(([nx, ny, px, py]) => {
+    const n = m2dir(M, nx, ny), q = m2pt(M, px, py);
+    return new THREE.Plane(new THREE.Vector3(n.x, 0, n.y), -(n.x * q.x + n.y * q.y));
+  });
+}
+// Cut away by the planes of walkRooms: a point inside all of them; a box wholly inside all of them.
+function walkCutPt(pls, Q) { return !!pls && pls.every(pl => pl.distanceToPoint(Q) < 0); }
+function walkCutBox(pls, b) { return !!pls && pls.every(pl => pl.normal.x * (pl.normal.x > 0 ? b.max.x : b.min.x) + pl.normal.z * (pl.normal.z > 0 ? b.max.z : b.min.z) + pl.constant < 0.5); }
 // Puts each joined room's pieces back on their own looks (leaving Walk, or before the room is drawn again).
 function walkRoomsOff(v) {
   if (!v || !v.root) return; WALK.planes = null;
-  v.root.traverse(o => { const u = o.userData; if (u.mat0) { [].concat(o.material).forEach(m => m.dispose && m.dispose()); o.material = u.mat0; delete u.mat0; } if (u.room && o.parent === v.root) o.visible = true; });
+  v.root.traverse(o => { const u = o.userData; if (u.cutHide) { o.visible = true; delete u.cutHide; } if (u.mat0) { [].concat(o.material).forEach(m => m.dispose && m.dispose()); o.material = u.mat0; delete u.mat0; } if (u.room && o.parent === v.root) o.visible = true; });
 }
 // The walker in the open room's own plan: x, z and the way they face.
 function walkLocal() {
@@ -285,9 +311,9 @@ function walkSolids(v) {
     const b = o.geometry.boundingBox; if (!b || b.isEmpty()) return;
     wb.copy(b).applyMatrix4(o.matrixWorld);
     if (wb.max.y < 6 || wb.min.y > WALK.eye + 6) return;
-    // A joined room's piece wholly on this side of its doorway's wall is cut away: it doesn't block either.
+    // A joined room's piece wholly in the cut (inside this room, this side of its doorway's wall) is cut away: it doesn't block either.
     const pl = WALK.on && WALK.planes && walkRoomOf(o) !== S.roomId && WALK.planes[walkRoomOf(o)] || null;
-    if (pl && pl.normal.x * (pl.normal.x > 0 ? wb.max.x : wb.min.x) + pl.normal.z * (pl.normal.z > 0 ? wb.max.z : wb.min.z) + pl.constant < 0.5) return;
+    if (walkCutBox(pl, wb)) return;
     out.push({ pl, box: b.clone(), m: o.matrixWorld.clone(), inv: o.matrixWorld.clone().invert(), x0: wb.min.x, x1: wb.max.x, y0: wb.min.y, y1: wb.max.y, z0: wb.min.z, z1: wb.max.z });
   });
   WALK.solids = out; WALK.first = v.root.children[0]; WALK.count = v.root.children.length; WALK.at = performance.now();
@@ -321,8 +347,8 @@ function walkHits(x, z) {
     for (const y of [14, 38, WALK.eye - 4]) {
       if (y < s.y0 - r || y > s.y1 + r) continue;
       P.set(x, y, z).applyMatrix4(s.inv); s.box.clampPoint(P, Q); Q.applyMatrix4(s.m);
-      // A joined room's piece only blocks past its doorway's wall (the part on this side is cut away).
-      if (s.pl && s.pl.distanceToPoint(Q) < 0) continue;
+      // A joined room's piece only blocks outside the cut (the part inside this room is cut away).
+      if (walkCutPt(s.pl, Q)) continue;
       if ((Q.x - x) ** 2 + (Q.y - y) ** 2 + (Q.z - z) ** 2 < r * r) return true;
     }
   }

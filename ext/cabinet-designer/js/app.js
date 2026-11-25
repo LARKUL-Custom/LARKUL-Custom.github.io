@@ -819,7 +819,9 @@ function wallAt(e) {
 }
 document.addEventListener('pointerdown', e => {
   if (!e.target.closest('#ctxmenu')) hideCtx();
-  ctxDown = e.button === 2 && !ui.drawWalls && !ui.placing && e.target.closest('#plan,#elev,#room3d') ? { x: e.clientX, y: e.clientY } : null;
+  // 0.63.60 (Ayden 2026-11-25): no right-click menu (or picking) on the 3D while walking.
+  const walking = typeof WALK === 'object' && WALK.on && e.target.closest('#room3d');
+  ctxDown = e.button === 2 && !walking && !ui.drawWalls && !ui.placing && e.target.closest('#plan,#elev,#room3d') ? { x: e.clientX, y: e.clientY } : null;
 }, true);
 document.addEventListener('pointerup', e => {
   const d = ctxDown; ctxDown = null;
@@ -852,7 +854,7 @@ let hold = null;
 const dropHold = () => { if (hold) { clearTimeout(hold.t); hold = null; } };
 document.addEventListener('pointerdown', e => {
   dropHold();
-  if (e.pointerType !== 'touch' || !e.isPrimary || ui.drawWalls || ui.placing || !e.target.closest('#plan,#elev,#room3d')) return;
+  if (e.pointerType !== 'touch' || !e.isPrimary || ui.drawWalls || ui.placing || !e.target.closest('#plan,#elev,#room3d') || (typeof WALK === 'object' && WALK.on && e.target.closest('#room3d'))) return;
   const at = { clientX: e.clientX, clientY: e.clientY };
   hold = { x: e.clientX, y: e.clientY, t: setTimeout(() => {
     hold = null;

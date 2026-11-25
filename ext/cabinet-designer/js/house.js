@@ -59,8 +59,12 @@ function houseSize(id = S.roomId) { return houseOf(id).length; }
 // half with a door to open, else by the earlier room.
 function housePrep(list) {
   const cover = new Map(), skip = new Set(), segs = [], at = new Map(list.map((h, i) => [h.r.id, i]));
+  // 0.63.62 (Ayden 2026-11-25: "can still see the other side of things through the wall"): only a wall holding a joined
+  // doorway leaves its line to the other room. Other walls that happen to lie on a wall of another room (rooms drawn
+  // overlapping) stay; that room is cut away in Walk, and a room relying on its walls was left open.
+  const live = h => new Set((h.r.fixtures || []).filter(f => { const p = doorPartner(f); return p && at.has(p.r.id) && doorLiveAt(h.r, f, h.M, p, list[at.get(p.r.id)].M); }).map(f => f.wall));
   list.forEach(h => {
-    const mine = [];
+    const mine = [], dw = live(h);
     (h.r.walls || []).forEach(w => {
       if (w.hidden) return;
       const a = m2pt(h.M, w.x1, w.y1), b = m2pt(h.M, w.x2, w.y2), L = Math.hypot(b.x - a.x, b.y - a.y); if (L < 1) return;
@@ -73,7 +77,7 @@ function housePrep(list) {
         if (hi - lo > 1) ivs.push({ a0: lo, a1: hi });
       });
       if (ivs.length) cover.set(h.r.id + ':' + w.id, ivs);
-      mine.push({ a, b, u, t: T });
+      if (dw.has(w.id)) mine.push({ a, b, u, t: T });
     });
     segs.push(...mine);
     (h.r.fixtures || []).forEach(f => {
