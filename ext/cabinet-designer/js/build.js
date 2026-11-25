@@ -795,16 +795,23 @@ function caseRails(c, p, fronts, t) {
     if (rowCols(c, r)) return;
     // A microwave opening always has its fixed shelf, placed as Ayden's Mozaik library does (mwShelfZ in bidprod.js).
     const mz = typeof mwShelfZ === 'function' ? mwShelfZ(c, p, i, f, t) : null;
-    if (nx && (mz !== null || r.fixShelf || (auto && r.type !== 'drawer' && nx.type === 'drawer'))) out.shelves.push({ row: i, auto: mz === null && !r.fixShelf, ...(mz !== null ? { mw: true } : {}), z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, mz !== null ? mz : f.z0 - t / 2))) });
+    if (nx && (mz !== null || r.fixShelf || (auto && r.type !== 'drawer' && nx.type === 'drawer'))) {
+      // 0.63.70 (Ayden: fixed shelf "centered between both doors"): a door over a drawer gets its shelf centred on the gap
+      // too, so the door has something to close against (it used to sit just under the door, flush with its bottom).
+      const b2 = r.type === 'door' || nx.type === 'door' ? first(i + 1) : null, zc = b2 ? (f.z0 + b2.z1) / 2 : f.z0 - t / 2;
+      out.shelves.push({ row: i, auto: mz === null && !r.fixShelf, ...(mz !== null ? { mw: true } : {}), z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, mz !== null ? mz : zc))) });
+    }
     if (auto && r.type === 'drawer' && !(i > 0 && rows[i - 1].type === 'drawer' && !rowCols(c, rows[i - 1])) && nx) {
       const b = first(i + 1); if (b) out.stretchers.push({ row: i, z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, (f.z0 + b.z1) / 2))) });
     }
     // 0.63.69 (Ayden 2026-11-25): every other split with a door at it gets a stop for the doors to close against, so
-    // they can't swing into the cabinet: a stretcher at the front in a base, a fixed shelf in an upper or tall. Centred
-    // on the gap between the fronts. Door over drawer and drawer over door already have one (above).
+    // they can't swing into the cabinet, centred on the gap between the fronts. Door over drawer and drawer over door
+    // already have one (above).
     const b = nx && auto && first(i + 1);
     if (b && doorStopSplit(c, r, nx, f, b) && !out.shelves.some(q => q.row === i) && !out.stretchers.some(q => q.row === i)) {
       const z = r3(Math.min(zIn1 - t, Math.max(zIn0 + t, (f.z0 + b.z1) / 2)));
+      // Bases get a Door stretcher at the front, uppers and talls a fixed shelf (Ayden 2026-11-25: fixed shelf "only on
+      // uppers and talls").
       if (c.cat === 'Base') out.stretchers.push({ row: i, door: true, z }); else out.shelves.push({ row: i, auto: true, door: true, z });
     }
   });
