@@ -37,8 +37,10 @@ function renderPlan(pr) {
     // The top's name only while drawing tops; otherwise its color says it is there and labels stay clear.
     if (r.len > 8 && ui.drawMold === 'top') s += `<text class="lbl ct-lbl" x="${mx}" y="${my}" font-size="${fs * 0.9}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${mx} ${my})">${esc(r.generic ? r.name : (r.tpl && r.tpl.name) || 'Top')} · ${fmtLen(r.len, 1)}</text>`;
   });
+  // 0.63.66: each base and tall cabinet's outline again over the tops, so the tint never hides where one ends.
+  if (topOp() > 0) order.filter(c => c.cat !== 'Wall' && !hot(c)).forEach(c => { const p = cabPlanPoly(c); if (p) s += `<polygon class="c-edge nss" points="${polyPts(p)}"/>`; });
   order.filter(c => c.cat === 'Wall' || hot(c)).forEach(c => { s += cabPlanSVG(c); });
-  s += `<g class="cab-lbls" pointer-events="none">${planLabelBuf.join('')}</g>`; planLabelBuf = null;
+  s += `<g class="cab-lbls" pointer-events="none">${planLabelsSVG(planLabelBuf)}</g>`; planLabelBuf = null;
   s += shapesPlanSVG();
   s += lightsPlanSVG(px);
   // walls. On paper they get one dark outline round all of them (drawn wide underneath, the fills cover the joints),
@@ -120,10 +122,11 @@ function wallDrawSVG(fs, px) {
 // A point in a cabinet's own frame: a along its wall from the cabinet's start, b out from the wall face.
 function cabPt(c, a, b) { const w = wall(c.wall), g = wg(w); return wallPt(w, g, c.side, c.off + a, w.thick / 2 + (c.outset || 0) + b); }
 let planLabelBuf = null;
+// A cabinet's outline in the plan. A top shape draws its own outline: x across from the cabinet's left, y out from the wall.
+function cabPlanPoly(c, box) { box = box || cabPoly(c); return box && cabTopShape(c) ? cabOutline(c, 'top').map(q => cabPt(c, c.side === 1 ? q.x : c.w - q.x, q.y)) : box; }
 function cabPlanSVG(c) {
   const box = cabPoly(c); if (!box) return '';
-  // A top shape draws its own outline: x across from the cabinet's left, y out from the wall.
-  const poly = cabTopShape(c) ? cabOutline(c, 'top').map(q => cabPt(c, c.side === 1 ? q.x : c.w - q.x, q.y)) : box;
+  const poly = cabPlanPoly(c, box);
   const px = ui.px, isSel = (ui.sel && ui.sel.type === 'cab' && ui.sel.id === c.id) || inMulti(c.id), isDrop = ui.dropCab === c.id;
   const cls = c.cat === 'Wall' ? 'c-wall' : c.cat === 'Tall' ? 'c-tall' : 'c-base';
   let s = drawnPanels(() => panelPolys(c)).map(pp => `<polygon class="apanel nss" points="${polyPts(pp)}"/>`).join('');
@@ -135,12 +138,50 @@ function cabPlanSVG(c) {
   s += planFrontsSVG(c);
   if (ui.open[c.id]) s += planOpenSVG(c);
   // Uppers are labeled near the wall and bases near the front, so a stacked pair never prints on top of each other.
-  const fs = Math.min((ui.printing ? 9 : 13) * px, c.w * 0.32, c.d * 0.3), at = cabPt(c, c.w / 2, c.cat === 'Wall' ? c.d * 0.36 : c.d * 0.62);
-  const showW = ui.dims.cab && c.w / px > 34;
-  let t = `<text class="lbl ${c.cat === 'Wall' ? 'lbl-up' : ''}" x="${at.x}" y="${at.y - (showW ? fs * 0.15 : -fs * 0.35)}" font-size="${fs}" text-anchor="middle" font-weight="600">${LBL[c.id] || ''}</text>`;
-  if (showW) t += `<text class="lbl-m" x="${at.x}" y="${at.y + fs * 0.95}" font-size="${fs * 0.85}" text-anchor="middle">${fmtLen(c.w)}</text>`;
+  // 0.63.66 (Ayden 2026-11-25: "the top down view has to show some things clearer"): a piece too small for a readable
+  // number (a filler, a panel) gets it just in front of the piece with a short leader, at the normal size.
+  const fsMax = (ui.printing ? 9 : 13) * px, fsMin = (ui.printing ? 7 : 10) * px;
+  let fs = Math.min(fsMax, c.w * 0.32, c.d * 0.3), at = cabPt(c, c.w / 2, c.cat === 'Wall' ? c.d * 0.36 : c.d * 0.62), lead = '';
+  // Automatic end panel pieces keep their small name inside (they follow their cabinet and are named after it).
+  if (fs < fsMin && !c.autoOf) {
+    fs = fsMin; const f0 = cabPt(c, c.w / 2, c.d), f1 = cabPt(c, c.w / 2, c.d + fs * 1.6);
+    at = f1; lead = `<line class="lbl-lead nss" x1="${f0.x}" y1="${f0.y}" x2="${f1.x}" y2="${f1.y}"/>`;
+  }
+  const showW = ui.dims.cab && c.w / px > 34 && !lead;
+  const t = { x: at.x, y: at.y, fs, up: c.cat === 'Wall', lbl: LBL[c.id] || '', wtxt: showW ? fmtLen(c.w) : '', lead, auto: !!c.autoOf };
   // In the room plan the labels are drawn last, so tops and uppers never cover a cabinet's number.
-  if (planLabelBuf) planLabelBuf.push(t); else s += t;
+  if (planLabelBuf) planLabelBuf.push(t); else s += planLabelsSVG([t]);
+  return s;
+}
+// Cabinet numbers in the plan, with any that would print over each other (a base under an upper, two pieces side by
+// side, a tiny piece's label next to its neighbour's) stacked one under the other instead. 0.63.66.
+function planLabelsSVG(L) {
+  const box = t => { const w = Math.max(2, t.lbl.length) * t.fs * 0.62, h = t.fs * (t.wtxt ? 2.1 : 1.15); return { x0: t.x - w / 2, x1: t.x + w / 2, y0: t.y - h / 2, y1: t.y + h / 2 }; };
+  const hit = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+  // Group labels whose boxes touch (through any chain of them).
+  const groups = [];
+  L.filter(t => t.lbl).forEach(t => {
+    if (t.auto) { groups.push([t]); return; }
+    const b = box(t), joined = groups.filter(g => g.some(o => hit(box(o), b)));
+    const g = joined.length ? joined[0] : []; if (!joined.length) groups.push(g);
+    joined.slice(1).forEach(o => { g.push(...o); groups.splice(groups.indexOf(o), 1); });
+    g.push(t);
+  });
+  let s = '';
+  groups.forEach(g => {
+    if (g.length > 1) {
+      // One column round the group's middle, uppers first (they are nearer the wall in most plans), each line its own size.
+      g.sort((a, b) => (b.up - a.up) || a.lbl.localeCompare(b.lbl, undefined, { numeric: true }));
+      const cx = g.reduce((a, t) => a + t.x, 0) / g.length, cy = g.reduce((a, t) => a + t.y, 0) / g.length, fs = Math.min(...g.map(t => t.fs));
+      const H = g.length * fs * 1.2; g.forEach((t, i) => { t.x = cx; t.y = cy - H / 2 + fs * 1.2 * (i + 0.5); t.fs = fs; t.wtxt = ''; t.stack = 1; });
+    }
+    g.forEach(t => {
+      s += t.lead;
+      const y = t.stack ? t.y + t.fs * 0.35 : t.y - (t.wtxt ? t.fs * 0.15 : -t.fs * 0.35);
+      s += `<text class="lbl ${t.up ? 'lbl-up' : ''}" x="${t.x}" y="${y}" font-size="${t.fs}" text-anchor="middle" font-weight="600">${t.lbl}</text>`;
+      if (t.wtxt) s += `<text class="lbl-m" x="${t.x}" y="${t.y + t.fs * 0.95}" font-size="${t.fs * 0.85}" text-anchor="middle">${t.wtxt}</text>`;
+    });
+  });
   return s;
 }
 // Closed fronts in plan, like Mozaik: the door and drawer front thickness on the cabinet face, joints between them,
@@ -566,20 +607,30 @@ function resizeHandlesElev(c, ex, L) {
   return rzHandle(side === 1 ? 'S' : 'E', ex - o, by - c.h / 2, -1, 0, k, 'Drag to change the width') + rzHandle(side === 1 ? 'E' : 'S', ex + c.w + o, by - c.h / 2, 1, 0, k, 'Drag to change the width')
     + rzHandle('H', ex + c.w / 2, by - c.h - o, 0, -1, k, 'Drag to change the height');
 }
-// Try a new size (and spot along the wall). It is kept only where it fits without sliding or overlapping;
-// otherwise it backs off a step at a time toward the size it had, so the cabinet stops against what is in the way.
+// Try a new size (and spot along the wall).
+// 0.63.66 (Ayden 2026-11-25: "cant extend the corner cabinet to match the others even though i need to"): a size is never
+// blocked by what is in the way (RULE: allow it, flag it). The drag stops for a moment where the cabinet first meets
+// something (that edge snaps), and pulling on past it keeps going; any overlap then shows red and is listed before Print/CNC.
+// Only the wall's own length still limits the width, so the cabinet can't leave its wall.
 function rzApply(c, key, v, step) {
-  const field = { S: 'w', E: 'w', D: 'd', H: 'h' }[key], end = c.off + c.w, cur = c[field];
+  const field = { S: 'w', E: 'w', D: 'd', H: 'h' }[key], end = c.off + c.w, cur = c[field], L = wg(wall(c.wall)).L;
   v = Math.max(6, Math.round(v / step) * step);
+  if (key === 'S') v = Math.min(v, end); else if (key === 'E') v = Math.min(v, L - c.off);
   const fits = val => {
     const was = { off: c.off, w: c.w, d: c.d, h: c.h };
     c[field] = val; if (key === 'S') c.off = end - val;
-    const off = findFree(c, c.wall, c.side, c.off, c.id);
-    if (off !== null && Math.abs(off - c.off) < 0.01) return true;
-    Object.assign(c, was); return false;
+    const off = findFree(c, c.wall, c.side, c.off, c.id), ok = off !== null && Math.abs(off - c.off) < 0.01;
+    Object.assign(c, was); return ok;
   };
-  const dir = v > cur ? 1 : -1;
-  for (let i = 0, x = v; i < 400 && (x - cur) * dir > 0.001; i++, x -= dir * step) if (fits(r3(x))) return;
+  const set = val => { c[field] = r3(val); if (key === 'S') c.off = r3(end - val); };
+  // Shrinking, or growing into open space: as asked.
+  if (v <= cur || fits(v)) { set(v); return; }
+  // The size where it first touches something, stepping out from where it is.
+  let stop = cur;
+  for (let i = 0, x = cur + step; i < 400 && x <= v + 0.001 && fits(r3(x)); i++, x += step) stop = r3(x);
+  // Pulled only a little past that edge: stay on it. Further: go where the mouse is.
+  const hold = Math.max(1, 14 * (ui.px || 0.1));
+  set(v - stop <= hold ? stop : v);
 }
 // Depth drag: the nearest depth of the cabinets beside it on the same wall (same height band), when the drag is close to it.
 function rzDepthSnap(c, v) {

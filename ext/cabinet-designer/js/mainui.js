@@ -47,6 +47,13 @@ function itemBar(c) {
   } else slide = '<input type="range" class="ib-slide" disabled aria-label="Slide along the wall">';
   const R = c ? 'cab:' + id : '';
   const sz = (label, f) => `<label class="ib-f"><span>${label}</span>${c ? ctl(R, f, f === 'outset' ? c.outset || 0 : c[f], 'len', { label }) : `<input type="text" disabled aria-label="${label}">`}</label>`;
+  // 0.63.66 (Ayden 2026-11-25: "i cant change the width on the corner cabinet to what it needs to be ... it only increases
+  // the door not the other side"): a corner cabinet shows each of its sides as its own box. 45° and 90°: the side on this
+  // wall (Width) and the side on the other wall (Depth). Blind: the whole width and the blind side, so either can be set.
+  // (Blind side takes the Outset box's place on the bar; Outset stays in the cabinet editor.)
+  const cornerSz = c && typeof isCorner === 'function' && isCorner(c) ? (blindCorner(c)
+    ? [sz('Width', 'w'), sz('Depth', 'd') + `<label class="ib-f"><span>Blind side</span>${ctl('cabk:' + id, 'blind', blindWidth(c), 'len', { label: 'Blind side' })}</label>`]
+    : [sz('This wall', 'w'), sz('Other wall', 'd') + sz('Outset', 'outset')]) : null;
   const tog = (k, label) => `<label class="ib-tog"><span>${label}</span>${ctl('layout', k, L[k], 'bool', { label })}<i aria-hidden="true"></i></label>`;
   // Nothing picked: no empty boxes, just what to do next (Mozaik shows only its item picker here).
   if (!c) {
@@ -62,7 +69,7 @@ function itemBar(c) {
       ${pos('From left wall', 'cabpos:', 'L', c ? fromEnd(c, 'L') : 0)}<span class="ib-ctrs ib-ctrs-row2">${ctr('cab-center-open', 'O', 'Center it in the opening')}${ctr('cab-center', 'W', 'Center it on the whole wall')}</span>${pos('From right wall', 'cabpos:', 'R', c ? fromEnd(c, 'R') : 0)}
       <div class="ib-slidewrap">${slide}</div>
     </div>
-    <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}${ceilCell()}${sz('Depth', 'd')}${sz('Outset', 'outset')}${finEndsCell(c)}</div>
+    <div class="ib-size">${cornerSz ? cornerSz[0] : sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}${ceilCell()}${cornerSz ? cornerSz[1] : sz('Depth', 'd') + sz('Outset', 'outset')}${finEndsCell(c)}</div>
     ${c && typeof endRows === 'function' && !(typeof noAutoEnds === 'function' && noAutoEnds(c)) ? `<div class="ib-ends">${endRows(c)}</div>` : ''}
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
       <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Copy (duplicate it)">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Autofill: fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${cornerBtn(c)}${finIntBtn(c)}${falseBtn(c)}${typeof pocketBtn === 'function' ? pocketBtn(c) : ''}<button data-act="cab-flip" data-id="${id}" title="Flip: move it to the other side of the wall">${icon('flip')}Flip</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Rehinge: swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side, so it swings the other way (H)">${icon('door')}Rehinge</button>` : ''}<button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>${c.wall && conflicts(c) ? `<div class="ib-ovl" title="It runs into a wall or another piece. It shows red in the plan and is listed on Print, the CNC card and the quote until it's fixed.">${icon('hint')}Overlaps.<span class="ib-ovl2"> Fix before sending.</span></div>` : ''}`

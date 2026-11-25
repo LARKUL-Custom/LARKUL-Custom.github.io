@@ -251,6 +251,8 @@ svg text{font-family:var(--f-label)}
 .c-tall{fill:var(--tall);stroke:var(--wood-edge)}
 .c-wall{fill:var(--upper);fill-opacity:.35;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:6 3}
 .c-base,.c-tall{stroke-width:1.2}
+.c-edge{fill:none;stroke:var(--wood-edge);stroke-width:1.2;pointer-events:none}
+.lbl-lead{stroke:var(--muted);stroke-width:1}
 .c-front{stroke:var(--wood-edge);stroke-width:3}
 .filler{fill:var(--accent);stroke:var(--accent)}
 .guide{stroke:var(--sel);stroke-dasharray:3 3;stroke-width:1}
