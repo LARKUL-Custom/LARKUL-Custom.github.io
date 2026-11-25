@@ -70,7 +70,7 @@ function renderPlan(pr) {
   s += fixtPlanSVG();
   // ghost (placing from the library, or drag and drop)
   const gl = ui.ghost && libItem(ui.ghostLib || ui.placing);
-  if (gl) { const poly = cabPoly({ ...gl, w: ui.ghost.w || gl.w }, ui.ghost); if (poly) s += `<polygon class="ghost nss" points="${polyPts(poly)}"/>`; }
+  if (gl) { const poly = cabPoly({ ...gl, w: ui.ghost.w || gl.w, ...(ui.ghost.cside && gl.corner ? { corner: { ...gl.corner, side: ui.ghost.cside } } : {}) }, ui.ghost); if (poly) s += `<polygon class="ghost nss" points="${polyPts(poly)}"/>`; }
   if (ui.ghostBlocked && ui.mouse) s += `<text class="lbl dimtxt warntxt" x="${ui.mouse.x}" y="${ui.mouse.y - 14 * px}" font-size="${fs}" text-anchor="middle">No room here</text>`;
   // molding runs, drawn along the cabinet fronts or where they were placed
   moldingRuns().forEach(r => {
@@ -734,7 +734,7 @@ function initPlan() {
       const g = snapToWall(p, c, c.id, 0, ui.px);
       if (g) {
         const g2 = (g.wall === d.wall && snapToWall(p, c, c.id, d.delta, ui.px)) || g;
-        c.wall = g2.wall; c.side = g2.side; c.off = g2.off; ui.elevWall = c.wall;
+        c.wall = g2.wall; c.side = g2.side; c.off = g2.off; if (g2.cside && c.corner) c.corner = { ...c.corner, side: g2.cside }; ui.elevWall = c.wall;
       }
       renderPlan(); renderElev(); return;
     }

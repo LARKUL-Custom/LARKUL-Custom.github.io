@@ -658,7 +658,7 @@ function dockBody(k) {
 /* ---------- Placing and applying ---------- */
 function placeCabinet(libId, g) {
   const l = libItem(libId); if (!l || !g) return;
-  let nc; mutate(() => { nc = newCab(S, l, g.wall, g.side, g.off); if (g.w) nc.w = g.w; S.cabinets.push(nc); { const fo = fillerFlushOutset(nc); if (fo !== null) nc.outset = fo; } if (l.lights && l.lights.length) addCabStrips(nc.id, l.lights); if (l.sinkOn && nc.wall && typeof sinkOnCab === 'function') sinkOnCab(nc, l.sinkOn); });
+  let nc; mutate(() => { nc = newCab(S, l, g.wall, g.side, g.off); if (g.w) nc.w = g.w; if (g.cside && nc.corner) nc.corner = { ...nc.corner, side: g.cside }; S.cabinets.push(nc); { const fo = fillerFlushOutset(nc); if (fo !== null) nc.outset = fo; } if (l.lights && l.lights.length) addCabStrips(nc.id, l.lights); if (l.sinkOn && nc.wall && typeof sinkOnCab === 'function') sinkOnCab(nc, l.sinkOn); });
   ui.sel = { type: 'cab', id: nc.id }; ui.elevWall = g.wall; renderRoom();
 }
 function applyPayload(cabId, kind, val) {

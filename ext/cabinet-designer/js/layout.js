@@ -140,7 +140,8 @@ function blockedOffs(c, wallId, side, excludeId) {
   const ly = lay(), [eLo, eHi] = ownExtents(c, side), out = [];
   obstacles(wallId, side, c, excludeId).forEach(o => {
     // A wall keeps a filler's width clear, unless that end's filler is set to Never.
-    const lo = side === 1 ? 'L' : 'R', hi = side === 1 ? 'R' : 'L', pad = e => o.kind === 'wall' && ly.autoFillers && c['fill' + e] !== 'off' ? ly.fillerW : 0;
+    // 0.63.61: a corner cabinet's corner end goes tight to the return wall (no filler there), so it sits on both walls.
+    const lo = side === 1 ? 'L' : 'R', hi = side === 1 ? 'R' : 'L', pad = e => o.kind === 'wall' && ly.autoFillers && c['fill' + e] !== 'off' && !cornerEnd(c, e) ? ly.fillerW : 0;
     out.push([o.a0 - pad(hi) - c.w - eHi, o.a1 + pad(lo) + eLo]);
   });
   return out;
@@ -180,6 +181,25 @@ function fitOpening(spec, wallId, side, t) {
   if (w > spec.w && (left.kind !== 'cab' || right.kind !== 'cab')) return null;
   return { off: Math.round(off * 1000) / 1000, w };
 }
+// True when this end (viewer's L or R) of a corner cabinet is the one that goes into the corner.
+const cornerEnd = (c, end) => !!(c && c.corner && typeof isCorner === 'function' && isCorner(c) && cornerSide(c) === end);
+// 0.63.61 (Ayden 2026-11-25: "corner cabinets need to attach to two walls"): a corner cabinet near either end of its wall
+// is pulled into that corner, back on this wall and its corner end tight to the return wall, and its Left/Right switch
+// turns to that end. Returns { off, cside } or null when neither end of the wall is close or the corner end is not a wall.
+function cornerSnap(spec, w, side, want, excludeId, px) {
+  if (!spec || !spec.corner || !isCorner(spec)) return null;
+  const reach = Math.max(spec.w * 0.75, lay().snapReach, 12 * (px || 0)), L = wg(w).L;
+  let best = null;
+  [[0, side === 1 ? 'L' : 'R'], [L - spec.w, side === 1 ? 'R' : 'L']].forEach(([at, end]) => {
+    const sp = { ...spec, corner: { ...spec.corner, side: end } }, off = findFree(sp, w.id, side, at, excludeId);
+    if (off === null || Math.abs(off - want) > reach) return;
+    // Only a real corner: the corner end must touch a wall (another cabinet in the way means it is not in the corner).
+    const lowEnd = (end === 'L') === (side === 1), n = nearestAtNow({ ...sp, wall: w.id, side, off, id: excludeId }, lowEnd ? -1 : 1);
+    if (!n || n.kind !== 'wall' || n.gap > 0.05) return;
+    if (!best || Math.abs(off - want) < Math.abs(best.off - want)) best = { off: Math.round(off * 1000) / 1000, cside: end };
+  });
+  return best;
+}
 function snapToWall(pt, spec, excludeId, delta, px) {
   let best = null;
   S.walls.forEach(w => {
@@ -192,7 +212,9 @@ function snapToWall(pt, spec, excludeId, delta, px) {
   // A new cabinet over an opening takes the opening's width.
   const fit = !excludeId && fitOpening(spec, w.id, r.side, r.t);
   if (fit) return { wall: w.id, side: r.side, off: fit.off, w: fit.w };
-  const want = snapOff(spec, w.id, r.side, r.t - spec.w / 2 - (delta || 0), excludeId, px);
+  const raw = r.t - spec.w / 2 - (delta || 0), cs = cornerSnap(spec, w, r.side, raw, excludeId, px);
+  if (cs) return { wall: w.id, side: r.side, off: cs.off, cside: cs.cside };
+  const want = snapOff(spec, w.id, r.side, raw, excludeId, px);
   const off = findFree(spec, w.id, r.side, want, excludeId);
   return off === null ? null : { wall: w.id, side: r.side, off: Math.round(off * 1000) / 1000 };
 }
