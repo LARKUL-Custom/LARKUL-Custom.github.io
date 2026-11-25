@@ -165,7 +165,7 @@ function wxUserData(o) {
   if (u.cabId) out.cabId = u.cabId;
   if (u.open && u.cabId) {
     const op = u.open;
-    if (op.kind === 'door') out.open = { kind: 'door', sign: op.sign, swing: doorSwing(o) };
+    if (op.kind === 'door') out.open = { kind: 'door', sign: op.sign, swing: doorSwing(o), ...(op.stage ? { stage: op.stage } : {}) };
     else if (op.kind === 'pocket') out.open = { kind: 'pocket', sign: op.sign, base: { x: op.base.x, z: op.base.z }, dx: op.dx, dz: op.dz };
     else out.open = { kind: 'drawer', travel: drawerOut(o) };
   }
@@ -368,7 +368,7 @@ function wxPlayer(W) {
       });
       v.root.traverse(o => { const op = o.userData.open; if (!op || !o.userData.cabId) return; const t = openT[o.userData.cabId] || 0;
         if (op.kind === 'pocket') { const m = pocketMove(o, t); o.rotation.y = op.sign * m.a; o.position.set(op.base.x + m.dx, 0, op.base.z + m.dz); }
-        else if (op.kind === 'door') o.rotation.y = op.sign * ease(t) * op.swing;
+        else if (op.kind === 'door') o.rotation.y = op.sign * ease(op.stage === 'fold' ? Math.min(1, 2 * t) : op.stage === 'last' ? Math.max(0, 2 * t - 1) : t) * op.swing;
         else o.position.z = ease(t) * op.travel;
       });
       v.requestRender();

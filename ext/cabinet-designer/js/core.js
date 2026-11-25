@@ -55,7 +55,7 @@ const PARAM_DEFS = [
   { k: 'stretcherWidth', g: 'box', label: 'Top stretcher width', type: 'len', cats: ['Base'] },
   { k: 'sinkApron', g: 'box', label: 'Sink base front: upright apron this tall (0 = flat stretcher)', type: 'len', cats: ['Base'] },
   // 0.55.44, from Ayden's Mozaik library: a stretcher under the top drawer of a stack, a fixed shelf over a stack with a door above.
-  { k: 'drawerRails', g: 'box', label: 'Drawer stretchers and fixed shelves at drawer stacks', type: 'select', options: [{ v: 'on', l: 'Add automatically (like Mozaik)' }, { v: 'off', l: 'Leave off' }] },
+  { k: 'drawerRails', g: 'box', label: 'Stretchers and fixed shelves at face splits (drawer stacks and door stops)', type: 'select', options: [{ v: 'on', l: 'Add automatically (like Mozaik)' }, { v: 'off', l: 'Leave off' }] },
   // 0.55.15 (Ayden 2026-11-09): every cabinet gets top and bottom nailers unless its back or construction says otherwise.
   // 0.57.0 (bids): laminate outside, melamine inside. Exposed ends are cut from the Finish material, no applied panel, and a
   // wall cabinet's bottom is finished. Blank keeps applied end panels. Not in SHOP_PARAMS, so old jobs export the same.

@@ -327,6 +327,7 @@ function cabinetMeshes(c, opts = {}) {
   const lzAt = angledCorner(c) ? cornerSusan(c, p, t, bt) : null;
   (lay.pulls || []).forEach(pl => grp.add(box3(idx * 0.4, pl.z1 - pl.z0 - 2, inD * 0.85, flat3('#9aa1a7'), ix0 + idx / 2, (pl.z0 + pl.z1) / 2, p.backInset + bt + inD * 0.45)));
   lay.lazy.forEach(lz => { const r = lzAt ? lzAt.r : Math.min(W - 2 * t, inD) / 2 - 0.75; [0.3, 0.72].forEach(k => { const m = new THREE.Mesh(lzAt && lzAt.pie !== null ? new THREE.CylinderGeometry(r, r, 0.6, 40, 1, false, lzAt.pie, Math.PI * 1.5) : new THREE.CylinderGeometry(r, r, 0.6, 40), flat3('#d9cfbf')); m.position.set(lzAt ? lzAt.cx : W / 2, lz.z0 + (lz.z1 - lz.z0) * k, lzAt ? lzAt.cz : p.backInset + bt + inD / 2); grp.add(m); }); });
+  const cornerPivots = [];
   fronts.forEach((f, fi) => {
     if (f.type === 'open') return;
     // A corner's fronts are built on their own face (x along it, z out of it), so here D is that face.
@@ -359,7 +360,9 @@ function cabinetMeshes(c, opts = {}) {
     } else if (f.type === 'door') {
       // An overlay hinge turns the door about its front hinge-side corner, so at 90° it stands in front of the
       // cabinet side instead of swinging out past it into the next door.
-      const hx = f.hinge === 'R' ? f.x1 : f.x0, pz = D + ft, pivot = new THREE.Group();
+      // A bi-fold's folding door turns about the middle of its hinge edge, so folded it lies flat on the other door's
+      // front, edge to edge with it, instead of poking past its hinge end (0.63.68).
+      const fold = f.face && cornerFoldDoor(c, f), hx = (f.hinge === 'R' ? f.x1 : f.x0) + (fold ? (f.hinge === 'R' ? -ft / 2 : ft / 2) : 0), pz = D + (fold ? ft / 2 : ft), pivot = new THREE.Group();
       pivot.position.set(hx, 0, pz); fg.position.set(-hx, 0, -pz); pivot.add(fg);
       pivot.userData.open = { kind: 'door', sign: f.hinge === 'R' ? 1 : -1, f };
       // A pocket door swings to 90°, steps in off the side into its slot, then slides back (pocket.js, pocketMove).
@@ -370,7 +373,16 @@ function cabinetMeshes(c, opts = {}) {
         Object.assign(pivot.userData.open, { kind: 'pocket', base: { x: hx, z: pz }, dx: (f.hinge === 'R' ? W - t - pk3.gap + cl + ft : t + pk3.gap - cl - ft) - hx, dz: -(ft + back) });
       }
       host.add(pivot);
+      if (f.face) cornerPivots.push({ f, pivot });
     } else host.add(fg);
+  });
+  // A 90° corner's bi-fold (0.63.68): the folding door hangs on the cabinet's door, so it folds first and then rides
+  // with it as the pair swings open.
+  cornerPivots.forEach(({ f, pivot }) => {
+    const g = cornerFoldOf(c, f, fronts), fp = g && cornerPivots.find(q => q.f === g);
+    if (!fp) return;
+    grp.updateMatrixWorld(true); pivot.attach(fp.pivot.parent); // its face group, so its own swing still starts at 0
+    fp.pivot.userData.open.stage = 'fold'; pivot.userData.open.stage = 'last';
   });
   const ps = panelFor(c), pmM = L3(mat(ps.mat) || cm, 'finished'), pt = panelThick(c);
   const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pdL = endDepth(c, 'L') + ps.frontOverhang, pdR = endDepth(c, 'R') + ps.frontOverhang;
@@ -474,11 +486,13 @@ function applyOpen(root, t) {
     moveFront(o, t);
   });
 }
+// A bi-fold's folding door moves in the first half of the opening and the door it hangs on in the second (0.63.68).
+const stageT = (op, t) => op.stage === 'fold' ? Math.min(1, 2 * t) : op.stage === 'last' ? Math.max(0, 2 * t - 1) : t;
 // Puts one door or drawer at open amount t (0 shut .. 1 open).
 function moveFront(o, t) {
   const op = o.userData.open;
   if (op.kind === 'pocket') { const m = pocketMove(o, t); o.rotation.y = op.sign * m.a; o.position.set(op.base.x + m.dx, 0, op.base.z + m.dz); }
-  else if (op.kind === 'door') o.rotation.y = op.sign * ease(t) * doorSwing(o);
+  else if (op.kind === 'door') o.rotation.y = op.sign * ease(stageT(op, t)) * doorSwing(o);
   else o.position.z = ease(t) * drawerOut(o);
 }
 // A door opens as far as it can before it hits something (see doorLimit).

@@ -4,7 +4,7 @@
   --accent:#2563eb; --accent-2:#7c3aed; --accent-ink:#ffffff; --accent-soft:#e2ebff;
   --t-indigo:#4f46e5; --t-teal:#0d9488; --t-amber:#d97706; --t-violet:#7c3aed; --t-rose:#e11d63; --t-green:#16a34a; --t-blue:#2563eb; --t-slate:#52637d; --t-stone:#a16207;
   --shadow:0 1px 2px rgba(21,32,51,.06),0 4px 14px rgba(21,32,51,.06);
-  --wood:#e3c9a2; --wood-edge:#94744a; --tall:#cfa978; --upper:#a9c0d3; --wall:#3a4347;
+  --wood:#e3c9a2; --wood-edge:#94744a; --tall:#cfa978; --upper:#a9c0d3; --pl-tall:#b9cba0; --pl-tall-edge:#5f7445; --pl-upper:#9cbbd9; --top:#a988c4; --top-edge:#5d4378; --wall:#3a4347;
   --paper:#f7f8f6; --grid:#e1e5e2; --grid-major:#c9d0cb; --wall3d:#d9dcd8; --floor3d:#e6e1d8;
   --sel:#d9731b; --drop:#2b8a5a; --warn:#b0501a; --warn-soft:#f6e3d6; --ok:#2e7650;
   --f-ui:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -16,7 +16,7 @@
     --bg:#0f1420; --panel:#171e2c; --sunk:#1f2838; --line:#2f3b52; --line-strong:#4a5a78; --ink:#e7ecf5; --muted:#9aa8bf;
     --accent:#6b9bff; --accent-2:#a78bfa; --accent-ink:#0b1430; --accent-soft:#1d2c52; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25);
     --t-indigo:#9b97ff; --t-teal:#4fc9c6; --t-amber:#f0a94a; --t-violet:#b994ff; --t-rose:#ff7fa8; --t-green:#5fd08e; --t-blue:#6aa8f0; --t-slate:#9fb0c4; --t-stone:#d0a77a;
-    --wood:#7d6142; --wood-edge:#c49e6c; --tall:#8f6b42; --upper:#3f5a70; --wall:#aab4b6;
+    --wood:#7d6142; --wood-edge:#c49e6c; --tall:#8f6b42; --upper:#3f5a70; --pl-tall:#4f6a3e; --pl-tall-edge:#a9c48f; --pl-upper:#3f5a70; --top:#6c5486; --top-edge:#c3a9de; --wall:#aab4b6;
     --paper:#181d1f; --grid:#20272a; --grid-major:#2c3538; --wall3d:#59626a; --floor3d:#2a2e30;
     --sel:#f0913a; --drop:#5cc48e; --warn:#ef8a52; --warn-soft:#3a2518; --ok:#6cc495;
     color-scheme:dark;
@@ -26,7 +26,7 @@
   --bg:#0f1420; --panel:#171e2c; --sunk:#1f2838; --line:#2f3b52; --line-strong:#4a5a78; --ink:#e7ecf5; --muted:#9aa8bf;
   --accent:#6b9bff; --accent-2:#a78bfa; --accent-ink:#0b1430; --accent-soft:#1d2c52; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25);
     --t-indigo:#9b97ff; --t-teal:#4fc9c6; --t-amber:#f0a94a; --t-violet:#b994ff; --t-rose:#ff7fa8; --t-green:#5fd08e; --t-blue:#6aa8f0; --t-slate:#9fb0c4; --t-stone:#d0a77a;
-  --wood:#7d6142; --wood-edge:#c49e6c; --tall:#8f6b42; --upper:#3f5a70; --wall:#aab4b6;
+  --wood:#7d6142; --wood-edge:#c49e6c; --tall:#8f6b42; --upper:#3f5a70; --pl-tall:#4f6a3e; --pl-tall-edge:#a9c48f; --pl-upper:#3f5a70; --top:#6c5486; --top-edge:#c3a9de; --wall:#aab4b6;
   --paper:#181d1f; --grid:#20272a; --grid-major:#2c3538; --wall3d:#59626a; --floor3d:#2a2e30;
   --sel:#f0913a; --drop:#5cc48e; --warn:#ef8a52; --warn-soft:#3a2518; --ok:#6cc495;
   color-scheme:dark;
@@ -249,6 +249,9 @@ svg text{font-family:var(--f-label)}
 .handle{fill:var(--panel);stroke:var(--sel);stroke-width:2;cursor:move}
 .c-base{fill:var(--wood);stroke:var(--wood-edge)}
 .c-tall{fill:var(--tall);stroke:var(--wood-edge)}
+/* 0.63.67: in the top-down plan only, each kind its own color (Ayden: "only in top down"). */
+#plan .c-tall:not(.c-sel):not(.c-drop){fill:var(--pl-tall);stroke:var(--pl-tall-edge)}
+#plan .c-wall:not(.c-sel):not(.c-drop){fill:var(--pl-upper);fill-opacity:.85}
 .c-wall{fill:var(--upper);fill-opacity:.35;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:6 3}
 .c-base,.c-tall{stroke-width:1.2}
 .c-edge{fill:none;stroke:var(--wood-edge);stroke-width:1.2;pointer-events:none}
@@ -273,6 +276,8 @@ svg text{font-family:var(--f-label)}
 .c-drop{stroke:var(--drop);stroke-width:3}
 .c-bad{stroke:var(--warn);stroke-width:2.5;stroke-dasharray:3 2}
 .ct-outline{fill:none;stroke:var(--muted);stroke-dasharray:2 3}
+.ct-hbg{fill:none}.ct-hln{stroke:var(--top,#a988c4)}
+#plan .ct-solid.ct-hatch{fill:url(#ctHatch);stroke:var(--top-edge);stroke-width:1.6px}
 .ct-solid{fill:#5f8aa6;stroke:#2f566f;stroke-width:1.2px;pointer-events:none}
 .ct-lbl{fill:#fff;font-weight:600;pointer-events:none}
 .ctj{cursor:pointer}
@@ -282,6 +287,7 @@ svg text{font-family:var(--f-label)}
 .ctj-ico{stroke:#fff;stroke-width:2px;fill:none;pointer-events:none}
 .ctj:hover .ctj-dot{fill:#d97706}
 :root[data-theme="dark"] .ct-solid{fill:#4c7590;stroke:#9cc3db}
+:root[data-theme="dark"] #plan .ct-solid.ct-hatch{fill:url(#ctHatch);stroke:var(--top-edge)}
 .apanel{fill:var(--wood-edge);stroke:var(--wood-edge)}
 .ghost{fill:var(--accent);fill-opacity:.2;stroke:var(--accent);stroke-dasharray:4 3}
 .ghost.bad{fill:var(--warn);stroke:var(--warn)}

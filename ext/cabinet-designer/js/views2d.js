@@ -33,7 +33,11 @@ function renderPlan(pr) {
     const mx = poly.reduce((a, p) => a + p.x, 0) / 4, my = poly.reduce((a, p) => a + p.y, 0) / 4;
     let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;
     const hot = typeof ctjTopsMode === 'function' && ctjTopsMode() && !pr;
-    s += `<polygon class="ct-solid nss${hot && ui.topRun === r.key ? ' on' : ''}" style="fill-opacity:${hot ? Math.max(0.45, topOp()) : topOp()}" points="${polyPts(poly)}"/>`;
+    // 0.63.67 (Ayden 2026-11-25: "make the wood tops a different color from both", "only in top down"): on screen tops are purple, drawn as a light
+    // purple hatch with a purple edge, so the cabinets under them keep their own color (tan bases) instead of mixing.
+    if (pr) { s += `<polygon class="ct-solid nss" style="fill-opacity:${topOp()}" points="${polyPts(poly)}"/>`; } else {
+    if (!s.includes('id="ctHatch"')) s += `<defs><pattern id="ctHatch" patternUnits="userSpaceOnUse" width="${r3(7 * px)}" height="${r3(7 * px)}" patternTransform="rotate(45)"><rect class="ct-hbg" width="${r3(7 * px)}" height="${r3(7 * px)}"/><line class="ct-hln" x1="0" y1="0" x2="0" y2="${r3(7 * px)}" stroke-width="${r3(2.2 * px)}"/></pattern></defs>`;
+    s += `<polygon class="ct-solid ct-hatch nss${hot && ui.topRun === r.key ? ' on' : ''}" style="fill-opacity:${Math.min(1, (hot ? Math.max(0.45, topOp()) : topOp()) * 2.5)}" points="${polyPts(poly)}"/>`; }
     // The top's name only while drawing tops; otherwise its color says it is there and labels stay clear.
     if (r.len > 8 && ui.drawMold === 'top') s += `<text class="lbl ct-lbl" x="${mx}" y="${my}" font-size="${fs * 0.9}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${mx} ${my})">${esc(r.generic ? r.name : (r.tpl && r.tpl.name) || 'Top')} · ${fmtLen(r.len, 1)}</text>`;
   });

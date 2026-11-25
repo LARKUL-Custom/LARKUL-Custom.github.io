@@ -451,7 +451,7 @@ function fsInteriorTab(c) {
   return `<div class="fs-tab">
     <div class="fs-work">${draw}${panel}</div>${lib}
     ${bottom}
-    <div class="fs-status">${isPhone() ? 'Tap' : 'Click'} an opening to pick it, then add shelves and inserts on the right. Automate interior adds the drawer stretchers and fixed shelves between rows.</div></div>`;
+    <div class="fs-status">${isPhone() ? 'Tap' : 'Click'} an opening to pick it, then add shelves and inserts on the right. Automate interior adds the drawer stretchers and fixed shelves between rows, and a stop wherever the face splits at a door (a stretcher in a base, a fixed shelf in an upper or tall).</div></div>`;
 }
 // The panel right of the inside drawing for the picked opening.
 function fsIntPanel(c, key, z, L) {

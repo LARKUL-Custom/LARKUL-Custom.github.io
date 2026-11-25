@@ -119,6 +119,18 @@ function cornerHinge(c, f, hg) {
 }
 // The door of a 90° corner's bi-fold that hinges on the cabinet: the one on the return leg (faces run left to right).
 const cornerMainDoor = (c, f) => f.idx === (cornerSide(c) === 'R' ? 1 : 0);
+// 0.63.68 (Ayden 2026-11-25: "the corner doors wont fold open"): a bi-fold opens as one. The folding door turns on its
+// hinge at the inside corner until it lies flat on the front of the door that hangs on the cabinet, then the two swing
+// open together on the cabinet's hinge. cornerFoldDoor is the folding one; cornerFoldOf finds it for the cabinet's door.
+const cornerBifold = c => !!(c && c.corner && c.corner.type === 'l' && !cornerPair(c));
+const cornerFoldDoor = (c, f) => !!(f && f.face && f.type === 'door' && cornerBifold(c) && !cornerMainDoor(c, f));
+const cornerFoldOf = (c, f, fr) => f && f.face && f.type === 'door' && cornerBifold(c) && cornerMainDoor(c, f) ? (fr || computeFronts(c)).find(d => d.type === 'door' && d.face && d.row === f.row && d.idx !== f.idx) || null : null;
+// The folding door folded flat (90° on its own hinge), as points in the cabinet (x across, z out). t is its thickness.
+// It turns about the middle of its hinge edge, so it lies on the other door's front from that door's free edge back.
+function cornerFoldedLeaf(g, t) {
+  const R = g.hinge === 'R', hx = R ? g.x1 : g.x0, dir = R ? -1 : 1, fw = g.x1 - g.x0;
+  return [[hx, 0], [hx + dir * t, 0], [hx + dir * t, fw], [hx, fw]].map(([x, o]) => facePt(g.face, x, o));
+}
 // Where a corner door's hinges are, in cabinet coordinates (x across, z out from the wall).
 function cornerHingeEnd(f) {
   return facePt(f.face, f.hinge === 'R' ? f.face.len : 0);

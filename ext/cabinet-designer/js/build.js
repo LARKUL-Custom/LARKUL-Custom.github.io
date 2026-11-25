@@ -281,6 +281,12 @@ function doorPoly(c, f, a, fr) {
   const at = (s, t) => L(hx + dir * (s * Math.cos(a) + t * Math.sin(a)), FRONT_T + s * Math.sin(a) - t * Math.cos(a));
   const out = [[at(0, 0), at(fw, 0), at(fw, FRONT_T), at(0, FRONT_T)]];
   if (ps) { const s0 = R ? f.x1 - (f.x0 + ps.x1) : ps.x0, s1 = R ? f.x1 - (f.x0 + ps.x0) : ps.x1; out.push([at(s0, -PULL_OUT), at(s1, -PULL_OUT), at(s1, 0), at(s0, 0)]); }
+  // A 90° corner's bi-fold (0.63.68): once it opens, the folding door rides on this one, folded flat on its front.
+  const g = a > 0 && typeof cornerFoldOf === 'function' && cornerFoldOf(c, f);
+  if (g) {
+    const fc = f.face, toS = q => { const dx = q.x - fc.ox, dz = q.z - fc.oz, x = dx * fc.ux + dz * fc.uz, o = -dx * fc.uz + dz * fc.ux; return at(dir * (x - hx), FRONT_T - o); };
+    out.push(cornerFoldedLeaf(g, FRONT_T).map(toS));
+  }
   return out;
 }
 // A drawer pulled out by tr, in plan: the part that sticks out past the cabinet with its front, plus its pull.
@@ -320,11 +326,14 @@ function openOne(c, f, placed, cap, shutAll) {
   const z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1;
   // A pocket door ends up inside its own cabinet, so once open it is in nobody's way (pocket.js).
   if (f.type === 'door' && typeof pocketDoor === 'function' && pocketDoor(c, f)) return { v: Math.PI / 2, poly: [], z0, z1 };
+  // A bi-fold's folding door folds flat onto the door it hangs on, and rides with it (doorPoly draws it there).
+  if (typeof cornerFoldDoor === 'function' && cornerFoldDoor(c, f)) return { v: Math.PI / 2, poly: [], z0, z1 };
+  const fold = f.type === 'door' && typeof cornerFoldOf === 'function' && cornerFoldOf(c, f), foldKey = fold ? frontKey3(c, fold) : null;
   // Cabinets, walls and fronts that stay shut are still; anything one of them already touches with this front shut
   // (a corner door's edge over the next front, say) is how the cabinets were placed, not this front running into it.
-  const near = placed.filter(p => !(p.c.id === c.id && frontKey3(p.c, p.f) === frontKey3(c, f)) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
+  const near = placed.filter(p => !(p.c.id === c.id && (frontKey3(p.c, p.f) === frontKey3(c, f) || frontKey3(p.c, p.f) === foldKey)) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
   const still = fixedObstacles(c, z0, z1).concat(near.filter(p => p.v <= 0).reduce((a, p) => a.concat(p.poly), []))
-    .concat((shutAll || []).filter(q => q.key !== frontKey3(c, f) && q.z0 < z1 - 0.25 && q.z1 > z0 + 0.25).reduce((a, q) => a.concat(q.poly), []));
+    .concat((shutAll || []).filter(q => q.key !== frontKey3(c, f) && q.key !== foldKey && q.z0 < z1 - 0.25 && q.z1 > z0 + 0.25).reduce((a, q) => a.concat(q.poly), []));
   const moving = near.filter(p => p.v > 0).reduce((a, p) => a.concat(p.poly), []);
   const shut = f.type === 'door' ? doorPoly(c, f, 0, fr) : drawerPoly(c, f, 0, fr);
   const obs = still.filter(o => !shut.some(poly => polysHit(poly, o))).concat(moving);
@@ -573,6 +582,9 @@ const twoPt = (ds, pt) => ds.type === 'twopiece' && PANEL_FIELD(pt) ? 'insert' :
 function pullPlacement(c, f) {
   // A false front gets a pull only when its row asks for one (glued-on drawer fronts that should look like drawers).
   if (f.type !== 'door' && f.type !== 'drawer' && !(f.type === 'false' && f.pull)) return null;
+  // A 90° corner's bi-fold takes one pull (Ayden 2026-11-25: "corner only needs one set of handles"), on the folding
+  // door at its free end: pulling it folds that door onto the other one, then the pair swings open (0.63.68).
+  if (f.type === 'door' && typeof cornerFoldOf === 'function' && cornerFoldOf(c, f)) return null;
   const dt = doorTpl(cabSet(c, 'doorT'));
   const asDoor = (f.was || f.type) === 'door';
   const p = hwPick(cabSet(c, 'pull') || (asDoor ? dt.pull : dt.drawerPull), 'pull'); if (!p) return null;
@@ -630,6 +642,13 @@ function interiorLayout(c, p, fronts) {
   const mwRow = i => typeof mwSpot === 'function' && !!mwSpot(c, i);
   const doorZones = fronts.filter(f => (f.type === 'door' || f.type === 'open') && f.idx === 0 && f.cell === undefined && !mwRow(f.row))
     .map(f => Object.assign([Math.max(f.z0, zIn0, mwRow(f.row + 1) ? f.z0 - p.frontGap / 2 + t : -1e9), Math.min(f.z1, zIn1)], { row: f.row }));
+  // 0.63.69 (Ayden 2026-11-25): a fixed shelf or stretcher at a split closes each opening off, so an opening runs from
+  // its face, not the door's edge (adjustable shelves then space evenly in it).
+  const stops = (() => { const rl = caseRails(c, p, fronts, t); return [...rl.stretchers, ...rl.shelves]; })();
+  doorZones.forEach(z => stops.forEach(q => {
+    if (q.z < z[0] - t || q.z > z[1] + t) return;
+    if (q.z < (z[0] + z[1]) / 2) z[0] = Math.max(z[0], r3(q.z + t / 2)); else z[1] = Math.min(z[1], r3(q.z - t / 2));
+  }));
   const zones = doorZones.length ? doorZones : (fronts.length ? [] : [[zIn0, zIn1]]);
   const low = zones.length ? zones[zones.length - 1] : null, ins = falseOn(c) ? [] : c.inserts || [];
   const hasDoors = fronts.some(f => f.type === 'door');
@@ -663,6 +682,13 @@ function interiorLayout(c, p, fronts) {
   // V1: with a minimum shelf spacing, each opening gets as many shelves as keep the gaps at least that tall.
   const gap = +p.shelfMinSep;
   if (!out.perRow && gap > 0) out.perRow = out.shelfZones.map(z => ({ z, k: Math.max(0, Math.floor((z[1] - z[0] - gap) / (gap + t) + 1e-6)) }));
+  // 0.63.69 (Ayden: "split the opening so if like an adjustable shelf comes in above it splits the opening evenly"): when a
+  // fixed shelf or stretcher stands between the openings, the cabinet's shelf count is shared out opening by opening (the
+  // same share the quick editor shows, upper openings first) and each opening spaces its own shelves evenly.
+  const sz = out.shelfZones, lo = sz.length ? Math.min(...sz.map(z => z[0])) : 0, hi = sz.length ? Math.max(...sz.map(z => z[1])) : 0;
+  if (!out.perRow && sz.length > 1 && stops.some(q => q.z > lo && q.z < hi)) {
+    const n = Math.max(0, p.shelfCount | 0); out.perRow = sz.map((z, k) => ({ z, k: Math.floor(n / sz.length) + (k < n % sz.length ? 1 : 0) }));
+  }
   out.colZones = colZones(c, p, fronts, t, zIn0, zIn1);
   return out;
 }
@@ -773,8 +799,25 @@ function caseRails(c, p, fronts, t) {
     if (auto && r.type === 'drawer' && !(i > 0 && rows[i - 1].type === 'drawer' && !rowCols(c, rows[i - 1])) && nx) {
       const b = first(i + 1); if (b) out.stretchers.push({ row: i, z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, (f.z0 + b.z1) / 2))) });
     }
+    // 0.63.69 (Ayden 2026-11-25): every other split with a door at it gets a stop for the doors to close against, so
+    // they can't swing into the cabinet: a stretcher at the front in a base, a fixed shelf in an upper or tall. Centred
+    // on the gap between the fronts. Door over drawer and drawer over door already have one (above).
+    const b = nx && auto && first(i + 1);
+    if (b && doorStopSplit(c, r, nx, f, b) && !out.shelves.some(q => q.row === i) && !out.stretchers.some(q => q.row === i)) {
+      const z = r3(Math.min(zIn1 - t, Math.max(zIn0 + t, (f.z0 + b.z1) / 2)));
+      if (c.cat === 'Base') out.stretchers.push({ row: i, door: true, z }); else out.shelves.push({ row: i, auto: true, door: true, z });
+    }
   });
   return out;
+}
+// A split between two front rows that needs a door stop: a door on one side, a door, drawer or open opening on the other
+// (false fronts, appliances and microwave openings have their own parts), and no pocket door sliding in past it.
+function doorStopSplit(c, r, nx, f, b) {
+  const ok = ty => ty === 'door' || ty === 'drawer' || ty === 'open';
+  if (!ok(r.type) || !ok(nx.type) || (r.type !== 'door' && nx.type !== 'door')) return false;
+  if (r.mw || nx.mw) return false;
+  if (typeof pocketDoor === 'function' && [f, b].some(x => x.type === 'door' && pocketDoor(c, x))) return false;
+  return true;
 }
 // A blind corner (no face frame), as Ayden's Mozaik library builds it (0.55.47, Ayden 2026-11-13): an inside panel stands
 // at the blind edge, just behind the edge of the doors like a cabinet side, so a door hinged on that edge gets its plates
@@ -1270,7 +1313,9 @@ function buildParts(c) {
     part('Rear stretcher', cm, inW, p.stretcherWidth, { kind: 'rearStretcher', ops: rsAt && p.dadoDepth > 0 ? [{ ...panelGroove, y1: rsAt.groove, y2: rsAt.groove }] : [] });
   } else part('Top', cm, inW, D, { kind: 'topbot', ops: p.dadoDepth > 0 ? [{ ...panelGroove }] : [] });
   // Drawer stretchers (caseRails): flat, the top stretcher's width deep, at the front, joined into the sides like it.
-  rails.stretchers.forEach((q, i) => { q.pt = part('Drawer stretcher' + (rails.stretchers.length > 1 ? ' ' + (i + 1) : ''), cm, inW, p.stretcherWidth, { kind: 'stretcher' }); });
+  // Door stretchers (0.63.69) stop the doors at a split between door rows in a base; same part, own name.
+  rails.stretchers.forEach(q => { const grp = rails.stretchers.filter(s => !s.door === !q.door), n = grp.indexOf(q);
+    q.pt = part((q.door ? 'Door stretcher' : 'Drawer stretcher') + (grp.length > 1 ? ' ' + (n + 1) : ''), cm, inW, p.stretcherWidth, { kind: 'stretcher' }); });
   part('Back', bm, r3((zIn1 - zIn0) + 2 * gReach), r3(inW + 2 * gReach), { kind: 'back' });
   if (tk && p.toeSkin !== 'off') part(feet ? 'Toe skin' : 'Toe kick', tkm, W, tk, { kind: 'toekick' });
   // Ladder base (2026-11-09; its two settings are not in SHOP_PARAMS so older jobs export byte for byte the same): a box built under the cabinet, the toe kick height tall. Front and back rails run the full
