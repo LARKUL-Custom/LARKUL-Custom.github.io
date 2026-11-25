@@ -2008,7 +2008,9 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 .libpeek .lp-dim{font-size:13px;color:var(--muted)}
 .libpeek .lp-empty{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);font-size:14px;font-weight:600}
 .libpeek .lp-empty svg{width:40px;height:40px;fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-:root[data-libsize="s"] .rail .libpeek{display:none}
+/* Small library size keeps the preview, just shorter (0.63.60: it used to hide it and Ayden thought it was gone). */
+:root[data-libsize="s"] .rail .libpeek{height:160px}
+:root[data-libsize="s"] .rail .libpeek .lp-pic svg{max-height:100px}
 
 /* Opening panel in the cabinet editor: Mozaik-style label / dropdown rows. */
 .qe-picks{display:flex;flex-direction:column;gap:8px;margin-top:6px}
