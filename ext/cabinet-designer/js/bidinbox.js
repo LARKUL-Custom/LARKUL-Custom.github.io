@@ -125,7 +125,10 @@ function bidNativeData(tk) {
         const shift = (walls[wi - 1] && walls[wi - 1].bidCaps && !back && walls[wi - 1].bidCaps.shift) || 0;
         const x = hasX && k === 0 ? +r.x + shift : (cursor[key] || shift);
         cursor[key] = Math.max(cursor[key] || 0, x + w);
-        prods.push({ name, desc: [r.category, text].join(' '), w, h, d, x, y: NaN, elev, outset: 0, rot: 0, wall: wi, back,
+        // 0.63.75: desc is the row's category, code and product only. The notes are the reader's own words ("the drawn 1"
+        // corner filler is left out", "right end open", "over the microwave"), and the import read them as the product: a
+        // sink base whose notes said "filler" was taken for a filler and dropped, uppers that said "2 shelves" became hoods.
+        prods.push({ name, desc: [r.category, r.code, r.product].filter(Boolean).join(' '), w, h, d, x, y: NaN, elev, outset: 0, rot: 0, wall: wi, back,
           type: type, sub, num: 0, inserts: [], fronts: [], fromBid: true,
           notes: [r.code, r.material, r.notes].filter(Boolean).join(' · '), ada: ADA_TOE.test(text), ends: bidEnds(r.notes) });
       }

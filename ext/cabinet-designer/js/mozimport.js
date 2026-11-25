@@ -215,7 +215,13 @@ function mozPick(p, cat) {
 }
 function mozLib(p, cat) {
   const same = mozSameName(p); if (same && (same.cat === cat || /shelf/i.test(p.name))) return same;
-  if (p.fromBid) return bidNearLib(p, cat);
+  // 0.63.75: a Bid Reader row takes the shop's standard cabinet for what its product and code say (door, pair, drawers,
+  // sink...), the same as a Mozaik product; the nearest library name only when nothing says what it is.
+  if (p.fromBid) {
+    const n = (p.name + ' ' + p.desc).toLowerCase(), id = mozPick(p, cat) || (/\b(v?sb|vs)\d/.test(n) ? 'b-sink' : /\b(v?db|b?\d+-?3d|dr)\d*\b|\bdrawer bank\b/.test(n) && cat === 'Base' ? 'b-3dr' : cat === 'Wall' ? (p.w > 24 ? 'w-2d' : 'w-1d') : cat === 'Tall' ? 't-pantry' : cat === 'Base' ? (p.w > 24 ? 'b-2d1dr' : 'b-1d1dr') : null);
+    const l = id && libItem(id);
+    return l && l.cat === cat ? l : bidNearLib(p, cat);
+  }
   const id = mozPick(p, cat), l = id && libItem(id);
   if (l && l.cat === cat) return l;
   // A library without that product (American Cabinets): its standard cabinet of the same kind, by name words.
@@ -556,7 +562,10 @@ function mozRooms(data) {
     extras.forEach(({ p, at }) => {
       // 0.63.25 (Ayden's Serv 2615 list: "a 3" filler next to a lazy susan corner turns into an end panel"): a Mozaik filler
       // is placed as the library's filler at its own spot and size, never turned into an end panel.
-      if (isFiller(p) && !p.fromBid) {
+      // 0.63.75: a filler from a Bid Reader row too (the drawn 1" filler beside an empty corner was turned into an end panel
+      // on the cabinet, and the two end panels ran into each other in the corner). bidFlushFillers sets it flush with the
+      // doors and butts two that meet in a corner.
+      if (isFiller(p)) {
         const cat = mozCat(p), r = /right|\(r\)/i.test(p.name) ? 'right' : 'left', fl = libItem(cat === 'Wall' ? 'moz-frost-wall-' + r : cat === 'Tall' ? 'moz-frost-tth-' + r : 'moz-frost-bth-' + r);
         if (fl) { put(fl, p, at); return; }
       }
@@ -758,6 +767,12 @@ async function importMozaik(files, opts = {}) {
   let rooms, added = null;
   try {
     rooms = mozRooms(data);
+    // 0.63.75 (Ayden 2026-11-25: "when we import into cabinet designer it will just be correct"): every cabinet row of a
+    // native bid comes in as a cabinet. Any that didn't are named in the import message and the job notes.
+    if (tk && tk.native) data.rows = rooms.map((rm, i) => {
+      const want = ((data.rooms[i] || {}).prods || []).filter(p => p.type > 0 && !(p.sub > 0)), got = rm.cabinets.filter(c => c.fromMozaik && !c.made).length;
+      return want.length > got ? `${rm.name}: ${want.length} cabinet rows, ${got} placed` : '';
+    }).filter(Boolean);
     if (tk) added = bidTakeoffAdd(rooms, tk);
     // 0.60.0: and the way the chat takeoffs draw bids (tops by others at $0, finish look, corner panels, overlap check).
     if (tk && typeof bidRules === 'function') added = bidRules(rooms, tk, added);
@@ -766,6 +781,8 @@ async function importMozaik(files, opts = {}) {
   s.rooms = rooms; s.roomId = rooms[0].id; s.job.notes = `Imported from ${opts.from || 'Mozaik'} ${new Date().toLocaleDateString()}`;
   if (added && added.overlaps && typeof bidOverlapNote === 'function') s.job.notes += '\n' + bidOverlapNote(added.overlaps);
   if (added && added.cornerChecks && added.cornerChecks.length) s.job.notes += '\nCorners to check:\n' + added.cornerChecks.join('\n');
+  if (added && added.brief && typeof bidBriefNote === 'function') s.job.notes += '\n' + bidBriefNote(added.brief);
+  if (data.rows && data.rows.length) s.job.notes += '\nCabinet rows from the bid that did not come in as cabinets (check these rooms against the bid):\n' + data.rows.join('\n');
   // 0.61.0: Mozaik products with no match here, and the Mozaik materials (tops colour, names with no match).
   const tally = list => { const k = {}; (list || []).forEach(n => { k[n] = (k[n] || 0) + 1; }); return Object.entries(k).map(([n, q]) => q > 1 ? `${q} × ${n}` : n); };
   const flagged = tally(data.flagged);
@@ -780,7 +797,7 @@ async function importMozaik(files, opts = {}) {
   const nc = rooms.reduce((t, r) => t + r.cabinets.length, 0), nw = rooms.reduce((t, r) => t + r.walls.filter(w => !w.island && !w.hidden).length, 0);
   const sk = {}; (data.skipped || []).forEach(n => { sk[n] = (sk[n] || 0) + 1; });
   const left = Object.entries(sk).map(([n, k]) => k > 1 ? `${k} ${n}` : n).join(', ');
-  flash(`Imported ${s.job.name} from ${opts.from || 'Mozaik'}: ${rooms.length} room${rooms.length > 1 ? 's' : ''}, ${nw} walls, ${nc} cabinets.${flagged.length ? ` No match for ${flagged.length} product${flagged.length > 1 ? 's' : ''}, listed in the job notes.` : ''}${left ? ' Not brought in: ' + left + '.' : ''}${typeof bidTakeoffNote === 'function' ? bidTakeoffNote(added) : ''}`);
+  flash(`Imported ${s.job.name} from ${opts.from || 'Mozaik'}: ${rooms.length} room${rooms.length > 1 ? 's' : ''}, ${nw} walls, ${nc} cabinets.${data.rows && data.rows.length ? ` ${data.rows.length} room${data.rows.length > 1 ? 's are' : ' is'} missing cabinet rows from the bid, listed in the job notes.` : ''}${flagged.length ? ` No match for ${flagged.length} product${flagged.length > 1 ? 's' : ''}, listed in the job notes.` : ''}${left ? ' Not brought in: ' + left + '.' : ''}${typeof bidTakeoffNote === 'function' ? bidTakeoffNote(added) : ''}`);
   return p;
 }
 // Anything that is not a Cabinet Designer job file is read as Mozaik.

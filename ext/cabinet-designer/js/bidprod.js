@@ -210,14 +210,20 @@ function bidLen(s) {
   const m = String(s || '').match(/(\d+(?:\.\d+)?)\s*'\s*-?\s*(\d+(?:\.\d+)?)?\s*"?/); if (m) return +m[1] * 12 + (+m[2] || 0);
   const n = String(s || '').match(/(\d+(?:\.\d+)?)\s*"/); return n ? +n[1] : null;
 }
+// 0.63.75: the reader's notes say where a box's ends are ("right end open") and what is near it ("countertop microwave
+// above", "range 30" opening"); those words never make it an open vanity, an open shelf or a microwave shelf.
+const bidPlanTxt = r => bidTxt(r).replace(/\b(?:left|right|both|north|south|east|west)?\s*ends?\s*(?:is\s*|are\s*)?(?:open|exposed)\b|\bopen\s*(?:ends?|sides?)\b|\bopenings?\b/g, ' ')
+  .replace(/\b(?:no|not|without)\s+(?:an?\s+|the\s+)?[a-z]*\s*(?:microwave|open|legs?|shel(?:f|ves))[a-z]*(?:\s+shel(?:f|ves))?/g, ' ');
+const BID_MW_SPACE = /microwave\s*(?:shel|upper|open|cab|niche|space)|(?:open|shelf)\s*(?:for\s*(?:the|a)\s*)?microwave|\bmw\s*(?:shel|upper|open)/;
 function bidPlan(r) {
-  const t = bidTxt(r), cat = r.category || '', H = +r.H || 0, ada = /\bada\b|accessib/.test(t);
+  const t = bidPlanTxt(r), cat = r.category || '', H = +r.H || 0, ada = /\bada\b|accessib/.test(t);
+  const named = [r.code, r.product].filter(Boolean).join(' ').toLowerCase();
   const ours = !!r.cd || ['millwork', 'countertop', 'shelf', 'other', 'wood top'].includes(cat);
   if (/window\s*sill|\bsills?\b/.test(t)) return { kind: 'sill' };
   if (/\bcrown\b/.test(t) && !/cabinet|box/.test(cat)) return { kind: 'crown' };
   if (!ours) return null;
   if (/microwave\s*drawer|\bmwd\b|mw\s*drawer/.test(t)) return { kind: 'lib', lib: ada ? 'b-mw-drawer-ada' : 'b-mw-drawer' };
-  if (/microwave|\bmw\b/.test(t) && /shelf|open/.test(t)) return { kind: 'lib', lib: 'w-mw-shelf', appl: 'mw-ct' };
+  if ((/microwave|\bmw\b/.test(named) && /shelf|open/.test(t)) || BID_MW_SPACE.test(t)) return { kind: 'lib', lib: 'w-mw-shelf', appl: 'mw-ct' };
   if (/wall[- ]?hung|rakks|\behv\b|vanity\s*(counter)?top|lav(atory)?\s*top/.test(t) && /vanity|lav|ada|top|counter/.test(t)) return { kind: 'made', made: 'adatop', sink: /sink|lav|bowl/.test(t) };
   if (/vanity/.test(t) && /legs?|open/.test(t)) return { kind: 'lib', lib: /sink|lav|bowl/.test(t) ? 'b-vanity-legs-sink' : 'b-vanity-legs' };
   if (/\bslat/.test(t)) return { kind: 'made', made: 'slatwall' };

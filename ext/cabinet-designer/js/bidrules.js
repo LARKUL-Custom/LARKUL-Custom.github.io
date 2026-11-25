@@ -23,6 +23,7 @@ function bidRules(rooms, tk, done) {
     bidTopsByOthers(rooms, tk, done);
     bidFinishLook(tk, done);
     bidToe(tk, done);
+    bidBrief(tk, done);
     bidShelves(rooms, done);
     if (!done.exact && typeof isCornerFiller === 'function') {
       done.cornerChecks = [];
@@ -153,6 +154,66 @@ function bidFinishLook(tk, done) {
   if (!Object.keys(tex).length) return;
   S.job.tex = { ...(S.job.tex || {}), ...tex };
   done.options.push(`${pick ? `the finish (${finish.slice(0, 60)}) shown in 3D` : ''}${pick && pc ? ' with ' : ''}${pc ? `${pick ? '' : 'pulls shown '}${pc === '#232427' ? 'black' : pc === '#b08d57' ? 'brass' : 'nickel'} pulls` : ''}`);
+}
+
+/* ---------- The job brief (0.63.75, Bid Reader 0.33.0) ---------- */
+// Ayden 2026-11-25: "You are his eyes, he has the actual logic to build". Bid Reader sends what the set says about the
+// job (tk.brief: box material, finish type, door style, construction, hardware, custom millwork described, and every
+// issue it isn't sure of). The job's own picks change only where the bid names something this job has a template for;
+// everything else, and every issue, goes in Job › Notes with what to do about it.
+const BRIEF_BOX = { plywood: t => /\bply|plywood|prefinished maple|birch/i.test(t) && !/melamine|tfm/i.test(t), melamine: t => /melamine|tfm|particle|furniture board/i.test(t), mdf: t => /\bmdf\b/i.test(t) };
+const BRIEF_FIN = { laminate: t => /laminate|\bp-?lam\b|\bhpl\b/i.test(t) && !/melamine/i.test(t), melamine: t => /melamine|tfm/i.test(t), wood: t => /veneer|stain|\boak\b|maple|walnut|cherry|alder|hickory|\bwood\b/i.test(t) && !/paint|melamine|laminate|tfm/i.test(t), paint: t => /paint/i.test(t), thermofoil: t => /thermofoil|\brtf\b/i.test(t) };
+const BRIEF_DOOR = { shaker: t => /shaker|5[- ]?piece|five[- ]piece/i.test(t), slab: t => /slab|flat/i.test(t), 'raised panel': t => /raised/i.test(t) };
+function bidBrief(tk, done) {
+  const b = tk && tk.brief; if (!b || typeof b !== 'object') return;
+  const d = S.job.defaults = S.job.defaults || {}, set = [], todo = [];
+  const mName = id => ((S.materials || []).find(m => m.id === id) || {}).name || '';
+  // One pick: keep the job's own when it already matches, else the first that does, else say so.
+  const pick = (what, kind, list, key, text, test) => {
+    if (!test || !Array.isArray(list) || !list.length) return;
+    const cur = list.find(x => x.id === d[key]) || list[0];
+    if (cur && test(text(cur))) { set.push(`${what}: ${cur.name} (the bid asks for ${kind})`); return; }
+    const hit = list.find(x => test(text(x)));
+    if (hit) { d[key] = hit.id; set.push(`${what} changed to ${hit.name} (the bid asks for ${kind}; was ${cur ? cur.name : 'none'})`); }
+    else todo.push(`${what}: the bid asks for ${kind} and this job has nothing like it. Add one in Materials and pick it on the job.`);
+  };
+  if (b.box && b.box.kind) {
+    if (BRIEF_BOX[b.box.kind]) pick('Cabinet boxes', b.box.kind, (S.matTemplates || {}).cabinet, 'cabMatT', t => `${t.name || ''} ${mName(t.carcass)}`, BRIEF_BOX[b.box.kind]);
+    else todo.push(`Cabinet boxes: the bid says "${String(b.box.text || b.box.kind).slice(0, 160)}". Check the cabinet material on the job.`);
+  }
+  if (b.finish && b.finish.kind) {
+    const fins = typeof finishList === 'function' ? finishList() : S.finishes;
+    if (BRIEF_FIN[b.finish.kind]) pick('Finish', b.finish.kind, fins, 'finish', f => f.name || mName(f.front), BRIEF_FIN[b.finish.kind]);
+    else todo.push(`Finish: the bid allows ${b.finish.kind} ("${String(b.finish.text || '').slice(0, 160)}"). Pick the one to price.`);
+  }
+  if (b.doors && BRIEF_DOOR[b.doors.style]) {
+    const fk = b.finish && BRIEF_FIN[b.finish.kind], dt = S.doorTemplates || [];
+    // A door style in the bid's finish first (melamine shaker for a melamine job), then any of that style.
+    const both = t => BRIEF_DOOR[b.doors.style](t) && (!fk || fk(t));
+    const txt = x => `${x.name || ''} ${mName(x.door)}`;
+    pick('Door style', b.doors.style, dt, 'doorT', txt, dt.some(x => both(txt(x))) ? both : BRIEF_DOOR[b.doors.style]);
+  }
+  if (b.construction === 'face frame' && (!d.faceFrame || d.faceFrame === 'none')) todo.push('Construction: the bid calls for face frame cabinets. Pick a face frame on the job (Settings › Face frame).');
+  if (+b.toe > 0 && !(done.options || []).some(o => /toe kick/.test(o))) set.push(`toe ${b.toe}"`);
+  done.brief = { set, todo, specs: BRIEF_SPECS.map(([k, l]) => [l, k === 'box' || k === 'finish' ? (b[k] || {}).text : k === 'doors' ? (b.doors || {}).style : b[k]]).filter(([, v]) => v), millwork: Array.isArray(b.millwork) ? b.millwork : [], issues: Array.isArray(b.issues) ? b.issues : [] };
+  const n = done.brief.issues.length, m = done.brief.millwork.length;
+  done.options.push(`job brief from the bid${set.length ? `: ${set.length} setting${set.length === 1 ? '' : 's'} checked or set` : ''}${todo.length ? `, ${todo.length} to set by hand` : ''}${m ? `, ${m} custom millwork piece${m === 1 ? '' : 's'} described` : ''}${n ? `, ${n} issue${n === 1 ? '' : 's'} to look at` : ''} (Job › Notes)`);
+}
+const BRIEF_SPECS = [['box', 'Box'], ['finish', 'Finish'], ['doors', 'Door style'], ['construction', 'Construction'], ['grade', 'Grade'], ['edges', 'Edges'], ['hinges', 'Hinges'], ['slides', 'Slides / drawer boxes'], ['pulls', 'Pulls'], ['shelves', 'Shelves'], ['tops', 'Tops']];
+// What Cabinet Designer does about each kind of issue, so the note says what to do, not only what's wrong.
+const BRIEF_DO = { fix: 'sizes on the bid don\'t add up: check this run against the walls in the plan view', check: 'check it in 3D', scaled: 'drawn at the scaled size: verify before ordering, qualify it on the bid', spec: 'priced on the job\'s current pick until you change it', gap: 'not in the job: add it or qualify it', question: 'ask the GC, or qualify the bid' };
+function bidBriefNote(bb) {
+  if (!bb) return '';
+  const out = ['Job brief from Bid Reader:'];
+  if (bb.set.length) out.push('Set from the bid: ' + bb.set.join('; '));
+  if (bb.todo.length) out.push('To set by hand:\n' + bb.todo.map(t => '- ' + t).join('\n'));
+  if (bb.specs.length) out.push('What the set says:\n' + bb.specs.map(([l, v]) => `- ${l}: ${String(v).slice(0, 300)}`).join('\n'));
+  if (bb.millwork.length) out.push('Custom millwork (not drawn; priced on Pricing › Quote › From the bid):\n' + bb.millwork.map(x => `- ${x.room ? x.room + ': ' : ''}${x.what}${x.qty > 1 ? ` x${x.qty}` : ''}${x.size ? `, ${x.size}` : ''}${x.material ? `, ${x.material}` : ''}${x.by ? ' (by others)' : ''}${x.description ? `. ${x.description}` : ''}`).join('\n'));
+  if (bb.issues.length) {
+    const by = {}; bb.issues.forEach(i => { (by[i.kind] = by[i.kind] || []).push(i); });
+    out.push(`Issues Bid Reader flagged (${bb.issues.length}):\n` + Object.entries(by).map(([k, l]) => `${k === 'fix' ? 'Doesn\'t add up' : k === 'scaled' ? 'Scaled sizes' : k === 'spec' ? 'Specs not stated or conflicting' : k === 'gap' ? 'Gaps in the set' : k === 'question' ? 'Open questions' : 'To check'} (${BRIEF_DO[k] || 'check it'}):\n` + l.map(i => `- ${i.room ? i.room + ': ' : ''}${i.text}`).join('\n')).join('\n'));
+  }
+  return out.join('\n');
 }
 
 /* ---------- Empty corners ---------- */
