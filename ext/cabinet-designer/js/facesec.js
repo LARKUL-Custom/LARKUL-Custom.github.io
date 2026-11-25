@@ -389,7 +389,7 @@ function fsPanel(c, s) {
     ${lf.type === 'false' ? pick('Pull', 'pull', [['', 'None'], ['1', 'Drawer pull']], lf.pull ? '1' : '') : ''}
     ${size}
     ${lf.type === 'open' ? '' : pick('Style', 'style', styleOpts, lf.style || '')}
-    ${lf.type === 'open' || !f0 ? '' : fsMidRows(`secm:${id}:${key}`, lf.mids, (() => { try { const st = frontStyle(c, f0); return st.framed ? { ds: st.ds, fw, fh: f0.z1 - f0.z0, kind: frontKind(c, f0) } : null; } catch (_) { return null; } })())}
+    ${lf.type === 'open' || !f0 ? '' : fsMidRows(`secm:${id}:${key}`, lf.mids, (() => { try { const st = frontStyle(c, f0); return st.framed ? { ds: st.ds, fw, fh: f0.z1 - f0.z0, kind: frontKind(c, f0, st.ds) } : null; } catch (_) { return null; } })())}
     <div class="fs-acts">
       <button class="btn sm" data-act="fs-reset" data-id="${key}" title="Take off this section's own style and hinge">Reset</button>
       <button class="btn sm danger" data-act="fs-del" data-id="${key}" title="Take section ${s.letter} out; the section beside it takes its room"${fsSecs(c).length > 1 ? '' : ' disabled'}>${icon('trash')}Delete</button></div>

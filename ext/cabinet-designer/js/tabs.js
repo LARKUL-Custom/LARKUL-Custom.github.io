@@ -1463,23 +1463,27 @@ function splitRulesBox(d, R) {
     return `<div class="srule"><div class="srule-h"><b>Rule ${i + 1}</b><button class="btn sm icon-only danger" data-act="srule-del" data-id="${esc(d.id)}:${i}" title="Take this rule out" aria-label="Take rule ${i + 1} out">${icon('trash')}</button></div>
       <div class="grid2">${fld('For', Q, 'on', r.on || 'any', 'select', { options: SPLIT_KINDS.map(([v, l]) => ({ v, l })), wide: true })}
       ${fld('Wider than', Q, 'wOver', r.wOver ?? '', 'len', { blank: true, ph: 'any width' })}${fld('Taller than', Q, 'hOver', r.hOver ?? '', 'len', { blank: true, ph: 'any height' })}
-      ${fld('Mid stiles', Q, 'stiles', r.stiles ?? '', 'int', { blank: true, ph: 'leave' })}${fld('Mid rails', Q, 'rails', r.rails ?? '', 'int', { blank: true, ph: 'leave' })}</div></div>`; };
+      ${fld('Shorter than', Q, 'hUnder', r.hUnder ?? '', 'len', { blank: true, ph: 'any height' })}<span></span>
+      ${fld('Mid stiles', Q, 'stiles', r.stiles ?? '', 'int', { blank: true, ph: 'leave' })}${fld('Mid rails', Q, 'rails', r.rails ?? '', 'int', { blank: true, ph: 'leave' })}
+      ${fld('Stile width', Q, 'stileW', r.stileW ?? '', 'len', { blank: true, ph: fmtLen(d.stile) })}${fld('Rail width', Q, 'railW', r.railW ?? '', 'len', { blank: true, ph: fmtLen(d.rail) })}</div></div>`; };
   return `<div class="dsec">${secHead('gridsplit', 'Split rules', 'amber')}
-    <div class="note">Add mid stiles or mid rails on their own when a front or panel is past a size. Panel width is how deep it is. Every rule that fits counts, the biggest number wins. A section or panel set by hand on the Face tab keeps its own.</div>
+    <div class="note">Add mid stiles or mid rails on their own when a front or panel is past a size, or make the outside stiles or rails narrower (reduced rail drawer fronts, reduced stile legs). Panel width is how deep it is. Every rule that fits counts: the most mids and the narrowest widths win. A section or panel set by hand on the Face tab keeps its own.</div>
     ${rules.map(row).join('')}
     <div class="srule-add"><button class="btn sm" data-act="srule-add" data-id="${esc(d.id)}">${icon('plus')}Add rule</button>
-    ${rules.length ? '' : `<button class="btn sm" data-act="srule-add" data-id="${esc(d.id)}:island" title="Island end panels get one mid stile unless 18&quot; wide or less">Island panel example</button>`}</div>
+    <button class="btn sm" data-act="srule-add" data-id="${esc(d.id)}:island" title="Island end panels get one mid stile unless 18&quot; wide or less">Island panel example</button>
+    <button class="btn sm" data-act="srule-add" data-id="${esc(d.id)}:topdrawer" title="The top drawer front's top and bottom rails are 1 1/2&quot;">Reduced top drawer</button>
+    <button class="btn sm" data-act="srule-add" data-id="${esc(d.id)}:leg" title="Leg faces get 1 1/2&quot; stiles, rails stay the style's">Reduced leg stiles</button></div>
     <div class="grid2">${fld('Each extra mid ($)', R, 'midAdd', d.midAdd ?? '', 'num', { blank: true, ph: '0' })}</div>
     <div class="note">Each mid stile or rail a rule or the Face tab adds past this style's own costs this much more.</div></div>`;
 }
 document.addEventListener('click', e => {
   const b = e.target.closest && e.target.closest('[data-act="srule-add"],[data-act="srule-del"]'); if (!b) return;
   e.stopPropagation();
-  const id = b.dataset.id || '', j = id.lastIndexOf(':'), sid = b.dataset.act === 'srule-del' || id.endsWith(':island') ? id.slice(0, j) : id, d = S.doorStyles.find(x => x.id === sid); if (!d) return;
+  const id = b.dataset.id || '', j = id.lastIndexOf(':'), ex = /:(island|topdrawer|leg)$/.test(id) ? id.slice(j + 1) : '', sid = b.dataset.act === 'srule-del' || ex ? id.slice(0, j) : id, d = S.doorStyles.find(x => x.id === sid); if (!d) return;
   mutate(() => {
     d.splitRules = d.splitRules || [];
     if (b.dataset.act === 'srule-del') { d.splitRules.splice(+id.slice(j + 1), 1); return; }
-    d.splitRules.push(id.endsWith(':island') ? { on: 'island', wOver: 18, stiles: 1 } : { on: 'any', wOver: '', hOver: '', stiles: '', rails: '' });
+    d.splitRules.push(ex === 'island' ? { on: 'island', wOver: 18, stiles: 1 } : ex === 'topdrawer' ? { on: 'topdrawer', railW: 1.5 } : ex === 'leg' ? { on: 'leg', stileW: 1.5 } : { on: 'any', wOver: '', hOver: '', stiles: '', rails: '' });
   });
 });
 function buyPanelList() {

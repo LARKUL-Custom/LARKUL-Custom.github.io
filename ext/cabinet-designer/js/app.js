@@ -981,6 +981,7 @@ document.addEventListener('click', e => {
     case 'light-del': mutate(() => { S.lights = S.lights.filter(l => l.id !== id); }); break;
     case 'light-clear': mutate(() => { S.lights = S.lights.filter(l => l.kind !== id); }); break;
     case 'light-grid': case 'light-regen': regenCeilLights(); break;
+    case 'light-reset': resetLighting(); break;
     case 'light-winonly': mutate(() => { S.job.layout = { ...(S.job.layout || {}), winOnly: !lay().winOnly }; }); break;
     case 'light-list': ui.lightList = ui.lightList === id ? null : id; render(); break;
     case 'light-place': startLightPlace(); break;

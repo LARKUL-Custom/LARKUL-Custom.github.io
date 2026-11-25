@@ -157,7 +157,8 @@ function shapesElevSVG(w, side, L, mats) {
     const sel = ui.sel && ui.sel.type === 'shape' && ui.sel.id === s.id;
     const shape = s.plane === 'flat' ? `<rect ${fillFor(m, 'ev-top')} x="${x0}" y="${-(s.elev + shapeT(s))}" width="${box.w}" height="${shapeT(s)}"/>`
       : `<polygon ${fillFor(m, 'ev-top')} points="${out.map(p => `${r3(x0 + p.x)},${r3(-(s.elev + p.y))}`).join(' ')}"/>`;
-    const P = shapePost(s), fr = P && P.faces[0].framed ? `<rect class="ev-inner nss" fill="none" x="${r3(x0 + +P.ds.stile)}" y="${r3(-(s.elev + box.h) + +P.ds.rail)}" width="${r3(box.w - 2 * P.ds.stile)}" height="${r3(box.h - 2 * P.ds.rail)}"/>` : '';
+    const P = shapePost(s), fd = P && (P.faces[0].ds || P.ds), sL = P && (+fd.sL || +fd.stile), sR = P && (+fd.sR || +fd.stile), rT = P && (+fd.rT || +fd.rail), rB = P && (+fd.rB || +fd.rail);
+    const fr = P && P.faces[0].framed ? `<rect class="ev-inner nss" fill="none" x="${r3(x0 + sL)}" y="${r3(-(s.elev + box.h) + rT)}" width="${r3(box.w - sL - sR)}" height="${r3(box.h - rT - rB)}"/>` : '';
     const hb = s.plane === 'flat' ? [x0, -(s.elev + shapeT(s)), box.w, shapeT(s)] : [x0, -(s.elev + box.h), box.w, box.h];
     return `<g data-shape="${s.id}">${shape}${fr}<rect class="ev-hit" x="${hb[0]}" y="${hb[1] - (s.plane === 'flat' ? 1 : 0)}" width="${hb[2]}" height="${hb[3] + (s.plane === 'flat' ? 2 : 0)}"/>${sel ? `<rect class="ev-sel nss" x="${hb[0]}" y="${hb[1]}" width="${hb[2]}" height="${hb[3]}"/>` : ''}</g>`;
   }).join('');

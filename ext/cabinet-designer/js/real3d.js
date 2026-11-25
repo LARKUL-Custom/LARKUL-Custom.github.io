@@ -179,12 +179,17 @@ function realLight(v) {
   // Sun: warm and orange when low, white at midday, gone at night.
   v.sun.intensity = 2.4 * d; v.sun.castShadow = d > 0.01; v.sun.color.copy(mixHex(0xfff3e2, 0xffa860, S0.low));
   // Sky and bounce: bright in the day, a dim blue at night.
-  v.hemi.intensity = 0.14 + 0.42 * d; v.hemi.color.copy(mixHex(0x5a6a90, 0xeef2ff, d)); v.hemi.groundColor.copy(mixHex(0x2a2a30, 0xb39b7e, d));
+  v.hemi.intensity = hasLamps ? 0.12 + 0.26 * d : 0.14 + 0.42 * d; v.hemi.color.copy(mixHex(0x5a6a90, 0xeef2ff, d)); v.hemi.groundColor.copy(mixHex(0x2a2a30, 0xb39b7e, d));
   // A soft light from overhead stands in for room lighting when the room has no ceiling lights drawn.
   v.fill.intensity = hasLamps ? 0.05 + 0.1 * d : 0.18 + 0.12 * d; v.fill.color.set(0xfff4e8);
   v.fill.position.set(0, 1, 0.25); v.fill.target.position.set(0, 0, 0);
-  v.renderer.toneMappingExposure = 0.75 + 0.2 * d;
-  if (typeof realCeil3 === 'function') realCeil3().emissive.copy(mixHex(0x141418, 0x5a5854, d));
+  v.renderer.toneMappingExposure = hasLamps ? 0.72 + 0.1 * d : 0.75 + 0.2 * d;
+  if (typeof realCeil3 === 'function') realCeil3().emissive.copy(mixHex(0x141418, hasLamps ? 0x2a2927 : 0x5a5854, d));
+  // 0.63.52 (Ayden 2026-11-25: "look at how bright and like hard to see it is"): ceiling cans on in daylight used to add
+  // their full night strength on top of the sun and sky, washing the room out. Their light and bounce now ease off as
+  // the daylight comes up (cans still show by day, softer), and the exposure is a little lower when cans are on.
+  v.root.traverse(o => { const u = o.userData; if (!o.isLight || !u.puck || u.k0 === undefined) return;
+    const k = u.k0 * (o.isAmbientLight ? 1 - 0.75 * d : 1 - 0.5 * d); if (u.lit0 !== undefined) u.lit0 = k; if (!(typeof WALK === 'object' && WALK.darkOn)) o.intensity = k; });
   v.envK = 0.25 + 0.75 * d;
   // Only through windows (Lights tab): no fill from overhead, almost no sky everywhere, a dark ceiling, and the sky
   // light at each window (windowSky3 in lights.js) follows the daylight. The sun still comes in where walls let it.

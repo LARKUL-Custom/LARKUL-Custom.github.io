@@ -376,6 +376,7 @@ function walkUI(v, on) {
     // 0.63.31 (Ayden 2026-11-24): the time of day and the room's lights, right in the Walk bar, to set before full screen.
     + (v.real && typeof SUN === 'object' ? `<label class="walksun" title="Time of day">${icon('sun')}<input type="range" min="5" max="22" step="0.25" value="${SUN.hour}" aria-label="Time of day"><span>${sunLabel(SUN.hour)}</span></label>` : '')
     + `<button class="btn sm walklights" data-walk="lights" aria-pressed="false" title="Turn the room's ceiling lights and LED strips off or on"></button>`
+    + (v.real && typeof resetLighting === 'function' ? `<button class="btn sm" data-walk="reset" title="Reset lighting: 3 PM daylight, room lights on, automatic ceiling cans, Only through windows off">${icon('regen')}Reset lighting</button>` : '')
     + `<button class="btn sm" data-walk="stop">${icon('close')}Stop walking</button></div><div class="walkdot"></div>`
     + (coarse ? '<div class="walkstick"><i></i></div>' : '');
   v.host.parentElement.appendChild(box); WALK.ui = box;
@@ -384,6 +385,7 @@ function walkUI(v, on) {
   const fb = box.querySelector('[data-walk=full]'); if (fb) fb.addEventListener('click', e => { e.stopPropagation(); fb.blur(); walkFull(true); });
   const sr = box.querySelector('.walksun input');
   if (sr) sr.addEventListener('input', e => { e.stopPropagation(); walkSunSet(v, +sr.value); });
+  const rb = box.querySelector('[data-walk=reset]'); if (rb) rb.addEventListener('click', e => { e.stopPropagation(); rb.blur(); resetLighting(); });
   const lb = box.querySelector('[data-walk=lights]');
   if (lb) { walkLightsBtn(); lb.addEventListener('click', e => { e.stopPropagation(); lb.blur(); WALK.dark = !WALK.dark; walkLights(v); walkLightsBtn(); v.requestRender(); }); }
 

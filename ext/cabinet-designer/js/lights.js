@@ -26,7 +26,7 @@ function lightsCard() {
   return `<div class="lt-dock">
   <div class="lt-box"><div class="lt-head"><b>LED strips</b><span class="muted">${strips.length} · ${feet.toFixed(1)} ft</span>${listBtn('strip', strips.length)}</div>
     <div class="lt-row"><button class="btn sm${drawing ? ' on' : ''}" data-act="${drawing ? 'light-place-stop' : 'light-draw'}" aria-pressed="${drawing}" title="Then click each cabinet. Click again to take it off.">${icon(drawing ? 'check' : 'edit')}${drawing ? 'Done' : 'Draw'}</button><select class="strip-where" aria-label="Where the strip goes" title="Where the strip goes"><option value="auto"${(ui.stripWhere || 'auto') === 'auto' ? ' selected' : ''}>Auto spot</option>${STRIP_SPOTS.map(o => `<option value="${o.v}"${ui.stripWhere === o.v ? ' selected' : ''}>${o.l}</option>`).join('')}</select><button class="btn sm" data-act="light-strips" data-id="under" title="A strip under every wall cabinet">${icon('plus')}Under uppers</button><button class="btn sm" data-act="light-strips" data-id="top" title="A strip on top of every wall cabinet">${icon('plus')}On uppers</button><button class="btn sm" data-act="light-strips" data-id="toe" title="A strip in the toe kick of every base">${icon('plus')}Toe kicks</button>${strips.length ? `<button class="btn sm danger" data-act="light-clear" data-id="strip" title="Remove all strips">${icon('trash')}All</button>` : ''}</div>${stripList}</div>
-  <div class="lt-box"><div class="lt-head"><b>Ceiling lights</b><span class="muted">${ceil.length ? ceil.length + (nAuto ? ` (${nAuto} auto)` : '') : ap ? ap + ' automatic' : 'none'}</span><button class="btn sm${wo ? ' on' : ''}" data-act="light-winonly" aria-pressed="${wo}" title="Realistic only: no daylight or fill from outside the drawing except what comes in through the windows (following the time of day). Ceiling lights and LED strips you placed by hand stay on. Automatic and regenerated cans go off.">${icon(wo ? 'check' : 'sun')}Only through windows</button>${listBtn('ceiling', ceil.length)}</div>
+  <div class="lt-box"><div class="lt-head"><b>Ceiling lights</b><span class="muted">${ceil.length ? ceil.length + (nAuto ? ` (${nAuto} auto)` : '') : ap ? ap + ' automatic' : 'none'}</span><button class="btn sm" data-act="light-reset" title="Back to the best-looking lighting: 3 PM daylight, Only through windows off, automatic ceiling cans at the usual spacing (the cans Regenerate laid out and a typed spacing are cleared). Lights you placed stay. Undo brings it back.">${icon('regen')}Reset lighting</button><button class="btn sm${wo ? ' on' : ''}" data-act="light-winonly" aria-pressed="${wo}" title="Realistic only: no daylight or fill from outside the drawing except what comes in through the windows (following the time of day). Ceiling lights and LED strips you placed by hand stay on. Automatic and regenerated cans go off.">${icon(wo ? 'check' : 'sun')}Only through windows</button>${listBtn('ceiling', ceil.length)}</div>
     <div class="lt-row"><button class="btn sm${placing ? ' on' : ''}" data-act="${placing ? 'light-place-stop' : 'light-place'}" aria-pressed="${placing}" title="Click in the plan to place a light">${icon(placing ? 'check' : 'plus')}${placing ? 'Done' : 'Place'}</button><button class="btn sm" data-act="light-regen" title="Lays out recessed cans over the room again. Replaces the automatic ones, keeps lights you placed.">${icon('regen')}Regenerate ceiling lights</button><label class="lt-sp" title="Spacing between cans">${icon('gridsplit')}${ctl('layout', 'lightGrid', (S.job.layout || {}).lightGrid || canSpacing(), 'len', { label: 'Spacing between cans' })}</label>${ceil.length ? `<button class="btn sm danger" data-act="light-clear" data-id="ceiling" title="Remove all ceiling lights">${icon('trash')}All</button>` : ''}</div>${ceilList}</div>
 </div>`;
 }
@@ -75,6 +75,24 @@ function regenCeilLights() {
   });
   flash(`${P.length} ceiling light${P.length === 1 ? '' : 's'} laid out${mine.length ? `, kept the ${mine.length} you placed` : ''}.`);
 }
+/* Reset lighting (Ayden 2026-11-25: "a baseline reset lighting button so it looks as visually appealing as possible
+   without me messing with it"). One click, one undo: Only through windows off, Automatic ceiling lights on, the cans
+   Regenerate laid out and any typed can spacing cleared (so the cans come back on their own, at the spacing from the
+   ceiling height), 3 PM daylight, and in Walk the room's lights back on. Lights placed by hand stay. */
+function resetLighting() {
+  mutate(() => {
+    const L = { ...(S.job.layout || {}) }; delete L.winOnly; delete L.lightGrid; L.autoLights = true; S.job.layout = L;
+    S.lights = (S.lights || []).filter(l => !(l.kind === 'ceiling' && l.auto));
+  });
+  if (typeof sunSet === 'function') sunSet(15);
+  if (typeof WALK === 'object' && WALK.on && typeof walkLights === 'function' && typeof roomViewer !== 'undefined' && roomViewer) {
+    WALK.dark = false; walkLights(roomViewer, false); if (typeof walkLightsBtn === 'function') walkLightsBtn();
+    if (typeof walkSunSet === 'function') walkSunSet(roomViewer, 15);
+    const r = WALK.ui && WALK.ui.querySelector('.walksun input'); if (r) { r.value = 15; const t = WALK.ui.querySelector('.walksun span'); if (t) t.textContent = sunLabel(15); }
+  }
+  const mine = roomLights().filter(l => l.kind === 'ceiling').length, auto = autoPucks().length;
+  flash(`Lighting reset: 3 PM daylight${auto ? `, ${auto} ceiling cans` : ''}${mine ? `, your ${mine} ceiling light${mine === 1 ? '' : 's'} kept` : ''}.`);
+}
 function startLightPlace() { stopWalls(); if (ui.drawMold) stopMoldDraw(); ui.placing = null; ui.placeLight = true; ui.dock = 'lights'; ui.dockOpen = true; if (ui.viewMode !== 'plan') setView('plan'); else render(); }
 function stopLightPlace() { ui.placeLight = false; render(); }
 function placeLightAt(p) { mutate(() => S.lights.push({ id: uid('lt'), kind: 'ceiling', style: 'can', temp: 'warm', x: Math.round(p.x), y: Math.round(p.y) })); }
@@ -122,7 +140,7 @@ function washMat(col, up) {
    recessed pucks so it isn't dark. Placing any ceiling light turns these off. Look only, never saved. */
 const AUTO_CEIL = { n: 0 };
 const CAN_LAMPS = 16;
-const CAN_K = { k: 2.2 };
+const CAN_K = { k: 1.8 };
 // The soft glow on the ceiling round a can's trim (a down-facing disc of added light that fades out by 9 inches).
 let haloGeo3_ = null; const halo3 = {};
 function haloGeo3() { return haloGeo3_ || (haloGeo3_ = new THREE.CircleGeometry(9, 32).rotateX(Math.PI / 2)); }
@@ -320,11 +338,11 @@ function addLights3d(v, R3, layerOn, ceilOn) {
     sl.position.set(p.x, p.h - 0.6, p.y); sl.target.position.set(p.x, 0, p.y); sl.userData.puck = true;
     // A few cast shadows (under wall cabinets, beside talls); phones and tablets skip it.
     if (!coarse && sh < 4) { sl.castShadow = true; sl.shadow.mapSize.set(512, 512); sl.shadow.bias = -0.0015; sl.shadow.normalBias = 0.4; sl.shadow.radius = 3; sl.shadow.camera.near = 1; sl.shadow.camera.far = dist; sh++; }
-    g.add(sl); g.add(sl.target); lamps++;
+    sl.userData.k0 = k; g.add(sl); g.add(sl.target); lamps++;
   }
   // Light from the cans bouncing off the floor and counters lights the ceiling and upper walls a little (a real room
   // with cans on isn't dark above them). Warm, even, and off with the cans (Walk's Lights off).
-  const bo = new THREE.AmbientLight(new THREE.Color(col), Math.min(0.55, 0.2 * Math.sqrt(P.length))); bo.userData.puck = true; g.add(bo);
+  const bo = new THREE.AmbientLight(new THREE.Color(col), Math.min(0.45, 0.16 * Math.sqrt(P.length))); bo.userData.puck = true; bo.userData.k0 = bo.intensity; g.add(bo);
   g.traverse(o => { o.userData.layer = 'lights'; o.userData.noBounds = true; });
   v.root.add(g);
 }

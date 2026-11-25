@@ -457,6 +457,8 @@ function panelSplitOf(c, end) {
   if (!c) return { kind: 'panel', man: null };
   const w = c.wall && typeof wall === 'function' ? wall(c.wall) : null, onIsland = !!(w && (w.island || w.hidden));
   if (end === 'L' || end === 'R') return { kind: onIsland ? 'island' : 'panel', man: (c.pSplit || {})[end] || null };
+  // 0.63.50: a panel product that is a leg (Mozaik's leg columns come in as panels) takes the leg rules.
+  if (/\b(leg|column|post)s?\b/i.test(c.name || '')) return { kind: 'leg', man: c.pSplit || null };
   const ip = c.islandP, isl = ip === true || ip === '1' ? true : ip === false || ip === '0' ? false : onIsland || /island/i.test(c.name || '');
   return { kind: isl ? 'island' : 'panel', man: c.pSplit && (c.pSplit.S != null || c.pSplit.R != null) ? c.pSplit : null };
 }

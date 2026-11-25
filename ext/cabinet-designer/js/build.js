@@ -414,9 +414,9 @@ function frontStyle(c, f) {
   // a door style with a frame in any material but HDM/MDF is ordered from the door maker (Buyout).
   if (ds.type !== 'slab' && ds.source !== 'buyout' && typeof shopMadeDoorMat === 'function' && !shopMadeDoorMat(mat(ds.mat))) ds = { ...ds, source: 'buyout' };
   // 0.63.35: the style's split rules and the section's own mid stiles and rails (Face tab).
-  ds = splitDs(ds, fw, fh, frontKind(c, f), f.mids);
+  ds = splitDs(ds, fw, fh, frontKind(c, f, ds), f.mids);
   const { nR, nS, mrs, mss } = doorMids(ds, fw, fh), sum = a => a.reduce((x, y) => x + y, 0);
-  const mp = +ds.minPanel > 0 ? +ds.minPanel : 2, needH = 2 * ds.rail + sum(mrs) + (nR + 1) * mp, needW = 2 * ds.stile + sum(mss) + (nS + 1) * mp;
+  const mp = +ds.minPanel > 0 ? +ds.minPanel : 2, needH = (+ds.rT || ds.rail) + (+ds.rB || ds.rail) + sum(mrs) + (nR + 1) * mp, needW = (+ds.sL || ds.stile) + (+ds.sR || ds.stile) + sum(mss) + (nS + 1) * mp;
   const framed = ds.type !== 'slab' && fh >= Math.max(needH, (f.was || f.type) === 'door' ? 0 : dt.minFrameHeight || 0) && fw >= needW;
   return { ds, framed, dt };
 }
@@ -461,31 +461,39 @@ function doorMids(ds, fw, fh) {
    automatically gets a split unless its below a certain width"). A door style keeps split rules: for a kind of front or panel,
    wider than / taller than -> this many mid stiles and mid rails. The biggest count of every rule that fits wins. A section's
    or panel's own count (Face tab, mids {S, R}) wins over the rules. Counts that would not leave a panel field drop to fit. */
-const SPLIT_KINDS = [['any', 'Every front and panel'], ['door', 'Doors'], ['drawer', 'Drawer and false fronts'], ['panel', 'End panels (all)'], ['island', 'Island end panels'], ['apfront', 'Appliance panel fronts'], ['leg', 'Leg faces']];
+const SPLIT_KINDS = [['any', 'Every front and panel'], ['door', 'Doors'], ['drawer', 'Drawer and false fronts'], ['topdrawer', 'Top drawer fronts'], ['panel', 'End panels (all)'], ['island', 'Island end panels'], ['apfront', 'Appliance panel fronts'], ['leg', 'Leg faces']];
 const fMids = o => o && o.mids && (o.mids.S != null || o.mids.R != null) ? { mids: { ...o.mids } } : {};
 // What kind of front this is for the rules.
-function frontKind(c, f) {
+// 0.63.50: the top drawer of a cabinet is 'drawer-top' when the style has a Top drawer fronts rule (only then is it looked for).
+function frontKind(c, f, ds) {
   if (c && c.made === 'apfront') return 'apfront';
   const t = (f && (f.was || f.type)) || 'door';
+  if (t === 'drawer' && ds && (ds.splitRules || []).some(r => r.on === 'topdrawer') && c && !c.made) {
+    try { const dr = computeFronts(c).filter(x => (x.was || x.type) === 'drawer'); const top = Math.max(...dr.map(x => x.z1)); if (Math.abs(f.z1 - top) < 0.01) return 'drawer-top'; } catch (_) {}
+  }
   return t === 'drawer' || t === 'false' ? 'drawer' : 'door';
 }
 const splitNum = v => v !== '' && v !== null && v !== undefined && isFinite(+v);
 function splitRuleHits(r, fw, fh, kind) {
   const on = r.on || 'any';
-  if (on !== 'any' && on !== kind && !(on === 'panel' && kind === 'island')) return false;
+  if (on !== 'any' && on !== kind && !(on === 'panel' && kind === 'island') && !(on === 'drawer' && kind === 'drawer-top') && !(on === 'topdrawer' && kind === 'drawer-top')) return false;
   if (splitNum(r.wOver) && !(fw > +r.wOver)) return false;
   if (splitNum(r.hOver) && !(fh > +r.hOver)) return false;
+  if (splitNum(r.hUnder) && !(fh < +r.hUnder)) return false;
   return true;
 }
 // The rule counts for a front or panel fw wide and fh tall: { S, R, rules } (null = no rule sets it).
 function splitRuleCounts(ds, fw, fh, kind) {
-  let S = null, R = null; const rules = [];
+  let S = null, R = null, sw = null, rw = null; const rules = [];
   (ds && ds.splitRules || []).forEach((r, i) => {
     if (!splitRuleHits(r, fw, fh, kind)) return;
-    const hs = splitNum(r.stiles), hr = splitNum(r.rails); if (!hs && !hr) return;
-    if (hs) S = Math.max(S ?? 0, +r.stiles | 0); if (hr) R = Math.max(R ?? 0, +r.rails | 0); rules.push(i);
+    const hs = splitNum(r.stiles), hr = splitNum(r.rails), ws = splitNum(r.stileW) && +r.stileW > 0, wr = splitNum(r.railW) && +r.railW > 0; if (!hs && !hr && !ws && !wr) return;
+    if (hs) S = Math.max(S ?? 0, +r.stiles | 0); if (hr) R = Math.max(R ?? 0, +r.rails | 0);
+    // 0.63.50 (Ayden 2026-11-25: reduced shaker drawers, top and bottom rails 1 1/2; legs the other way, stiles 1 1/2):
+    // a rule can also set the outside stile or rail width. The narrowest of the rules that fit wins.
+    if (ws) sw = Math.min(sw ?? Infinity, +r.stileW); if (wr) rw = Math.min(rw ?? Infinity, +r.railW); rules.push(i);
   });
-  return { S, R, rules };
+  return { S, R, rules, sw, rw };
 }
 // The style with its split rules and the piece's own counts worked in. Unchanged when nothing applies (same outputs).
 // ds._extraMids = mid stiles and rails past the style's own (each one adds the style's Each extra mid price).
@@ -496,6 +504,8 @@ function splitDs(ds, fw, fh, kind, man) {
   // 0.63.39 (Ayden 2026-11-24: "let me click on the face and set the opening distance and rail or stile width"): a panel's
   // own sizes: st / rl = its outside stiles / rails, ms / mr = each mid stile / rail, W / H = each opening across / up.
   const ONE = ['sL', 'sR', 'rT', 'rB'], pos = v => splitNum(v) && +v > 0;
+  // Rule widths for the outside frame, under anything set by hand.
+  if (rc.sw || rc.rw) { const m2 = { ...(man || {}) }; [['sL', rc.sw], ['sR', rc.sw], ['rT', rc.rw], ['rB', rc.rw]].forEach(([k, v]) => { if (v && !pos(m2[k])) m2[k] = v; }); man = m2; }
   const sz = man && [...ONE, 'ms', 'mr', 'W', 'H'].some(k => ONE.includes(k) ? pos(man[k]) : Array.isArray(man[k]) && man[k].some(pos));
   if (nS === null && nR === null && !sz) return ds;
   if (nS === null) nS = base.nS; if (nR === null) nR = base.nR;
@@ -1043,7 +1053,9 @@ function buildParts(c) {
       if (f.x1 < X1 - 1e-3) line(f.z0, f.x1 + g / 2, f.z1, f.x1 + g / 2);
       if (f.z0 > Z0 + 1e-3) line(f.z0 - g / 2, Math.max(X0, f.x0 - g), f.z0 - g / 2, Math.min(X1, f.x1 + g));
       const st = frontStyle(c, f);
-      if (st.framed && st.ds.type === 'routed') { const fr = st.ds.stile; ops.push({ type: 'pocket', x: r3(f.z0 - Z0 + fr), y: r3(f.x0 - X0 + fr), w: r3(f.z1 - f.z0 - 2 * fr), h: r3(f.x1 - f.x0 - 2 * fr), depth: st.ds.pocketDepth, face: 'front', why: 'panel recess' }); }
+      const pf = st.framed && st.ds.type === 'routed' && panelFieldPockets(st.ds, f.z1 - f.z0, f.x1 - f.x0, 0, st.ds.pocketDepth, 'front');
+      if (pf) pf.forEach(o => ops.push({ ...o, x: r3(o.x + f.z0 - Z0), y: r3(o.y + f.x0 - X0) }));
+      else if (st.framed && st.ds.type === 'routed') { const fr = st.ds.stile; ops.push({ type: 'pocket', x: r3(f.z0 - Z0 + fr), y: r3(f.x0 - X0 + fr), w: r3(f.z1 - f.z0 - 2 * fr), h: r3(f.x1 - f.x0 - 2 * fr), depth: st.ds.pocketDepth, face: 'front', why: 'panel recess' }); }
     });
     part('Front panel', dm, r3(Z1 - Z0), r3(X1 - X0), { kind: 'door', ops });
   }
