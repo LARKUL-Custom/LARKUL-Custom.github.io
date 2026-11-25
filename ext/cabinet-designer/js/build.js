@@ -1598,7 +1598,7 @@ function cornerBridges() {
   const out = [];
   S.cabinets.forEach(c => {
     if (c.cat !== 'Base' || !(angledCorner(c) || cfLeg(c))) return;
-    const leg = angledCorner(c) ? cornerLeg(c) : cfLeg(c);
+    const leg = angledCorner(c) ? cornerLeg2(c) : cfLeg(c);
     const poly = cabPoly(c); if (!poly) return;
     S.walls.forEach(w2 => {
       if (w2.id === c.wall) return;
@@ -1692,9 +1692,17 @@ function ctEndPanel(r, e) {
   return pp && pp.length && Math.max(...pp.map(p => p.z1)) >= c.h - 0.5 ? +panelThick(c) || 0 : 0;
 }
 // Stretches [a0, a1] along the wall where a top's backsplash runs: its length less the cabinets sitting on the top.
+// 0.63.64 (Ayden 2026-11-25, Argil: "backsplash doesnt end at the cabinet"): any cabinet standing where the backsplash
+// goes cuts it, on this wall or the wall around the corner (an open tall in the corner over the end of the top), sitting
+// on the top or standing on the floor: its plan outline over the backsplash strip and its height past the top.
 function bsSegsOf(r, onTop) {
-  const cut = S.cabinets.filter(k => k.wall === r.wall && k.side === r.side && !k.autoOf && Math.abs((k.elev || 0) - onTop) < 1 && !(k.outset > 1))
-    .map(k => [Math.max(r.start, k.off), Math.min(r.end, k.off + k.w)]).filter(([a, b]) => b - a > 0.01).sort((x, y) => x[0] - y[0]);
+  const w = wall(r.wall), g = wg(w), b0 = w.thick / 2 + (r.back || 0), b1 = b0 + 1.01, hi = onTop + Math.max(r.bs, 0.5);
+  const cut = S.cabinets.filter(k => !k.autoOf && !r.cabs.includes(k.id) && (k.elev || 0) < hi - 0.01 && (k.elev || 0) + k.h > onTop + 0.01).map(k => {
+    const poly = cabPoly(k); if (!poly) return null;
+    const a = poly.map(q => (q.x - w.x1) * g.u.x + (q.y - w.y1) * g.u.y), b = poly.map(q => ((q.x - w.x1) * g.n.x + (q.y - w.y1) * g.n.y) * r.side);
+    if (Math.min(...b) > b1 - 0.01 || Math.max(...b) < b0 + 0.01) return null;
+    return [Math.max(r.start, Math.min(...a)), Math.min(r.end, Math.max(...a))];
+  }).filter(s => s && s[1] - s[0] > 0.01).sort((x, y) => x[0] - y[0]);
   const out = []; let at = r.start;
   cut.forEach(([a, b]) => { if (a - at > 0.25) out.push([r3(at), r3(a)]); at = Math.max(at, b); });
   if (r.end - at > 0.25) out.push([r3(at), r3(r.end)]);

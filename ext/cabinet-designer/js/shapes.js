@@ -326,20 +326,20 @@ function renderShapeDesigner() {
   const rows = d.pts.map((p, i) => `<tr class="${sel.i === i ? 'on' : ''}"><td><button class="linkbtn" data-act="se-sel" data-id="pt:${i}">${i + 1}</button></td><td>${calcWrap(ctl(P(i), 'x', p.x, 'len', { label: `Point ${i + 1} x` }), P(i), 'x')}</td><td>${calcWrap(ctl(P(i), 'y', p.y, 'len', { label: `Point ${i + 1} y` }), P(i), 'y')}</td><td>${ctl(P(i), 'r', p.r || 0, 'len', { label: `Point ${i + 1} corner radius` })}</td>
     <td><button class="linkbtn" data-act="se-sel" data-id="edge:${i}">${i + 1}→${(i + 1) % n + 1}</button></td><td>${calcWrap(ctl(P(i), 'len', r3(edgeLen(d.pts, i)), 'len', { label: `Edge ${i + 1} length` }), P(i), 'len')}</td><td>${ctl(P(i), 'b', p.b || 0, 'len', { label: `Edge ${i + 1} bulge` })}</td><td><button class="btn sm" data-act="se-del" data-id="${i}" aria-label="Remove point ${i + 1}"${n <= 3 ? ' disabled' : ''}>×</button></td></tr>`).join('');
   const fm = d.forMold && molding(d.forMold), fc = d.forCab && cab(d.forCab.id);
-  if (d.forWalls && typeof wallShapePage === 'function') { $('#tab-designer').innerHTML = wallShapePage(d, selBox, rows, b); initShapeEditor(); return; }
+  if (d.forWalls && typeof wallShapePage === 'function') { setHTML($('#tab-designer'), wallShapePage(d, selBox, rows, b)); initShapeEditor(); return; }
   if (fc) {
     const vl = (CAB_VIEWS.find(x => x[0] === d.forCab.view) || [])[2] || '', [cw, ch] = cabShapeDims(fc, d.forCab.view);
     const pal = `<button class="pe-railbtn" data-act="se-cab-reset" title="Plain box"><svg viewBox="-1 -1 12 9" aria-hidden="true"><polygon points="0,0 10,0 10,7 0,7"/></svg>Plain box</button>${(CAB_SHAPE_PRESETS[d.forCab.view] || []).map(pr => `<button class="pe-railbtn" data-act="se-pre" data-id="cab:${pr[0]}" title="${esc(pr[1])}">${cabPresetPic(fc, d.forCab.view, pr)}${esc(pr[1].replace(/ \(.*\)$/, ''))}</button>`).join('')}`;
-    $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="se-cab-cancel">${icon('back')}Back to the room</button><h2>${esc(LBL[fc.id] || '')} ${esc(fc.name)}: ${d.forCab.view} shape</h2><p>${vl}. Dashed box: the cabinet, ${fmtLen(cw)} × ${fmtLen(ch)}.</p></div>
+    setHTML($('#tab-designer'), `<div class="pagehead"><div><button class="linkbtn back" data-act="se-cab-cancel">${icon('back')}Back to the room</button><h2>${esc(LBL[fc.id] || '')} ${esc(fc.name)}: ${d.forCab.view} shape</h2><p>${vl}. Dashed box: the cabinet, ${fmtLen(cw)} × ${fmtLen(ch)}.</p></div>
     <div class="row-actions"><button class="btn" data-act="se-cab-cancel">Cancel</button><button class="btn primary" data-act="se-cab-save">${icon('check')}Save shape</button></div></div>
-  ${seMz(d, pal, rows, b, selBox, '', 'Points and edges')}`;
+  ${seMz(d, pal, rows, b, selBox, '', 'Points and edges')}`);
     initShapeEditor(); return;
   }
   if (fm) {
     const mp = SHAPE_PRESETS.find(p => p.id === 'mold');
-    $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="se-mold-cancel">${icon('back')}Moldings</button><h2>Molding profile: ${esc(fm.name)}</h2><p>Side profile: x sticks out from the cabinet, y goes up from the bottom.</p></div>
+    setHTML($('#tab-designer'), `<div class="pagehead"><div><button class="linkbtn back" data-act="se-mold-cancel">${icon('back')}Moldings</button><h2>Molding profile: ${esc(fm.name)}</h2><p>Side profile: x sticks out from the cabinet, y goes up from the bottom.</p></div>
     <div class="row-actions"><button class="btn" data-act="se-mold-cancel">Cancel</button><button class="btn primary" data-act="se-mold">${icon('check')}Save profile</button></div></div>
-  ${seMz(d, `<button class="pe-railbtn" data-act="se-mold-reset" title="Start over from a crown">${seThumb(mp.pts(), true)}Crown</button>`, rows, b, selBox, `<div class="grid2">${fld('Projection', 'shd', 'bw', r3(b.w), 'len')}${fld('Height', 'shd', 'bh', r3(b.h), 'len')}</div>`, 'Points and edges', `${fmtLen(b.w, 1)} out × ${fmtLen(b.h, 1)} tall`)}`;
+  ${seMz(d, `<button class="pe-railbtn" data-act="se-mold-reset" title="Start over from a crown">${seThumb(mp.pts(), true)}Crown</button>`, rows, b, selBox, `<div class="grid2">${fld('Projection', 'shd', 'bw', r3(b.w), 'len')}${fld('Height', 'shd', 'bh', r3(b.h), 'len')}</div>`, 'Points and edges', `${fmtLen(b.w, 1)} out × ${fmtLen(b.h, 1)} tall`)}`);
     initShapeEditor(); return;
   }
   const pal = SHAPE_PRESETS.filter(p => !p.moldOnly).map(p => `<button class="pe-railbtn" data-act="se-pre" data-id="pre:${p.id}" title="${esc(p.name)}">${seThumb(p.pts(), p.plane !== 'flat')}${esc(p.name)}</button>`).join('')
@@ -349,9 +349,9 @@ function renderShapeDesigner() {
       <div class="grid2">${fld('Lies', 'shd', 'plane', d.plane, 'select', { options: [{ v: 'flat', l: 'Flat (top, shelf)' }, { v: 'upright', l: 'Upright (panel)' }] })}${d.forMold ? fld('Thickness', 'shd', 'thick', d.thick, 'len') : ''}
       ${fld('Overall width', 'shd', 'bw', r3(b.w), 'len')}${fld(d.plane === 'flat' ? 'Overall depth' : 'Overall height', 'shd', 'bh', r3(b.h), 'len')}</div>
       ${fld('Material', 'shd', 'mat', d.mat, 'select', { options: shapeMatOpts(), wide: true })}`;
-  $('#tab-designer').innerHTML = `<div class="pagehead"><div><button class="linkbtn back" data-act="tab" data-id="library">${icon('back')}Products</button><h2>Shape editor</h2></div>
+  setHTML($('#tab-designer'), `<div class="pagehead"><div><button class="linkbtn back" data-act="tab" data-id="library">${icon('back')}Products</button><h2>Shape editor</h2></div>
     <div class="row-actions">${desModeSeg()}${inRoom ? `<button class="btn primary" data-act="se-apply">${icon('check')}Apply to the shape in the room</button>` : ''}${src ? `<button class="btn" data-act="se-update">Update “${esc(src.name)}”</button>` : ''}<button class="btn" data-act="se-save">Save to shape library</button><button class="btn${inRoom ? '' : ' primary'}" data-act="se-place">${icon('plus')}Save and place in room</button></div></div>
-  ${seMz(d, pal, rows, b, selBox, fields, 'Points and edges', `${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(shapeT(d), 1)} · ${r3(Math.abs(shapeArea2(o)) / 2 / 144)} sq ft · edge ${fmtLen(shapePerim(o), 1)} around`)}`;
+  ${seMz(d, pal, rows, b, selBox, fields, 'Points and edges', `${fmtLen(b.w, 1)} × ${fmtLen(b.h, 1)} × ${fmtLen(shapeT(d), 1)} · ${r3(Math.abs(shapeArea2(o)) / 2 / 144)} sq ft · edge ${fmtLen(shapePerim(o), 1)} around`)}`);
   initShapeEditor();
 }
 // A small picture of a shape for the rail.
@@ -383,7 +383,8 @@ function shapeSvgPoint(e) {
 }
 let seDrag = null;
 function initShapeEditor() {
-  const stage = $('.se-stage'); if (!stage) return;
+  // 0.63.65: the screen is patched in place (setHTML), so the same drawing box stays; hook it up once.
+  const stage = $('.se-stage'); if (!stage || stage.dataset.seOn) return; stage.dataset.seOn = '1';
   stage.addEventListener('pointerdown', e => {
     const d = S.shapeDesign, t = e.target;
     if (t.dataset.pt !== undefined) { const i = +t.dataset.pt; ui.shapeSel = { kind: 'pt', i }; seDrag = { i, snap: JSON.stringify(S), live: false, view: shapeView(d) }; }

@@ -12,6 +12,8 @@ const angledCorner = c => isCorner(c) && c.corner.type !== 'blind';
 const blindCorner = c => isCorner(c) && c.corner.type === 'blind';
 const cornerSide = c => (c.corner && c.corner.side === 'R') ? 'R' : 'L';
 const cornerLeg = c => { const v = +c.corner.leg > 0 ? +c.corner.leg : (c.cat === 'Wall' ? 12 : 24); return Math.max(3, Math.min(v, c.w - 3, c.d - 3)); };
+// 0.63.65: the return leg (how wide the leg along the other wall is) can differ from the leg depth; unset, it is the same.
+const cornerLeg2 = c => { const v = +c.corner.leg2 > 0 ? +c.corner.leg2 : cornerLeg(c); return Math.max(3, Math.min(v, c.w - 3, c.d - 3)); };
 const blindWidth = c => { const v = +c.corner.blind > 0 ? +c.corner.blind : (c.cat === 'Wall' ? 15 : 26); return Math.max(3, Math.min(v, c.w - 6)); };
 
 // The products, from the shop's 2026 Larkul Mozaik library (Blind Corner Left/Right, 45 and 90 Susan Cabinet,
@@ -40,8 +42,8 @@ function ensureCornerLib(s) {
 // The top shape of a 45° or 90° corner (x across, y out from the cabinet's wall), with the end of the return leg closed
 // by a panel. Edge 0 is the back, the edges after it go round the outside.
 function cornerTop(c) {
-  const W = c.w, D = c.d, a = cornerLeg(c), L = c.corner.type === 'l';
-  let pts = L ? [[0, 0], [W, 0], [W, a], [a, a], [a, D], [0, D]] : [[0, 0], [W, 0], [W, a], [a, D], [0, D]];
+  const W = c.w, D = c.d, a = cornerLeg(c), b = cornerLeg2(c), L = c.corner.type === 'l';
+  let pts = L ? [[0, 0], [W, 0], [W, a], [b, a], [b, D], [0, D]] : [[0, 0], [W, 0], [W, a], [b, D], [0, D]];
   if (cornerSide(c) === 'R') pts = pts.map(([x, y]) => [W - x, y]);
   return { pts: pts.map(([x, y]) => ({ x: r3(x), y: r3(y) })), w: W, h: D, edges: L ? ['', '', '', '', 'unfin', ''] : ['', '', '', 'unfin', ''], corner: true };
 }
@@ -53,8 +55,8 @@ const cornerFaceEdges = c => c.corner.type === 'l' ? [2, 3] : [2];
 // The faces the fronts sit on, left to right as you stand in front of them, in cabinet coordinates (x across, z out from
 // the wall): each starts at (ox, oz) and runs along (ux, uz) for len; its outside is (-uz, ux).
 function cornerFaces(c) {
-  const W = c.w, D = c.d, a = cornerLeg(c);
-  let f = c.corner.type === 'l' ? [[[a, D], [a, a]], [[a, a], [W, a]]] : [[[a, D], [W, a]]];
+  const W = c.w, D = c.d, a = cornerLeg(c), b = cornerLeg2(c);
+  let f = c.corner.type === 'l' ? [[[b, D], [b, a]], [[b, a], [W, a]]] : [[[b, D], [W, a]]];
   if (cornerSide(c) === 'R') f = f.map(([p, q]) => [[W - q[0], q[1]], [W - p[0], p[1]]]).reverse();
   return f.map(([p, q]) => { const len = Math.hypot(q[0] - p[0], q[1] - p[1]); return { ox: p[0], oz: p[1], ux: (q[0] - p[0]) / len, uz: (q[1] - p[1]) / len, len }; });
 }
@@ -230,11 +232,11 @@ function cornerBox(c) {
   const seg = `<div class="seg" role="group" aria-label="Corner side">${[['L', 'Left'], ['R', 'Right']].map(([v, l]) => `<button data-act="corner-side" data-id="${c.id}:${v}" aria-pressed="${side === v}">${l}</button>`).join('')}</div>`;
   return `<div class="psec box">${secHead('plan', CORNER_KINDS[c.corner.type], 'violet')}
     <div class="grid4"><label class="f"><span>${blind ? 'Blind side' : 'Corner on the'}</span>${seg}</label>
-    ${blind ? fld('Blind width', K, 'blind', blindWidth(c), 'len') : fld('Leg depth', K, 'leg', cornerLeg(c), 'len')}
+    ${blind ? fld('Blind width', K, 'blind', blindWidth(c), 'len') : fld('Leg depth', K, 'leg', cornerLeg(c), 'len') + fld('Return leg', K, 'leg2', cornerLeg2(c), 'len')}
     ${c.corner.type === 'l' ? fld('Doors', K, 'doors', c.corner.doors || '', 'select', { options: [{ v: '', l: 'Bi-fold' }, { v: 'pair', l: 'Two separate doors' }] })
       + fld(cornerPair(c) ? 'First door' : 'Door on the cabinet', K, 'hingeMain', c.corner.hingeMain || '', 'select', { options: [{ v: '', l: 'Cabinet hinge' }, ...opts(hwOf('hinge'))] })
       + fld(cornerPair(c) ? 'Second door' : 'Folding door', K, 'hingeFold', c.corner.hingeFold || '', 'select', { options: [{ v: '', l: cornerPair(c) ? 'Cabinet hinge' : 'Bi-fold hinge' }, ...opts(hwOf('hinge'))] }) : ''}</div>
-    <div class="note">${blind ? 'The blind side goes into the corner, behind the cabinet on the other wall. A blind panel covers it; the doors and drawers fill the rest.' : 'Width runs along this wall and depth runs out along the other wall. Both legs are the leg depth.'}${c.corner.type === 'l' ? ' The two doors are a bi-fold: one hangs on the cabinet, the other folds on it. Pick the hinge each one takes.' : ''}</div></div>`;
+    <div class="note">${blind ? 'The blind side goes into the corner, behind the cabinet on the other wall. A blind panel covers it; the doors and drawers fill the rest.' : 'Width runs along this wall and depth runs out along the other wall. Leg depth is how deep it is along this wall; Return leg is how wide the leg along the other wall is.'}${c.corner.type === 'l' ? ' The two doors are a bi-fold: one hangs on the cabinet, the other folds on it. Pick the hinge each one takes.' : ''}</div></div>`;
 }
 // The Left/Right switch on the bar under the drawing.
 const cornerBtn = c => isCorner(c) ? `<button data-act="corner-flip" data-id="${c.id}" title="Corner: put the ${blindCorner(c) ? 'blind side' : 'corner'} on the ${cornerSide(c) === 'L' ? 'right' : 'left'} end">${icon('flip')}Corner ${cornerSide(c) === 'L' ? 'left' : 'right'}</button>` : '';
@@ -249,3 +251,26 @@ document.addEventListener('click', e => {
   else { const [id, v] = b.dataset.id.split(':'), c = cab(id); if (c) setCornerSide(c, v); }
   if (ui.quick) renderQuick();
 }, true);
+
+// 0.63.65 (Ayden: "i keep changing it to 15 instead of 12 and it resets"): a 45° or 90° corner's top is made from its
+// width, depth and legs, so a top drawn in the shape editor is read back into those. Gives false when the drawing is
+// not a corner of that kind (then nothing changes).
+function cornerFromTop(c, pts) {
+  const L = c.corner.type === 'l', n = L ? 6 : 5; if (!pts || pts.length !== n || pts.some(p => p.r || p.b)) return false;
+  const b0 = shapeBox(pts), W = b0.w, D = b0.h;
+  let q = pts.map(p => [p.x - b0.x0, p.y - b0.y0]);
+  if (cornerSide(c) === 'R') q = q.map(([x, y]) => [W - x, y]);
+  const near = (p, x, y) => Math.abs(p[0] - x) < 1e-3 && Math.abs(p[1] - y) < 1e-3;
+  // The points can start anywhere and go either way round.
+  for (const dir of [1, -1]) for (let s = 0; s < n; s++) {
+    const r = q.map((_, i) => q[((s + dir * i) % n + n) % n]);
+    if (!near(r[0], 0, 0) || !near(r[1], W, 0) || !near(r[n - 1], 0, D)) continue;
+    const a = r[2][1], b = r[3][0];
+    if (Math.abs(r[2][0] - W) > 1e-3 || a < 3 - 1e-3 || a > D - 3 + 1e-3 || b < 3 - 1e-3 || b > W - 3 + 1e-3) continue;
+    if (L ? !(near(r[3], b, a) && near(r[4], b, D)) : !near(r[3], b, D)) continue;
+    c.w = r3(W); c.d = r3(D); c.corner.leg = r3(a);
+    if (Math.abs(a - b) < 1e-3) delete c.corner.leg2; else c.corner.leg2 = r3(b);
+    return true;
+  }
+  return false;
+}

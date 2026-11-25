@@ -580,12 +580,16 @@ function wallSnap(p, skip) {
   const px = ui.px, ly = lay(), reach = 14 * px, pts = [];
   // 0.63.1: while drawing, the chain's own corners are its drawn (inside face) points, not its centerline ends.
   const ch = ui.drawing && ui.drawing.chain, own = ch ? ch.ids : [];
-  S.walls.forEach(w => { if (!own.includes(w.id)) [[w.x1, w.y1], [w.x2, w.y2]].forEach(([x, y]) => { if (!skip || !samePt(x, y, skip)) pts.push({ x, y }); }); });
+  // 0.63.63: while drawing walls, each wall end and end cap offers its center line and both corners (attachPts).
+  if (ui.drawWalls) attachPts(own).forEach(q => pts.push(q));
+  else S.walls.forEach(w => { if (!own.includes(w.id)) [[w.x1, w.y1], [w.x2, w.y2]].forEach(([x, y]) => { if (!skip || !samePt(x, y, skip)) pts.push({ x, y }); }); });
   if (ch) ch.pts.forEach(q => { if (!samePt(q.x, q.y, ui.drawing)) pts.push({ x: q.x, y: q.y }); });
   else if (ui.drawing && ui.drawing.first && !samePt(ui.drawing.first.x, ui.drawing.first.y, ui.drawing)) pts.push(ui.drawing.first);
   let best = null, bd = reach;
   pts.forEach(q => { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < bd) { bd = d; best = q; } });
-  if (best) return { x: best.x, y: best.y, at: true };
+  if (best) return { x: best.x, y: best.y, at: true, att: best.att };
+  // Starting a wall: the side of a wall (its center line or either face) is an attach point too.
+  if (ui.drawWalls && !ui.drawing) { const sd = attachSide(p, reach, own); if (sd) return sd; }
   const g = ly.grid > 0 ? ly.grid : 1, out = { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g, guides: [] };
   let bx = 10 * px, by = 10 * px;
   pts.forEach(q => {

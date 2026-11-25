@@ -1138,6 +1138,12 @@ document.addEventListener('click', e => {
     case 'se-cab-save': {
       const d = S.shapeDesign, fc = d && d.forCab, c = fc && cab(fc.id); if (!c) { goTab('room'); break; }
       const [W, H] = cabShapeDims(c, fc.view), b = shapeBox(d.pts), plain = d.pts.length === 4 && !d.pts.some(p => p.r || p.b) && Math.abs(b.x0) < 1e-3 && Math.abs(b.y0) < 1e-3 && Math.abs(b.w - W) < 1e-3 && Math.abs(b.h - H) < 1e-3;
+      // 0.63.65: a 45° or 90° corner's top comes from its size and legs, so the drawing is read back into those.
+      if (fc.view === 'top' && angledCorner(c)) {
+        const t = clone(c); if (!cornerFromTop(t, d.pts)) { flash(`A ${CORNER_KINDS[c.corner.type]} keeps its corner shape. Move the corner points to change the legs, width or depth.`); break; }
+        mutate(() => { cornerFromTop(c, d.pts); if (c.shape) delete c.shape.top; S.shapeDesign = blankShapeDesign(); });
+        goTab('room'); openEditor(c.id, 'shape'); break;
+      }
       mutate(() => { c.shape = c.shape || {}; if (plain) delete c.shape[fc.view]; else c.shape[fc.view] = { pts: clone(d.pts), w: W, h: H }; S.shapeDesign = blankShapeDesign(); });
       goTab('room'); openEditor(c.id, 'shape'); break;
     }

@@ -287,6 +287,8 @@ svg text{font-family:var(--f-label)}
 .lbl-m{fill:var(--muted)}
 .dimln{stroke:var(--muted);fill:none}
 .prev-wall{stroke:var(--accent);stroke-opacity:.55;fill:none}
+.attdot{fill:var(--panel,#fff);stroke:var(--accent);stroke-width:1.2;opacity:.8}
+.attdot.mid{fill:var(--accent)}
 .prev-face{stroke:var(--accent);stroke-width:1.5;fill:none}
 .snapdot{fill:var(--sel)}
 .ev-wall{fill:var(--panel);stroke:var(--line)}
@@ -2162,16 +2164,20 @@ main.is-room{padding-bottom:max(56px,calc(env(safe-area-inset-bottom,0px) + 24px
 @media (max-width:1100px){.ed-parts2{grid-template-columns:1fr}}
 
 /* Shape editor laid out like the part editor */
-.se-mz{display:grid;grid-template-columns:136px minmax(0,1fr) 380px;gap:0;border:2px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);height:calc(100vh - 190px);min-height:560px}
+.se-mz{display:grid;grid-template-columns:136px minmax(0,1fr) 380px;gap:0;border:2px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);height:calc(100vh - 190px);min-height:380px}
+/* 0.63.65 (Ayden): the editor fills the screen with no page scroll; the drawing takes the room above and the point table stays docked at the bottom. */
+main.lib-on:has(> #tab-designer:not([hidden]) .se-mz){overflow:hidden;grid-template-rows:minmax(0,1fr);align-items:stretch}
+main.lib-on > #tab-designer:not([hidden]):has(.se-mz){display:flex;flex-direction:column;min-height:0;padding-bottom:12px}
+#tab-designer .se-mz{flex:1 1 0;height:auto}
 .se-mz .pe-rail{gap:6px}
 .se-mz .pe-railbtn.on{border-color:var(--accent);background:var(--accent-soft)}
 .se-mz .pe-railbtn:disabled{opacity:.45;cursor:default}
 .se-center{display:flex;flex-direction:column;min-width:0;padding:8px;gap:6px;border-right:2px solid var(--line)}
-.se-center .se-stage{flex:1;height:auto;min-height:280px}
+.se-center .se-stage{flex:1 1 0;height:auto;min-height:150px}
 .se-mz .pe-rail .eyebrow{margin-top:4px}
 .se-tablewrap .calc-btn,.se-tablewrap .calcbtn{display:none}
 .se-size{font-size:12px;color:var(--muted);text-align:right}
-.se-tablewrap{max-height:230px;overflow:auto;border:1.5px solid var(--line);border-radius:8px}
+.se-tablewrap{flex:0 0 auto;max-height:min(40%,300px);min-height:96px;overflow:auto;border:1.5px solid var(--line);border-radius:8px}
 .se-tablewrap thead th{position:sticky;top:0;background:var(--sunk);z-index:1}
 .se-panel{padding:10px;display:flex;flex-direction:column;gap:10px;overflow:auto}
 .se-panel .grid2 .f,.se-panel .grid3 .f{grid-template-columns:minmax(0,1fr);gap:4px}

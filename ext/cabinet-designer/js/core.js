@@ -736,7 +736,7 @@ function snapshot() { undoStack.push(JSON.stringify(S)); if (undoStack.length > 
 function mutate(fn, defer) {
   ui.intSel = []; // picked interior lines point at places that may move
   snapshot(); fn(); attachRoom(S); if (typeof apFrontSync === 'function') apFrontSync(); if (typeof pocketDoorsSync === 'function') pocketDoorsSync(); if (typeof panelItemSync === 'function') panelItemSync(); if (typeof recalcFormulas === 'function') recalcFormulas(); save();
-  if (defer) setTimeout(() => { const id = document.activeElement && document.activeElement.id; render(); if (id) { const el = document.getElementById(id); if (el) el.focus(); } }, 0);
+  if (defer) setTimeout(() => { const id = document.activeElement && document.activeElement.id; render(); if (id) { const el = document.getElementById(id); if (el) el.focus({ preventScroll: true }); } }, 0);
   else render();
 }
 function undoRedo(dir) {

@@ -95,6 +95,8 @@ function renderPlan(pr) {
 // Preview of the wall being drawn: dashed segment, live length, snap marker and alignment guides.
 function wallDrawSVG(fs, px) {
   let s = '';
+  // 0.63.63: while drawing walls, every attach point shows as a small ring.
+  if (ui.drawWalls) attachPts(ui.drawing && ui.drawing.chain ? ui.drawing.chain.ids : []).forEach(q => { s += `<circle class="attdot nss${q.att.kind === 'center' ? ' mid' : ''}" cx="${q.x}" cy="${q.y}" r="${4 * px}"/>`; });
   if (ui.drawing) {
     const e = wallPreviewEnd();
     if (e) {
@@ -226,6 +228,8 @@ function commitWallSegment() {
   const rm = curRoom(), first = st.first || { x: st.x, y: st.y }, ch = st.chain || { pts: [{ x: r3(st.x), y: r3(st.y) }], ids: [], pins: [null] };
   const ex = r3(e.x), ey = r3(e.y), id = uid('w');
   mutate(() => {
+    if (ch.capStart && !ch.ids.length) capToWall(ch.capStart);
+    if (e.at && !wallEndAt({ x: ex, y: ey }, ch.ids)) capToWall({ x: ex, y: ey });
     S.walls.push({ id, x1: r3(st.x), y1: r3(st.y), x2: ex, y2: ey, thick: ch.thick ?? rm.wallThick ?? S.job.wallThick, height: rm.wallHeight ?? S.job.wallHeight });
     ch.pts.push({ x: ex, y: ey }); ch.ids.push(id); ch.pins.push(e.at ? wallEndAt({ x: ex, y: ey }, ch.ids) : null);
     applyWallChain(ch);
@@ -244,10 +248,75 @@ function commitWallSegment() {
    or above/left of the line when there are none (drawing clockwise, like Mozaik). Saved rooms are not touched.
    0.63.57 (Ayden): walls started on an existing wall's end join it on the center line: that whole chain is drawn on
    its centerline with the thickness split both sides, at the thickness of the wall it joins, so faces line up. */
+// 0.63.63 (Ayden): attaching is picked by where you start. Every wall end and end cap has three attach points:
+// - its center line: the new walls are drawn on their center line with the thickness split both sides, at the
+// attached wall's thickness, so the join is seamless;
+// - either corner: the line is a face, and the thickness goes the same way as the attached wall's (the room stays on
+// the same side), so working from the inside corner keeps working from the inside. The attached wall stretches
+// to meet the new one.
+// A wall's side (its center line or either face) is an attach point too, for a wall that tees into it.
 function startWallChain(sp) {
-  const p = { x: r3(sp.x), y: r3(sp.y) }, pin = sp.at ? wallEndAt(p, []) : null, pw = pin && wall(pin.wid);
-  ui.drawing = { x: p.x, y: p.y, first: { ...p }, chain: { pts: [p], ids: [], pins: [null], center: !!pw, thick: pw ? pw.thick : undefined } };
+  const p = { x: r3(sp.x), y: r3(sp.y) }, at = sp.at ? sp.att || null : null, rec = at && at.rec, ch = { pts: [p], ids: [], pins: [null] };
+  if (rec && at.kind === 'center') Object.assign(ch, { center: true, thick: rec.t, capStart: rec.cap ? p : null });
+  else if (rec && at.kind === 'corner') Object.assign(ch, { sgFix: rec.sig, capStart: rec.cap ? { x: rec.c.x, y: rec.c.y } : null }, { pins: [{ corner: true, ox: rec.c.x, oy: rec.c.y, ux: rec.u.x, uy: rec.u.y, wid: rec.wid, end: rec.end }] });
+  else if (at && at.kind === 'side') { const w = wall(at.wid); if (w && !at.b) Object.assign(ch, { center: true, thick: w.thick }); }
+  else if (sp.at) { const pin = wallEndAt(p, []), pw = pin && wall(pin.wid); if (pw) Object.assign(ch, { center: true, thick: pw.thick }); }
+  ui.drawing = { x: p.x, y: p.y, first: { ...p }, chain: ch };
   ui.typed = '';
+}
+// Open ends you can attach to: each wall end and end cap tip, with c its center-line point, u pointing out of the end,
+// t its thickness and sig the hand the room is on going out of the end (+1 = the n side of the travel direction).
+function attachEnds(skip) {
+  const out = [], hand = (u, r) => u.x * r.y - u.y * r.x < 0 ? -1 : 1;
+  S.walls.forEach(w => {
+    if (w.hidden || (skip || []).includes(w.id)) return;
+    const g = wg(w), r = { x: g.n.x * elevSide(w), y: g.n.y * elevSide(w) };
+    [[1, { x: w.x1, y: w.y1 }, { x: -g.u.x, y: -g.u.y }], [2, { x: w.x2, y: w.y2 }, g.u]].forEach(([end, c, u]) =>
+      out.push({ wid: w.id, end, c, u, t: w.thick, sig: hand(u, r), joined: wallEndJoined(w, end === 1 ? 'S' : 'E') }));
+  });
+  capTips().forEach(k => {
+    const g = wg(k.w), u = { x: g.n.x * k.cp.side, y: g.n.y * k.cp.side }, toRoom = k.cp.end === 'S' ? 1 : k.cp.end === 'E' ? -1 : k.a < g.L / 2 ? 1 : -1;
+    out.push({ cap: true, c: k.tip, u, t: k.cp.t, sig: hand(u, { x: g.u.x * toRoom, y: g.u.y * toRoom }), joined: false });
+  });
+  return out;
+}
+// The attach points of those ends: the center line, and both corners of an end nothing else meets.
+function attachPts(skip) {
+  const out = [];
+  attachEnds(skip).forEach(rec => {
+    out.push({ x: rec.c.x, y: rec.c.y, att: { kind: 'center', rec } });
+    if (rec.joined) return;
+    const h = rec.t / 2, f = { x: rec.c.x + rec.u.x * h, y: rec.c.y + rec.u.y * h };
+    [1, -1].forEach(k => out.push({ x: f.x - rec.u.y * h * k, y: f.y + rec.u.x * h * k, att: { kind: 'corner', rec } }));
+  });
+  return out;
+}
+// A point on a wall's center line or either face, for a wall that tees into its side.
+function attachSide(p, reach, skip) {
+  let best = null, bd = reach;
+  S.walls.forEach(w => {
+    if (w.hidden || (skip || []).includes(w.id)) return;
+    const g = wg(w), gr = lay().grid > 0 ? lay().grid : 1, a = Math.round(((p.x - w.x1) * g.u.x + (p.y - w.y1) * g.u.y) / gr) * gr, bp = (p.x - w.x1) * g.n.x + (p.y - w.y1) * g.n.y;
+    if (a < 0 || a > g.L) return;
+    [0, w.thick / 2, -w.thick / 2].forEach(b => { const d = Math.abs(bp - b); if (d < bd) { bd = d; best = { x: r3(w.x1 + g.u.x * a + g.n.x * b), y: r3(w.y1 + g.u.y * a + g.n.y * b), at: true, att: { kind: 'side', wid: w.id, b } }; } });
+  });
+  return best;
+}
+// 0.63.63 (Ayden): walls attach to end caps too. A cap's tip (the middle of its far end) is a wall end you can snap
+// to (half its thickness in from the end, so the wall it becomes ends where the cap did); drawing a wall from or to
+// it turns the cap into a real wall there, joined on its center line.
+function capTips() {
+  const out = [];
+  S.walls.forEach(w => { if (w.hidden) return; const g = wg(w); capsOf(w).forEach(cp => { const a = (cp.a0 + cp.a1) / 2; out.push({ w, cp, a, tip: wallPt(w, g, cp.side, a, w.thick / 2 + cp.len - cp.t / 2), base: wallPt(w, g, cp.side, a, 0) }); }); });
+  return out;
+}
+const capTipAt = p => capTips().find(c => samePt(c.tip.x, c.tip.y, p)) || null;
+// Turns the cap whose tip is at p into a wall from the host wall's center line out to the tip. Returns the new wall.
+function capToWall(p) {
+  const c = capTipAt(p); if (!c) return null;
+  const { w, cp } = c, nw = { id: uid('w'), x1: r3(c.base.x), y1: r3(c.base.y), x2: r3(c.tip.x), y2: r3(c.tip.y), thick: cp.t, height: cp.height };
+  if (cp.end === 'C') w.caps = (w.caps || []).filter(k => k.id !== cp.id); else w['cap' + cp.end] = { ...w['cap' + cp.end], on: false };
+  S.walls.push(nw); return nw;
 }
 // An existing wall (not one being drawn) whose start or end sits at p, to join the new wall onto. joined: that end
 // is already a corner of two walls, so it stays put and the new wall meets it there.
@@ -262,13 +331,13 @@ function wallEndAt(p, skip) {
 // Points wall ends snap to while drawing: other walls' ends, and the drawn (inside face) corners of this chain.
 function drawEnds() {
   const ch = ui.drawing && ui.drawing.chain, skip = ch ? ch.ids : [], out = [];
-  S.walls.forEach(w => { if (!skip.includes(w.id)) out.push({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }); });
+  attachPts(skip).forEach(q => out.push({ x: q.x, y: q.y }));
   if (ch) ch.pts.forEach(q => out.push({ x: q.x, y: q.y }));
   return out;
 }
 const lineCross = (p, u, q, v) => { const d = u.x * v.y - u.y * v.x; if (Math.abs(d) < 1e-6) return null; const k = ((q.x - p.x) * v.y - (q.y - p.y) * v.x) / d; return { x: p.x + u.x * k, y: p.y + u.y * k }; };
 // Centerlines for a chain of inside-face points pts. t[i] is wall i's thickness. Returns segs and where pinned walls' ends go.
-function wallChainGeom(pts, t, pins, skip, center) {
+function wallChainGeom(pts, t, pins, skip, center, sgFix) {
   const n = pts.length - 1; if (n < 1) return null;
   // Joined onto an existing wall: the drawn points are the centerline.
   if (center) return { segs: pts.slice(1).map((q, i) => ({ x1: pts[i].x, y1: pts[i].y, x2: q.x, y2: q.y })), moves: [], sg: 0 };
@@ -278,7 +347,7 @@ function wallChainGeom(pts, t, pins, skip, center) {
   const U = [], N = [];
   for (let i = 0; i < n; i++) { const dx = pts[i + 1].x - pts[i].x, dy = pts[i + 1].y - pts[i].y, L = Math.hypot(dx, dy) || 1; U.push({ x: dx / L, y: dy / L }); N.push({ x: -dy / L, y: dx / L }); }
   // sg = 1 when the room is on the n side of each segment (screen y runs down, so a clockwise chain has area > 0).
-  let sg = area > 1e-6 ? 1 : area < -1e-6 ? -1 : 0;
+  let sg = sgFix || (area > 1e-6 ? 1 : area < -1e-6 ? -1 : 0);
   if (!sg) {
     const others = S.walls.filter(w => !skip.includes(w.id));
     if (others.length) {
@@ -290,6 +359,14 @@ function wallChainGeom(pts, t, pins, skip, center) {
   const V = [], moves = [];
   for (let i = 1; i < n; i++) V[i] = lineCross(Q[i - 1], U[i - 1], Q[i], U[i]) || Q[i];
   const pinTo = (pin, i) => {
+    if (pin && pin.corner) {
+      // Off a corner: the new wall meets the attached wall's line, which stretches to it (or the cap still to become a wall).
+      const w = pin.wid && wall(pin.wid), o = w ? { x: w.x1, y: w.y1 } : { x: pin.ox, y: pin.oy }, v = w ? wg(w).u : { x: pin.ux, y: pin.uy };
+      const p = lineCross(Q[i], U[i], o, v);
+      if (!p) { const off = Math.abs((Q[i].x - o.x) * v.y - (Q[i].y - o.y) * v.x); return off < 0.01 ? { x: pin.ox, y: pin.oy } : null; }
+      if (w) moves.push({ ...pin, x: p.x, y: p.y });
+      return p;
+    }
     const w = pin && wall(pin.wid); if (!w) return null;
     const g = wg(w), p = !pin.joined && lineCross(Q[i], U[i], { x: w.x1, y: w.y1 }, g.u); if (!p) return { x: pin.ox, y: pin.oy };
     moves.push({ ...pin, x: p.x, y: p.y }); return p;
@@ -304,9 +381,11 @@ function wallChainGeom(pts, t, pins, skip, center) {
 // Puts the chain's walls on their centerlines and joins its ends onto the walls it started or ended on.
 function applyWallChain(ch) {
   // Pinned walls go back where they were first, so a pin that is no longer at an end of the chain lets go.
+  // A corner pin on a cap knows its wall once the cap has become one.
+  ch.pins.forEach(pin => { if (pin && pin.corner && !wall(pin.wid)) { const q = { x: pin.ox, y: pin.oy }, w = S.walls.find(k => !ch.ids.includes(k.id) && (samePt(k.x1, k.y1, q) || samePt(k.x2, k.y2, q))); if (w) Object.assign(pin, { wid: w.id, end: samePt(w.x1, w.y1, q) ? 1 : 2 }); } });
   ch.pins.forEach(pin => { const w = pin && wall(pin.wid); if (!w) return; setWallEndAt(w, pin.end, { x: pin.ox, y: pin.oy }); });
   const ws = ch.ids.map(id => wall(id)); if (ws.some(w => !w)) return;
-  const G = wallChainGeom(ch.pts, ws.map(w => w.thick), ch.pins, ch.ids, ch.center); if (!G) return;
+  const G = wallChainGeom(ch.pts, ws.map(w => w.thick), ch.pins, ch.ids, ch.center, ch.sgFix); if (!G) return;
   G.segs.forEach((g, i) => Object.assign(ws[i], { x1: r3(g.x1), y1: r3(g.y1), x2: r3(g.x2), y2: r3(g.y2) }));
   G.moves.forEach(m => { const w = wall(m.wid); if (w) setWallEndAt(w, m.end, { x: r3(m.x), y: r3(m.y) }); });
 }
@@ -319,7 +398,7 @@ function setWallEndAt(w, end, p) {
 function wallPreviewBand(e) {
   const st = ui.drawing, ch = st.chain; if (!ch) return null;
   const t = ch.thick ?? curRoom().wallThick ?? S.job.wallThick, ts = ch.ids.map(id => (wall(id) || { thick: t }).thick).concat([t]);
-  const G = wallChainGeom(ch.pts.concat([{ x: e.x, y: e.y }]), ts, ch.pins.concat([null]), ch.ids, ch.center);
+  const G = wallChainGeom(ch.pts.concat([{ x: e.x, y: e.y }]), ts, ch.pins.concat([null]), ch.ids, ch.center, ch.sgFix);
   return G ? { ...G.segs[G.segs.length - 1], t } : null;
 }
 function startWalls() { ui.placeLight = false; ui.drawMold = false; ui.moldFrom = null; ui.drawWalls = true; ui.placing = null; ui.ghost = null; ui.drawing = null; ui.typed = ''; if (ui.viewMode !== 'plan') setView('plan'); else renderRoom(); }
@@ -436,7 +515,7 @@ function renderHint() {
   if (ui.placeLight) { h.innerHTML = 'Click where each ceiling light goes. <b>Right-click</b> or <b>Esc</b> to stop.'; return; }
   if (ui.drawMold) { h.innerHTML = ui.moldFrom ? `Click where the ${ui.drawMold === 'top' ? 'top' : 'run'} ends. Keep clicking to add more. <b>Right-click</b> or <b>Esc</b> to stop.` : `Click on a wall face where the ${ui.drawMold === 'top' ? 'top' : 'molding'} starts.`; return; }
   if (ui.drawWalls) {
-    if (!ui.drawing) h.innerHTML = 'Click to start a wall. The line is the inside of the room; the wall thickness goes behind it. Ends snap to other walls, to lines through them and to the grid.';
+    if (!ui.drawing) h.innerHTML = 'Click to start a wall. The line is the inside of the room; the thickness goes behind it. To attach, start on a wall end\'s center dot (thickness split, seamless) or a corner ring (thickness goes the same way as that wall), or on the side of a wall.';
     else h.innerHTML = `Type a length and press <b>Enter</b>, or click. Click the first corner to close the room. <b>Shift</b> for any angle. <b>Right-click</b> or <b>Esc</b> to stop.`;
   } else if (ui.placing && String(ui.placing).startsWith('fixt:')) {
     const l = fixtPreset(ui.placing.slice(5));
@@ -845,7 +924,7 @@ function frontsSVG(c, ex, by, opts = {}) {
   // A 45° or 90° corner's return leg comes out toward you, so its end panel covers that part of the box.
   // (A plain wood rectangle goes under it, in case the material's texture isn't in this drawing.)
   const solid = (x, y, w, h) => `<rect class="ev-box nss" x="${x}" y="${y}" width="${w}" height="${h}"/><rect ${fillFor(cm, 'ev-box')} x="${x}" y="${y}" width="${w}" height="${h}"/>`;
-  if (angledCorner(c)) { const a = cornerLeg(c); s += solid(X(cornerSide(c) === 'L' ? 0 : c.w - a), Y(c.h), a, c.h - tk); }
+  if (angledCorner(c)) { const a = cornerLeg2(c); s += solid(X(cornerSide(c) === 'L' ? 0 : c.w - a), Y(c.h), a, c.h - tk); }
   // A blind corner's blind panel on the front, beside the doors.
   if (blindCorner(c) && !faceFrame(c)) { const q = blindPanelAt(c); s += solid(X(q.x0), Y(q.z1), q.x1 - q.x0, q.z1 - q.z0); }
   // Face frame members, in front of the box and behind the doors.
