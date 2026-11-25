@@ -331,17 +331,22 @@ function openOne(c, f, placed, cap, shutAll) {
   const fold = f.type === 'door' && typeof cornerFoldOf === 'function' && cornerFoldOf(c, f), foldKey = fold ? frontKey3(c, fold) : null;
   // Cabinets, walls and fronts that stay shut are still; anything one of them already touches with this front shut
   // (a corner door's edge over the next front, say) is how the cabinets were placed, not this front running into it.
-  const near = placed.filter(p => !(p.c.id === c.id && (frontKey3(p.c, p.f) === frontKey3(c, f) || frontKey3(p.c, p.f) === foldKey)) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
+  // A bi-fold pair (0.63.71) also ignores a cabinet placed over its own (flagged as an overlap) and that cabinet's
+  // fronts: that is how they were placed, not the doors running into them. Else the pair stays shut and only the
+  // folding door seems to move.
+  const own = fold ? cabPlanPoly(c) : null, over = new Set(own ? S.cabinets.filter(o => o.id !== c.id && over2(o)).map(o => o.id) : []);
+  function over2(o) { const q = cabPlanPoly(o); return q && (o.elev || 0) < z1 - 0.25 && (o.elev || 0) + o.h > z0 + 0.25 && polysHit(q, own); }
+  const near = placed.filter(p => !(p.c.id === c.id && (frontKey3(p.c, p.f) === frontKey3(c, f) || frontKey3(p.c, p.f) === foldKey)) && !over.has(p.c.id) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
   const still = fixedObstacles(c, z0, z1).concat(near.filter(p => p.v <= 0).reduce((a, p) => a.concat(p.poly), []))
-    .concat((shutAll || []).filter(q => q.key !== frontKey3(c, f) && q.key !== foldKey && q.z0 < z1 - 0.25 && q.z1 > z0 + 0.25).reduce((a, q) => a.concat(q.poly), []));
+    .concat((shutAll || []).filter(q => q.key !== frontKey3(c, f) && q.key !== foldKey && !over.has(q.key.slice(0, q.key.indexOf(':'))) && q.z0 < z1 - 0.25 && q.z1 > z0 + 0.25).reduce((a, q) => a.concat(q.poly), []));
   const moving = near.filter(p => p.v > 0).reduce((a, p) => a.concat(p.poly), []);
   const shut = f.type === 'door' ? doorPoly(c, f, 0, fr) : drawerPoly(c, f, 0, fr);
-  const obs = still.filter(o => !shut.some(poly => polysHit(poly, o))).concat(moving);
+  const obs = still.filter(o => !shut.some(poly => polysHit(poly, o)) && !(own && polysHit(own, o))).concat(moving);
   // Boxes first: an obstacle whose box is clear of the front's box can't touch it (same answer, much less work).
   const ob = obs.map(o => [o, planBox(o)]);
   const hit = polys => polys.some(poly => { const b = planBox(poly); return ob.some(([o, q]) => !(q.x1 < b.x0 || q.x0 > b.x1 || q.y1 < b.y0 || q.y0 > b.y1) && polysHit(poly, o)); });
   if (f.type === 'door') {
-    const max = Math.min(f.face ? DOOR_MAX : pairCap(c, f), cap || DOOR_MAX); let v = max;
+    const max = Math.min(fold ? Math.PI / 2 : f.face ? DOOR_MAX : pairCap(c, f), cap || DOOR_MAX); let v = max; // a bi-fold pair stops square
     for (let a = 0.04; a <= max + 1e-9; a += 0.02) if (hit(doorPoly(c, f, a, fr))) { v = Math.max(0, a - 0.06); break; }
     return { v, poly: doorPoly(c, f, v, fr), z0, z1 };
   }

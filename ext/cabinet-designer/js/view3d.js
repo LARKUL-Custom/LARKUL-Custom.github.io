@@ -376,13 +376,13 @@ function cabinetMeshes(c, opts = {}) {
       if (f.face) cornerPivots.push({ f, pivot });
     } else host.add(fg);
   });
-  // A 90° corner's bi-fold (0.63.68): the folding door hangs on the cabinet's door, so it folds first and then rides
-  // with it as the pair swings open.
+  // A 90° corner's bi-fold (0.63.68): the folding door hangs on the cabinet's door, so it rides with it and folds
+  // flat onto it as the pair swings open.
   cornerPivots.forEach(({ f, pivot }) => {
     const g = cornerFoldOf(c, f, fronts), fp = g && cornerPivots.find(q => q.f === g);
     if (!fp) return;
     grp.updateMatrixWorld(true); pivot.attach(fp.pivot.parent); // its face group, so its own swing still starts at 0
-    fp.pivot.userData.open.stage = 'fold'; pivot.userData.open.stage = 'last';
+    // 0.63.71 (Ayden: "only opens one door not both in one action"): both move at once, the fold riding the swing.
   });
   const ps = panelFor(c), pmM = L3(mat(ps.mat) || cm, 'finished'), pt = panelThick(c);
   const ph = ps.toFloor || c.cat === 'Wall' ? H : H - tk, py0 = H - ph, pdL = endDepth(c, 'L') + ps.frontOverhang, pdR = endDepth(c, 'R') + ps.frontOverhang;

@@ -115,13 +115,17 @@ function cornerHinge(c, f, hg) {
   const own = cornerHingeHw(c, f); if (own) return { name: own.name, plate: cornerMainDoor(c, f) };
   const blum = /blum/i.test(hg.name || '');
   if (c.corner.type === 'diag') return { name: blum ? 'Blum CLIP top BLUMOTION 110° diagonal 45°' : `${hg.name} (45° diagonal)`, plate: true };
-  return cornerMainDoor(c, f) ? { name: hg.name, plate: true } : { name: blum ? 'Blum CLIP top 60° bi-fold' : `${hg.name} (bi-fold)`, plate: false };
+  // 0.63.71 (Ayden 2026-11-25: "the hinge side has regular hinges but the connection between the two has 110 degree
+  // hinges"): the folding door hangs on the other door on 110° hinges, no plates on the cabinet.
+  if (cornerMainDoor(c, f)) return { name: hg.name, plate: true };
+  const h110 = /110/.test(hg.name || '') ? hg : (typeof hwOf === 'function' ? hwOf('hinge') : []).find(h => /110/.test(h.name || ''));
+  return { name: h110 ? h110.name : blum ? 'Blum CLIP top 110°' : `${hg.name} (bi-fold)`, plate: false };
 }
 // The door of a 90° corner's bi-fold that hinges on the cabinet: the one on the return leg (faces run left to right).
 const cornerMainDoor = (c, f) => f.idx === (cornerSide(c) === 'R' ? 1 : 0);
 // 0.63.68 (Ayden 2026-11-25: "the corner doors wont fold open"): a bi-fold opens as one. The folding door turns on its
-// hinge at the inside corner until it lies flat on the front of the door that hangs on the cabinet, then the two swing
-// open together on the cabinet's hinge. cornerFoldDoor is the folding one; cornerFoldOf finds it for the cabinet's door.
+// hinge at the inside corner until it lies flat on the front of the door that hangs on the cabinet, while the two swing
+// open together on the cabinet's hinge (0.63.71: one move, "both in one action like a bifold door"). cornerFoldDoor is the folding one; cornerFoldOf finds it for the cabinet's door.
 const cornerBifold = c => !!(c && c.corner && c.corner.type === 'l' && !cornerPair(c));
 const cornerFoldDoor = (c, f) => !!(f && f.face && f.type === 'door' && cornerBifold(c) && !cornerMainDoor(c, f));
 const cornerFoldOf = (c, f, fr) => f && f.face && f.type === 'door' && cornerBifold(c) && cornerMainDoor(c, f) ? (fr || computeFronts(c)).find(d => d.type === 'door' && d.face && d.row === f.row && d.idx !== f.idx) || null : null;
