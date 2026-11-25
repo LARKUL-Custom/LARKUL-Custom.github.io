@@ -96,7 +96,9 @@ function cabShapedBox(c, p, t, bt, tk, sideBottom, dd = 0) {
   } else flat(H - t / 2, out.top);
   if (!out.bottom.length) warn.push('The shape leaves no room for a bottom.');
   // Back: the front shape inside the box.
-  const back = clipPoly(fo, t - dd, W - t + dd, bottomY + t - dd, H - t + dd); if (back.length >= 3) out.back = back;
+  // The back runs only where the top shape reaches the wall (0.63.72: a corner's cut-off back corner has its own back).
+  const onWall = (to || []).filter(q => Math.abs(q.y) < 0.01).map(q => q.x), bx0 = onWall.length && Math.min(...onWall) > 0.01 ? Math.min(...onWall) : t - dd, bx1 = onWall.length && Math.max(...onWall) < W - 0.01 ? Math.max(...onWall) : W - t + dd;
+  const back = clipPoly(fo, bx0, bx1, bottomY + t - dd, H - t + dd); if (back.length >= 3) out.back = back;
   return out;
 }
 

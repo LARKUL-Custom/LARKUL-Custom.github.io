@@ -53,7 +53,10 @@ function itemBar(c) {
   // (Blind side takes the Outset box's place on the bar; Outset stays in the cabinet editor.)
   const cornerSz = c && typeof isCorner === 'function' && isCorner(c) ? (blindCorner(c)
     ? [sz('Width', 'w'), sz('Depth', 'd') + `<label class="ib-f"><span>Blind side</span>${ctl('cabk:' + id, 'blind', blindWidth(c), 'len', { label: 'Blind side' })}</label>`]
-    : [sz('This wall', 'w'), sz('Other wall', 'd') + sz('Outset', 'outset')]) : null;
+    // 0.63.72 (Ayden: "it's just hard and doesnt really adjust right"): each leg's depth sits by its length, so every
+    // size of a 45° or 90° corner is on the bar (Outset moves to the cabinet editor, as on a blind corner).
+    : [sz('This wall', 'w') + `<label class="ib-f"><span>Depth here</span>${ctl('cabk:' + id, 'leg', cornerLeg(c), 'len', { label: 'Depth on this wall' })}</label>`,
+      sz('Other wall', 'd') + `<label class="ib-f"><span>Depth there</span>${ctl('cabk:' + id, 'leg2', cornerLeg2(c), 'len', { label: 'Depth on the other wall' })}</label>`]) : null;
   const tog = (k, label) => `<label class="ib-tog"><span>${label}</span>${ctl('layout', k, L[k], 'bool', { label })}<i aria-hidden="true"></i></label>`;
   // Nothing picked: no empty boxes, just what to do next (Mozaik shows only its item picker here).
   if (!c) {

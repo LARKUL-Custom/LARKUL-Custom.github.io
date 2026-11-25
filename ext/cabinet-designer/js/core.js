@@ -707,7 +707,7 @@ function migrate(s) {
   // 0.55.7: the 0.55.4 Mini Display Cabinet left My library for the Dollhouse set; jobs that got it lose it unless one is drawn.
   if (!s.miniGone) { const used = s.rooms.some(r => (r.cabinets || []).some(c => c.libId === 'mini-ad')), L = !s.libSet || s.libSet === 'main' ? s.library : (s.libSets || {}).main;
     if (!used && Array.isArray(L)) { const i = L.findIndex(l => l.id === 'mini-ad'); if (i >= 0) L.splice(i, 1); } s.miniGone = 1; }
-  const out = attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensurePaintedMaple(ensureBoughtDoors(ensureFinishes(ensureFaceFrames(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s)))))))))));
+  const out = attachRoom(ensureShapeNames(ensureMatSets(ensureMatGroups(ensurePaintedMaple(ensureBoughtDoors(ensureFinishes(ensureFaceFrames(ensureCornerClip(ensureCornerLib(ensureJoinery(ensureEdgeLibs(s))))))))))));
   // 0.57.3: bid shelves and products were placed from the wall's centerline end, half the corner wall's thickness inside it.
   if (!out.bidFace && typeof bidFaceFix === 'function') { const keep = S; S = out; try { bidFaceFix(out); } catch (_) {} finally { S = keep; } out.bidFace = 1; }
   // 0.59.27 (Ayden 2026-11-19: "fix what he did"): jobs imported from a bid before this get the support panels at the open ends

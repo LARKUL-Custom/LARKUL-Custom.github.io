@@ -276,16 +276,16 @@ function pullSpan(c, f) {
 }
 // A door open to angle a, in plan: the door, plus its pull as a small block. It turns on its front hinge-side corner
 // (an overlay hinge), so at 90° it stands in front of its own cabinet side and two doors hinged next to each other both clear.
-function doorPoly(c, f, a, fr) {
+function doorPoly(c, f, a, fr, k = 1) {
   const R = f.hinge === 'R', hx = R ? f.x1 : f.x0, fw = f.x1 - f.x0, dir = R ? -1 : 1, L = frontLocal(c, f, fr), ps = pullSpan(c, f);
   const at = (s, t) => L(hx + dir * (s * Math.cos(a) + t * Math.sin(a)), FRONT_T + s * Math.sin(a) - t * Math.cos(a));
   const out = [[at(0, 0), at(fw, 0), at(fw, FRONT_T), at(0, FRONT_T)]];
   if (ps) { const s0 = R ? f.x1 - (f.x0 + ps.x1) : ps.x0, s1 = R ? f.x1 - (f.x0 + ps.x0) : ps.x1; out.push([at(s0, -PULL_OUT), at(s1, -PULL_OUT), at(s1, 0), at(s0, 0)]); }
-  // A 90° corner's bi-fold (0.63.68): once it opens, the folding door rides on this one, folded flat on its front.
+  // A 90° corner's bi-fold (0.63.72): once it opens, the second door rides on this one, straightened in line with it.
   const g = a > 0 && typeof cornerFoldOf === 'function' && cornerFoldOf(c, f);
   if (g) {
     const fc = f.face, toS = q => { const dx = q.x - fc.ox, dz = q.z - fc.oz, x = dx * fc.ux + dz * fc.uz, o = -dx * fc.uz + dz * fc.ux; return at(dir * (x - hx), FRONT_T - o); };
-    out.push(cornerFoldedLeaf(g, FRONT_T).map(toS));
+    out.push(cornerFoldedLeaf(g, FRONT_T, k * Math.PI / 2).map(toS)); // k: how far it has straightened (0..1)
   }
   return out;
 }
@@ -326,7 +326,7 @@ function openOne(c, f, placed, cap, shutAll) {
   const z0 = (c.elev || 0) + f.z0, z1 = (c.elev || 0) + f.z1;
   // A pocket door ends up inside its own cabinet, so once open it is in nobody's way (pocket.js).
   if (f.type === 'door' && typeof pocketDoor === 'function' && pocketDoor(c, f)) return { v: Math.PI / 2, poly: [], z0, z1 };
-  // A bi-fold's folding door folds flat onto the door it hangs on, and rides with it (doorPoly draws it there).
+  // A bi-fold's second door straightens in line with the door it hangs on, and rides with it (doorPoly draws it there).
   if (typeof cornerFoldDoor === 'function' && cornerFoldDoor(c, f)) return { v: Math.PI / 2, poly: [], z0, z1 };
   const fold = f.type === 'door' && typeof cornerFoldOf === 'function' && cornerFoldOf(c, f), foldKey = fold ? frontKey3(c, fold) : null;
   // Cabinets, walls and fronts that stay shut are still; anything one of them already touches with this front shut
@@ -346,8 +346,11 @@ function openOne(c, f, placed, cap, shutAll) {
   const ob = obs.map(o => [o, planBox(o)]);
   const hit = polys => polys.some(poly => { const b = planBox(poly); return ob.some(([o, q]) => !(q.x1 < b.x0 || q.x0 > b.x1 || q.y1 < b.y0 || q.y0 > b.y1) && polysHit(poly, o)); });
   if (f.type === 'door') {
-    const max = Math.min(fold ? Math.PI / 2 : f.face ? DOOR_MAX : pairCap(c, f), cap || DOOR_MAX); let v = max; // a bi-fold pair stops square
-    for (let a = 0.04; a <= max + 1e-9; a += 0.02) if (hit(doorPoly(c, f, a, fr))) { v = Math.max(0, a - 0.06); break; }
+    const max = Math.min(fold ? CORNER_PAIR_MAX : f.face ? DOOR_MAX : pairCap(c, f), cap || (fold ? CORNER_PAIR_MAX : DOOR_MAX)); let v = max; // a bi-fold pair stops at its hinge
+    // A bi-fold pair straightens as it swings (both by the same share of their move, as in 3D), so each angle it
+    // could stop at is checked along the whole way there.
+    if (fold) { v = 0; for (let m = max; m > 0.04; m -= 0.04) { let ok = true; for (let k = 0.1; k <= 1 + 1e-9 && ok; k += 0.1) if (hit(doorPoly(c, f, k * m, fr, cornerFoldShare(k)))) ok = false; if (ok) { v = m; break; } } }
+    else for (let a = 0.04; a <= max + 1e-9; a += 0.02) if (hit(doorPoly(c, f, a, fr))) { v = Math.max(0, a - 0.06); break; }
     return { v, poly: doorPoly(c, f, v, fr), z0, z1 };
   }
   // A drawer on a corner's angled face doesn't slide out in 3D; it stays shut but still blocks.
