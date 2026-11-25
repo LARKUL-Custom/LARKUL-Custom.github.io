@@ -966,6 +966,7 @@ function frontsSVG(c, ex, by, opts = {}) {
   const spans = lay.divX !== null ? [[t, lay.divX - t / 2], [lay.divX + t / 2, c.w - t]] : [[t, c.w - t]];
   shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => spans.forEach(([a, b]) => { s += `<rect class="ev-shelf nss" x="${X(a)}" y="${Y(z + t)}" width="${b - a}" height="${t}"/>`; }));
   colShelves(lay).forEach(q => { s += `<rect class="ev-shelf nss" x="${X(q.x0)}" y="${Y(q.z + t)}" width="${q.x1 - q.x0}" height="${t}"/>`; });
+  if (lay.inner && typeof inDrawParts === 'function') inDrawParts(lay).forEach(q => { s += `<rect class="ev-shelf nss" x="${X(q.x0)}" y="${Y(q.z1)}" width="${q.x1 - q.x0}" height="${q.z1 - q.z0}"/>`; });
   // 0.63.0: the partitions behind side-by-side sections and the fixed shelves over and under them.
   if (fr.some(f => f.cell !== undefined)) { const rl = caseRails(c, p, fr, t);
     rl.shelves.filter(q => q.cols).forEach(q => { s += `<rect class="ev-shelf nss" x="${X(t)}" y="${Y(q.z + t / 2)}" width="${c.w - 2 * t}" height="${t}"/>`; });

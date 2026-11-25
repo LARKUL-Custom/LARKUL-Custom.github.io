@@ -190,6 +190,11 @@ function qBuildExtras(c, parts, warn, part, x) {
     const q = part(`Fixed shelf ${i + 1}`, x.sm || x.cm, x.shW || x.inW, Math.max(1, x.inD - 0.0625), { kind: 'shelf' }), f = fr.find(z => z.row === i);
     // Where it sits, so the joint templates can fasten it into the sides.
     if (q && f && x.zIn0 !== undefined) q.jx = fs.z;
+    // A 45° or 90° corner's fixed shelf is cut to the inside of the corner, flush with the faces (0.63.72).
+    if (q && typeof angledCorner === 'function' && angledCorner(c) && typeof cornerInside === 'function') {
+      const p = effParams(c), bt = (mat(cabMatT(cabSet(c, 'cabMatT')).back) || x.cm).thick, poly = cornerInside(c, p, x.t, bt, 0.0625), b = polyBox(poly);
+      Object.assign(q, { L: r3(b.x1 - b.x0), W: r3(b.y1 - b.y0), outline: poly.map(v => ({ x: r3(v.x - b.x0), y: r3(v.y - b.y0) })) });
+    }
   });
   (c.inserts || []).forEach(it => {
     const row = it.row !== undefined && it.row !== '' ? +it.row : rows.length - 1, f = fr.find(z => z.row === row) || fr[fr.length - 1];

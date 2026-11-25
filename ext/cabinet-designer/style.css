@@ -3788,7 +3788,7 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .fs-tab{display:flex;flex-direction:column;gap:10px;min-height:100%}
 .fs-work{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px;flex:1;min-height:0}
 .fs-draw{background:var(--panel);border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;padding:10px;min-height:300px}
-.fs-draw svg{width:100%;height:auto;max-height:max(280px,calc(100vh - 480px))}
+.fs-draw svg{width:100%;height:auto;max-height:max(280px,calc(100vh - 480px)) !important}
 .fs-hit{fill:transparent;stroke:transparent;cursor:pointer;vector-effect:non-scaling-stroke}
 .fs-sec:hover .fs-hit{fill:color-mix(in srgb,var(--accent) 10%,transparent)}
 .fs-sec.on .fs-hit{stroke:#d92d20;stroke-width:3px;fill:transparent}
@@ -4089,3 +4089,13 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 }
 /* 0.63.46: Auto build base molding sits under the crown box, set apart by a line. */
 .qm-box.bm-box{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+/* 0.63.74: interior parts picked by clicking them in the Interior tab drawing (intsplit.js) */
+.in-part{fill:transparent;stroke:transparent;cursor:pointer;vector-effect:non-scaling-stroke}
+.in-part:hover{fill:color-mix(in srgb,var(--accent) 35%,transparent)}
+.in-part.fill{fill:transparent}
+.in-part.fill:hover{fill:color-mix(in srgb,var(--accent) 12%,transparent)}
+.in-part.on{fill:color-mix(in srgb,#d92d20 45%,transparent);stroke:#d92d20;stroke-width:2px}
+.in-part.fill.on{fill:color-mix(in srgb,#d92d20 14%,transparent)}
+.in-names{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:2px}
+.in-split{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.in-split-btns{display:flex;flex-wrap:wrap;gap:6px}

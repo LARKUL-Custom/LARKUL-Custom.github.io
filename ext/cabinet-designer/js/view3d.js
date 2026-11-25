@@ -260,6 +260,8 @@ function cabinetMeshes(c, opts = {}) {
   // Drawer stretchers and fixed shelves between front rows (caseRails in build.js), where the cut list has them.
   { const rl = caseRails(c, p, null, t), inD0 = D - p.backInset - bt, shM = I3(mat(mt.shelf) || cm, bk), bpO = blindPart(c, p, t), [sa, sb2] = bpO ? [bpO.o0, bpO.o1] : [t, W - t];
     rl.stretchers.forEach(q => grp.add(box3(W - 2 * t, t, p.stretcherWidth, cmM, W / 2, q.z, D - p.stretcherWidth / 2)));
+    // A corner's fixed shelf is cut to the inside of the corner, flush with the faces so the doors stop on it.
+    if (angledCorner(c)) { rl.shelves.forEach(q => grp.add(cornerShelf3d(c, p, t, bt, q.z - t / 2, shM, 0.0625))); rl.shelves.length = 0; }
     rl.shelves.forEach(q => grp.add(box3(sb2 - sa, t, Math.max(1, inD0 - 0.0625), shM, (sa + sb2) / 2, q.z, p.backInset + bt + Math.max(1, inD0 - 0.0625) / 2)));
     [...drawerPartitions(c, p, computeFronts(c, p), t, rl), ...blindPieces(c, p, t, rl)].forEach(q => grp.add(box3(t, q.z1 - q.z0, inD0 - 0.0625, cmM, q.x + t / 2, (q.z0 + q.z1) / 2, D - (inD0 - 0.0625) / 2))); }
   if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, L3(toeMat(c, mt) || cm, 'toe'), o => grp.add(o)); else grp.add(box3(W, tk, t, L3(toeMat(c, mt) || cm, 'toe'), W / 2, tk / 2, D - sb - t / 2)); }
@@ -295,6 +297,12 @@ function cabinetMeshes(c, opts = {}) {
   if (angledCorner(c)) shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => grp.add(cornerShelf3d(c, p, t, bt, z, sm)));
   else shelfHeights(lay, Math.max(0, p.shelfCount | 0)).forEach(z => spans.forEach(([a, b]) => grp.add(box3(b - a - 0.06, t, inD - p.shelfFrontSetback, sm, (a + b) / 2, z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2))));
   if (!angledCorner(c)) colShelves(lay).forEach(q => grp.add(box3(q.x1 - q.x0 - 0.06, t, inD - p.shelfFrontSetback, sm, (q.x0 + q.x1) / 2, q.z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2)));
+  // 0.63.74: openings split inside: partitions, fixed shelves and their adjustable shelves (intsplit.js).
+  if (lay.inner && typeof inDrawParts === 'function') inDrawParts(lay).forEach(q => {
+    if (q.kind === 'part') grp.add(box3(t, q.z1 - q.z0, inD - 0.0625, cmM, q.x0 + t / 2, (q.z0 + q.z1) / 2, p.backInset + bt + (inD - 0.0625) / 2));
+    else if (q.kind === 'fixed') grp.add(box3(q.x1 - q.x0, t, Math.max(1, inD - 0.0625), sm, (q.x0 + q.x1) / 2, q.z0 + t / 2, p.backInset + bt + Math.max(1, inD - 0.0625) / 2));
+    else grp.add(box3(q.x1 - q.x0 - 0.06, t, inD - p.shelfFrontSetback, sm, (q.x0 + q.x1) / 2, q.z0 + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2));
+  });
   if (lay.divX !== null) grp.add(box3(t, lay.zIn1 - lay.zIn0, inD, cmM, lay.divX, (lay.zIn0 + lay.zIn1) / 2, p.backInset + bt + inD / 2));
   // inserts
   const dmt = cabDrawerMatT(c), dbx = L3(mat(dmt.sides) || cm, 'drawerBox');
@@ -972,7 +980,7 @@ function edView3D(c) {
   edViewer.moveTo(host);
   // 0.63.28: the big 3D view (ed3dview.js) picks the look (Shaded, Wireframe, Hidden line) and which parts show.
   const st = typeof ed3State === 'function' ? ed3State() : { look: 'shaded', layers: null };
-  const real = !!ui.render3d && st.look === 'shaded', key = JSON.stringify(c) + '|' + real + '|' + document.documentElement.dataset.theme + '|' + st.look + '|' + JSON.stringify(st.layers);
+  const real = !!ui.render3d && st.look === 'shaded', key = JSON.stringify(c) + '|' + real + '|' + document.documentElement.dataset.theme + '|' + st.look + '|' + JSON.stringify(st.layers) + '|' + !!st.ops;
   if (key === edViewKey && host.contains(edViewer.renderer.domElement) && !ui.ed3Fresh) return edViewer.requestRender();
   edViewKey = key;
   // Drawn in the same look as the room (plain or realistic).
@@ -981,6 +989,7 @@ function edView3D(c) {
     edViewer.setReal(R3); edViewer.setBackground(R3 ? '#e4e1db' : cssVar('--sunk'));
     edViewer.clear();
     const m = cabinetMeshes(c, st.layers ? { layers: st.layers } : {}); m.position.x = -c.w / 2; edViewer.root.add(m);
+    if (st.ops && typeof ops3d === 'function') ops3d(c, m, st.layers);
     if (R3) edViewer.fitShadow();
   } finally { R3 = false; }
   if (st.look === 'hidden') hiddenLine3d(edViewer);

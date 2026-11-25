@@ -1048,7 +1048,7 @@ document.addEventListener('click', e => {
     }
     case 'qe-finint-on': case 'qe-finint-off': { const c = cab(id); if (c) mutate(() => { c.finInt = a === 'qe-finint-on'; }); break; }
     case 'qe-clear-shelves': { const c = cab(id); if (c) mutate(() => { c.params = c.params || {}; c.params.shelfCount = 0; (c.rows || []).forEach(r => { delete r.shelves; }); }); flash('Adjustable shelves removed'); break; }
-    case 'qe-clear-all': { const c = cab(id); if (c) mutate(() => { c.params = c.params || {}; c.params.shelfCount = 0; (c.rows || []).forEach(r => { delete r.shelves; delete r.fixShelf; }); c.inserts = []; c.finInt = false; }); flash('Interior cleared. Doors and drawers stay. Undo brings it back.'); break; }
+    case 'qe-clear-all': { const c = cab(id); if (c) mutate(() => { c.params = c.params || {}; c.params.shelfCount = 0; (c.rows || []).forEach(r => { delete r.shelves; delete r.fixShelf; delete r.inner; }); c.inserts = []; c.finInt = false; }); flash('Interior cleared. Doors and drawers stay. Undo brings it back.'); break; }
     case 'qe-clear-row': {
       const c = qeCab(), i = +id; if (!c || !c.rows[i]) break;
       mutate(() => {
@@ -1057,7 +1057,7 @@ document.addEventListener('click', e => {
           const p = effParams(c), lay = interiorLayout(c, p, computeFronts(c, p)), n = Math.max(0, p.shelfCount | 0), zs = lay.shelfZones;
           zs.forEach((z, k) => { const r = c.rows[z.row]; if (r) r.shelves = Math.floor(n / zs.length) + (k < n % zs.length ? 1 : 0); });
         }
-        c.rows[i].shelves = 0; delete c.rows[i].fixShelf;
+        c.rows[i].shelves = 0; delete c.rows[i].fixShelf; delete c.rows[i].inner;
         c.inserts = (c.inserts || []).filter(it => !(it.row !== undefined && it.row !== '' && +it.row === i));
       }); flash(`Opening ${i + 1} cleared`); break;
     }

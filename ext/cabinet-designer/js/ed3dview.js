@@ -5,7 +5,8 @@
 //   Look: Shaded (the room's look), Wireframe (every edge, see-through) or Hidden line (white faces, black edges).
 //   Camera: Iso, Front, Back, Left, Right, Top, Bottom, all flat (no perspective) so the sides read like drawings,
 //   plus Perspective. Dragging still turns it.
-//   Show: doors and drawer fronts, drawer boxes (off shows the parts behind them).
+//   Show: doors and drawer fronts, drawer boxes (off shows the parts behind them), and in Wireframe the holes and grooves
+//   the CNC cuts (0.63.73, ops3d.js), in red.
 // Look only: nothing in the build, cut list or price changes.
 
 const ED3_LOOKS = [['shaded', 'Shaded'], ['wire', 'Wireframe'], ['hidden', 'Hidden line']];
@@ -19,7 +20,9 @@ function ed3State() {
   const sh = ui.ed3Show || {}, layers = {};
   if (sh.fronts === false) { layers.fronts = false; layers.pulls = false; layers.glass = false; }
   if (sh.drawerBox === false) layers.drawerBox = false;
-  return { look: ui.ed3Look || 'shaded', layers: Object.keys(layers).length ? layers : null };
+  const look = ui.ed3Look || 'shaded';
+  // 0.63.73: the Wireframe look draws the cabinet's holes, cups, dados and grooves too (ops3d.js), unless Holes is off.
+  return { look, layers: Object.keys(layers).length ? layers : null, ops: look === 'wire' && sh.ops !== false };
 }
 
 // The editor body while the big view is open: a bar of looks, cameras and shown parts over the 3D view.
@@ -29,7 +32,7 @@ function ed3BigHTML(c) {
   const chk = (k, l) => `<button class="btn sm${sh[k] === false ? '' : ' on'}" data-act="ed3-show" data-id="${k}" aria-pressed="${sh[k] !== false}">${l}</button>`;
   return `<section class="ed3-big">
     <div class="ed3-bar">${seg('Look', ED3_LOOKS, look, 'ed3-look')}${seg('Camera', [...ED3_CAMS.map(([k, l]) => [k, l]), ['persp', 'Perspective']], cam, 'ed3-cam')}
-      <div class="ed3-grp"><span class="ed3-lbl">Show</span>${chk('fronts', 'Fronts')}${chk('drawerBox', 'Drawer boxes')}</div>
+      <div class="ed3-grp"><span class="ed3-lbl">Show</span>${chk('fronts', 'Fronts')}${chk('drawerBox', 'Drawer boxes')}${look === 'wire' ? chk('ops', 'Holes and grooves') : ''}</div>
       <button class="btn sm" data-act="ed3-cam" data-id="${esc(cam)}" title="Frame the whole cabinet again">${icon('fit')}Fit</button></div>
     <div class="preview ed3d ed3-host" id="ed3d" data-morph-keep></div>
     <div class="note qe-tip helponly">Drag to turn it, right-drag to slide, scroll to zoom. ${esc(c.name || '')}</div>

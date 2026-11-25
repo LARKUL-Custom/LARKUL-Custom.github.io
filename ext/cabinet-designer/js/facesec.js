@@ -57,7 +57,7 @@ function fsSel(c) {
   const r = Math.max(0, ui.qeRow | 0);
   return secs.find(s => s.row === r) || secs[0] || null;
 }
-function fsPick(c, key) { ui.fsSel = key; ui.fsSelCab = c.id; ui.qeRow = fsParse(key)[0]; }
+function fsPick(c, key) { ui.fsSel = key; ui.fsSelCab = c.id; ui.qeRow = +String(key).split(/[./]/)[0]; }
 
 // A section's type for the Type pick.
 function fsType(leaf) {
@@ -306,14 +306,17 @@ function fsFaceSVG(c, sel, inside) {
   let g = '';
   if (inside) {
     const p = effParams(c), fr = computeFronts(c, p), lay = interiorLayout(c, p, fr), L = faceLetters(c);
-    const zs = [...lay.zones.filter(z => z.row != null).map(z => ({ key: String(z.row), x0: lay.x0, x1: lay.x0 + lay.inW, z0: z[0], z1: z[1] })),
-      ...(lay.colZones || []).map(z => ({ key: z.cell, x0: z.x0, x1: z.x1, z0: z[0], z1: z[1] }))];
+    const zs = [...lay.zones.filter(z => z.row != null && !(lay.inner && lay.inner.rows.includes(z.row))).map(z => ({ key: String(z.row), x0: lay.x0, x1: lay.x0 + lay.inW, z0: z[0], z1: z[1] })),
+      ...(lay.colZones || []).map(z => ({ key: z.cell, x0: z.x0, x1: z.x1, z0: z[0], z1: z[1] })),
+      ...(lay.inner ? lay.inner.zones.map(z => ({ key: z.key, x0: z.x0, x1: z.x1, z0: z[0], z1: z[1], lab: inLabel(c, z.key, L) })) : [])];
     zs.forEach(z => {
       if (z.x1 - z.x0 < 0.6 || z.z1 - z.z0 < 0.6) return;
-      const on = sel && sel.key === z.key;
-      g += `<g class="fs-sec in${on ? ' on' : ''}"><rect class="fs-hit" data-act="fs-pick" data-id="${z.key}" x="${r3(z.x0 + 0.2)}" y="${r3(-z.z1 + 0.2)}" width="${r3(z.x1 - z.x0 - 0.4)}" height="${r3(z.z1 - z.z0 - 0.4)}"><title>Opening ${esc(L[z.key] || '')}</title></rect>
-        <text class="fs-let" x="${r3(z.x1 - fs * 0.6)}" y="${r3(-z.z1 + fs * 1.3)}" font-size="${fs}" text-anchor="end">${esc(L[z.key] || '')}</text></g>`;
+      const on = sel && sel.key === z.key && !(ui.inSel || []).length;
+      g += `<g class="fs-sec in${on ? ' on' : ''}"><rect class="fs-hit" data-act="fs-pick" data-id="${z.key}" x="${r3(z.x0 + 0.2)}" y="${r3(-z.z1 + 0.2)}" width="${r3(z.x1 - z.x0 - 0.4)}" height="${r3(z.z1 - z.z0 - 0.4)}"><title>Opening ${esc(z.lab || L[z.key] || '')}</title></rect>
+        <text class="fs-let" x="${r3(z.x1 - fs * 0.6)}" y="${r3(-z.z1 + fs * 1.3)}" font-size="${fs}" text-anchor="end">${esc(z.lab || L[z.key] || '')}</text></g>`;
     });
+    // 0.63.74: every shelf, partition, stretcher and insert can be clicked to pick it (intsplit.js).
+    if (typeof inPickSVG === 'function') g += inPickSVG(c);
   } else {
     fsSecs(c).forEach(s => {
       if (!s.box) return;
@@ -432,9 +435,10 @@ function fsInteriorTab(c) {
   if (c.made || (c.moz && typeof isMoz === 'function' && isMoz(c))) return `<div class="psec box"><div class="note show">${fsApFront(c) ? 'An appliance panel front has no inside.' : 'This product has no interior to set here.'}</div></div>`;
   const p = effParams(c), fr = computeFronts(c, p), lay = interiorLayout(c, p, fr), L = faceLetters(c);
   // The picked opening: a plain row's door or open opening, or a side-by-side section's.
-  const zones = [...lay.zones.filter(z => z.row != null).map(z => ({ key: String(z.row), z })), ...(lay.colZones || []).map(z => ({ key: z.cell, z }))];
+  const zones = [...lay.zones.filter(z => z.row != null && !(lay.inner && lay.inner.rows.includes(z.row))).map(z => ({ key: String(z.row), z })), ...(lay.colZones || []).map(z => ({ key: z.cell, z })),
+    ...(lay.inner ? lay.inner.zones.map(z => ({ key: z.key, z })) : [])];
   let key = ui.fsSel && ui.fsSelCab === id ? ui.fsSel : String(ui.qeRow | 0);
-  if (!zones.some(z => z.key === key)) { const r = zones.find(z => fsParse(z.key)[0] === fsParse(key)[0]); key = r ? r.key : zones.length ? zones[0].key : key; }
+  if (!zones.some(z => z.key === key)) { const r0 = String(key).split(/[./]/)[0], r = zones.find(z => String(z.key).split(/[./]/)[0] === r0); key = r ? r.key : zones.length ? zones[0].key : key; }
   const sel = { key };
   const zn = zones.find(z => z.key === key);
   const auto = p.drawerRails !== 'off';
@@ -446,12 +450,12 @@ function fsInteriorTab(c) {
       ${(c.inserts || []).some(it => it.type === 'divider') ? `<button class="btn sm" data-act="int-del" data-id="-1:ins:${(c.inserts || []).findIndex(it => it.type === 'divider')}" title="Take out the vertical divider">Remove divider</button>` : `<button class="btn sm" data-act="fs-divider" data-id="${id}" title="A full height vertical divider down the middle of the cabinet">Vertical divider</button>`}
       <button class="btn sm" data-act="qe-clear-all" data-id="${id}" title="Take out every shelf and insert. Doors and drawers stay. Undo brings it back.">Clear</button></div>`;
   const draw = `<div class="fs-draw">${fsFaceSVG(c, sel, true)}</div>`;
-  const panel = fsIntPanel(c, key, zn ? zn.z : null, L);
-  const lib = ui.fsIns && !String(key).includes('.') && zn ? `<div class="fs-lib">${intLibrary(c, +key)}</div>` : ui.fsIns ? '<div class="fs-lib"><div class="note show">Pick a full-width door or open opening to add inserts.</div></div>' : '';
+  const panel = (typeof inSelPanel === 'function' && inSelPanel(c)) || (zn && String(key).includes('/') ? inLeafPanel(c, key, zn.z, L) : fsIntPanel(c, key, zn ? zn.z : null, L));
+  const lib = ui.fsIns && !String(key).includes('.') && !String(key).includes('/') && zn ? `<div class="fs-lib">${intLibrary(c, +key)}</div>` : ui.fsIns ? '<div class="fs-lib"><div class="note show">Pick a full-width door or open opening to add inserts.</div></div>' : '';
   return `<div class="fs-tab">
     <div class="fs-work">${draw}${panel}</div>${lib}
     ${bottom}
-    <div class="fs-status">${isPhone() ? 'Tap' : 'Click'} an opening to pick it, then add shelves and inserts on the right. Automate interior adds the drawer stretchers and fixed shelves between rows, and a stop wherever the face splits at a door (a stretcher in a base, a fixed shelf in an upper or tall).</div></div>`;
+    <div class="fs-status">${isPhone() ? 'Tap' : 'Click'} an opening to pick it, then add shelves and inserts or split it on the right. Click any shelf, partition, stretcher or insert to pick it (Shift or Ctrl for more), then change it or remove it. Automate interior adds the drawer stretchers and fixed shelves between rows, and a stop wherever the face splits at a door (a stretcher in a base, a fixed shelf in an upper or tall).</div></div>`;
 }
 // The panel right of the inside drawing for the picked opening.
 function fsIntPanel(c, key, z, L) {
@@ -469,7 +473,7 @@ function fsIntPanel(c, key, z, L) {
   const i = +key, add = (k, label) => `<button class="btn sm fs-add" data-act="int-add" data-id="${k}" title="Add ${label.toLowerCase()} to opening ${esc(L[key] || '')}">${intPic(k)}${label}</button>`;
   return `<aside class="fs-panel">${head}
     <div class="fs-adds"><span class="eyebrow">Add</span>${add('shelf', 'Adjustable shelf')}${i < c.rows.length - 1 ? add('fixed', 'Fixed shelf') : ''}${add('rollout', 'Roll-out')}${add('traydiv', 'Tray dividers')}${add('rod', 'Closet rod')}${add('separator', 'Separator')}</div>
-    ${intContents(c, i)}${intWhole(c)}</aside>`;
+    ${intContents(c, i)}${typeof inSplitBox === 'function' ? inSplitBox(c, key) : ''}${intWhole(c)}</aside>`;
 }
 
 /* ---------- Actions ---------- */
@@ -477,7 +481,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest && e.target.closest('[data-act^="fs-"]'); if (!b || b.disabled) return;
   const a = b.dataset.act, id = b.dataset.id || '', c = qeCab(); if (!c) return;
   e.stopPropagation();
-  if (a === 'fs-pick') { fsPick(c, id); ui.fsSplit = null; renderQuick(); return; }
+  if (a === 'fs-pick') { fsPick(c, id); ui.fsSplit = null; ui.inSel = []; renderQuick(); return; }
   if (a === 'fs-mid') {
     const [ref, dim, d] = id.split('|'), cur = +(b.closest('.fs-step') || {}).querySelector?.('b')?.textContent || 0;
     // A new count starts its openings and mid widths over (they are numbered across the old count).

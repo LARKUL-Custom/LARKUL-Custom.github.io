@@ -209,8 +209,8 @@ function cornerParts(c, parts, k) {
 }
 
 // 3D: shelves cut to the inside outline, toe skins along the faces, and the legs at the footprint's corners.
-function cornerShelf3d(c, p, t, bt, z, m) {
-  const poly = cornerInside(c, p, t, bt, p.shelfFrontSetback);
+function cornerShelf3d(c, p, t, bt, z, m, setback) {
+  const poly = cornerInside(c, p, t, bt, setback === undefined ? p.shelfFrontSetback : setback);
   const g = new THREE.ExtrudeGeometry(new THREE.Shape(poly.map(q => new THREE.Vector2(q.x, q.y))), { depth: t, bevelEnabled: false });
   const me = new THREE.Mesh(g, m); me.rotation.x = Math.PI / 2; me.position.set(0, z + t, 0);
   if (!R3) me.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), edgeMat3()));

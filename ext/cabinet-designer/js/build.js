@@ -662,7 +662,7 @@ function interiorLayout(c, p, fronts) {
   const out = { t, zIn0, zIn1, inW: pk ? inW - pk.wL - pk.wR : inW, x0: t + (pk ? pk.wL : 0), pocket: pk, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? t : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], pulls: [], bom: [] };
   // An insert goes in the door opening it names (it.row), or else the bottom one.
   const used = new Set();
-  ins.forEach(it => {
+  ins.forEach((it, ii) => {
     const low = (it.row !== undefined && it.row !== '' && zones.find(z => z.row === +it.row)) || out.low;
     // A product made in the insert designer builds its own parts (dpBuild); it is still drawn like its kind.
     const designed = typeof intItemOf === 'function' && ((intItemOf(it) || {}).parts || []).length > 0;
@@ -673,14 +673,17 @@ function interiorLayout(c, p, fronts) {
       // Roll-out trays and shelves are roll-outs with low sides (a lip on a shelf).
       const label = { rollout: 'Roll-out', rotray: 'Roll-out tray', roshelf: 'Roll-out shelf' }[it.type];
       const n = Math.max(1, it.n | 0), h = it.h > 0 ? it.h : { rollout: 4, rotray: 2.5, roshelf: 1.5 }[it.type], step = (low[1] - low[0]) / n;
-      for (let i = 0; i < n; i++) out.rollouts.push({ z: low[0] + 0.5 + i * step, h: Math.min(h, step - 1), label, designed });
-    } else if (it.type === 'traydiv' && low) out.trays.push({ n: Math.max(1, it.n | 0), z0: low[0], z1: low[1], designed });
-    else if (it.type === 'trash') { if (low) out.bins.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('trash').def.name); }
-    else if (it.type === 'lazy') { if (low) out.lazy.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('lazy').def.name); }
-    else if (it.type === 'pullout') { if (low) out.pulls.push({ z0: low[0], z1: low[1] }); out.bom.push(it.name || insertType('pullout').def.name); }
+      for (let i = 0; i < n; i++) out.rollouts.push({ z: low[0] + 0.5 + i * step, h: Math.min(h, step - 1), label, designed, ins: ii });
+    } else if (it.type === 'traydiv' && low) out.trays.push({ n: Math.max(1, it.n | 0), z0: low[0], z1: low[1], designed, ins: ii });
+    else if (it.type === 'trash') { if (low) out.bins.push({ z0: low[0], z1: low[1], ins: ii }); out.bom.push(it.name || insertType('trash').def.name); }
+    else if (it.type === 'lazy') { if (low) out.lazy.push({ z0: low[0], z1: low[1], ins: ii }); out.bom.push(it.name || insertType('lazy').def.name); }
+    else if (it.type === 'pullout') { if (low) out.pulls.push({ z0: low[0], z1: low[1], ins: ii }); out.bom.push(it.name || insertType('pullout').def.name); }
     else if (it.type === 'other') out.bom.push(it.name || 'Insert');
   });
   out.shelfZones = zones.filter(z => !used.has(z));
+  // 0.63.74: an opening split inside (row.inner, intsplit.js) has its own fixed shelves, partitions and shelves.
+  const inr = typeof innerTree === 'function' ? innerTree(c, p, out, t) : null;
+  if (inr) { out.inner = inr; out.shelfZones = out.shelfZones.filter(z => !inr.rows.includes(z.row)); }
   // Shelves set opening by opening (row.shelves) replace the cabinet's single shelf count.
   const rows = c.rows || [];
   out.perRow = rows.some(r => r.shelves !== undefined && r.shelves !== '') ? out.shelfZones.map(z => ({ z, k: Math.max(0, (rows[z.row] || {}).shelves | 0) })) : null;
@@ -784,10 +787,14 @@ function caseRails(c, p, fronts, t) {
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return out;
   if (c.made && typeof madeDef === 'function' && madeDef(c)) return out;
   // A row split side by side (rowCols) counts as one opening as tall as the row.
-  const rz = fronts.rowZ || {}, first = i => rowCols(c, rows[i]) && rz[i] ? { z0: rz[i][0], z1: rz[i][1] } : fronts.find(f => f.row === i && !f.face);
+  // A 45° or 90° corner's fronts sit on its faces (f.face); any of them gives the row's height.
+  const ac = angledCorner(c), rz = fronts.rowZ || {}, first = i => rowCols(c, rows[i]) && rz[i] ? { z0: rz[i][0], z1: rz[i][1] } : fronts.find(f => f.row === i && (ac || !f.face));
   const tk = hasToe(c) ? p.toeKickHeight : 0, zIn0 = tk + t, zIn1 = c.h - t;
   const auto = p.drawerRails !== 'off' && !faceFrame(c) && !angledCorner(c) && !hasCabShape(c) && !(cabTopShape(c) || {}).edges;
   const solid = !faceFrame(c) && !angledCorner(c) && !hasCabShape(c) && !(cabTopShape(c) || {}).edges;
+  // 0.63.72 (Ayden 2026-11-25, a 90° corner tall with split doors had no fixed shelf at the split): an upper or tall
+  // 45°/90° corner gets its door-split fixed shelf too, cut to the inside of the corner (cornerInside).
+  const cornerStop = p.drawerRails !== 'off' && ac && c.cat !== 'Base' && !faceFrame(c);
   rows.forEach((r, i) => {
     const f = first(i), nx = rows[i + 1]; if (!f) return;
     // 0.63.0: a side-by-side row has a fixed shelf over and under it (where another row is), so its partitions stand on
@@ -800,24 +807,24 @@ function caseRails(c, p, fronts, t) {
     if (rowCols(c, r)) return;
     // A microwave opening always has its fixed shelf, placed as Ayden's Mozaik library does (mwShelfZ in bidprod.js).
     const mz = typeof mwShelfZ === 'function' ? mwShelfZ(c, p, i, f, t) : null;
-    if (nx && (mz !== null || r.fixShelf || (auto && r.type !== 'drawer' && nx.type === 'drawer'))) {
+    if (nx && (mz !== null || r.fixShelf || (auto && !r.noStop && r.type !== 'drawer' && nx.type === 'drawer'))) {
       // 0.63.70 (Ayden: fixed shelf "centered between both doors"): a door over a drawer gets its shelf centred on the gap
       // too, so the door has something to close against (it used to sit just under the door, flush with its bottom).
       const b2 = r.type === 'door' || nx.type === 'door' ? first(i + 1) : null, zc = b2 ? (f.z0 + b2.z1) / 2 : f.z0 - t / 2;
       out.shelves.push({ row: i, auto: mz === null && !r.fixShelf, ...(mz !== null ? { mw: true } : {}), z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, mz !== null ? mz : zc))) });
     }
-    if (auto && r.type === 'drawer' && !(i > 0 && rows[i - 1].type === 'drawer' && !rowCols(c, rows[i - 1])) && nx) {
+    if (auto && !r.noStop && r.type === 'drawer' && !(i > 0 && rows[i - 1].type === 'drawer' && !rowCols(c, rows[i - 1])) && nx) {
       const b = first(i + 1); if (b) out.stretchers.push({ row: i, z: r3(Math.min(zIn1 - t, Math.max(zIn0 + t, (f.z0 + b.z1) / 2))) });
     }
     // 0.63.69 (Ayden 2026-11-25): every other split with a door at it gets a stop for the doors to close against, so
     // they can't swing into the cabinet, centred on the gap between the fronts. Door over drawer and drawer over door
     // already have one (above).
-    const b = nx && auto && first(i + 1);
+    const b = nx && (auto || cornerStop) && !r.noStop && first(i + 1);
     if (b && doorStopSplit(c, r, nx, f, b) && !out.shelves.some(q => q.row === i) && !out.stretchers.some(q => q.row === i)) {
       const z = r3(Math.min(zIn1 - t, Math.max(zIn0 + t, (f.z0 + b.z1) / 2)));
       // Bases get a Door stretcher at the front, uppers and talls a fixed shelf (Ayden 2026-11-25: fixed shelf "only on
       // uppers and talls").
-      if (c.cat === 'Base') out.stretchers.push({ row: i, door: true, z }); else out.shelves.push({ row: i, auto: true, door: true, z });
+      if (c.cat === 'Base') out.stretchers.push({ row: i, door: true, z }); else out.shelves.push({ row: i, auto: true, door: true, z, ...(ac ? { corner: true } : {}) });
     }
   });
   return out;
@@ -1210,7 +1217,7 @@ function buildParts(c) {
   // Shelf pins over the door openings that have no roll-outs
   let shelves = falseOn(c) ? 0 : lay.perRow ? lay.perRow.reduce((a, r) => a + r.k, 0) : Math.max(0, p.shelfCount | 0);
   const zones = lay.perRow ? lay.perRow.filter(r => r.k).map(r => r.z) : lay.shelfZones;
-  if (shelves && !zones.length) { if (!lay.colZones.length) warn.push(lay.zones.length ? 'Inserts fill the door opening, so adjustable shelves were skipped.' : 'Shelves are set but this cabinet has no door opening. Shelves skipped.'); shelves = 0; }
+  if (shelves && !zones.length) { if (!lay.colZones.length && !lay.inner) warn.push(lay.zones.length ? 'Inserts fill the door opening, so adjustable shelves were skipped.' : 'Shelves are set but this cabinet has no door opening. Shelves skipped.'); shelves = 0; }
   if (lay.divX !== null && (lay.rollouts.length || lay.bins.length || lay.lazy.length)) warn.push('The divider runs through the roll-outs or pull-out. Remove one of them, or check the sizes by hand.');
   if (shelves && pin) {
     const pitch = pin.pitchMM * MM, ys = [pin.pinSetbackMM * MM, inD - pin.pinSetbackMM * MM], divOps = [];
@@ -1274,6 +1281,8 @@ function buildParts(c) {
     });
   }
 
+  // 0.63.74: openings split inside (intsplit.js): their partitions, fixed shelves and adjustable shelves, pins included.
+  const inB = lay.inner && typeof innerParts === 'function' ? innerParts(c, { part, p, t, cm, sm, inD, lay, leftOps, rightOps, pin, plateZones, addB, warn }) : null;
   // Pocket panels: one each side a door slides into, front to back between the bottom and the top (or as high as the
   // doors reach). The shelves rest on them, so that side's shelf pins move onto the panel's inside face.
   if (pk) [pk.L, pk.R].filter(Boolean).forEach(s => {
@@ -1395,7 +1404,7 @@ function buildParts(c) {
   });
   // Joins a panel into both sides. Horizontal panels (fx = height of their center) run front to back from a to b;
   // vertical ones (zr = [z0, z1]) sit at the back, in front of the back panel.
-  const joinSides = (type, pt, fx, zr, a = 0, b = backY) => ['L', 'R'].forEach(end => {
+  const joinSides = (type, pt, fx, zr, a = 0, b = backY, only) => ['L', 'R'].filter(e => !only || e === only).forEach(end => {
     // A blind corner's fixed shelf stops at the inside panel, so its blind end is fastened into that (flush at the front).
     const bq = type === 'shelf' && !zr && bpC && end === bpC.side ? bpPieces.find(q => q.pt && fx > q.z0 && fx < q.z1) : null;
     const J = jFor(end), sp = bq ? bq.pt : sideP[end]; if (!J || !sp || !pt) return;
@@ -1517,6 +1526,7 @@ function buildParts(c) {
   // Hand edits from the part editor (shape, operations, size), worked out again for this size.
   if (typeof qBuildExtras === 'function') qBuildExtras(c, parts, warn, part, { cm, sm, inW, shW: bpC ? bpC.o1 - bpC.o0 : inW, inD, t, fronts, addB, zIn0, zIn1, rails });
   colJoins.forEach(fn => fn());
+  if (inB) innerJoints(c, inB, { parts, J: hw(cabSet(c, 'jointU')), jx, spots, joinSides, rails, t, zIn0, zIn1, backY, sw: p.stretcherWidth });
   if (typeof jtLate === 'function') jtLate(c, parts, jtLateCtx);
   if (typeof jtTabSlot === 'function') jtTabSlot(c, parts, jx);
   if (typeof vBuildExtras === 'function') vBuildExtras(c, parts, warn, p, { t, inD, zIn0, zIn1, addB, pin });
