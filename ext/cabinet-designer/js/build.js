@@ -335,6 +335,8 @@ function openOne(c, f, placed, cap, shutAll) {
   // fronts: that is how they were placed, not the doors running into them. Else the pair stays shut and only the
   // folding door seems to move.
   const own = fold ? cabPlanPoly(c) : null, over = new Set(own ? S.cabinets.filter(o => o.id !== c.id && over2(o)).map(o => o.id) : []);
+  // That includes a cabinet right against it with no filler between: the pair could not clear it, so the pair opens
+  // square instead (below), as far as it can go without a filler.
   function over2(o) { const q = cabPlanPoly(o); return q && (o.elev || 0) < z1 - 0.25 && (o.elev || 0) + o.h > z0 + 0.25 && polysHit(q, own); }
   const near = placed.filter(p => !(p.c.id === c.id && (frontKey3(p.c, p.f) === frontKey3(c, f) || frontKey3(p.c, p.f) === foldKey)) && !over.has(p.c.id) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
   const still = fixedObstacles(c, z0, z1).concat(near.filter(p => p.v <= 0).reduce((a, p) => a.concat(p.poly), []))
@@ -346,7 +348,9 @@ function openOne(c, f, placed, cap, shutAll) {
   const ob = obs.map(o => [o, planBox(o)]);
   const hit = polys => polys.some(poly => { const b = planBox(poly); return ob.some(([o, q]) => !(q.x1 < b.x0 || q.x0 > b.x1 || q.y1 < b.y0 || q.y0 > b.y1) && polysHit(poly, o)); });
   if (f.type === 'door') {
-    const max = Math.min(fold ? CORNER_PAIR_MAX : f.face ? DOOR_MAX : pairCap(c, f), cap || (fold ? CORNER_PAIR_MAX : DOOR_MAX)); let v = max; // a bi-fold pair stops at its hinge
+    // a bi-fold pair stops at its hinge (185°); against a cabinet with no filler (ignored above) it stops square so it doesn't swing through it
+    const pairMax = over.size ? Math.PI / 2 : CORNER_PAIR_MAX;
+    const max = Math.min(fold ? pairMax : f.face ? DOOR_MAX : pairCap(c, f), cap || (fold ? pairMax : DOOR_MAX)); let v = max;
     // A bi-fold pair straightens as it swings (both by the same share of their move, as in 3D), so each angle it
     // could stop at is checked along the whole way there.
     if (fold) { v = 0; for (let m = max; m > 0.04; m -= 0.04) { let ok = true; for (let k = 0.1; k <= 1 + 1e-9 && ok; k += 0.1) if (hit(doorPoly(c, f, k * m, fr, cornerFoldShare(k)))) ok = false; if (ok) { v = m; break; } } }

@@ -132,7 +132,9 @@ function cornerHinge(c, f, hg) {
   if (c.corner.type === 'diag') return { name: blum ? 'Blum CLIP top BLUMOTION 110° diagonal 45°' : `${hg.name} (45° diagonal)`, plate: true };
   // 0.63.71 (Ayden 2026-11-25: "the hinge side has regular hinges but the connection between the two has 110 degree
   // hinges"): the folding door hangs on the other door on 110° hinges, no plates on the cabinet.
-  if (cornerMainDoor(c, f)) return { name: hg.name, plate: true };
+  // 0.63.77 (Ayden 2026-11-25: "make that 90 corner cabinet have a 185 degree hinge thats on the cabinet side door"):
+  // the door on the cabinet hangs on 185° hinges (one from the hardware list with 185 in its name, else by name).
+  if (cornerMainDoor(c, f)) { const h185 = (typeof hwOf === 'function' ? hwOf('hinge') : []).find(h => /185/.test(h.name || '')); return { name: h185 ? h185.name : blum ? 'Blum CLIP top 185°' : '185° hinge', plate: true }; }
   const h110 = /110/.test(hg.name || '') ? hg : (typeof hwOf === 'function' ? hwOf('hinge') : []).find(h => /110/.test(h.name || ''));
   return { name: h110 ? h110.name : blum ? 'Blum CLIP top 110°' : `${hg.name} (bi-fold)`, plate: false };
 }
@@ -153,8 +155,9 @@ const cornerFoldOf = (c, f, fr) => f && f.face && f.type === 'door' && cornerBif
 // swings out on the cabinet's hinges first, then flattens as it clears the cabinet next to it (real bi-folds: "bend
 // at 90 degrees when shut, but straighten up when opened"; "these doors now become flat").
 const cornerFoldShare = k => k * k;
-// The cabinet hinge on the hinge side: a regular 110° hinge, so the straightened pair stops there.
-const CORNER_PAIR_MAX = 110 * Math.PI / 180;
+// The cabinet hinge on the hinge side opens 185° (0.63.77), so the straightened pair can swing back flat against the
+// cabinet beside it, as far as nothing is in the way.
+const CORNER_PAIR_MAX = 185 * Math.PI / 180;
 // Where the straightening door turns, along its own face (its face's x): halfway through the other door's thickness
 // at the inside corner, so straightened it lines up with that door, its back flush with the other door's back.
 const cornerFoldPivot = (g, t) => g.hinge === 'R' ? g.face.len - t / 2 : t / 2;
