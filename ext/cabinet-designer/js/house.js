@@ -26,18 +26,28 @@ function houseJoinM(rA, f, rB, g) {
 }
 // Every room joined to room id (through joined doorways, room after room), each with its place in that room's plan.
 // The room itself comes first, at no move.
+// 0.63.58 (Ayden 2026-11-25: walking into the kitchen, a big blank box from the laundry stood in it): the house is
+// laid out the same way whichever room you start from (from the first room of the job in it), so the plan, House and
+// Walk always agree. Rooms drawn overlapping still join (Ayden: "just lay the rooms together"); in Walk only the open
+// room shows whole and a joined room shows only past its doorway (walk3d.js walkRooms).
 function houseOf(id) {
   const r0 = roomById(id); if (!r0) return [];
-  const out = [{ r: r0, M: M2_ID }], seen = new Set([r0.id]);
+  const comp = [r0], seen = new Set([r0.id]);
+  for (let i = 0; i < comp.length; i++) (comp[i].fixtures || []).forEach(f => { const p = doorPartner(f); if (p && !seen.has(p.r.id)) { seen.add(p.r.id); comp.push(p.r); } });
+  if (comp.length < 2) return [{ r: r0, M: M2_ID }];
+  const root = comp.reduce((a, b) => (S.rooms.indexOf(b) < S.rooms.indexOf(a) ? b : a));
+  const out = [{ r: root, M: M2_ID }], placed = new Map([[root.id, out[0]]]);
   for (let i = 0; i < out.length; i++) {
     const h = out[i];
     (h.r.fixtures || []).forEach(f => {
-      const p = doorPartner(f); if (!p || seen.has(p.r.id)) return;
+      const p = doorPartner(f); if (!p || placed.has(p.r.id)) return;
       const J = houseJoinM(h.r, f, p.r, p.g); if (!J) return;
-      seen.add(p.r.id); out.push({ r: p.r, M: m2mul(h.M, J) });
+      const e = { r: p.r, M: m2mul(h.M, J) }; placed.set(p.r.id, e); out.push(e);
     });
   }
-  return out;
+  const me = placed.get(r0.id); if (!me) return [{ r: r0, M: M2_ID }];
+  const I = m2inv(me.M);
+  return [me, ...out.filter(o => o !== me)].map(o => ({ r: o.r, M: m2mul(I, o.M) }));
 }
 // The joined rooms are drawn while walking, and in the 3D view with House on.
 function houseOn() { return (typeof WALK === 'object' && (WALK.on || WALK.pending)) || !!ui.house3d; }
@@ -68,6 +78,7 @@ function housePrep(list) {
     segs.push(...mine);
     (h.r.fixtures || []).forEach(f => {
       const p = doorPartner(f); if (!p || !at.has(p.r.id) || at.get(p.r.id) > at.get(h.r.id)) return;
+      if (!doorLiveAt(h.r, f, h.M, p, list[at.get(p.r.id)].M)) return;
       if (doorHasLeaf(f) && !doorHasLeaf(p.g)) skip.add(p.r.id + ':' + p.g.id); else skip.add(h.r.id + ':' + f.id);
     });
   });

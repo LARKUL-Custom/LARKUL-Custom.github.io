@@ -216,6 +216,7 @@ document.addEventListener('change', e => {
     if (ref.startsWith('cabmp:') && typeof madeSync === 'function') { o[field] = v; madeSync(cab(ref.slice(6))); return; }
     if (ref.startsWith('wall:') && field === 'len') return setWallLen(o, v + wg(o).L - insideLen(o));
     if (ref.startsWith('wall:') && field === 'angle') return setWallAngle(o, v);
+    if (ref.startsWith('wall:') && field === 'thick') return setWallThick(o, v);
     if (ref === 'layout') {
       const from = lay(); o[field] = v;
       if (['autoFillers', 'fillerW', 'fillerReach'].includes(field)) { const n = refitFillers(from, lay()); if (n) note = `Moved ${nCab(n)} to fit the fillers`; }

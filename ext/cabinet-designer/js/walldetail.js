@@ -198,8 +198,9 @@ function wdTex(url, srgb) {
 // The color picture in greys (for a Color), made once per picture; drawn plain grey until the picture loads.
 function wdGreyTex(url) {
   const c = wdGreyTex.c || (wdGreyTex.c = {}); if (c[url]) return c[url];
-  const cv = document.createElement('canvas'); cv.width = cv.height = 4; cv.getContext('2d').fillStyle = '#aaa'; cv.getContext('2d').fillRect(0, 0, 4, 4);
-  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+  // No picture until the grey copy is made: a texture sent to the card at one size can't take a bigger picture later (it
+  // stayed a 4 px grey square, so a colored stone lost its picture and looked like plain clay).
+  const t = new THREE.Texture(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
   if ('encoding' in t && THREE.sRGBEncoding) t.encoding = THREE.sRGBEncoding;
   const im = new Image();
   im.onload = () => {
@@ -219,7 +220,7 @@ function wdGreyTex(url) {
 function wdStoneMat(key, tint) {
   const k = key + (R3 ? '|r' : '') + (tint ? '|' + tint : ''), c = wdStoneMat.c || (wdStoneMat.c = {}); if (c[k]) return c[k];
   const st = WALL_STONES[key], m = new THREE.MeshStandardMaterial({ map: tint ? wdGreyTex(st.col) : wdTex(st.col, true), roughness: 0.92, metalness: 0, envMapIntensity: 0.25 });
-  if (tint) { m.color.set(tint); m.color.multiplyScalar(255 / 200); }
+  if (tint) { m.color.set(tint); }
   // Fine detail past what the shape holds (the mortar edges, the stone's grain) as a bump.
   if (R3) { m.bumpMap = wdTex(st.disp, false); m.bumpScale = 0.6; }
   return (c[k] = m);

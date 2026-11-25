@@ -161,7 +161,7 @@ function wxMat(m, ctx) {
 // What the walk file keeps from each object's notes: what blocks the way, what opens, and nothing about parts.
 function wxUserData(o) {
   const u = o.userData || {}, out = {};
-  ['noBounds', 'cut', 'layer', 'fixtId', 'wall', 'land', 'noAO', 'wallDetail'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
+  ['noBounds', 'cut', 'layer', 'fixtId', 'wall', 'land', 'noAO', 'wallDetail', 'room'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
   if (u.cabId) out.cabId = u.cabId;
   if (u.open && u.cabId) {
     const op = u.open;

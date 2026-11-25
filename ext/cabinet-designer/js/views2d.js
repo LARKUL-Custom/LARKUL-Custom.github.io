@@ -99,7 +99,7 @@ function wallDrawSVG(fs, px) {
     const e = wallPreviewEnd();
     if (e) {
       e.guides.forEach(q => { s += `<line class="guide nss" x1="${q.x}" y1="${q.y}" x2="${e.x}" y2="${e.y}"/>`; });
-      const L0 = Math.hypot(e.x - ui.drawing.x, e.y - ui.drawing.y), L = L0 - (L0 > 0.01 ? pinStartGap((e.x - ui.drawing.x) / L0, (e.y - ui.drawing.y) / L0) : 0), mx = (ui.drawing.x + e.x) / 2, my = (ui.drawing.y + e.y) / 2;
+      const L = Math.hypot(e.x - ui.drawing.x, e.y - ui.drawing.y), mx = (ui.drawing.x + e.x) / 2, my = (ui.drawing.y + e.y) / 2;
       const band = wallPreviewBand(e) || { x1: ui.drawing.x, y1: ui.drawing.y, x2: e.x, y2: e.y, t: curRoom().wallThick ?? S.job.wallThick };
       s += `<line class="prev-wall nss" x1="${band.x1}" y1="${band.y1}" x2="${band.x2}" y2="${band.y2}" stroke-width="${Math.max(2, band.t / px)}"/>`;
       s += `<line class="prev-face nss" x1="${ui.drawing.x}" y1="${ui.drawing.y}" x2="${e.x}" y2="${e.y}"/>`;
@@ -197,7 +197,7 @@ function wallPreviewEnd() {
   let ang = Math.atan2(m.y - st.y, m.x - st.x), L = Math.hypot(m.x - st.x, m.y - st.y);
   if (!ui.shift) { const k = (ly.angleSnap || 90) * Math.PI / 180; ang = Math.round(ang / k) * k; }
   const ux = Math.cos(ang), uy = Math.sin(ang), guides = [];
-  if (ui.typed) { const t = parseLen(ui.typed); if (isFinite(t) && t > 0) { const k = pinStartGap(ux, uy); return { x: st.x + ux * (t + k), y: st.y + uy * (t + k), guides }; } }
+  if (ui.typed) { const t = parseLen(ui.typed); if (isFinite(t) && t > 0) return { x: st.x + ux * t, y: st.y + uy * t, guides }; }
   L = Math.round(L / g) * g;
   // Stop level with another wall end when the line passes close to it.
   const reach = 10 * ui.px; let best = reach;
@@ -226,7 +226,7 @@ function commitWallSegment() {
   const rm = curRoom(), first = st.first || { x: st.x, y: st.y }, ch = st.chain || { pts: [{ x: r3(st.x), y: r3(st.y) }], ids: [], pins: [null] };
   const ex = r3(e.x), ey = r3(e.y), id = uid('w');
   mutate(() => {
-    S.walls.push({ id, x1: r3(st.x), y1: r3(st.y), x2: ex, y2: ey, thick: rm.wallThick ?? S.job.wallThick, height: rm.wallHeight ?? S.job.wallHeight });
+    S.walls.push({ id, x1: r3(st.x), y1: r3(st.y), x2: ex, y2: ey, thick: ch.thick ?? rm.wallThick ?? S.job.wallThick, height: rm.wallHeight ?? S.job.wallHeight });
     ch.pts.push({ x: ex, y: ey }); ch.ids.push(id); ch.pins.push(e.at ? wallEndAt({ x: ex, y: ey }, ch.ids) : null);
     applyWallChain(ch);
   });
@@ -241,25 +241,21 @@ function commitWallSegment() {
    sizes are what you draw (Mozaik draws walls the same way). Walls are still saved on their centerline, so each
    wall of the chain being drawn moves back half its thickness and the corners meet where the moved lines cross.
    The outside is the side the chain turns away from; a straight run puts it away from the room's other walls,
-   or above/left of the line when there are none (drawing clockwise, like Mozaik). Saved rooms are not touched. */
-// Starting on the open end of a wall: that point is the wall's centerline, so a typed length counts from the
-// other wall's inside face, half its thickness further on.
-function pinStartGap(ux, uy) {
-  const ch = ui.drawing && ui.drawing.chain, pin = ch && !ch.ids.length && ch.pins[0], w = pin && wall(pin.wid); if (!w) return 0;
-  const g = wg(w), sn = Math.abs(ux * g.u.y - uy * g.u.x); return sn < 0.2 ? 0 : w.thick / 2 / sn;
-}
+   or above/left of the line when there are none (drawing clockwise, like Mozaik). Saved rooms are not touched.
+   0.63.57 (Ayden): walls started on an existing wall's end join it on the center line: that whole chain is drawn on
+   its centerline with the thickness split both sides, at the thickness of the wall it joins, so faces line up. */
 function startWallChain(sp) {
-  const p = { x: r3(sp.x), y: r3(sp.y) };
-  ui.drawing = { x: p.x, y: p.y, first: { ...p }, chain: { pts: [p], ids: [], pins: [sp.at ? wallEndAt(p, []) : null] } };
+  const p = { x: r3(sp.x), y: r3(sp.y) }, pin = sp.at ? wallEndAt(p, []) : null, pw = pin && wall(pin.wid);
+  ui.drawing = { x: p.x, y: p.y, first: { ...p }, chain: { pts: [p], ids: [], pins: [null], center: !!pw, thick: pw ? pw.thick : undefined } };
   ui.typed = '';
 }
-// An existing wall (not one being drawn) whose start or end sits at p, to join the new wall onto. A corner that
-// already joins two walls is left alone.
+// An existing wall (not one being drawn) whose start or end sits at p, to join the new wall onto. joined: that end
+// is already a corner of two walls, so it stays put and the new wall meets it there.
 function wallEndAt(p, skip) {
   for (const w of S.walls) {
     if (skip.includes(w.id)) continue;
     const end = samePt(w.x1, w.y1, p) ? 1 : samePt(w.x2, w.y2, p) ? 2 : 0;
-    if (end && !wallEndJoined(w, end === 1 ? 'S' : 'E')) return { wid: w.id, end, ox: p.x, oy: p.y };
+    if (end) return { wid: w.id, end, ox: p.x, oy: p.y, joined: wallEndJoined(w, end === 1 ? 'S' : 'E') };
   }
   return null;
 }
@@ -272,8 +268,10 @@ function drawEnds() {
 }
 const lineCross = (p, u, q, v) => { const d = u.x * v.y - u.y * v.x; if (Math.abs(d) < 1e-6) return null; const k = ((q.x - p.x) * v.y - (q.y - p.y) * v.x) / d; return { x: p.x + u.x * k, y: p.y + u.y * k }; };
 // Centerlines for a chain of inside-face points pts. t[i] is wall i's thickness. Returns segs and where pinned walls' ends go.
-function wallChainGeom(pts, t, pins, skip) {
+function wallChainGeom(pts, t, pins, skip, center) {
   const n = pts.length - 1; if (n < 1) return null;
+  // Joined onto an existing wall: the drawn points are the centerline.
+  if (center) return { segs: pts.slice(1).map((q, i) => ({ x1: pts[i].x, y1: pts[i].y, x2: q.x, y2: q.y })), moves: [], sg: 0 };
   const closed = n >= 2 && samePt(pts[n].x, pts[n].y, pts[0]);
   let area = 0; for (let i = 0; i < n; i++) area += pts[i].x * pts[i + 1].y - pts[i + 1].x * pts[i].y;
   if (!closed) area += pts[n].x * pts[0].y - pts[0].x * pts[n].y;
@@ -293,7 +291,7 @@ function wallChainGeom(pts, t, pins, skip) {
   for (let i = 1; i < n; i++) V[i] = lineCross(Q[i - 1], U[i - 1], Q[i], U[i]) || Q[i];
   const pinTo = (pin, i) => {
     const w = pin && wall(pin.wid); if (!w) return null;
-    const g = wg(w), p = lineCross(Q[i], U[i], { x: w.x1, y: w.y1 }, g.u); if (!p) return null;
+    const g = wg(w), p = !pin.joined && lineCross(Q[i], U[i], { x: w.x1, y: w.y1 }, g.u); if (!p) return { x: pin.ox, y: pin.oy };
     moves.push({ ...pin, x: p.x, y: p.y }); return p;
   };
   if (closed) V[0] = V[n] = lineCross(Q[n - 1], U[n - 1], Q[0], U[0]) || Q[0];
@@ -308,7 +306,7 @@ function applyWallChain(ch) {
   // Pinned walls go back where they were first, so a pin that is no longer at an end of the chain lets go.
   ch.pins.forEach(pin => { const w = pin && wall(pin.wid); if (!w) return; setWallEndAt(w, pin.end, { x: pin.ox, y: pin.oy }); });
   const ws = ch.ids.map(id => wall(id)); if (ws.some(w => !w)) return;
-  const G = wallChainGeom(ch.pts, ws.map(w => w.thick), ch.pins, ch.ids); if (!G) return;
+  const G = wallChainGeom(ch.pts, ws.map(w => w.thick), ch.pins, ch.ids, ch.center); if (!G) return;
   G.segs.forEach((g, i) => Object.assign(ws[i], { x1: r3(g.x1), y1: r3(g.y1), x2: r3(g.x2), y2: r3(g.y2) }));
   G.moves.forEach(m => { const w = wall(m.wid); if (w) setWallEndAt(w, m.end, { x: r3(m.x), y: r3(m.y) }); });
 }
@@ -320,8 +318,8 @@ function setWallEndAt(w, end, p) {
 // Where the wall being drawn would sit (its centerline) with the end at e.
 function wallPreviewBand(e) {
   const st = ui.drawing, ch = st.chain; if (!ch) return null;
-  const t = curRoom().wallThick ?? S.job.wallThick, ts = ch.ids.map(id => (wall(id) || { thick: t }).thick).concat([t]);
-  const G = wallChainGeom(ch.pts.concat([{ x: e.x, y: e.y }]), ts, ch.pins.concat([null]), ch.ids);
+  const t = ch.thick ?? curRoom().wallThick ?? S.job.wallThick, ts = ch.ids.map(id => (wall(id) || { thick: t }).thick).concat([t]);
+  const G = wallChainGeom(ch.pts.concat([{ x: e.x, y: e.y }]), ts, ch.pins.concat([null]), ch.ids, ch.center);
   return G ? { ...G.segs[G.segs.length - 1], t } : null;
 }
 function startWalls() { ui.placeLight = false; ui.drawMold = false; ui.moldFrom = null; ui.drawWalls = true; ui.placing = null; ui.ghost = null; ui.drawing = null; ui.typed = ''; if (ui.viewMode !== 'plan') setView('plan'); else renderRoom(); }

@@ -534,6 +534,19 @@ function moveWall(w, d) {
   carryJoined(p1, d, seen); carryJoined(p2, d, seen);
   tidyWalls();
 }
+// 0.63.57 (Ayden): a new thickness keeps the room side where it is and grows or shrinks outward. Walls running
+// straight on from this one take the same thickness so the face stays one line; walls meeting it at a corner stretch.
+function setWallThick(w, t) {
+  if (!(t >= 0)) return;
+  const d = (t - w.thick) / 2; if (w.hidden || Math.abs(d) < 1e-9) { w.thick = t; return; }
+  const g = wg(w), out = -elevSide(w), D = { x: g.n.x * out * d, y: g.n.y * out * d };
+  const grp = [w], par = k => Math.abs(wg(k).u.x * g.u.y - wg(k).u.y * g.u.x) < 0.02, ends = k => [{ x: k.x1, y: k.y1 }, { x: k.x2, y: k.y2 }];
+  for (let i = 0; i < grp.length; i++) S.walls.forEach(k => { if (!grp.includes(k) && !k.hidden && par(k) && ends(grp[i]).some(p => ends(k).some(q => samePt(q.x, q.y, p)))) grp.push(k); });
+  const pts = grp.flatMap(ends), seen = new Set(grp.map(k => k.id));
+  grp.forEach(k => { k.x1 += D.x; k.y1 += D.y; k.x2 += D.x; k.y2 += D.y; k.thick = t; });
+  pts.forEach(p => carryJoined(p, D, seen));
+  tidyWalls();
+}
 function setWallLen(w, L) {
   if (!(L > 1)) return;
   const g = wg(w);
