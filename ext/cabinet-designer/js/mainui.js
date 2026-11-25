@@ -63,9 +63,9 @@ function itemBar(c) {
       <div class="ib-slidewrap">${slide}</div>
     </div>
     <div class="ib-size">${sz('Width', 'w')}${sz('Height', 'h')}${sz('Elevation', 'elev')}${ceilCell()}${sz('Depth', 'd')}${sz('Outset', 'outset')}${finEndsCell(c)}</div>
-    ${c && typeof endRows === 'function' ? `<div class="ib-ends">${endRows(c)}</div>` : ''}
+    ${c && typeof endRows === 'function' && !(typeof noAutoEnds === 'function' && noAutoEnds(c)) ? `<div class="ib-ends">${endRows(c)}</div>` : ''}
     <div class="ib-acts">${c ? `<button class="ib-edit" data-act="ed-open" data-id="${id}" title="Open this cabinet in the cabinet editor (Enter)">${icon('edit')}<span>Edit ${esc(LBL[c.id] || '')}</span></button>
-      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Duplicate">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${cornerBtn(c)}${finIntBtn(c)}${falseBtn(c)}${typeof pocketBtn === 'function' ? pocketBtn(c) : ''}<button data-act="cab-flip" data-id="${id}" title="Move it to the other side of the wall">${icon('flip')}Flip</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side, so it swings the other way (H)">${icon('door')}Rehinge</button>` : ''}<button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>${c.wall && conflicts(c) ? `<div class="ib-ovl" title="It runs into a wall or another piece. It shows red in the plan and is listed on Print, the CNC card and the quote until it's fixed.">${icon('hint')}Overlaps.<span class="ib-ovl2"> Fix before sending.</span></div>` : ''}`
+      <div class="ib-small"><button data-act="cab-dup" data-id="${id}" title="Copy (duplicate it)">${icon('copy')}Copy</button><button data-act="cab-autofill" data-id="${id}" title="Autofill: fill the empty space on this wall with cabinets like this one, split evenly">${icon('ends')}Autofill</button>${cornerBtn(c)}${finIntBtn(c)}${falseBtn(c)}${typeof pocketBtn === 'function' ? pocketBtn(c) : ''}<button data-act="cab-flip" data-id="${id}" title="Flip: move it to the other side of the wall">${icon('flip')}Flip</button>${rehingeable(c) ? `<button data-act="cab-rehinge" data-id="${id}" title="Rehinge: swap the door hinges to the ${hingeNow(c) === 'L' ? 'right' : 'left'} side, so it swings the other way (H)">${icon('door')}Rehinge</button>` : ''}<button class="danger" data-act="cab-del" data-id="${id}" title="Delete (Del)">${icon('trash')}Delete</button></div>${c.wall && conflicts(c) ? `<div class="ib-ovl" title="It runs into a wall or another piece. It shows red in the plan and is listed on Print, the CNC card and the quote until it's fixed.">${icon('hint')}Overlaps.<span class="ib-ovl2"> Fix before sending.</span></div>` : ''}`
       : `<div class="ib-name">${multiIds().length > 1 ? `${multiIds().length} items picked. Edit them together in the side panel.` : 'Pick a cabinet to size, place and edit it here.'}</div>`}</div>
   </div>`;
 }
@@ -74,7 +74,7 @@ function itemBar(c) {
 // room's Finish material (build.js), never from the door style. Same switch as the editor's Interior tab.
 function finIntBtn(c) {
   const on = !!c.finInt, fm = typeof finishMat === 'function' ? mat(finishMat(c)) : null, fn = fm ? fm.name : 'the finish material';
-  return `<button data-act="cab-finint" data-id="${c.id}" aria-pressed="${on}" title="${on ? `Finished interior is on: the inside is cut from ${esc(fn)}. Click to turn it off.` : `Make the inside finished: sides, top, bottom, shelves and dividers are cut from ${esc(fn)}.`}">${icon('shelf')}Fin. inside</button>`;
+  return `<button data-act="cab-finint" data-id="${c.id}" aria-pressed="${on}" title="Fin. inside: ${on ? `Finished interior is on: the inside is cut from ${esc(fn)}. Click to turn it off.` : `Make the inside finished: sides, top, bottom, shelves and dividers are cut from ${esc(fn)}.`}">${icon('shelf')}Fin. inside</button>`;
 }
 // The picked appliance, fixture or shape, for the same item bar as a cabinet.
 function xItem() {
@@ -96,7 +96,7 @@ function itemBarX(x) {
   const pos = (label, end) => `<label class="ib-f"><span>${label}</span>${px ? ctl(P, end, r3(fromEnd(px, end)), 'len', { label }) : `<input type="text" disabled aria-label="${label}">`}</label>`;
   const span = px ? Math.max(0, r3(hi - lo - px.w)) : 0;
   const ctr = `<span class="ib-ctrs"><button class="ib-ctr" data-act="x-center" data-id="${x.k}:${id}" title="Center it on the wall" aria-label="Center it on the wall"${px ? '' : ' disabled'}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 3v14M18 3v14M5 10h10m-7-3-3 3 3 3m4-6 3 3-3 3"/></svg></button></span>`;
-  const sizes = fx ? `${box('Width', R, 'w', o.w)}${fixtSink(o) ? box('Front to back', R, 'd', o.d) : box('Height', R, 'h', o.h)}${fixtHole(o) ? box(o.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', o.elev || 0) : ''}${doorType(o) ? `<label class="ib-f ib-wide"><span>Door type</span>${ctl(R, 'dtype', doorType(o), 'select', { options: ROOM_DOOR_TYPES.map(({ v, l }) => ({ v, l })), label: 'Door type' })}</label>${(d => d ? `<label class="ib-f"><span>${d.label}</span>${ctl(R, 'swing', doorSideVal(o), 'select', { options: d.options, label: d.label })}</label>` : '')(doorSideOpts(o))}` : ''}${fixtFloor(o) ? box('Depth', R, 'd', o.d) : ''}${fixtLoose(o) || fixtHung(o) ? box(fixtHung(o) ? 'Bottom off floor' : 'Off the floor', R, 'elev', o.elev || 0) : ''}`
+  const sizes = fx ? `${box('Width', R, 'w', o.w)}${fixtSink(o) ? box('Front to back', R, 'd', o.d) : box('Height', R, 'h', o.h)}${fixtSink(o) && !o.cooktop ? box('Height', R, 'h', o.h) + box('Elevation', R, 'selev', sinkElev(o)) : ''}${fixtHole(o) ? box(o.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', o.elev || 0) : ''}${doorType(o) ? `<label class="ib-f ib-wide"><span>Door type</span>${ctl(R, 'dtype', doorType(o), 'select', { options: ROOM_DOOR_TYPES.map(({ v, l }) => ({ v, l })), label: 'Door type' })}</label>${(d => d ? `<label class="ib-f"><span>${d.label}</span>${ctl(R, 'swing', doorSideVal(o), 'select', { options: d.options, label: d.label })}</label>` : '')(doorSideOpts(o))}${roomDoorStyleOpts(o).length ? `<label class="ib-f"><span>Style</span>${ctl(R, 'dstyle', roomDoorStyle(o), 'select', { options: roomDoorStyleOpts(o), label: 'Door style' })}</label>` : ''}` : ''}${fixtFloor(o) ? box('Depth', R, 'd', o.d) : ''}${fixtLoose(o) || fixtHung(o) ? box(fixtHung(o) ? 'Bottom off floor' : 'Off the floor', R, 'elev', o.elev || 0) : ''}`
     : `${box(o.plane === 'flat' ? 'Bottom height' : 'Off the floor', R, 'elev', o.elev || 0)}${box('Out from wall', R, 'outset', o.outset || 0)}${typeof shapeLeg === 'function' && shapeLeg(o) ? `${box('Width', R, 'legW', r3(shapeBox(o.pts).w))}${box('Depth', R, 'thick', o.thick)}${box('Height', R, 'legH', r3(shapeBox(o.pts).h))}` : box('Thickness', R, 'thick', o.thick)}${o.plane === 'upright' && typeof postDoorOpts === 'function' ? `<label class="ib-f"><span>Leg door style</span>${ctl(R, 'postDoor', o.postDoor || '', 'select', { options: postDoorOpts(o), label: 'Leg door style (miter-folded)' })}</label>` : ''}`;
   const name = fx ? fixtName(o) : o.name || 'Shape', kind = fx ? ((fixtPreset(o.lib) || {}).folder || fixtDef(o).name) : 'Shape';
   const sb = (act, ic, l, t, cls = '') => `<button class="${cls}" data-act="${act}" data-id="${id}" title="${t}">${icon(ic)}${l}</button>`;
@@ -338,11 +338,20 @@ function wallsHeight() {
   const hs = [...new Set((S.walls || []).map(w => r3(+w.height || 96)))];
   return hs.length === 1 ? hs[0] : hs.length ? '' : (curRoom() || {}).wallHeight || 96;
 }
+// 0.63.48 (Ayden 2026-11-25): the room's floor and what's outside the walls, look only (landscape.js).
+function roomLookFields(rm) {
+  if (typeof FLOORS === 'undefined') return '';
+  const fp = ((rm || {}).tex || {}).floor || '', job = (S.job.tex || {}).floor || '';
+  const jn = job ? texName(job) : 'Oak planks';
+  const fo = [{ v: '', l: `Default · ${jn}` }, ...FLOORS.map(f => ({ v: 'fl:' + f.k, l: f.n, g: f.g }))];
+  if (fp && !fp.startsWith('fl:')) fo.push({ v: fp, l: texName(fp) + ' (Textures)', last: true });
+  return fld('Floor', 'rfloor', 'f', fp, 'select', { options: fo }) + fld('Outside', 'room', 'land', landOf(rm), 'select', { options: LAND_KINDS, title: 'Realistic 3D and Walk' });
+}
 // Bottom panel Room tab: the ceiling (height, slope, gap above the cabinets) and the walls.
 function roomDockBody() {
   const rm = curRoom(), ws = S.walls;
   return `<div class="roomdock">${typeof ceilingBox === 'function' ? ceilingBox(rm) : ''}
-    <div class="psec box">${secHead('wall', 'Walls', 'teal')}<div class="autogrid">${fld('Wall height', 'rwalls', 'h', wallsHeight(), 'len', { blank: true, ph: 'Mixed' })}</div><div class="note show">Wall height sets every wall in this room. Change the room's corners and wall lengths point by point.</div><div class="row-actions"><button class="btn sm" data-act="walls-shape"${ws.length ? '' : ' disabled'}>${icon('edit')}Edit walls in the shape editor</button></div></div></div>`;
+    <div class="psec box">${secHead('wall', 'Walls', 'teal')}<div class="autogrid">${fld('Wall height', 'rwalls', 'h', wallsHeight(), 'len', { blank: true, ph: 'Mixed' })}${roomLookFields(rm)}</div><div class="note show">Wall height sets every wall in this room. Change the room's corners and wall lengths point by point.</div><div class="row-actions"><button class="btn sm" data-act="walls-shape"${ws.length ? '' : ' disabled'}>${icon('edit')}Edit walls in the shape editor</button></div></div></div>`;
 }
 
 /* ----- Edit the room's walls in the shape editor: each point is a corner, each edge a wall. ----- */
@@ -416,7 +425,7 @@ document.addEventListener('click', e => {
 function falseBtn(c) {
   if (!c || c.moz || c.made || !(c.rows || []).some(r => r.type === 'door' || r.type === 'drawer')) return '';
   const on = c.falseFront === 'on';
-  return `<button data-act="cab-false" data-id="${c.id}" aria-pressed="${on}" title="${on ? 'False fronts are on: the fronts look the same but are glued on, with no hinges, slides, drawer boxes, shelves or inserts. Click to turn them off.' : 'Make every front a false front: it looks the same, but hinges, slides, drawer boxes, shelves and inserts come out of the cut list, hardware and price.'}">${icon('box')}False front</button>`;
+  return `<button data-act="cab-false" data-id="${c.id}" aria-pressed="${on}" title="False front: ${on ? 'False fronts are on: the fronts look the same but are glued on, with no hinges, slides, drawer boxes, shelves or inserts. Click to turn them off.' : 'Make every front a false front: it looks the same, but hinges, slides, drawer boxes, shelves and inserts come out of the cut list, hardware and price.'}">${icon('box')}False front</button>`;
 }
 function hingeRows(c) { return (c && c.rows || []).filter(r => r.type === 'door' && (r.count | 0) <= 1); }
 // 0.62.4 (Ayden 2026-11-24: "a rehinge option so it can swap what side the door swings from"): appliance panel fronts

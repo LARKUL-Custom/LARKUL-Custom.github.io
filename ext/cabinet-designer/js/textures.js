@@ -68,6 +68,7 @@ function skinOf(p, m) {
   const base = m || { kind: 'sheet', thick: 0.75 }, kind = base.kind || 'sheet', id = 'sk' + skinHash(p + '|' + kind);
   let lk = null;
   if (p[0] === '#') lk = { name: 'Paint color', color: p, texture: null, procedural: null, texScale: 24 };
+  else if (p.startsWith('fl:')) { const f = typeof floorOf === 'function' && floorOf(p.slice(3)); if (!f) return m; lk = { name: f.n, color: f.col, texture: null, procedural: null, texScale: 96 }; }
   else if (isLibTex(p)) {
     if (typeof loadTexLib === 'function' && !TEXLIB) loadTexLib().then(() => { if (typeof redrawView === 'function') redrawView(); });
     const t = (TEXLIB || []).find(x => 'textures/' + x.p === p);
@@ -119,6 +120,13 @@ function ceilLook3(def) {
 }
 function floorLook3(def, geo, w, h) {
   const p = texPickOf('floor'); if (!p) return def;
+  // 0.63.48: a painted floor from the Room tab's Floor list (FLOORS in landscape.js), one picture per 96".
+  if (p.startsWith('fl:')) {
+    const f = typeof floorOf === 'function' && floorOf(p.slice(3)); if (!f) return def;
+    if (!R3) return flat3(f.col);
+    const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 96, uv.getY(i) * h / 96);
+    return floorMat3(f);
+  }
   const m = skinOf(p, { kind: 'sheet' }), mm = mat3(m), k = (mm.userData && mm.userData.texScale) || m.texScale || 24, uv = geo.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / k, uv.getY(i) * h / k);
   return mm;
@@ -132,7 +140,7 @@ function texBase(k, c) {
   const mt = cabMatT(cabSet(c, 'cabMatT')), cm = mat(mt.carcass);
   if (k === 'inside') return cm;
   if (k === 'toe') return toeMat(c, mt) || cm;
-  if (k === 'drawerBox') return mat(drawerMatT(cabSet(c, 'drawerMatT')).sides);
+  if (k === 'drawerBox') return mat(cabDrawerMatT(c).sides);
   if (k === 'tops') return mat(countertop(roomSet('countertop')).mat);
   if (k === 'molding') { const m = S.moldings.find(x => x.id === roomSet('molding')) || S.moldings[0]; return moldFinishLook(m && mat(m.mat), c); }
   if (k === 'pulls') { const t = doorTpl(cabSet(c, 'doorT')), h = hw(t.pull); return { id: '_pull', color: (h && h.finish) || '#333333' }; }
@@ -242,6 +250,7 @@ const TXQ_KEYS = {
   finish: [TEX_ALL, 'Doors, drawer fronts and finished ends'],
   cabMatT: [['inside'], 'Cabinet (unfinished parts)'],
   drawerMatT: [['drawerBox'], 'Drawer boxes'],
+  drawerWood: [['drawerBox'], 'Drawer boxes'],
   pull: [['pulls'], 'Pulls'],
   countertop: [['tops'], 'Countertops'],
   molding: [['molding'], 'Molding'],
@@ -353,7 +362,7 @@ function moldLook(r) {
   return p ? skinOf(p, base) : moldFinishLook(base, null);
 }
 // A run is found again by its first cabinet, or by a placed run's id.
-const mrunKey = r => r.generic ? 'g.' + r.generic : 'c.' + r.cabs[0];
+const mrunKey = r => r.generic ? 'g.' + r.generic : (r.base ? 'b.' : 'c.') + r.cabs[0];
 const mrunFind = key => moldingRuns().find(r => mrunKey(r) === key);
 function mrunName(r) {
   const wn = typeof wallName === 'function' ? wallName(wall(r.wall)) : '';

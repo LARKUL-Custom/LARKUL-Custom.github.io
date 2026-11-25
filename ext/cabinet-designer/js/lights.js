@@ -26,8 +26,8 @@ function lightsCard() {
   return `<div class="lt-dock">
   <div class="lt-box"><div class="lt-head"><b>LED strips</b><span class="muted">${strips.length} · ${feet.toFixed(1)} ft</span>${listBtn('strip', strips.length)}</div>
     <div class="lt-row"><button class="btn sm${drawing ? ' on' : ''}" data-act="${drawing ? 'light-place-stop' : 'light-draw'}" aria-pressed="${drawing}" title="Then click each cabinet. Click again to take it off.">${icon(drawing ? 'check' : 'edit')}${drawing ? 'Done' : 'Draw'}</button><select class="strip-where" aria-label="Where the strip goes" title="Where the strip goes"><option value="auto"${(ui.stripWhere || 'auto') === 'auto' ? ' selected' : ''}>Auto spot</option>${STRIP_SPOTS.map(o => `<option value="${o.v}"${ui.stripWhere === o.v ? ' selected' : ''}>${o.l}</option>`).join('')}</select><button class="btn sm" data-act="light-strips" data-id="under" title="A strip under every wall cabinet">${icon('plus')}Under uppers</button><button class="btn sm" data-act="light-strips" data-id="top" title="A strip on top of every wall cabinet">${icon('plus')}On uppers</button><button class="btn sm" data-act="light-strips" data-id="toe" title="A strip in the toe kick of every base">${icon('plus')}Toe kicks</button>${strips.length ? `<button class="btn sm danger" data-act="light-clear" data-id="strip" title="Remove all strips">${icon('trash')}All</button>` : ''}</div>${stripList}</div>
-  <div class="lt-box"><div class="lt-head"><b>Ceiling lights</b><span class="muted">${ceil.length ? ceil.length + (nAuto ? ` (${nAuto} auto)` : '') : ap ? ap + ' automatic' : 'none'}</span><button class="btn sm${wo ? ' on' : ''}" data-act="light-winonly" aria-pressed="${wo}" title="Realistic only: no daylight or fill from outside the drawing except what comes in through the windows (following the time of day). Ceiling lights and LED strips you placed stay on. The automatic ceiling lights stay off.">${icon(wo ? 'check' : 'sun')}Only through windows</button>${listBtn('ceiling', ceil.length)}</div>
-    <div class="lt-row"><button class="btn sm${placing ? ' on' : ''}" data-act="${placing ? 'light-place-stop' : 'light-place'}" aria-pressed="${placing}" title="Click in the plan to place a light">${icon(placing ? 'check' : 'plus')}${placing ? 'Done' : 'Place'}</button><button class="btn sm" data-act="light-regen" title="Lays out recessed cans over the room again. Replaces the automatic ones, keeps lights you placed.">${icon('regen')}Regenerate ceiling lights</button><label class="lt-sp" title="Spacing between cans">${icon('gridsplit')}${ctl('layout', 'lightGrid', (S.job.layout || {}).lightGrid || 48, 'len', { label: 'Spacing between cans' })}</label>${ceil.length ? `<button class="btn sm danger" data-act="light-clear" data-id="ceiling" title="Remove all ceiling lights">${icon('trash')}All</button>` : ''}</div>${ceilList}</div>
+  <div class="lt-box"><div class="lt-head"><b>Ceiling lights</b><span class="muted">${ceil.length ? ceil.length + (nAuto ? ` (${nAuto} auto)` : '') : ap ? ap + ' automatic' : 'none'}</span><button class="btn sm${wo ? ' on' : ''}" data-act="light-winonly" aria-pressed="${wo}" title="Realistic only: no daylight or fill from outside the drawing except what comes in through the windows (following the time of day). Ceiling lights and LED strips you placed by hand stay on. Automatic and regenerated cans go off.">${icon(wo ? 'check' : 'sun')}Only through windows</button>${listBtn('ceiling', ceil.length)}</div>
+    <div class="lt-row"><button class="btn sm${placing ? ' on' : ''}" data-act="${placing ? 'light-place-stop' : 'light-place'}" aria-pressed="${placing}" title="Click in the plan to place a light">${icon(placing ? 'check' : 'plus')}${placing ? 'Done' : 'Place'}</button><button class="btn sm" data-act="light-regen" title="Lays out recessed cans over the room again. Replaces the automatic ones, keeps lights you placed.">${icon('regen')}Regenerate ceiling lights</button><label class="lt-sp" title="Spacing between cans">${icon('gridsplit')}${ctl('layout', 'lightGrid', (S.job.layout || {}).lightGrid || canSpacing(), 'len', { label: 'Spacing between cans' })}</label>${ceil.length ? `<button class="btn sm danger" data-act="light-clear" data-id="ceiling" title="Remove all ceiling lights">${icon('trash')}All</button>` : ''}</div>${ceilList}</div>
 </div>`;
 }
 /* Drawing strips one cabinet at a time: Draw LED strip, then click each cabinet (plan or elevation).
@@ -65,7 +65,7 @@ function addStrips(where) {
    placed by hand, leaving out any spot within a foot and a half of one. Replaces the old plain Lay out cans grid. */
 function regenCeilLights() {
   if (!S.walls.length) { flash('Draw the walls first.'); return; }
-  const sp = Math.max(12, +(S.job.layout || {}).lightGrid || 48);
+  const sp = +(S.job.layout || {}).lightGrid > 0 ? Math.max(12, +S.job.layout.lightGrid) : canSpacing();
   const mine = roomLights().filter(l => l.kind === 'ceiling' && !l.auto);
   const P = puckSpots(true, sp, 60).filter(p => !mine.some(m => Math.hypot((+m.x || 0) - p.x, (+m.y || 0) - p.y) < 18));
   if (!P.length && !mine.length) { flash('The room is too small for ceiling lights. Walls need to enclose at least 4 ft each way.'); return; }
@@ -120,13 +120,30 @@ function washMat(col, up) {
 }
 /* Realistic only: a room that is mostly closed in by walls and has a ceiling but no ceiling lights drawn gets a few
    recessed pucks so it isn't dark. Placing any ceiling light turns these off. Look only, never saved. */
-const AUTO_CEIL = { n: 0, max: 6 };
+const AUTO_CEIL = { n: 0 };
+const CAN_LAMPS = 16;
+const CAN_K = { k: 2.2 };
+// The soft glow on the ceiling round a can's trim (a down-facing disc of added light that fades out by 9 inches).
+let haloGeo3_ = null; const halo3 = {};
+function haloGeo3() { return haloGeo3_ || (haloGeo3_ = new THREE.CircleGeometry(9, 32).rotateX(Math.PI / 2)); }
+function haloMat3(col) {
+  if (halo3[col]) return halo3[col];
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), r = g.createRadialGradient(32, 32, 6, 32, 32, 32);
+  r.addColorStop(0, 'rgba(255,255,255,0.55)'); r.addColorStop(0.35, 'rgba(255,255,255,0.18)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  return (halo3[col] = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: new THREE.Color(col), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+}
 function autoPucks() {
   // 0.58.30: Automatic ceiling lights switch in the bottom bar (on by default).
   if (lay().autoLights === false || S.walls.length < 3 || roomLights().some(l => l.kind === 'ceiling')) return [];
-  return puckSpots(false, 48, 12);
+  return puckSpots(false, 0, 16);
 }
-// force (Regenerate ceiling lights): any walls, open rooms too. sp = spacing, max = most lights.
+/* Where recessed cans go (0.63.42, Ayden 2026-11-25: "have them be more spread out than this, more realistic"). Even
+   rows and columns like a real can layout, no nudges. Spacing from the ceiling height (3/4 of it: 6 ft under an 8 ft
+   ceiling, never under 4 ft); the outer cans half a spacing in from the walls (24" to 36"), so they sit over the
+   counter's front edge, not over the wall cabinets. sp > 0 sets the spacing (Regenerate ceiling lights).
+   force: any walls, open rooms too. max = most cans. */
+// Can spacing from the ceiling height: 3/4 of it, to the nearest 6" (72" under a 96" ceiling), never under 48".
+function canSpacing(H) { if (!(H > 0)) { const cl = typeof roomCeiling === 'function' ? roomCeiling() : {}; H = +cl.h > 0 ? +cl.h : ceilHeight(); } return Math.max(48, Math.round(H * 0.75 / 6) * 6); }
 function puckSpots(force, sp, max) {
   const ws = S.walls; if (!ws.length) return [];
   const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
@@ -137,15 +154,15 @@ function puckSpots(force, sp, max) {
   if (!force && !loop && wallLen < 0.75 * 2 * (W + D)) return []; // open on more than a quarter: daylight is enough
   const cl = typeof roomCeiling === 'function' ? roomCeiling() : {}, H = +cl.h > 0 ? +cl.h : ceilHeight();
   const slope = cl.slope && cl.slope !== 'none' ? cl.slope : null, run = +cl.run > 0 ? +cl.run : 60;
-  // About one puck every 4 feet (or the spacing given), at most 12 (or max), kept 2 ft off the walls.
-  const ins = Math.min(24, W / 4, D / 4), iw = W - 2 * ins, id = D - 2 * ins;
-  let nx = Math.max(1, Math.round(iw / sp)), ny = Math.max(1, Math.round(id / sp));
-  while (nx * ny > max) { if (iw / nx < id / ny) nx--; else ny--; }
+  const s0 = sp > 0 ? sp : canSpacing(H);
+  // Cans along a side: as many as fit at the spacing, spread evenly between the end ones.
+  const fit = L => { const ins = Math.min(36, Math.max(24, s0 / 2), L / 4); return { n: Math.max(1, Math.round((L - 2 * ins) / s0) + 1), ins }; };
+  const fx = fit(W), fy = fit(D);
+  while (fx.n * fy.n > max) { if (fx.n >= fy.n) fx.n--; else fy.n--; }
+  const at = (a, L, f, i) => f.n === 1 ? a + L / 2 : a + f.ins + (L - 2 * f.ins) * i / (f.n - 1);
   const out = [];
-  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
-    // A small fixed nudge per puck so the layout isn't a perfect grid, the same every time.
-    const h = Math.sin((i + 1) * 12.9898 + (j + 1) * 78.233) * 43758.5453, jx = (h - Math.floor(h) - 0.5) * 6, jy = ((h * 7.13) - Math.floor(h * 7.13) - 0.5) * 6;
-    const x = x0 + ins + iw * (i + 0.5) / nx + (nx > 1 ? jx : 0), y = y0 + ins + id * (j + 0.5) / ny + (ny > 1 ? jy : 0);
+  for (let i = 0; i < fx.n; i++) for (let j = 0; j < fy.n; j++) {
+    const x = at(x0, W, fx, i), y = at(y0, D, fy, j);
     if (loop && !vInPoly(x, y, loop)) continue;
     if (slope) { const d = slope === 'N' ? y - y0 : slope === 'S' ? y1 - y : slope === 'W' ? x - x0 : x1 - x; if (d < run) continue; }
     out.push({ x, y, h: H });
@@ -193,11 +210,10 @@ function winSeal3(v) {
 const winOnly3 = R3 => !!(R3 && lay().winOnly);
 const WIN_SKY = { max: 6 };
 function windowSky3(v) {
-  v.winBounce = 0;
   const ws = S.walls; if (!ws.length || typeof fixtList !== 'function') return;
   const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
   const mid = new THREE.Vector3((Math.min(...xs) + Math.max(...xs)) / 2, 0, (Math.min(...ys) + Math.max(...ys)) / 2);
-  let n = 0, tot = 0;
+  let n = 0;
   fixtList().filter(f => f.kind === 'window').forEach(f => {
     const w = wall(f.wall); if (!w || n >= WIN_SKY.max) return;
     const [a0, a1, z0, z1] = fixtInner(f), T = w.thick, g = wallGroup(w, 1, 0, -w.thick);
@@ -211,18 +227,20 @@ function windowSky3(v) {
     sl.position.copy(P).addScaledVector(N, T / 2 + 1);
     sl.target.position.copy(P).addScaledVector(N, 80).add(new THREE.Vector3(0, -40, 0));
     sl.userData.winSky = Math.min(2.5, Math.sqrt(area)); sl.userData.noBounds = true; sl.target.userData.noBounds = true;
-    v.root.add(sl); v.root.add(sl.target); n++; tot += area;
+    v.root.add(sl); v.root.add(sl.target); n++;
+    // 0.63.45 (Ayden 2026-11-25: "global lighting comes through ceiling even when only through windows is selected"):
+    // the daylight bouncing round the room used to be an even fill everywhere, ceiling included. Now it starts at the
+    // window: a soft light 3 ft into the room at the window's middle height, fading with distance, so the room is
+    // brightest by the window and dark far from it. realLight sets it by the hour.
+    const b = new THREE.PointLight(0xf4efe6, 0, Math.max(240, 2.2 * Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))), 1.6);
+    b.position.copy(P).addScaledVector(N, 36); b.userData.winBounce = Math.min(1.6, 0.8 * Math.sqrt(area)); b.userData.noBounds = true; v.root.add(b);
   });
-  // Daylight that came in through the windows bounces round the room: an even soft light, as strong as the windows
-  // are big for the floor they light (window glass over floor area). No windows, no bounce. realLight sets it by the hour.
-  const fa = Math.max(1, (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)));
-  v.winBounce = Math.min(0.35, 2.5 * tot * 1440 / fa);
 }
 function addLights3d(v, R3, layerOn, ceilOn) {
   if (R3) AUTO_CEIL.n = 0;
   if (winOnly3(R3)) { windowSky3(v); winSeal3(v); }
   if (!layerOn) return;
-  // The automatic pucks are not lights anyone placed, so they stay off while only windows light the room.
+  // The automatic and regenerated cans are not lights anyone placed, so they stay off while only windows light the room.
   const off = winOnly3(R3);
   let lamps = 0;
   let shadows = 0;
@@ -273,20 +291,40 @@ function addLights3d(v, R3, layerOn, ceilOn) {
     g.traverse(o => { o.userData.layer = 'lights'; o.userData.noBounds = true; });
     v.root.add(g);
   });
-  // Auto pucks: every puck glows, but only a few carry a real light (each light costs every pixel), turned up to
-  // make up for the rest; two cast shadows on computers.
+  // Recessed cans, automatic or regenerated (0.63.42, Ayden 2026-11-25: "lights dont line up or work... they work but
+  // not all of them"). Before, at most 6 cans carried a light, hung 4" under the ceiling, so bright spots on the
+  // ceiling sat between cans and the rest stayed dark. Now each can (up to CAN_LAMPS) shines a spot light straight
+  // down from its trim, so the light falls under it, and every can gets a soft glow on the ceiling round it.
   if (!R3) return;
   const saved = roomLights().filter(isPuck), H = (() => { const cl = typeof roomCeiling === 'function' ? roomCeiling() : {}; return +cl.h > 0 ? +cl.h : hgt; })();
-  const P = saved.length ? saved.map(l => ({ x: +l.x || 0, y: +l.y || 0, h: H, col: lightColor(l.temp) })) : ceilOn && !off ? autoPucks() : [];
+  // Only through windows: the made-for-you cans (automatic, or laid out by Regenerate ceiling lights) are off too;
+  // only lights placed by hand stay on (Ayden 2026-11-25: with 28 regenerated cans on, the room looked the same).
+  const P = off ? [] : saved.length ? saved.map(l => ({ x: +l.x || 0, y: +l.y || 0, h: H, col: lightColor(l.temp) })) : ceilOn ? autoPucks() : [];
   if (!P.length) return;
-  const lit = Math.min(P.length, AUTO_CEIL.max, MAX_LAMPS - lamps); AUTO_CEIL.n = P.length;
-  const step = P.length / Math.max(1, lit), k = 0.9 * Math.sqrt(P.length / Math.max(1, lit)), col = lightColor('warm');
-  const g = new THREE.Group(); g.userData.noBounds = true;
+  AUTO_CEIL.n = P.length;
+  const col = lightColor('warm'), g = new THREE.Group(); g.userData.noBounds = true;
   // A disc facing down only, so looking in from above the room shows no floating dots.
   puckGeo3 = puckGeo3 || new THREE.CircleGeometry(2.2, 20).rotateX(Math.PI / 2);
-  P.forEach((p, i) => { const m = new THREE.Mesh(puckGeo3, glowMat(p.col || col)); m.position.set(p.x, p.h - 0.05, p.y); g.add(m); });
-  shadows = Math.max(shadows, 2); // two shadow casters for the pucks (fewer if lights placed by hand took them)
-  for (let i = 0; i < lit; i++) { const p = P[Math.floor(i * step + step / 2)]; lamp(g, p.col || col, p.x, p.h - 4, p.y, k, 240, true); }
+  P.forEach(p => {
+    const m = new THREE.Mesh(puckGeo3, glowMat(p.col || col)); m.position.set(p.x, p.h - 0.05, p.y); g.add(m);
+    const hl = new THREE.Mesh(haloGeo3(), haloMat3(p.col || col)); hl.position.set(p.x, p.h - 0.1, p.y); hl.renderOrder = 2; g.add(hl);
+  });
+  const coarse = typeof aoCoarse === 'function' && aoCoarse(), budget = Math.min(coarse ? 8 : CAN_LAMPS, Math.max(0, MAX_LAMPS - lamps));
+  const lit = Math.min(P.length, budget), step = P.length / Math.max(1, lit);
+  // More cans than lamps (very big rooms): each lamp stands for the cans round it and is that much brighter.
+  const k = CAN_K.k * (P.length / Math.max(1, lit));
+  let sh = 0;
+  for (let i = 0; i < lit; i++) {
+    const p = P[Math.floor(i * step + step / 2)], dist = p.h * 3;
+    const sl = new THREE.SpotLight(new THREE.Color(p.col || col), k, dist, 1.4, 1, 1.2);
+    sl.position.set(p.x, p.h - 0.6, p.y); sl.target.position.set(p.x, 0, p.y); sl.userData.puck = true;
+    // A few cast shadows (under wall cabinets, beside talls); phones and tablets skip it.
+    if (!coarse && sh < 4) { sl.castShadow = true; sl.shadow.mapSize.set(512, 512); sl.shadow.bias = -0.0015; sl.shadow.normalBias = 0.4; sl.shadow.radius = 3; sl.shadow.camera.near = 1; sl.shadow.camera.far = dist; sh++; }
+    g.add(sl); g.add(sl.target); lamps++;
+  }
+  // Light from the cans bouncing off the floor and counters lights the ceiling and upper walls a little (a real room
+  // with cans on isn't dark above them). Warm, even, and off with the cans (Walk's Lights off).
+  const bo = new THREE.AmbientLight(new THREE.Color(col), Math.min(0.55, 0.2 * Math.sqrt(P.length))); bo.userData.puck = true; g.add(bo);
   g.traverse(o => { o.userData.layer = 'lights'; o.userData.noBounds = true; });
   v.root.add(g);
 }

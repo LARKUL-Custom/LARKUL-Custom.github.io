@@ -117,6 +117,14 @@ const FIXT_LIB = [
   FX('wn-sh1', 'window', 'Windows', 'Single Hung 1', 36, 48, 0, { hung: true }),
   FX('wn-sh2', 'window', 'Windows', 'Single Hung 2', 54, 48, 0, { hung: true }),
   FX('wn-pic', 'window', 'Windows', 'Picture Window', 90, 60, 0),
+  // 0.63.44: more of Mozaik's windows, at their model sizes.
+  FX('wn-shm', 'window', 'Windows', 'Single Hung w Top Mullions', 38.75, 60, 0, { hung: true }),
+  FX('wn-picbar', 'window', 'Windows', 'Picture Window w Bars', 96, 60, 0),
+  FX('wn-case1', 'window', 'Windows', 'Casement w Transom 1', 38.5, 72, 0),
+  FX('wn-case2', 'window', 'Windows', 'Casement w Transom 2', 72, 72, 0),
+  FX('wn-farm1', 'window', 'Windows', 'Farm House 1', 36, 55, 0),
+  FX('wn-farm2', 'window', 'Windows', 'Farm House 2', 66.5, 55, 0),
+  FX('wn-slide', 'window', 'Windows', 'Sliding Window', 72, 54, 0),
 ];
 const FIXT_FOLDERS = ['Kitchen sinks', 'Cooktops', 'Dishwashers', 'Refrigerators', 'Under-counter fridges', 'Ranges', 'Range hoods', 'Microwaves', 'Laundry', 'Doors', 'Doorways and openings', 'Windows'];
 // 0.62.0: the SketchUp model (built in, models/) each preset draws with. Mozaik stretches a model to the product's
@@ -134,6 +142,10 @@ const STD_OF = {
   'hd-chim30': 'Chimney Hood', 'hd-chim36': 'Chimney Hood', 'hd-glass36': 'Glass Hood', 'hd-cont36': 'Contemorary Hood', 'hd-taper48': 'Metal Hood_Taper 3s',
   'hd-pro48': 'Professional Hood w Full Extention', 'hd-under30': 'Standard Hood', 'hd-under36': 'Standard Hood',
   'mw-otr': 'Over the Range Microwave', 'mw-ctr': 'Microwave',
+  'wn-1': 'Window_Basic 1', 'wn-2': 'Window_Basic 2', 'wn-3': 'Window_Basic 2', 'wn-4': 'Window_Basic 3', 'wn-sh1': 'Window_Single Hung 1',
+  'wn-sh2': 'Window_Single Hung 2', 'wn-pic': 'Window_Picture', 'wn-shm': 'Window_Single Hung 1 (w Top Mullions)', 'wn-picbar': 'Window_Picture w Bars',
+  'wn-case1': 'Window_Casement 1 (Transom)', 'wn-case2': 'Window_Casement 2 (Transom)', 'wn-farm1': 'Window_Farm House 1', 'wn-farm2': 'Window_Farm House 2',
+  'wn-slide': 'Window_Sliding',
   'ld-fw': 'Front Load Washer', 'ld-fd': 'Front Load Dryer', 'ld-tw': 'Top Load Washer', 'ld-td': 'Top Load Dryer', 'ld-combo': 'Washer_Dryer_Combo',
 };
 const fixtStdOf = id => STD_OF[id] ? 'std:' + STD_OF[id] : null;
@@ -166,6 +178,12 @@ const fixtList = () => S.fixtures || [];
 const fixtById = id => fixtList().find(f => f.id === id);
 const fixtHole = f => !!fixtDef(f).wallHole;
 const fixtSink = f => !!fixtDef(f).top;
+// 0.63.49 (Ayden 2026-11-25: "i cant adjust sink elevations"): a sink follows its countertop, raised or lowered by its
+// own lift (f.lift, inches; 0 = where the countertop puts it). sinkElev is its bottom off the floor, the Elevation box.
+const sinkLift = f => +(f && f.lift) || 0;
+function sinkRimZ(f, c) { c = c || fixtCounter(f); return sinkMount(f) === 'drop' ? c.top + 0.15 : c.top - c.thick; }
+const sinkElev = f => r3(sinkRimZ(f) - (+f.h || 0) + sinkLift(f));
+function sinkSetElev(f, v) { const l = r3(v - (sinkRimZ(f) - (+f.h || 0))); if (Math.abs(l) < 0.001) delete f.lift; else f.lift = l; }
 const fixtFloor = f => !fixtHole(f) && !fixtSink(f);
 const fixtLoose = f => !!fixtDef(f).loose;
 const fixtUnder = f => !!fixtDef(f).under;
@@ -417,7 +435,7 @@ function fixtElevSVG(w, side, L, fs, holes) {
     let s = ghost ? '<g class="fx-ghost" pointer-events="none">' : `<g data-fixt="${f.id}">`;
     if (fixtSink(f)) {
       // Under the countertop: dashed bowl; above it the faucet.
-      const t = fixtCounter(f).top, cx = x + f.w / 2;
+      const t = fixtCounter(f).top + sinkLift(f), cx = x + f.w / 2;
       if (f.cooktop) { s += `<rect class="fixt fx-sink nss" x="${x}" y="${-t - 0.4}" width="${f.w}" height="0.4"/><rect class="fx-bowl ev nss" x="${x + 1}" y="${-t}" width="${f.w - 2}" height="${f.h}"/><rect class="ev-hit" x="${x}" y="${-t - 2}" width="${f.w}" height="${2 + f.h}"/>`; return s + '</g>'; }
       s += f.apron ? `<rect class="fixt fx-sink nss" x="${x}" y="${-t}" width="${f.w}" height="${f.h}"/>` : (k => `<rect class="fx-bowl ev nss" x="${x + (f.w - k.w) / 2}" y="${-t}" width="${k.w}" height="${f.h}" rx="${Math.min(k.r, 2)}"/>`)(sinkCut(f));
       s += `<path class="fx-faucet ev nss" d="M${cx - 1} ${-t}V${-t - 11}Q${cx - 1} ${-t - 14} ${cx + 2} ${-t - 14}Q${cx + 5} ${-t - 14} ${cx + 5} ${-t - 11}V${-t - 9.5}"/>`;
@@ -448,7 +466,7 @@ function fixtElevSVG(w, side, L, fs, holes) {
       s += `<rect class="ev-hit" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
       if (sel) s += `<rect class="ev-halo nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/><rect class="ev-sel nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
     }
-    if (sel && fixtSink(f)) { const t = fixtCounter(f).top; s += `<rect class="ev-sel nss" x="${x}" y="${-t - 14}" width="${f.w}" height="${14 + f.h}"/>`; }
+    if (sel && fixtSink(f)) { const t = fixtCounter(f).top + sinkLift(f); s += `<rect class="ev-sel nss" x="${x}" y="${-t - 14}" width="${f.w}" height="${14 + f.h}"/>`; }
     return s + '</g>';
   }).join('');
 }
@@ -500,8 +518,10 @@ function fixtFaucetMesh(f, k, c, selCol) {
   mm.position.set(f.w / 2 - mw / 2, c.top, Math.max(0.5, back - 0.5));
   return mm;
 }
+// 0.63.48: Realistic glass for windows and glass doors is clear (a faint tint and a sharp reflection), so what is outside shows.
+function fixtGlass3() { return fixtGlass3.m || (fixtGlass3.m = new THREE.MeshStandardMaterial({ color: 0x1b2328, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0, envMapIntensity: 0.6, depthWrite: false })); }
 function fixt3d(v, selCol) {
-  const metal = flat3('#c3c7cc'), white = flat3('#f3f3f1'), dark = flat3('#3b3f44'), glass = flat3('#a8cfe6', 0.35), wood = flat3('#d9c3a0'), trim = flat3('#ffffff');
+  const metal = flat3('#c3c7cc'), white = flat3('#f3f3f1'), dark = flat3('#3b3f44'), glass = R3 ? fixtGlass3() : flat3('#a8cfe6', 0.35), wood = flat3('#d9c3a0'), trim = flat3('#ffffff');
   fixtList().forEach(f => {
     const w = wall(f.wall); if (!w) return;
     const sel = fixtSel(f.id), hot = sel ? flat3(selCol) : null, tag = o => { o.traverse(m => { if (m.isMesh) m.userData.fixtId = f.id; }); return o; };
@@ -513,8 +533,8 @@ function fixt3d(v, selCol) {
       // Walk can open a door: an opened (or opening) door draws as a plain leaf on its hinge instead of the model.
       const ajar = doorHasLeaf(f) && typeof doorAjar === 'function' && doorAjar(f.id) > 0;
       if (mm && !ajar && !f.dtype) { mm.position.set(f.off, f.elev, (T - md) / 2); grp.add(mm); v.root.add(tag(grp)); return; }
-      if (f.kind === 'window') grp.add(box3(iw, ih, 0.25, hot || glass, (a0 + a1) / 2, (z0 + z1) / 2, T / 2, false));
-      if (doorHasLeaf(f)) doorLeaves3(f, grp, T, a0, a1, z0, z1, { wood, glass, dark, hot });
+      if (f.kind === 'window') grp.add(box3(iw, ih, 0.25, hot ? flat3(selCol, 0.35) : glass, (a0 + a1) / 2, (z0 + z1) / 2, T / 2, false));
+      if (doorHasLeaf(f)) doorLeaves3(f, grp, T, a0, a1, z0, z1, { wood, glass, dark, hot, selCol: sel && selCol });
       if (doorIsArch(f)) { archCasing3(f, grp, T, hot || trim); v.root.add(tag(grp)); return; }
       if (c) [-0.25, T + 0.25].forEach(zc => {
         grp.add(box3(c, f.h - (z0 - f.elev), 0.5, hot || trim, f.off + c / 2, z0 + (f.h - (z0 - f.elev)) / 2, zc));
@@ -542,28 +562,28 @@ function fixt3d(v, selCol) {
         if (mm) { mm.position.set(0, rt ? c.top + 1.25 - mh : c.top, rt ? Math.max(0, k.depth - f.d) : k.sy0); grp.add(mm); v.root.add(tag(grp)); return; }
       }
       const mm = fm && !f.cooktop && modelMesh(fm.model, f.w, f.h, k.sy1 - k.sy0, sel && selCol);
-      if (mm) { mm.position.set(0, (under ? c.top - c.thick : c.top + 0.15) - f.h, k.sy0); grp.add(mm); v.root.add(tag(grp)); return; }
+      if (mm) { mm.position.set(0, (under ? c.top - c.thick : c.top + 0.15) - f.h + sinkLift(f), k.sy0); grp.add(mm); v.root.add(tag(grp)); return; }
       // A cooktop: black glass on the top over its cutout, with its burner box hanging under it.
       if (f.cooktop) {
         grp.add(box3(f.w, 0.25, k.sy1 - k.sy0, hot || dark, f.w / 2, c.top + 0.125, (k.sy0 + k.sy1) / 2));
         grp.add(box3(k.w, Math.max(1, f.h - 0.5), k.y1 - k.y0, hot || metal, lx((k.x0 + k.x1) / 2), c.top - c.thick - Math.max(1, f.h - 0.5) / 2, (k.y0 + k.y1) / 2));
         v.root.add(tag(grp)); return;
       }
-      const steel = hot || metal, wallT = 0.06, bowlTop = under ? c.top - c.thick : c.top;
+      const steel = hot || metal, wallT = 0.06, lift = sinkLift(f), bowlTop = (under ? c.top - c.thick : c.top) + lift;
       // The bowl under the cutout: its walls (a thin ring the shape of the cutout) and its bottom.
       const bowlPts = k.open ? roundRectPts(k.x0, k.y0, k.x1, k.y1 - 0.6, k.r, false) : sinkCutPts(k);
       const grow = (pts, e) => { const cx = (k.x0 + k.x1) / 2, cy = (k.y0 + k.y1) / 2, sx = (k.x1 - k.x0) / 2, sy = (k.y1 - k.y0) / 2; return pts.map(q => ({ x: cx + (q.x - cx) * (sx + e) / sx, y: cy + (q.y - cy) * (sy + e) / sy })); };
       const ap = k.mount === 'apron' && S.cabinets.find(q => apronSinkOn(q) === f);
-      const deep = Math.max(3, f.h - 0.5), low = ap ? Math.min(ap.elev + ap.h, c.top - deep) : c.top - deep;
+      const deep = Math.max(3, f.h - 0.5), low = (ap ? Math.min(ap.elev + ap.h, c.top - deep) : c.top - deep) + lift;
       grp.add(flatSlab3(L2(grow(bowlPts, wallT)), [L2(bowlPts)], bowlTop, bowlTop - low, steel));
       grp.add(flatSlab3(L2(bowlPts), [], low + 0.1, 0.1, hot || dark));
       // Bowls split by low dividers.
       const n = Math.max(1, Math.min(3, f.bowls | 0 || 1)), gap = 1.5;
       if (n > 1) { const bw = (k.w - gap * (n - 1)) / n; for (let i = 1; i < n; i++) { const x = k.x0 + i * bw + (i - 0.5) * gap; grp.add(box3(0.12, deep - 2, k.y1 - k.y0 - 0.8, steel, lx(x), low + (deep - 2) / 2, (k.y0 + k.y1) / 2, false)); } }
       // A drop-in's rim lies on the top round the cutout.
-      if (k.mount === 'drop') grp.add(flatSlab3(L2(roundRectPts(f.off, k.sy0, f.off + f.w, k.sy1, k.oval ? 0 : k.r + 0.5, k.oval)), [L2(sinkCutPts(k))], c.top + 0.15, 0.15, steel));
+      if (k.mount === 'drop') grp.add(flatSlab3(L2(roundRectPts(f.off, k.sy0, f.off + f.w, k.sy1, k.oval ? 0 : k.r + 0.5, k.oval)), [L2(sinkCutPts(k))], c.top + 0.15 + lift, 0.15, steel));
       // Apron sink: the front shows from the cabinet below up to the countertop, at the countertop's front edge.
-      if (ap) { const bot = ap.elev + ap.h, ah = c.top - bot; if (ah > 0.5) grp.add(box3(f.w, ah, 0.6, steel, f.w / 2, bot + ah / 2, k.y1 - 0.3)); }
+      if (ap) { const bot = (lift ? c.top - c.thick - f.h : ap.elev + ap.h) + lift, ah = c.top + lift - bot; if (ah > 0.5) grp.add(box3(f.w, ah, 0.6, steel, f.w / 2, bot + ah / 2, k.y1 - 0.3)); }
       if (!fau && fixtFaucet(f) !== 'none') {
         const fy = Math.max(1.2, Math.min(k.sy0, k.y0 - 0.5) - 1.25);
         grp.add(box3(1.2, 13, 1.2, steel, f.w / 2, c.top + 6.5, fy));
@@ -641,8 +661,8 @@ function fixtProps(f) {
     <div class="sizeline">${fixtHole(f) && !f.bare ? 'With casing: ' : ''}${fmtLen(f.w, 1)} wide × ${fmtLen(f.h, 1)} high${f.d ? ` × ${fmtLen(f.d, 1)} deep` : ''}</div>
     <div class="note">${w ? esc(wallName(w)) : ''}${fixtSink(f) ? ' · sits in the countertop' : fixtUnder(f) ? ' · the countertop runs over it' : fixtHole(f) ? ' · cabinets stay out of it where they would overlap' : fixtLoose(f) ? ' · just to look at, cabinets can go over it' : fixtHung(f) ? ' · on the wall, wall cabinets stay out of its space' : ' · cabinets stay out of its space'}. Not on the cut list.</div></div>
   <div class="psec box">${secHead('ruler', 'Size and position', 'teal')}
-    <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtLoose(f) || fixtHung(f) ? fld(fixtHung(f) ? 'Bottom off the floor' : 'Off the floor', R, 'elev', f.elev || 0, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
-    ${doorType(f) ? `<div class="grid2">${fld('Door type', R, 'dtype', doorType(f), 'select', { options: ROOM_DOOR_TYPES.map(({ v, l }) => ({ v, l })) })}${(o => o ? fld(o.label, R, 'swing', doorSideVal(f), 'select', { options: o.options }) : '')(doorSideOpts(f))}${doorIsArch(f) ? fld('Arch rise', R, 'rise', r3(archRise(f)), 'len') : ''}</div>` : ''}
+    <div class="grid2">${fld('Width', R, 'w', f.w, 'len')}${fixtSink(f) ? fld('Front to back', R, 'd', f.d, 'len') : fld('Height', R, 'h', f.h, 'len')}${fixtSink(f) && !f.cooktop ? fld('Height', R, 'h', f.h, 'len') + fld('Elevation', R, 'selev', sinkElev(f), 'len') : ''}${fixtFloor(f) ? fld('Depth', R, 'd', f.d, 'len') : ''}${fixtLoose(f) || fixtHung(f) ? fld(fixtHung(f) ? 'Bottom off the floor' : 'Off the floor', R, 'elev', f.elev || 0, 'len') : ''}${fixtHole(f) ? fld(f.kind === 'window' ? 'Bottom of casing' : 'Off the floor', R, 'elev', f.elev, 'len') : ''}${fld(from, R, 'off', f.off, 'len')}${w ? `<label class="f"><span>To the wall end</span><input type="text" class="num" disabled value="${esc(fmtLen(r3(L - f.off - f.w)))}"></label>` : ''}</div>
+    ${doorType(f) ? `<div class="grid2">${fld('Door type', R, 'dtype', doorType(f), 'select', { options: ROOM_DOOR_TYPES.map(({ v, l }) => ({ v, l })) })}${(o => o ? fld(o.label, R, 'swing', doorSideVal(f), 'select', { options: o.options }) : '')(doorSideOpts(f))}${doorIsArch(f) ? fld('Arch rise', R, 'rise', r3(archRise(f)), 'len') : ''}${roomDoorStyleOpts(f).length ? fld('Door style', R, 'dstyle', roomDoorStyle(f), 'select', { options: roomDoorStyleOpts(f) }) : ''}</div>` : ''}
     ${(f.kind === 'door' || f.kind === 'opening') && S.rooms.length > 1 ? fld('Leads to', R, 'leadsTo', roomById(f.leadsTo) ? f.leadsTo : '', 'select', { options: [{ v: '', l: 'Nowhere' }, ...S.rooms.filter(r => r.id !== S.roomId).map(r => ({ v: r.id, l: r.name }))], wide: true }) : ''}
     ${fixtSink(f) ? fld('Bowls', R, 'bowls', f.bowls || 1, 'selnum', { options: [{ v: 1, l: 'Single bowl' }, { v: 2, l: 'Double bowl' }, { v: 3, l: 'Triple bowl' }] }) : ''}
     ${fixtSink(f) && !f.cooktop ? fld('Faucet', R, 'faucet', fixtFaucet(f), 'select', { options: FAUCETS.map(([v, l]) => ({ v, l })), wide: true }) : ''}

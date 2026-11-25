@@ -25,12 +25,13 @@ function renderPlan(pr) {
   order.filter(c => c.cat !== 'Wall' && !hot(c)).forEach(c => { s += cabPlanSVG(c); });
   s += fixtPlanSVG(true);
   // Countertops: solid, in their own color, over the base cabinets, so you can see which tops there are and where.
-  if (topOp() > 0) countertopRuns().filter(r => r.on).forEach(r => {
+  if (topOp() > 0 || (!pr && typeof ctjTopsMode === 'function' && ctjTopsMode())) countertopRuns().filter(r => r.on).forEach(r => {
     const w = wall(r.wall), g = wg(w), f = w.thick / 2;
     const poly = r.poly || [wallPt(w, g, r.side, r.start - r.ovS, f), wallPt(w, g, r.side, r.end + r.ovE, f), wallPt(w, g, r.side, r.end + r.ovE, f + r.depth), wallPt(w, g, r.side, r.start - r.ovS, f + r.depth)];
     const mx = poly.reduce((a, p) => a + p.x, 0) / 4, my = poly.reduce((a, p) => a + p.y, 0) / 4;
     let ang = Math.atan2(g.u.y, g.u.x) * 180 / Math.PI; if (ang > 90 || ang <= -90) ang += 180;
-    s += `<polygon class="ct-solid nss" style="fill-opacity:${topOp()}" points="${polyPts(poly)}"/>`;
+    const hot = typeof ctjTopsMode === 'function' && ctjTopsMode() && !pr;
+    s += `<polygon class="ct-solid nss${hot && ui.topRun === r.key ? ' on' : ''}" style="fill-opacity:${hot ? Math.max(0.45, topOp()) : topOp()}" points="${polyPts(poly)}"/>`;
     // The top's name only while drawing tops; otherwise its color says it is there and labels stay clear.
     if (r.len > 8 && ui.drawMold === 'top') s += `<text class="lbl ct-lbl" x="${mx}" y="${my}" font-size="${fs * 0.9}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${mx} ${my})">${esc(r.generic ? r.name : (r.tpl && r.tpl.name) || 'Top')} · ${fmtLen(r.len, 1)}</text>`;
   });
@@ -595,6 +596,12 @@ function initPlan() {
       if (!g) { flash('There is no room for that cabinet there.'); return; }
       const keep = e.shiftKey ? ui.placing : null; placeCabinet(ui.placing, g); ui.placing = keep; ui.ghost = null; renderRoom(); return;
     }
+    // 0.63.41: with the Tops tab open, a click picks the top under it (over the cabinets) and dragging moves it.
+    if (e.button === 0 && typeof ctjTopsMode === 'function' && ctjTopsMode() && !ui.topEdit) {
+      const td = ctjDragStart(p, 3 * ui.px);
+      if (td) { ui.drag = td; renderPlan(); renderDock(); const row = document.querySelector(`#dock [data-ctrow="${CSS.escape(td.key)}"]`); if (row) row.scrollIntoView({ block: 'nearest' }); return; }
+      if (ui.topRun) { ui.topRun = ''; renderDock(); }
+    }
     const rz = e.target.closest && e.target.closest('[data-rz]');
     if (rz && rzShow()) { ui.drag = { mode: 'resize', key: rz.dataset.rz, id: ui.sel.id, snap: JSON.stringify(S), live: false }; return; }
     const hd = hitHandle(p);
@@ -709,6 +716,10 @@ function initPlan() {
       else { const w = wall(f.wall), r = segDist(p, w), gr = lay().grid > 0 ? lay().grid : 1, off = fixtFree(f, f.wall, f.side, Math.round((r.t - d.grab) / gr) * gr, ui.px); if (off !== null) f.off = r3(off); }
       ui.elevWall = f.wall; renderPlan(); renderElev(); return;
     }
+    if (d && d.mode === 'ctmove') {
+      if (!d.live && !moved()) return;
+      d.live = true; ctjDragMove(d, p, e.shiftKey); renderPlan(); renderElev(); return;
+    }
     if (d && d.mode === 'shape') {
       if (!d.live && !moved()) return;
       d.live = true; const s = shapeById(d.id), w = wall(s.wall), r = segDist(p, w), gr = lay().grid > 0 ? lay().grid : 1;
@@ -734,6 +745,7 @@ function initPlan() {
     if (d.mode === 'resize') { rzFinish(d); return; }
     if (d.mode === 'topnode') { if (d.live) { undoStack.push(d.snap); redoStack = []; save(); render(); } return; }
     if (d.mode === 'box') { finishBox(d); return; }
+    if (d.mode === 'ctmove') { if (d.live) { undoStack.push(d.snap); redoStack = []; save(); render(); } return; }
     if (d.mode === 'walltap' && ui.drawWalls) {
       if (!ui.drawing) { startWallChain(wallSnap(ui.mouse)); renderPlan(); }
       else commitWallSegment();
@@ -971,7 +983,7 @@ function renderElev(pr) {
   moldingRuns().filter(rn => rn.wall === w.id && rn.side === side).forEach(rn => {
     const a = side === 1 ? rn.start - rn.extS : L - rn.end - rn.extE, m = typeof moldLook === 'function' ? moldLook(rn) : mat(rn.m.mat); mats.push(m && m.id);
     body += `<rect ${fillFor(m, 'ev-mold')} x="${a}" y="${-(rn.z + rn.h)}" width="${rn.front}" height="${rn.h}"/>`;
-    if (rn.m.profile !== 'flat') body += `<line class="ev-inner nss" x1="${a}" x2="${a + rn.front}" y1="${-(rn.z + rn.h * 0.45)}" y2="${-(rn.z + rn.h * 0.45)}"/>`;
+    if (rn.m.profile !== 'flat') { const fy = rn.z + rn.h * (rn.m.profile === 'base' ? 0.78 : 0.45); body += `<line class="ev-inner nss" x1="${a}" x2="${a + rn.front}" y1="${-fy}" y2="${-fy}"/>`; }
   });
   if (dm) {
     // Width chains: base and tall below the floor, uppers above the ceiling. Heights chain on the right.

@@ -141,7 +141,7 @@ function computeFronts(c, p) {
   // fills the top of the face, so nothing hides or opens behind it.
   const apS = c.cat === 'Base' && typeof apronSinkOn === 'function' ? apronSinkOn(c) : null;
   const apTop = apS ? ((typeof apronTop === 'function' && apronTop(c)) || c.elev + c.h) - c.elev : 0;
-  const zt = Math.min(c.h - revT, apS ? apTop - (+apS.h || 0) - gap : Infinity);
+  const zt = Math.min(c.h - revT, apS ? apTop - (+apS.h || 0) + sinkLift(apS) - gap : Infinity);
   const bw = blindCorner(c) ? blindWidth(c) : 0;
   // A blind corner's fronts only cover the open part; the blind side has its blind panel.
   // 0.63.19 (Ayden 2026-11-24: "when importing from mozaik i want to follow the exact drawing"): a Mozaik cabinet keeps
@@ -424,16 +424,18 @@ function frontStyle(c, f) {
 // A slab, or a front too small for its frame, is one field covering the whole face.
 function doorLayout(ds, fw, fh, framed) {
   if (!framed) return { frame: [], fields: [{ x0: 0, z0: 0, x1: fw, z1: fh, i: 0, pt: ds.panelType }] };
-  const S = ds.stile, R = ds.rail, { nR, nS, mrs, mss } = doorMids(ds, fw, fh), sum = a => a.reduce((x, y) => x + y, 0);
+  // 0.63.39: a piece can have its own left and right stiles and top and bottom rails (sL, sR, rT, rB; else stile and rail).
+  const own = k => +ds[k] > 0 ? +ds[k] : 0;
+  const S = ds.stile, R = ds.rail, SL = own('sL') || S, SR = own('sR') || S, RT = own('rT') || R, RB = own('rB') || R, { nR, nS, mrs, mss } = doorMids(ds, fw, fh), sum = a => a.reduce((x, y) => x + y, 0);
   const frame = [
-    { kind: 'stile', x0: 0, z0: 0, x1: S, z1: fh }, { kind: 'stile', x0: fw - S, z0: 0, x1: fw, z1: fh },
-    { kind: 'rail', x0: S, z0: 0, x1: fw - S, z1: R }, { kind: 'rail', x0: S, z0: fh - R, x1: fw - S, z1: fh },
+    { kind: 'stile', side: 'L', x0: 0, z0: 0, x1: SL, z1: fh }, { kind: 'stile', side: 'R', x0: fw - SR, z0: 0, x1: fw, z1: fh },
+    { kind: 'rail', side: 'B', x0: SL, z0: 0, x1: fw - SR, z1: RB }, { kind: 'rail', side: 'T', x0: SL, z0: fh - RT, x1: fw - SR, z1: fh },
   ];
-  const ws = splitSizes(ds.splitW, nS + 1, fw - 2 * S - sum(mss), fw, fh), hs = splitSizes(ds.splitH, nR + 1, fh - 2 * R - sum(mrs), fw, fh), fields = [];
-  const cols = [], rows = []; let x = S, z = fh - R;
+  const ws = splitSizes(ds.splitW, nS + 1, fw - SL - SR - sum(mss), fw, fh), hs = splitSizes(ds.splitH, nR + 1, fh - RT - RB - sum(mrs), fw, fh), fields = [];
+  const cols = [], rows = []; let x = SL, z = fh - RT;
   ws.forEach((w, i) => { cols.push([x, x + w]); x += w + (mss[i] || 0); });
   hs.forEach((h, i) => { rows.push([z - h, z]); z -= h + (mrs[i] || 0); });
-  for (let i = 0; i < nS; i++) frame.push({ kind: 'midstile', i, x0: cols[i][1], z0: R, x1: cols[i][1] + mss[i], z1: fh - R });
+  for (let i = 0; i < nS; i++) frame.push({ kind: 'midstile', i, x0: cols[i][1], z0: RB, x1: cols[i][1] + mss[i], z1: fh - RT });
   // Each opening is numbered across then down from the top left, and can swap its panel for another kind.
   cols.forEach(([x0, x1], ci) => {
     for (let ri = 0; ri < nR; ri++) frame.push({ kind: 'midrail', i: ri, x0, z0: rows[ri][0] - mrs[ri], x1, z1: rows[ri][0] });
@@ -491,16 +493,30 @@ function splitDs(ds, fw, fh, kind, man) {
   if (!ds || ds.type === 'slab' || !(fw > 0) || !(fh > 0)) return ds;
   const base = doorMids(ds, fw, fh), rc = splitRuleCounts(ds, fw, fh, kind);
   let nS = man && splitNum(man.S) ? +man.S | 0 : rc.S, nR = man && splitNum(man.R) ? +man.R | 0 : rc.R;
-  if (nS === null && nR === null) return ds;
+  // 0.63.39 (Ayden 2026-11-24: "let me click on the face and set the opening distance and rail or stile width"): a panel's
+  // own sizes: st / rl = its outside stiles / rails, ms / mr = each mid stile / rail, W / H = each opening across / up.
+  const ONE = ['sL', 'sR', 'rT', 'rB'], pos = v => splitNum(v) && +v > 0;
+  const sz = man && [...ONE, 'ms', 'mr', 'W', 'H'].some(k => ONE.includes(k) ? pos(man[k]) : Array.isArray(man[k]) && man[k].some(pos));
+  if (nS === null && nR === null && !sz) return ds;
   if (nS === null) nS = base.nS; if (nR === null) nR = base.nR;
   nS = Math.max(0, Math.min(MAX_MIDS, nS)); nR = Math.max(0, Math.min(MAX_MIDS, nR));
-  if (nS === base.nS && nR === base.nR) return ds;
-  const mp = +ds.minPanel > 0 ? +ds.minPanel : 2, msw = +ds.midStileW || +ds.stile || 0, mrw = +ds.midRailW || +ds.rail || 0;
-  while (nS > 0 && 2 * ds.stile + nS * msw + (nS + 1) * mp > fw) nS--;
-  while (nR > 0 && 2 * ds.rail + nR * mrw + (nR + 1) * mp > fh) nR--;
+  if (nS === base.nS && nR === base.nR && !sz) return ds;
   const o = { ...ds };
+  // Its own outside stiles and rails, also on the door order (Left stile, Right stile, Top rail, Bottom rail).
+  if (sz) [['sL', 'leftStile'], ['sR', 'rightStile'], ['rT', 'topRail'], ['rB', 'botRail']].forEach(([k, v]) => { if (pos(man[k])) { o[k] = +man[k]; o[v] = +man[k]; } });
+  const mp = +o.minPanel > 0 ? +o.minPanel : 2, msw = +o.midStileW || +o.stile || 0, mrw = +o.midRailW || +o.rail || 0;
+  const fS = (+o.sL || o.stile) + (+o.sR || o.stile), fR = (+o.rT || o.rail) + (+o.rB || o.rail);
+  while (nS > 0 && fS + nS * msw + (nS + 1) * mp > fw) nS--;
+  while (nR > 0 && fR + nR * mrw + (nR + 1) * mp > fh) nR--;
   if (nS !== base.nS) { o.midStiles = nS; o.midStilesF = ''; o.midStileWs = []; o.splitW = []; o.fieldPanels = []; }
   if (nR !== base.nR) { o.midRails = nR; o.midRailsF = ''; o.midRailWs = []; o.splitH = []; o.fieldPanels = []; }
+  if (sz) {
+    const arr = (a, n) => Array.isArray(a) && a.some(v => splitNum(v) && +v > 0) ? Array.from({ length: n }, (_, i) => splitNum(a[i]) && +a[i] > 0 ? String(+a[i]) : '') : null;
+    const ms = arr(man.ms, nS), mr = arr(man.mr, nR), W = arr(man.W, nS + 1), H = arr(man.H, nR + 1);
+    if (ms) { o.midStileWs = ms; o.midStilesF = ''; o.midStiles = nS; } if (mr) { o.midRailWs = mr; o.midRailsF = ''; o.midRails = nR; }
+    if (W) o.splitW = W; if (H) o.splitH = H;
+    o._own = true;
+  }
   o._extraMids = Math.max(0, nS - base.nS) + Math.max(0, nR - base.nR);
   return o;
 }
@@ -509,8 +525,8 @@ function splitDs(ds, fw, fh, kind, man) {
 // (past a scribe strip). null = no mids, keep the one recess.
 function panelFieldPockets(ds, L, W, y0, depth, face) {
   if (!ds || ds.type === 'slab') return null;
-  const m = doorMids(ds, W, L); if (!m.nS && !m.nR) return null;
-  const lay = doorLayout(ds, W, L, true); if (lay.fields.length < 2) return null;
+  const m = doorMids(ds, W, L); if (!m.nS && !m.nR && !ds._own) return null;
+  const lay = doorLayout(ds, W, L, true); if (lay.fields.length < 2 && !ds._own) return null;
   return lay.fields.map(fl => ({ type: 'pocket', x: r3(fl.z0), y: r3(y0 + fl.x0), w: r3(fl.z1 - fl.z0), h: r3(fl.x1 - fl.x0), depth: depth || 0.25, face, why: 'panel recess' }));
 }
 // Opening sizes across one direction of a split door. Each entry is a size or a formula of W and H (the door's width
@@ -772,7 +788,7 @@ function sinkApronH(c, p) {
 function apronStretcherZ(c, p, t) {
   if (c.cat !== 'Base' || (c.construction || {}).top !== 'stretchers' || typeof apronSinkOn !== 'function') return null;
   const f = apronSinkOn(c); if (!f) return null;
-  const top = ((typeof apronTop === 'function' && apronTop(c)) || c.elev + c.h) - c.elev, bot = top - (+f.h || 0);
+  const top = ((typeof apronTop === 'function' && apronTop(c)) || c.elev + c.h) - c.elev, bot = top - (+f.h || 0) + sinkLift(f);
   if (!(bot < c.h - t / 2 - 0.01)) return null;
   const tk = hasToe(c) ? (p || effParams(c)).toeKickHeight : 0;
   return r3(Math.max(tk + 2 * t, bot - t / 2));
@@ -835,7 +851,7 @@ function drawerPartitions(c, p, fronts, t, rails) {
 }
 function drawerBoxAt(c, p, f) {
   const sl = hwPick(cabSet(c, 'slide'), 'slide'); if (!sl || f.face) return null;
-  const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = drawerMatT(cabSet(c, 'drawerMatT'));
+  const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = cabDrawerMatT(c);
   const cm = mat(mt.carcass) || S.materials[0], t = cm.thick, bm = mat(mt.back) || cm, bt = bm.thick;
   const ffr = faceFrame(c), W = c.w, D = c.d - (ffr ? ffr.thick : 0), tk = hasToe(c) ? p.toeKickHeight : 0, inD = D - p.backInset - bt, inW = W - 2 * t;
   const nominal = nominalFor(sl, inD); if (!nominal) return null;
@@ -880,7 +896,7 @@ function buildParts(c) {
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) { const mb = mozBuildParts(c); return typeof shelfExtras === 'function' ? shelfExtras(c, mb) : mb; }
   if (c.made && typeof madeBuildParts === 'function' && madeDef(c)) return madeBuildParts(c);
   const p = effParams(c), lbl = LBL[c.id] || c.name;
-  const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = drawerMatT(cabSet(c, 'drawerMatT'));
+  const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = cabDrawerMatT(c);
   const cm = mat(mt.carcass) || S.materials[0], t = cm.thick;
   const bm = mat(mt.back) || cm, bt = bm.thick, sm = mat(mt.shelf) || cm, tkm = toeMat(c, mt) || cm;
   const pin = hwPick(roomSet('shelfpin'), 'shelfpin'), hg = hwPick(cabSet(c, 'hinge'), 'hinge'), sl = hwPick(cabSet(c, 'slide'), 'slide');
@@ -1511,7 +1527,8 @@ function allParts() {
 /* ---------- Countertop runs ---------- */
 // bridges: spans a run carries on over without a cabinet (a dishwasher under the countertop). A run that is
 // only bridges is left out; one that starts on a bridge takes the height of the first cabinet after it.
-function runsBy(filter, keyOf, bridges) {
+// anyTop (0.63.46, base molding): cabinets of different heights stay in one run.
+function runsBy(filter, keyOf, bridges, anyTop) {
   const runs = [];
   S.walls.forEach(w => [1, -1].forEach(side => {
     const cs = S.cabinets.filter(c => c.wall === w.id && c.side === side && filter(c)).concat((bridges || []).filter(b => b.wall === w.id && b.side === side)).sort((a, b) => a.off - b.off);
@@ -1527,7 +1544,7 @@ function runsBy(filter, keyOf, bridges) {
       // other wall's cabinets, carried by a bridge on that wall).
       const cd = angledCorner(c) ? cornerLeg(c) : cfLeg(c, true) || c.d;
       const top = (typeof apronTop === 'function' && apronTop(c)) || c.elev + c.h, k = keyOf(c), fl = fillersOf(c), s0 = Math.min(c.off, ...fl.map(x => x.a0)), s1 = Math.max(c.off + c.w, ...fl.map(x => x.a1));
-      if (cur && s0 <= cur.end + 0.25 && (cur.top === null || (Math.abs(top - cur.top) < 0.01 && cur.k === k))) {
+      if (cur && s0 <= cur.end + 0.25 && (cur.top === null || ((anyTop || Math.abs(top - cur.top) < 0.01) && cur.k === k))) {
         if (cur.top === null) { cur.top = top; cur.k = k; cur.bottom = c.elev; }
         cur.end = Math.max(cur.end, s1); cur.d = Math.max(cur.d, cd + (c.outset || 0)); cur.bottom = Math.min(cur.bottom, c.elev); cur.cabs.push(c.id);
       }
@@ -1681,12 +1698,24 @@ function bsSegsOf(r, onTop) {
 const moldCabD = c => (angledCorner(c) ? cornerLeg(c) : c.d) + (c.outset || 0);
 // 0.61.3: worked out with automatic end panel pieces left out, so tops and molding are as with panels on the cabinets.
 function moldingRuns() { return withoutPieces(moldingRunsAll); }
+// 0.63.46 (Ayden 2026-11-25: "from the molding tab auto add bases as well"): base molding is its own pick on a cabinet
+// (c.baseMold), so a cabinet can have crown on top and base at the floor. A base run sits on the floor (the cabinet's
+// bottom), its back against the cabinet face (flush with the box front, over the toe space), and ends the same way crown
+// does: returns at open ends, short returns to a shallower neighbor, butts at inside corners, stops at appliances.
 function moldingRunsAll() {
-  const runs = runsBy(c => !!c.molding && !!molding(c.molding), c => c.molding + '@' + Math.round(moldCabD(c) * 16));
+  const top = runsBy(c => !!c.molding && !!molding(c.molding), c => c.molding + '@' + Math.round(moldCabD(c) * 16));
+  const base = runsBy(c => !!c.baseMold && !!molding(c.baseMold), c => c.baseMold + '@' + Math.round(moldCabD(c) * 16), null, true);
+  base.forEach(r => { r.base = true; });
+  const runs = top.concat(base);
   runs.forEach(r => {
     r.k = String(r.k).split('@')[0];
     const m = molding(r.k), w = wall(r.wall);
     r.m = m;
+    if (r.base) {
+      r.h = m.h; r.z = r.bottom; r.fz = r.d;
+      r.lo = r.z - 0.01; r.hi = r.z + r.h;
+      return;
+    }
     r.h = m.fill ? Math.max(0.5, Math.min(12, w.height - r.top)) : m.h;
     r.z = m.bottom ? r.bottom - r.h : r.top;
     r.fz = r.d + 0.75;
@@ -1731,6 +1760,8 @@ function moldEnd(r, at, dir, runs) {
   if (at >= L - f - 0.5 && wallEndJoined(w, 'E')) return { ret: false };
   if (capsOf(w).some(cp => cp.side === r.side && (Math.abs(cp.a0 - at) < 0.5 || Math.abs(cp.a1 - at) < 0.5) && cp.height > r.lo)) return { ret: false };
   if (typeof fixtBlocksEnd === 'function' && fixtBlocksEnd(band, at, dir)) return { ret: false };
+  // Base molding also stops at a dishwasher or other appliance that slides in under the counter.
+  if (r.base && typeof fixtList === 'function' && fixtList().some(f => fixtFloor(f) && !fixtLoose(f) && f.wall === r.wall && f.side === r.side && (+f.elev || 0) < r.hi && Math.abs((dir < 0 ? f.off + f.w : f.off) - at) < 0.5)) return { ret: false };
   // The deepest cabinet right beside this end that reaches the molding's height.
   let nd = -1;
   S.cabinets.forEach(k => {
@@ -1742,7 +1773,7 @@ function moldEnd(r, at, dir, runs) {
   if (nd >= r.d - 0.01) return { ret: false };
   // A shallower neighbor: the return comes back to its doors, or to the face of its own molding.
   const o = runs.find(q => q !== r && q.wall === r.wall && q.side === r.side && Math.abs((dir < 0 ? q.end : q.start) - at) < 0.5 && q.lo < r.hi && q.hi > r.lo);
-  return { ret: true, back: o ? o.fz + o.m.d : nd + 0.75 };
+  return { ret: true, back: o ? o.fz + o.m.d : nd + (r.base ? 0 : 0.75) };
 }
 // Inside corners: where runs on two walls that meet come together, the longer one runs through to the other's back
 // face and the other stops against its front, so they never overlap or run over the other wall's cabinets.
@@ -1753,7 +1784,7 @@ function moldCorners(runs) {
   const fr = runs.filter(r => wall(r.wall)).map(F), used = new Set();
   for (let i = 0; i < fr.length; i++) for (let j = i + 1; j < fr.length; j++) {
     const A = fr[i], B = fr[j];
-    if (A.w.id === B.w.id || Math.abs(X(A.g.u, B.g.u)) < 0.25 || Math.abs(A.r.z - B.r.z) > 0.5) continue;
+    if (A.w.id === B.w.id || Math.abs(X(A.g.u, B.g.u)) < 0.25 || Math.abs(A.r.z - B.r.z) > 0.5 || !A.r.base !== !B.r.base) continue;
     // Along each run: where the other run's back face and front face cross its molding.
     const cross = (P, Q, dq) => { const p = meet(P.at(0, P.r.fz + P.r.m.d / 2), P.g.u, Q.at(0, dq), Q.g.u); return p && P.along(p); };
     const aIn = cross(A, B, B.r.fz), aOut = cross(A, B, B.r.fz + B.r.m.d), bIn = cross(B, A, A.r.fz), bOut = cross(B, A, A.r.fz + A.r.m.d);
@@ -1767,11 +1798,12 @@ function moldCorners(runs) {
       return null;
     };
     const eA = endOf(A, aIn, aOut, B.r.fz), eB = endOf(B, bIn, bOut, A.r.fz); if (!eA || !eB) continue;
-    if (used.has(A.r.cabs[0] + eA) || used.has(B.r.cabs[0] + eB)) continue;
+    const uk = (P, e) => (P.r.base ? 'b' : '') + P.r.cabs[0] + e;
+    if (used.has(uk(A, eA)) || used.has(uk(B, eB))) continue;
     // Both runs have to be in front of the other's wall.
     const far = (P, e) => P.at(e === 'E' ? P.r.start : P.r.end, P.r.fz / 2);
     if (A.out(far(B, eB)) < -0.5 || B.out(far(A, eA)) < -0.5) continue;
-    used.add(A.r.cabs[0] + eA); used.add(B.r.cabs[0] + eB);
+    used.add(uk(A, eA)); used.add(uk(B, eB));
     // The run that goes further into the corner runs through; ties go to the longer run.
     const into = (P, e, tIn) => e === 'E' ? P.r.end - tIn : tIn - P.r.start;
     const dA = into(A, eA, aIn), dB = into(B, eB, bIn);

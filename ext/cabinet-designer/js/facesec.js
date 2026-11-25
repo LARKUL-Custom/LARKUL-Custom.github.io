@@ -242,7 +242,9 @@ function fsPanelInfo(c) {
 function fsPanelTab(c) {
   const P = fsPanelInfo(c), lk = typeof panelLook === 'function' ? panelLook(P.src, P.w, P.h, null, P.end) : null, k = panelSplitOf(P.src, P.end);
   const ds = lk ? lk.ds : null, R = 'cab:' + P.src.id;
-  const svg = ds && typeof doorRenderSVG === 'function' ? doorRenderSVG(ds, P.w, P.h, { dims: true }) : '';
+  // 0.63.39: click a stile, rail or opening on the drawing to size it (fsPanelPick).
+  const pk = ui.pnPick && ui.pnPick.ref === P.ref ? ui.pnPick : null;
+  const svg = ds && typeof doorRenderSVG === 'function' ? doorRenderSVG(ds, P.w, P.h, { dims: true, ...(lk && lk.framed ? { pick: pk || { k: '', i: -1 }, pickAct: 'fs-pnpick', pickRef: P.ref } : {}) }) : '';
   const style = `<label class="fs-row"><span>Door style</span>${fctl(R, 'panelDoor', P.src.panelDoor || '', 'select', { options: setOpts('panelDoor', [{ v: 'same', l: 'Same as the doors' }, ...opts(S.doorStyles)], 'cab'), label: 'Panel door style' })}</label>`;
   const isl = P.end ? `<div class="note show">${k.kind === 'island' ? 'An island end panel (its cabinet is on an island wall).' : 'An end panel.'}</div>`
     : `<label class="fs-row"><span>Island end panel</span><select data-obj="cab:${c.id}" data-field="islandP" data-type="select" aria-label="Island end panel"><option value=""${c.islandP == null || c.islandP === '' ? ' selected' : ''}>Auto · ${k.kind === 'island' ? 'Yes' : 'No'}</option><option value="1"${c.islandP === '1' || c.islandP === true ? ' selected' : ''}>Yes</option><option value="0"${c.islandP === '0' || c.islandP === false ? ' selected' : ''}>No</option></select></label>`;
@@ -253,10 +255,36 @@ function fsPanelTab(c) {
     <div class="fs-work"><div class="fs-draw fs-pdraw">${svg || `<div class="note show">Flat slab panel, ${fmtLen(P.w, 1)} × ${fmtLen(P.h, 1)}.</div>`}</div>
     <aside class="fs-panel" aria-label="Panel">
       <div class="fs-head"><b>${c.autoOf ? 'End panel' : esc(c.name || 'Panel')}</b><span class="muted">${fmtLen(P.w, 1)} wide × ${fmtLen(P.h, 1)}</span></div>
-      ${style}${isl}${mids}
+      ${style}${isl}${mids}${lk && lk.framed ? fsPanelPick(P, ds, pk) : ''}
       ${ds && ds.type !== 'slab' ? `<div class="note show">${buy ? 'Bought from the door maker in this style: the order lists its panels wide and high.' : 'Made in the shop: one recess per panel on the CNC.'}${c.autoOf ? ' Cut and priced with its cabinet.' : ''}</div>` : ''}
     </aside></div>
-    <div class="fs-status">Mid stiles split the panel side to side, mid rails top to bottom. The door style's split rules set them until you change them here.</div></div>`;
+    <div class="fs-status">${isPhone() ? 'Tap' : 'Click'} a stile, rail or opening on the drawing to set its width. Mid stiles split the panel side to side, mid rails top to bottom. The door style's split rules set them until you change them here.</div></div>`;
+}
+// 0.63.39 (Ayden 2026-11-24: "let me click on the face and set the opening distance and rail or stile width", "and adjust the
+// bottom, top rails, and the side stiles"): the size of the picked piece of the panel's face. Blank = the door style's
+// width, or an equal share of what is left for an opening. Kept with the panel's mid stiles and rails (pspl: ref).
+function fsPanelPick(P, ds, pk) {
+  const lay = doorLayout(ds, P.w, P.h, true), m = doorMids(ds, P.w, P.h), cols = m.nS + 1, own = P.own || {}, R = P.ref;
+  const len = (label, ref, f, cur, ph) => `<label class="fs-row"><span>${label}</span>${fctl(ref, f, cur ?? '', 'len', { blank: true, ph: fmtLen(ph, 1), label })}</label>`;
+  const arr = (k, i) => ((own[k] || [])[i]);
+  let title = '', body = '';
+  if (!pk) body = `<div class="note show">${isPhone() ? 'Tap' : 'Click'} a stile, rail or opening on the drawing to set its width.</div>`;
+  else if (pk.k === 'field') {
+    const fl = lay.fields.find(f => f.i === pk.i) || lay.fields[0], ci = pk.i % cols, ri = Math.floor(pk.i / cols);
+    title = `Opening ${pk.i + 1}`;
+    body = len('Opening width', `sub:W|${R}`, String(ci), arr('W', ci), fl.x1 - fl.x0) + len('Opening height', `sub:H|${R}`, String(ri), arr('H', ri), fl.z1 - fl.z0)
+      + `<div class="note show">Blank shares what is left with the other openings${cols > 1 || m.nR ? '' : '. Add a mid stile or rail to have more than one opening'}.</div>`;
+  } else if (pk.k === 'stile' || pk.k === 'rail') {
+    const side = pk.k === 'stile' ? (pk.i ? 'R' : 'L') : (pk.i ? 'T' : 'B'), f = lay.frame.find(x => x.kind === pk.k && x.side === side), key = pk.k === 'stile' ? 's' + side : 'r' + side;
+    title = { L: 'Left stile', R: 'Right stile', B: 'Bottom rail', T: 'Top rail' }[side];
+    body = len('Width', R, key, own[key], f ? (pk.k === 'stile' ? f.x1 - f.x0 : f.z1 - f.z0) : 0);
+  } else {
+    const f = lay.frame.find(x => x.kind === pk.k && x.i === pk.i), st = pk.k === 'midstile';
+    title = `Mid ${st ? 'stile' : 'rail'} ${pk.i + 1}`;
+    body = len('Width', `sub:${st ? 'ms' : 'mr'}|${R}`, String(pk.i), arr(st ? 'ms' : 'mr', pk.i), f ? (st ? f.x1 - f.x0 : f.z1 - f.z0) : 0);
+  }
+  const any = ['sL', 'sR', 'rT', 'rB', 'W', 'H', 'ms', 'mr'].some(k => own[k] != null && (!Array.isArray(own[k]) || own[k].some(v => v !== '' && v != null)));
+  return `<fieldset class="fs-size fs-mids"><legend>${title || 'Sizes'}</legend>${body}${any ? `<button class="btn sm" data-act="fs-pnreset" data-id="${esc(R)}" title="Every stile, rail and opening back to the door style's sizes">Reset sizes</button>` : ''}</fieldset>`;
 }
 // A cabinet's own end panels in a framed style: their mid stiles and rails, under the face.
 function fsEndPanelsBox(c) {
@@ -452,9 +480,13 @@ document.addEventListener('click', e => {
   if (a === 'fs-pick') { fsPick(c, id); ui.fsSplit = null; renderQuick(); return; }
   if (a === 'fs-mid') {
     const [ref, dim, d] = id.split('|'), cur = +(b.closest('.fs-step') || {}).querySelector?.('b')?.textContent || 0;
-    mutate(() => { const o = resolve(ref); if (!o) return; if (d === 'auto') delete o[dim]; else o[dim] = Math.max(0, Math.min(MAX_MIDS, cur + +d)); });
+    // A new count starts its openings and mid widths over (they are numbered across the old count).
+    mutate(() => { const o = resolve(ref); if (!o) return; if (d === 'auto') delete o[dim]; else o[dim] = Math.max(0, Math.min(MAX_MIDS, cur + +d)); if (dim === 'S') { delete o.W; delete o.ms; } else { delete o.H; delete o.mr; } });
+    if (ui.pnPick && ui.pnPick.k !== 'stile' && ui.pnPick.k !== 'rail') ui.pnPick = null;
     return;
   }
+  if (a === 'fs-pnpick') { const j = id.lastIndexOf('|'), [k, i] = id.slice(j + 1).split(':'), ref = id.slice(0, j); ui.pnPick = ui.pnPick && ui.pnPick.ref === ref && ui.pnPick.k === k && ui.pnPick.i === +i ? null : { ref, k, i: +i }; renderQuick(); return; }
+  if (a === 'fs-pnreset') { mutate(() => { const o = resolve(id); if (o) ['sL', 'sR', 'rT', 'rB', 'W', 'H', 'ms', 'mr'].forEach(k => delete o[k]); }); return; }
   if (a === 'fs-split') {
     const [key, d] = [id.slice(0, id.lastIndexOf(':')), id.slice(id.lastIndexOf(':') + 1)];
     fsPick(c, key);

@@ -49,6 +49,14 @@ const modelGroups = lib => [...new Set(modelTreeItems(lib).map(x => x.g))].map(g
 // SketchUp export ship with Cabinet Designer in models/ (packed small by tools/std-models.py), so every computer draws
 // them with nothing to import. Keys are 'std:<model name>'. A job's imported model that isn't in this browser falls
 // back to the built-in one of the same name.
+// 0.63.40: room door leaves cut from Ayden's Mozaik door models (tools/door-models.py, js/roomdoors.js).
+const STD_DOOR_MODELS = ['Door Leaf Panel', 'Door Leaf Slab', 'Door Leaf Glass', 'Door Leaf Half Glass', 'Door Leaf Closet', 'Door Leaf Panel Bare', 'Door Leaf Slab Bare',
+  'Door Leaf Glass Bare', 'Door Leaf Half Glass Bare', 'Door Leaf Closet Bare', 'Door Leaf Patio Slider', 'Door Leaf Patio Fixed', 'Door Pocket Pull', 'Barn Door Leaf',
+  'Barn Door Rail', 'Door Leaf Louvred'];
+// 0.63.44: Ayden's Mozaik windows (tools/window-models.py): casing, sash, mullions and clear glass.
+const STD_WINDOW_MODELS = ['Window_Basic 1', 'Window_Basic 2', 'Window_Basic 3', 'Window_Single Hung 1', 'Window_Single Hung 2',
+  'Window_Single Hung 1 (w Top Mullions)', 'Window_Picture', 'Window_Picture w Bars', 'Window_Casement 1 (Transom)', 'Window_Casement 2 (Transom)',
+  'Window_Farm House 1', 'Window_Farm House 2', 'Window_Sliding'];
 const STD_MODELS = ['Standard Fridge (L)', 'French Door Fridge', 'French Door Fridge w Ice', 'Side by Side Fridge', 'Bottom Drawer Fridge (L)',
   'Pro French Door', 'Pro Column (L)', 'Pro Side By Side', 'Undercounter Glass Door (L)', 'Wine Cooler (L)', 'Dishwasher', 'Pro Dishwasher',
   'Slide In Range', 'Floor Mount Range', 'Pro Range 30', 'Pro Range 36', 'Pro Range 48', 'Pro Range 60', 'Cooktop', 'Gas Range',
@@ -58,7 +66,7 @@ const STD_MODELS = ['Standard Fridge (L)', 'French Door Fridge', 'French Door Fr
   'Undermount Bar Sink', 'Drop In Vanity Oval', 'Undermount Vanity Oval', 'Faucet_Kitchen 1', 'Faucet_Kitchen 4', 'Faucet_Kitchen 5',
   'Faucet_Kitchen 7', 'Faucet_Pot Filler 1', 'Faucet_Vanity 1', 'Faucet_Vanity 5', 'Chimney Hood', 'Glass Hood', 'Contemorary Hood',
   'Metal Hood_Taper 3s', 'Professional Hood w Full Extention', 'Standard Hood'];
-const STD_BY_LOW = new Map(STD_MODELS.map(n => [n.toLowerCase(), n]));
+const STD_BY_LOW = new Map(STD_MODELS.concat(STD_DOOR_MODELS, STD_WINDOW_MODELS).map(n => [n.toLowerCase(), n]));
 const stdSlug = n => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 // The built-in model for an imported model key ("products/standard fridge (l)"), by its file name.
 const stdFor = key => { const n = STD_BY_LOW.get(String(key || '').split('/').pop().toLowerCase()); return n ? 'std:' + n : null; };
@@ -108,6 +116,9 @@ function mdlMat(c, o, tex, steel) {
   // so it doesn't read as white). Stainless steel
   // (0.62.0) is a little metallic, so Realistic shows the room in it.
   const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(steel ? (tex ? '#a4a8ad' : '#aeb2b7') : tex ? '#ffffff' : c), map: tex || null, roughness: steel ? 0.4 : 0.6, metalness: steel ? 0.5 : 0.05, envMapIntensity: steel ? 0.35 : 1, side: THREE.DoubleSide, transparent: o < 1, opacity: o, depthWrite: !(o < 1) });
+  // 0.63.48: see-through parts (window and door glass) are clear glass: almost no colour of their own, just a faint
+  // tint and a sharp reflection, so the landscape outside (landscape.js) shows through instead of a milky pane.
+  if (o < 0.7 && !tex) { m.color.set(0x1b2328); m.opacity = Math.min(o, 0.2); m.roughness = 0.05; m.metalness = 0; m.envMapIntensity = 0.6; }
   return mdlMats[k] = m;
 }
 // Which parts of a built-in model are stainless steel: SketchUp's brushed-metal pictures (light, colourless), and

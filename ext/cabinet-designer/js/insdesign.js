@@ -69,7 +69,7 @@ function dpVars(c, o, x, mats) {
 }
 // The material thicknesses (inches) for cabinet c: drawer box, drawer bottom, back, shelf and cabinet.
 function dpMats(c) {
-  const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = drawerMatT(cabSet(c, 'drawerMatT'));
+  const mt = cabMatT(cabSet(c, 'cabMatT')), dmt = cabDrawerMatT(c);
   const cm = mat(mt.carcass) || S.materials[0], bm = mat(mt.back) || cm, sm = mat(mt.shelf) || cm;
   const dm = mat(dmt.sides) || cm, dbm = mat(dmt.bottom) || bm;
   return { m: { box: dm, bottom: dbm, back: bm, shelf: sm, case: cm }, t: { box: dm.thick, bottom: dbm.thick, back: bm.thick, shelf: sm.thick, case: cm.thick } };

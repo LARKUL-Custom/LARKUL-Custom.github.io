@@ -30,7 +30,7 @@ const opts = (arr, filter) => arr.filter(filter || (() => true)).map(m => ({ v: 
 // Options for a pick that can follow the level above: cabinet follows its room, a room follows the job.
 function setOpts(k, list, level = 'room') {
   const inh = level === 'cab' ? roomSet(k) : S.job.defaults[k] || '';
-  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'flat slab' : 'none');
+  const nm = (list.find(o => o.v === inh) || {}).l || (k === 'pull' ? 'from door template' : k === 'panelDoor' ? 'flat slab' : k === 'drawerWood' ? (inh && mat(inh) ? mat(inh).wood || mat(inh).name : 'same as template') : 'none');
   return [{ v: '', l: `${level === 'cab' ? 'Room' : 'Job'} · ${nm}` }, ...list];
 }
 // L1: name pickers list A to Z under their group headers.
@@ -108,6 +108,8 @@ function resolve(ref) {
     case 'hwx': { const [hid, sub] = id.split(':'), h = hw(hid); if (!h) return null; return (h[sub] = h[sub] && typeof h[sub] === 'object' ? h[sub] : sub === 'top' && h.ends ? { ...h.ends } : {}); }
     case 'rceil': { const r = curRoom(); return r && (r.ceiling = r.ceiling || {}); }
     // 0.63.18 (Ayden 2026-11-24): Room tab › Walls › Wall height sets every wall in the room at once (and new walls drawn in it).
+    // 0.63.48: Room tab › Floor is the room's Textures › Floor pick ('fl:<key>' for the painted floors in landscape.js).
+    case 'rfloor': return { get f() { const r = curRoom(), p = (r && r.tex && r.tex.floor) || ''; return p; }, set f(v) { const r = curRoom(); if (!r) return; r.tex = r.tex || {}; if (v) r.tex.floor = v; else delete r.tex.floor; } };
     case 'rwalls': return { get h() { return wallsHeight(); }, set h(v) { if (!(v > 0)) return; const r = curRoom(); if (r) r.wallHeight = v; S.walls.forEach(w => { w.height = v; }); } };
     case 'jtt': case 'jtp': return typeof jtResolve === 'function' ? jtResolve(k, id) : null;
     case 'ptr': { const [tid, kind] = id.split(':'), t = S.partTemplates.find(x => x.id === tid); if (!t) return null; t.rules = t.rules || {}; return (t.rules[kind] = t.rules[kind] || {}); }
@@ -203,6 +205,7 @@ document.addEventListener('change', e => {
     if (ref.startsWith('fixt:') && field === 'leadsTo' && typeof doorLink === 'function') { doorLink(o, v); return; }
     // 0.63.30: a doorway's Door type (roomdoors.js) also sets its casing and, unless typed, its name.
     if (ref.startsWith('fixt:') && field === 'dtype' && typeof doorSetType === 'function') { doorSetType(o, v); return; }
+    if (ref.startsWith('fixt:') && field === 'selev' && typeof sinkSetElev === 'function') { sinkSetElev(o, v); return; }
     if (ref.startsWith('fixt:') && field === 'mount') { o.mount = v; if (v === 'apron') o.apron = true; else delete o.apron; return; }
     if (ref.startsWith('shp:') && (field === 'legW' || field === 'legH') && typeof shapeLegSize === 'function') return shapeLegSize(o, field, v);
     if (ref.startsWith('fixtpos:') || ref.startsWith('shppos:')) { const px = xProxy(o); setFromEnd(px, field, v); o.off = px.off; return; }

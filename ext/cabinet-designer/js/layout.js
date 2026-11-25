@@ -40,7 +40,7 @@ function panelItemSync() {
     const want = new Map(), all = r.cabinets;
     if (on && lib) {
       r.cabinets = all.filter(k => !k.autoOf);
-      try { withRoom(r, () => r.cabinets.forEach(c => { if (c.made || c.moz || !c.wall) return; ['L', 'R'].forEach(e => { const d = panelItemWant(c, e); if (d) want.set(c.id + ':' + e, { c, e, d }); }); })); }
+      try { withRoom(r, () => r.cabinets.forEach(c => { if (noAutoEnds(c) || !c.wall) return; ['L', 'R'].forEach(e => { const d = panelItemWant(c, e); if (d) want.set(c.id + ':' + e, { c, e, d }); }); })); }
       finally { r.cabinets = all; }
     }
     const keep = new Set();
@@ -66,6 +66,18 @@ function panelItemWant(c, end) {
   const pc = pcs[0], d0 = pc.steps[0].d0; if (pc.steps.some(q => Math.abs(q.d0 - d0) > 1e-6)) return null;
   const t = panelThick(c), ps = panelFor(c), D = endDepth(c, end) + ps.frontOverhang, dir = (end === 'L') === (c.side === 1) ? -1 : 1;
   return { wall: c.wall, side: c.side, off: r3(dir < 0 ? c.off - t : c.off + c.w), w: r3(t), h: r3(pc.z1 - pc.z0), elev: r3((c.elev || 0) + pc.z0), outset: r3((c.outset || 0) + d0), d: r3(D - d0) };
+}
+// 0.63.38 (Ayden 2026-11-24: "panels cant get more panels by the auto panel system, same thing with fillers"): a product
+// that is itself a panel, filler or leg never gets an automatic end panel or filler, and its ends have no Auto pick.
+// Shop-made and Mozaik products (end panels, panel fronts, fillers), the automatic panel pieces, anything classed
+// Fillers and Trim, and anything named as a panel, filler, scribe or leg.
+const NO_ENDS_RE = /\b(?:filler|scribe|legs?|levelers?)\b|\bpanel\b/i;
+function noAutoEnds(c) {
+  if (!c || c.made || c.moz || c.autoOf) return true;
+  const l = c.libId && typeof libItem === 'function' && libItem(c.libId);
+  if (l && typeof libGroup === 'function' && libGroup(l) === 'filler') return true;
+  const n = String(c.name || '');
+  return NO_ENDS_RE.test(n) && !/\bvanity\b|\bon legs\b/i.test(n);
 }
 function lay() { return { ...LAYOUT_DEFAULTS, ...((S && S.job && S.job.layout) || {}) }; }
 // Runs fn in the room that holds cabinet c, so neighbors are looked up in the right room.
@@ -281,7 +293,7 @@ function fillerFlushOutset(c) {
 }
 // Fillers between a cabinet and a wall, by the viewer's end: [{ end, gap, a0, a1 }].
 function fillersOf(c) {
-  if (c.moz || c.made) return []; // a Mozaik product is its own filler or trim
+  if (noAutoEnds(c)) return []; // a panel, filler or Mozaik product is its own filler or trim
   const ly = lay(); if (!c.wall || (!ly.autoFillers && fillMode(c, 'L') !== 'on' && fillMode(c, 'R') !== 'on')) return [];
   return inRoomOf(c, () => {
     if (!wall(c.wall)) return [];
@@ -338,17 +350,17 @@ function panelPieces(c, end) {
 // The cabinet back to back with this one at this end, on the other side of an island line: { k, end (k's end), owner
 // (this cabinet carries the shared panel) }, or null.
 function islandPartner(c, end) {
-  if (c.moz || c.made || !c.wall) return null;
+  if (noAutoEnds(c) || !c.wall) return null;
   const w = wall(c.wall); if (!w || !(w.hidden || w.island)) return null;
   const dir = (end === 'L') === (c.side === 1) ? -1 : 1, at = k => dir < 0 ? k.off : k.off + k.w;
-  const k = (S.cabinets || []).find(x => x !== c && x.wall === c.wall && x.side === -c.side && !x.moz && !x.made && Math.abs(at(x) - at(c)) <= 1
+  const k = (S.cabinets || []).find(x => x !== c && x.wall === c.wall && x.side === -c.side && !noAutoEnds(x) && Math.abs(at(x) - at(c)) <= 1
     && Math.min(x.elev + x.h, c.elev + c.h) - Math.max(x.elev, c.elev) > 1);
   if (!k) return null;
   const tc = c.elev + c.h, tk = k.elev + k.h, owner = Math.abs(tc - tk) > 0.5 ? tc > tk : c.side === 1;
   return { k, end: (dir < 0) === (k.side === 1) ? 'L' : 'R', owner };
 }
 function panelPiecesOwn(c, end) {
-  if (c.moz || c.made) return null;
+  if (noAutoEnds(c)) return null;
   const m = panelMode(c, end), full = () => { const z0 = panelZ0(c); return [{ z0, z1: c.h, steps: [{ z0, z1: c.h, d0: 0 }] }]; };
   // Products wrapped in the finish material all round (open shelf units, the open vanity) are their own finished ends.
   if (c.wrap && m !== 'on') return null;
@@ -458,7 +470,7 @@ function refitFillers(from, to) {
       [-1, 1].forEach(dir => {
         // 0.63.20: only ends that take an automatic filler move. Fillers and panels placed as products, ends set to Never
         // or Always, and a Mozaik job's own fillers stay where they are (they were sliding 1 1/2" each time).
-        const end = (dir < 0) === (c.side === 1) ? 'L' : 'R'; if (c.made || c.moz || (c['fill' + end] || '') !== '') return;
+        const end = (dir < 0) === (c.side === 1) ? 'L' : 'R'; if (noAutoEnds(c) || (c['fill' + end] || '') !== '') return;
         const n = nearestAt(c, dir); if (!n || n.kind !== 'wall') return;
         const had = from.autoFillers ? from.fillerW : 0, want = to.autoFillers ? to.fillerW : 0;
         if (n.gap > Math.max(had, from.fillerReach || 0, to.fillerReach) + 0.01 || Math.abs(n.gap - want) < 0.01) return;

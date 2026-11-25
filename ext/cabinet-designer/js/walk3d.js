@@ -237,6 +237,24 @@ function walkMove(dx, dz) {
   return false;
 }
 
+// Opens the shut door just ahead (within a foot) of someone walking toward it (dx,dz is the way they push).
+function walkBumpDoor(dx, dz) {
+  const r = curRoom(), L = Math.hypot(dx, dz); if (!r || !L) return false;
+  const ux = dx / L, uz = dz / L;
+  for (const f of r.fixtures || []) {
+    if (!doorHasLeaf(f) || DOORS.goal[f.id]) continue;
+    const d = doorWhere(r, f); if (!d) continue;
+    // Heading at the wall, not along it.
+    if (Math.abs(ux * d.g.n.x + uz * d.g.n.y) < 0.5) continue;
+    for (let k = WALK.r; k <= WALK.r + 12; k += 3) {
+      const px = WALK.x + ux * k - d.w.x1, pz = WALK.z + uz * k - d.w.y1;
+      const along = px * d.g.u.x + pz * d.g.u.y, across = px * d.g.n.x + pz * d.g.n.y;
+      if (along > d.a0 - 2 && along < d.a1 + 2 && Math.abs(across) < d.T / 2 + 10) { doorToggle(f.id); return true; }
+    }
+  }
+  return false;
+}
+
 /* ---------- Moving ---------- */
 function walkLoop() {
   if (WALK.raf || !WALK.on) return;
@@ -267,6 +285,8 @@ function walkLoop() {
     if (!turn && Math.abs(WALK.turnV) < 0.005) WALK.turnV = 0;
     const moving = !!(WALK.vx || WALK.vz), turning = !!WALK.turnV;
     if (turning) WALK.yaw += WALK.turnV * dt;
+    // Walking into a shut door opens it, so you can go on through.
+    if (want) walkBumpDoor(tx, tz);
     if (moving) {
       const x0 = WALK.x, z0 = WALK.z; walkMove(WALK.vx * dt, WALK.vz * dt);
       // Bumping into something takes the speed out of that direction, so you slide along it and don't stick.
@@ -433,7 +453,7 @@ function walkLights(v, force) {
   const inLights = o => { for (let p = o; p; p = p.parent) if (p.userData.layer === 'lights') return true; return false; };
   v.root.traverse(o => {
     const u = o.userData;
-    if (o.isPointLight) { if (u.lit0 === undefined) u.lit0 = o.intensity; o.intensity = dark ? 0 : u.lit0; return; }
+    if ((o.isPointLight && !u.winBounce) || (o.isLight && u.puck)) { if (u.lit0 === undefined) u.lit0 = o.intensity; o.intensity = dark ? 0 : u.lit0; return; }
     if (!o.isMesh || !inLights(o)) return;
     const m = u.litMat || o.material; if (!m || Array.isArray(m) || m.colorWrite === false) return;
     if (m.blending === THREE.AdditiveBlending) { o.visible = !dark; return; }

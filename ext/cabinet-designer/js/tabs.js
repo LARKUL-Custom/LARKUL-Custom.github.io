@@ -367,8 +367,8 @@ function doorRenderSVG(raw, w, h, o = {}) {
   if (o.dims && framed && lay.fields.length > 1) lay.fields.forEach(fl => { const fs = Math.max(1, Math.min(2.4, (fl.x1 - fl.x0) / 4)); s += `<g class="drnum"><circle cx="${(fl.x0 + fl.x1) / 2}" cy="${Y((fl.z0 + fl.z1) / 2)}" r="${fs * 0.75}"/><text x="${(fl.x0 + fl.x1) / 2}" y="${Y((fl.z0 + fl.z1) / 2) + fs * 0.35}" font-size="${fs}" text-anchor="middle">${fl.i + 1}</text></g>`; });
   // Click targets over the frame and the openings; the picked one gets an outline.
   if (o.pick && framed) {
-    const pk = o.pick, hit = (k, i, x0, z0, x1, z1) => `<rect class="dhit${pk.k === k && pk.i === i ? ' on' : ''}" data-act="door-pick" data-id="${k}:${i}" x="${x0}" y="${Y(z1)}" width="${x1 - x0}" height="${z1 - z0}"><title>${{ field: 'Opening ' + (i + 1), stile: 'Stile', rail: 'Rail', midrail: 'Mid rail ' + (i + 1), midstile: 'Mid stile ' + (i + 1) }[k]}</title></rect>`;
-    s += `<g class="dhits" style="--dw:${b * 0.5}">${lay.fields.map(fl => hit('field', fl.i, fl.x0, fl.z0, fl.x1, fl.z1)).join('')}${lay.frame.map(f => hit(f.kind, f.kind === 'stile' || f.kind === 'rail' ? 0 : f.i, f.x0, f.z0, f.x1, f.z1)).join('')}</g>`;
+    const pk = o.pick, hit = (k, i, x0, z0, x1, z1) => `<rect class="dhit${pk.k === k && pk.i === i ? ' on' : ''}" data-act="${o.pickAct || 'door-pick'}" data-id="${o.pickAct ? o.pickRef + '|' : ''}${k}:${i}" x="${x0}" y="${Y(z1)}" width="${x1 - x0}" height="${z1 - z0}"><title>${{ field: 'Opening ' + (i + 1), stile: 'Stile', rail: 'Rail', midrail: 'Mid rail ' + (i + 1), midstile: 'Mid stile ' + (i + 1) }[k]}</title></rect>`;
+    s += `<g class="dhits" style="--dw:${b * 0.5}">${lay.fields.map(fl => hit('field', fl.i, fl.x0, fl.z0, fl.x1, fl.z1)).join('')}${lay.frame.map(f => hit(f.kind, f.kind === 'stile' || f.kind === 'rail' ? (o.pickAct ? ({ L: 0, R: 1, B: 0, T: 1 })[f.side] : 0) : f.i, f.x0, f.z0, f.x1, f.z1)).join('')}</g>`;
   }
   if (!o.dims) return `<svg viewBox="${-b} ${-b} ${w + 2 * b} ${h + 2 * b}" aria-hidden="true">${defs}${s}</svg>`;
   const fs = Math.max(1.1, k / 16), g = fs * 1.4, tick = fs * 0.45, dl = 'stroke="currentColor" stroke-opacity=".55" stroke-width="' + fs * 0.06 + '"';
@@ -1043,7 +1043,7 @@ function renderCountertops() {
 function autoTopsCard(runs, topOpts) {
   return `<div class="card">${cardHead('Automatic runs in ' + esc(curRoom().name), curRoom().autoTops === false ? `<button class="btn primary" data-act="tops-auto">${icon('check')}Auto build countertops</button>` : `<button class="btn" data-act="tops-auto">Rebuild</button><button class="btn" data-act="tops-auto-off">Turn off</button>`)}<div class="tscroll"><table class="t"><thead><tr><th>Wall</th><th>Cabinets</th><th>Style</th><th>Length</th><th>Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${runs.filter(r => !r.generic).map(r => {
     const R = 'ctrun:' + r.key;
-    return `<tr><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(id => LBL[id]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts })}</td><td style="width:80px">${ctjSizeIn(r, 'len')}</td><td style="width:80px">${ctjSizeIn(r, 'depth')}</td>
+    return `<tr class="${ui.topRun === r.key ? 'on' : ''}" data-ctrow="${esc(r.key)}"><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(id => LBL[id]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts })}</td><td style="width:80px">${ctjSizeIn(r, 'len')}</td><td style="width:80px">${ctjSizeIn(r, 'depth')}</td>
       <td style="width:80px">${ctl(R, 'ovS', r.ovS, 'len')}</td><td style="width:80px">${ctl(R, 'ovE', r.ovE, 'len')}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td></tr>`;
   }).join('') || `<tr><td colspan="8" class="muted">${curRoom().autoTops === false ? 'Automatic tops are off in this room. Auto build countertops lays a top on every run of base cabinets.' : 'Place base cabinets to get countertop runs.'}</td></tr>`}</tbody></table></div></div>`;
 }
@@ -1075,22 +1075,36 @@ function autoMoldBox(runs) {
       <label class="f"><span>Within this much of the ceiling (blank = every upper)</span><input type="text" class="num qm-gap" value="${esc(ui.qmGap === '' ? '' : fmtLen(ui.qmGap ?? 12))}"></label>
       <label class="checkrow"><input type="checkbox" class="qm-tall"${ui.qmTall !== false ? ' checked' : ''}> Include tall cabinets</label>
       <div class="row-actions"><button class="btn primary" data-act="mold-quick">Auto build molding</button><button class="btn" data-act="mold-clear">Remove from cabinets</button></div>
-    </div><div class="note qm-note">${runs.length ? `${runs.length} run${runs.length === 1 ? '' : 's'} in ${esc(curRoom().name)}.` : `No moldings in ${esc(curRoom().name)} yet.`}</div></div>`;
+    </div><div class="note qm-note">${runs.length ? `${runs.length} run${runs.length === 1 ? '' : 's'} in ${esc(curRoom().name)}.` : `No moldings in ${esc(curRoom().name)} yet.`}</div></div>${autoBaseBox(runs)}`;
+}
+// 0.63.46: Auto build base molding, along the floor at the bottom of the base (and tall) cabinets.
+const baseMoldPick = () => (molding(ui.bmMold) ? ui.bmMold : ((S.moldings.find(m => m.base) || S.moldings.find(m => m.profile === 'base') || {}).id || ''));
+function autoBaseBox(runs) {
+  const sel = baseMoldPick(), n = runs.filter(r => r.base).length;
+  const list = S.moldings.slice().sort((a, b) => (b.base ? 1 : 0) - (a.base ? 1 : 0));
+  return `<div class="qm-box bm-box"><div class="quick">
+      <label class="f wide"><span>Base molding</span><select class="bm-mold">${list.map(m => `<option value="${m.id}"${m.id === sel ? ' selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
+      <label class="checkrow"><input type="checkbox" class="bm-tall"${ui.bmTall !== false ? ' checked' : ''}> Include tall cabinets</label>
+      <label class="checkrow"><input type="checkbox" class="bm-isl"${ui.bmIsl !== false ? ' checked' : ''}> Include islands</label>
+      <div class="row-actions"><button class="btn primary" data-act="bmold-quick">Auto build base molding</button><button class="btn" data-act="bmold-clear">Remove base molding</button></div>
+    </div><div class="note bm-note">${n ? `${n} base run${n === 1 ? '' : 's'} in ${esc(curRoom().name)}.` : `No base molding in ${esc(curRoom().name)} yet.`}</div></div>`;
 }
 
 // Molding page, laid out like Tops, Pricing and Cutlist.
-const MOLD_PROFILES = [{ v: 'crown', l: 'Crown' }, { v: 'cove', l: 'Cove' }, { v: 'flat', l: 'Flat / batten' }, { v: 'shape', l: 'Custom shape' }];
+const MOLD_PROFILES = [{ v: 'crown', l: 'Crown' }, { v: 'cove', l: 'Cove' }, { v: 'flat', l: 'Flat / batten' }, { v: 'base', l: 'Base' }, { v: 'shape', l: 'Custom shape' }];
 const moldTone = m => TOP_TONES[(Math.max(0, S.moldings.indexOf(m)) + 3) % TOP_TONES.length];
 // The molding's side profile; dims adds its height and projection.
 // The profile itself, in inches with up as -y; the back of the molding sits at x 0 on the cabinet top (y 0).
 function moldProfileShape(m, col, sw) {
-  const steps = m.profile === 'flat' ? [[1, 1]] : m.profile === 'crown' ? [[0.45, 0.4], [0.55, 1]] : [[0.5, 0.55], [0.5, 1]];
+  const steps = m.profile === 'flat' || m.profile === 'base' ? [[1, 1]] : m.profile === 'crown' ? [[0.45, 0.4], [0.55, 1]] : [[0.5, 0.55], [0.5, 1]];
   let y = 0; const outl = moldProfile(m);
   const st = `fill="${esc(col)}" stroke="#334155" stroke-width="${sw}"`;
   // Stock profiles drawn with their curves: a sprung crown with an ogee face, a cove, a flat batten.
   const h = m.h, d = m.d, P = (x, yy) => `${r3(x)},${r3(-yy)}`;
   const stock = m.profile === 'crown' ? `M${P(0, 0)}L${P(d * 0.22, 0)}L${P(d * 0.22, h * 0.08)}C${P(d * 0.22, h * 0.45)} ${P(d * 0.95, h * 0.4)} ${P(d * 0.92, h * 0.86)}L${P(d, h * 0.9)}L${P(d, h)}L${P(d * 0.78, h)}Z`
-    : m.profile === 'cove' ? `M${P(0, 0)}L${P(d * 0.18, 0)}Q${P(d * 0.22, h * 0.82)} ${P(d, h * 0.86)}L${P(d, h)}L${P(0, h)}Z` : '';
+    : m.profile === 'cove' ? `M${P(0, 0)}L${P(d * 0.18, 0)}Q${P(d * 0.22, h * 0.82)} ${P(d, h * 0.86)}L${P(d, h)}L${P(0, h)}Z`
+    // Base: square at the floor, an ogee easing back to the wall at the top.
+    : m.profile === 'base' ? `M${P(0, 0)}L${P(d, 0)}L${P(d, h * 0.74)}C${P(d, h * 0.86)} ${P(d * 0.4, h * 0.84)} ${P(d * 0.35, h * 0.96)}L${P(d * 0.3, h)}L${P(0, h)}Z` : '';
   return outl ? `<polygon ${st} points="${outl.map(p => `${r3(p.x)},${r3(-p.y)}`).join(' ')}"/>` : stock ? `<path ${st} d="${stock}"/>` : steps.map(([hf, df]) => { const r = `<rect ${st} x="0" y="${-(y + m.h * hf)}" width="${m.d * df}" height="${m.h * hf}"/>`; y += m.h * hf; return r; }).join('');
 }
 function moldProfileSVG(m, dims) {
@@ -1131,15 +1145,15 @@ function renderMoldings() {
   const all = runs.reduce((a, r) => a + r.len, 0), sticks = Object.values(tot).reduce((a, L) => a + Math.ceil(L * 1.1 / 96), 0);
   const side = `<div class="prx-grand mdx-grand"><span>Molding in ${esc(room.name)}</span><b>${(all * 1.1 / 12).toFixed(1)} ft</b><small>${runs.length} run${runs.length === 1 ? '' : 's'} · ${sticks} stick${sticks === 1 ? '' : 's'} of 8 ft, with 10% waste</small></div>
     <div class="prx-navh">Auto build</div><div class="mdx-auto">${autoMoldBox(runs)}</div>
-    <div class="prx-navh">Moldings</div><div class="cl-mats">${S.moldings.map(x => { const n = usedBy(c => c.molding === x.id); return `<button class="cl-mat ctx-style${view === 'styles' && x.id === m.id ? ' on' : ''}" data-act="mold-pick" data-id="${esc(x.id)}" style="--c:${moldTone(x)}" data-drag="mold:${x.id}"><span class="mdx-pic">${moldProfileSVG(x)}</span><span><b>${esc(x.name)}</b><small>${fmtLen(x.h)} high${n ? ` · ${nCab(n)}` : ''}</small></span><i class="ctx-dot"></i></button>`; }).join('')}</div>`;
+    <div class="prx-navh">Moldings</div><div class="cl-mats">${S.moldings.map(x => { const n = usedBy(c => c.molding === x.id || c.baseMold === x.id); return `<button class="cl-mat ctx-style${view === 'styles' && x.id === m.id ? ' on' : ''}" data-act="mold-pick" data-id="${esc(x.id)}" style="--c:${moldTone(x)}" data-drag="mold:${x.id}"><span class="mdx-pic">${moldProfileSVG(x)}</span><span><b>${esc(x.name)}</b><small>${fmtLen(x.h)} high${n ? ` · ${nCab(n)}` : ''}</small></span><i class="ctx-dot"></i></button>`; }).join('')}</div>`;
   const tabs = `<div class="setx-tabs prx-tabs" role="tablist">${[['runs', 'Runs', 'ruler'], ['styles', 'Moldings', 'stack']].map(([k, l, ic]) => `<button role="tab" data-act="mold-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
-  const rows = runs.map((r, i) => `<tr class="${ui.moldRun === i ? 'on' : ''}"><td><span class="ctx-num" style="background:${moldTone(r.m)}">${i + 1}</span></td><td>${wallName(wall(r.wall))}</td><td>${r.generic ? '<span class="muted">Placed by hand</span>' : r.cabs.map(cid => LBL[cid]).join(', ')}</td><td>${esc(r.m.name)}</td><td class="n">${fmtLen(r.h)}</td><td class="n">${fmtLen(r.front, 1)}</td><td class="n">${fmtLen(r.returns, 1)}</td><td class="n"><b>${fmtLen(r.len, 1)}</b></td></tr>`).join('');
+  const rows = runs.map((r, i) => `<tr class="${ui.moldRun === i ? 'on' : ''}"><td><span class="ctx-num" style="background:${moldTone(r.m)}">${i + 1}</span></td><td>${wallName(wall(r.wall))}</td><td>${r.generic ? '<span class="muted">Placed by hand</span>' : r.cabs.map(cid => LBL[cid]).join(', ')}</td><td>${esc(r.m.name)}${r.base ? ' <span class="muted">base</span>' : ''}</td><td class="n">${fmtLen(r.h)}</td><td class="n">${fmtLen(r.front, 1)}</td><td class="n">${fmtLen(r.returns, 1)}</td><td class="n"><b>${fmtLen(r.len, 1)}</b></td></tr>`).join('');
   const totals = Object.entries(tot).map(([mid, L]) => { const x = molding(mid); return `<div class="mdx-tot" style="--c:${moldTone(x)}"><span class="mdx-pic">${moldProfileSVG(x)}</span><span><b>${esc(x.name)}</b><small>${(L * 1.1 / 12).toFixed(1)} ft with 10% waste</small></span><b class="mdx-st">${Math.ceil(L * 1.1 / 96)} × 8 ft</b></div>`; }).join('');
   const runsBody = `<div class="psec box ctx-plan">${secHead('home', `${esc(room.name)} from above`, 'violet')}${moldPlanSVG(runs)}</div>
     ${totals ? `<div class="psec box">${secHead('stack', 'To order', 'amber')}<div class="mdx-tots">${totals}</div></div>` : ''}
-    <div class="psec box">${secHead('ruler', 'Runs', 'teal')}${rows ? `<div class="tscroll"><table class="t ctx-t"><thead><tr><th>#</th><th>Wall</th><th>Cabinets</th><th>Molding</th><th class="r">Height</th><th class="r">Front</th><th class="r">Returns</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="note show">No molding in ${esc(room.name)} yet. Auto build molding on the left puts it on every upper cabinet close to the ceiling, or drag a molding onto a cabinet in the Room.</div>`}</div>
+    <div class="psec box">${secHead('ruler', 'Runs', 'teal')}${rows ? `<div class="tscroll"><table class="t ctx-t"><thead><tr><th>#</th><th>Wall</th><th>Cabinets</th><th>Molding</th><th class="r">Height</th><th class="r">Front</th><th class="r">Returns</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="note show">No molding in ${esc(room.name)} yet. Auto build molding on the left puts it on every upper cabinet close to the ceiling, Auto build base molding puts it along the floor under the base cabinets, or drag a molding onto a cabinet in the Room.</div>`}</div>
     ${(S.genMolds || []).length ? genMoldsCard() : ''}`;
-  const R = 'mold:' + m.id, n = usedBy(c => c.molding === m.id), ft = S.rooms.reduce((a, rm) => a + withRoom(rm, () => moldingRuns().filter(r => r.m.id === m.id).reduce((q, r) => q + r.len, 0)), 0) / 12;
+  const R = 'mold:' + m.id, n = usedBy(c => c.molding === m.id || c.baseMold === m.id), ft = S.rooms.reduce((a, rm) => a + withRoom(rm, () => moldingRuns().filter(r => r.m.id === m.id).reduce((q, r) => q + r.len, 0)), 0) / 12;
   const tile = (tone, ic, v, lb) => `<div class="edx-stat ${tone}">${icon(ic)}<b>${esc(String(v))}</b><span>${lb}</span></div>`;
   const stylesBody = `<div class="ctx-style-grid"><div class="psec box ctx-pic">${secHead('stack', esc(m.name), 'violet')}<div class="ctx-pv mdx-pv">${moldProfileSVG(m, true)}</div>
       <div class="edx-stats">${tile('violet', 'ruler', fmtLen(m.h), 'Height')}${tile('teal', 'ruler', fmtLen(m.d), 'Projection')}${tile('amber', 'home', nCab(n), 'In this job')}${tile('blue', 'ruler', ft.toFixed(1) + ' ft', 'Length in this job')}</div></div>
@@ -1148,7 +1162,8 @@ function renderMoldings() {
         <div class="ctx-matrow">${swatch(mat(m.mat) || {}, 30)}${fld('Material', R, 'mat', m.mat, 'select', { options: matOpts(), wide: true })}</div></div>
       <div class="psec box">${secHead('ruler', 'Size', 'teal')}<div class="grid2">${fld('Height', R, 'h', m.h, 'len')}${fld('Projection', R, 'd', m.d, 'len')}</div></div>
       <div class="psec box">${secHead('sliders', 'Where it goes', 'amber')}<label class="checkrow">${ctl(R, 'fill', m.fill, 'bool', { label: 'Fill to ceiling' })} Fill the gap to the ceiling (up to 12")</label>
-        <label class="checkrow">${ctl(R, 'bottom', !!m.bottom, 'bool', { label: 'Light rail' })} Goes under the cabinet (light rail)</label></div></div></div>`;
+        <label class="checkrow">${ctl(R, 'bottom', !!m.bottom, 'bool', { label: 'Light rail' })} Goes under the cabinet (light rail)</label>
+        <label class="checkrow">${ctl(R, 'base', !!m.base, 'bool', { label: 'Base molding' })} Base molding (on the floor along the cabinet bottoms)</label></div></div></div>`;
   const b = (act, ic, l, x = '', bid = '') => `<button class="btn${x}" data-act="${act}"${bid ? ` data-id="${esc(bid)}"` : ''}>${icon(ic)}${l}</button>`;
   const acts = `<div class="prx-acts">${b('gmold-draw', 'wall', 'Draw molding runs')}${b('gmold-add', 'plus', 'Add a run by hand')}${b('tab', 'home', 'Show in the room', '', 'room')}
     <span class="edx-sep"></span><div class="prx-acth">Moldings</div>${b('mold-add', 'plus', 'New molding')}${b('mold-add-shape', 'ruler', 'Draw a new profile')}${b('lp-copy', 'copy', 'Copy this molding', '', 'mold')}${S.moldings.length > 1 ? b('mold-del', 'trash', 'Delete this molding', ' danger', m.id) : ''}</div>`;
@@ -1359,7 +1374,7 @@ function exportData(units) {
           edgebanding: Object.fromEntries(EDGE_KEYS.map(k => { const eb = edgeband(q.band[k]); return [k, eb ? { edge: partKind(q.kind).edges[k], band: eb.name, thicknessMM: eb.thickMM } : null]; })), ops: q.ops.map(conv), ...(q.note ? { comment: q.note } : {}), ...(q.cncGroup ? { cncGroup: q.cncGroup } : {}), ...(q.outline ? { outline: q.outline.map(o => ({ x: r(o.x), y: r(o.y) })) } : {}), ...(q.outline && q.outlineEdges ? { outlineEdges: q.outlineEdges.slice() } : {}) });
   const room = rm => withRoom(rm, () => ({
     name: rm.name,
-    settings: { cabinetMaterials: cabMatT(roomSet('cabMatT')).name, drawerMaterials: drawerMatT(roomSet('drawerMatT')).name, doorTemplate: doorTpl(roomSet('doorT')).name,
+    settings: { cabinetMaterials: cabMatT(roomSet('cabMatT')).name, drawerMaterials: cabDrawerMatT(null).name, doorTemplate: doorTpl(roomSet('doorT')).name,
       drawerSlide: (hwPick(roomSet('slide'), 'slide') || {}).name, hinge: (hwPick(roomSet('hinge'), 'hinge') || {}).name, shelfPin: (hwPick(roomSet('shelfpin'), 'shelfpin') || {}).name },
     walls: S.walls.map(w => ({ id: w.id, name: wallName(w), x1: r(w.x1), y1: r(w.y1), x2: r(w.x2), y2: r(w.y2), thickness: r(w.thick), height: r(w.height) })),
     cabinets: S.cabinets.map(c => {
@@ -1368,9 +1383,9 @@ function exportData(units) {
       return {
         label: LBL[c.id], name: c.name, template: c.libId, category: c.cat,
         width: r(c.w), height: r(c.h), depth: r(c.d), elevation: r(c.elev), wall: c.wall, side: c.side, positionAlongWall: r(c.off),
-        cabinetMaterials: cabMatT(cabSet(c, 'cabMatT')).name, drawerMaterials: drawerMatT(cabSet(c, 'drawerMatT')).name, doorTemplate: doorTpl(cabSet(c, 'doorT')).name,
+        cabinetMaterials: cabMatT(cabSet(c, 'cabMatT')).name, drawerMaterials: cabDrawerMatT(c).name, doorTemplate: doorTpl(cabSet(c, 'doorT')).name,
         drawerSlide: (hwPick(cabSet(c, 'slide'), 'slide') || {}).name, hinge: (hwPick(cabSet(c, 'hinge'), 'hinge') || {}).name,
-        construction: c.construction, appliedPanels: { left: hasPanel(c, 'L'), right: hasPanel(c, 'R'), style: panelFor(c).door.name, fit: panelFor(c).name }, fillers: fillersOf(c).map(f => ({ end: f.end === 'L' ? 'left' : 'right', width: r3(f.gap) })), molding: c.molding ? (molding(c.molding) || {}).name : null,
+        construction: c.construction, appliedPanels: { left: hasPanel(c, 'L'), right: hasPanel(c, 'R'), style: panelFor(c).door.name, fit: panelFor(c).name }, fillers: fillersOf(c).map(f => ({ end: f.end === 'L' ? 'left' : 'right', width: r3(f.gap) })), molding: c.molding ? (molding(c.molding) || {}).name : null, baseMolding: c.baseMold ? (molding(c.baseMold) || {}).name : null,
         frontLayout: c.rows.map(x => ({ ...x, h: x.h === '*' ? '*' : r(x.h) })),
         fronts: b.fronts.filter(x => x.type !== 'open').map(x => ({ type: x.type, width: r(x.x1 - x.x0), height: r(x.z1 - x.z0) })),
         parameters: pp, custom: Object.fromEntries((c.custom || []).filter(x => x.k).map(x => [x.k, x.v])),

@@ -110,7 +110,7 @@ function realAO(v) {
   v.scene.traverse(o => {
     if (!o.visible) return;
     if (o.isSprite || o.isLine || o.isLineSegments || o.isPoints || o.isLight) { if (!o.isLight) { hide.push(o); o.visible = false; } return; }
-    if (o.isMesh) { const m = Array.isArray(o.material) ? o.material[0] : o.material; if (!m || m.transparent || m.depthWrite === false || m.colorWrite === false || m.visible === false) { hide.push(o); o.visible = false; } }
+    if (o.isMesh) { const m = Array.isArray(o.material) ? o.material[0] : o.material; if (!m || o.userData.noAO || m.transparent || m.depthWrite === false || m.colorWrite === false || m.visible === false) { hide.push(o); o.visible = false; } }
   });
   const keep = { bg: v.scene.background, ov: v.scene.overrideMaterial, tm: r.toneMapping, sh: r.shadowMap.autoUpdate, ac: r.autoClear, cc: r.getClearColor(new THREE.Color()), ca: r.getClearAlpha() };
   try {
@@ -189,11 +189,11 @@ function realLight(v) {
   // Only through windows (Lights tab): no fill from overhead, almost no sky everywhere, a dark ceiling, and the sky
   // light at each window (windowSky3 in lights.js) follows the daylight. The sun still comes in where walls let it.
   if (typeof lay === 'function' && lay().winOnly) {
-    v.hemi.intensity = (v.winBounce || 0) * d; v.hemi.color.set(0xf4efe6); v.hemi.groundColor.set(0xb8a894); v.fill.intensity = 0;
+    v.hemi.intensity = 0; v.hemi.color.set(0xf4efe6); v.hemi.groundColor.set(0xb8a894); v.fill.intensity = 0;
     v.renderer.toneMappingExposure = 1.05;
     if (typeof realCeil3 === 'function') realCeil3().emissive.set(0x000000);
     v.envK = 0;
-    v.root.traverse(o => { if (o.isSpotLight && o.userData.winSky) o.intensity = o.userData.winSky * 3.2 * d; });
+    v.root.traverse(o => { if (o.isSpotLight && o.userData.winSky) o.intensity = o.userData.winSky * 3.2 * d; if (o.isPointLight && o.userData.winBounce) o.intensity = o.userData.winBounce * d; });
   }
   v.scene.traverse(o => { if (!o.isMesh) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
     if (!m || !m.isMeshStandardMaterial) return;
@@ -201,6 +201,8 @@ function realLight(v) {
     m.envMapIntensity = m.userData.env0 * v.envK;
   }); });
   v.setBackground('#' + mixHex(0x1c2233, 0xe4e1db, d).getHexString());
+  // 0.63.48: the sky and far hills of a landscape outside follow the time of day too (landscape.js).
+  if (typeof landSun === 'function') landSun(v, S0);
 }
 // The small time of day slider beside Realistic.
 function sunSet(h) {

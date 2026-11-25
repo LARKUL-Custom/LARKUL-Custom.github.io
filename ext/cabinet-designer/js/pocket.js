@@ -60,5 +60,5 @@ function pocketBtn(c) {
   if (!c || c.moz || c.made || !(c.rows || []).some(r => r.type === 'door')) return '';
   if ((typeof faceFrame === 'function' && faceFrame(c)) || (typeof angledCorner === 'function' && angledCorner(c)) || (typeof blindCorner === 'function' && blindCorner(c))) return '';
   const on = c.pocket === 'on';
-  return `<button data-act="cab-pocket" data-id="${c.id}" aria-pressed="${on}" title="${on ? 'Pocket doors are on: the doors swing open and slide back into pockets inside the cabinet. Click to turn them off.' : 'Pocket doors: the doors swing open, then slide back into pockets inside the cabinet (Blum REVEGO style). Pockets take width from the inside.'}">${icon('door')}Pocket</button>`;
+  return `<button data-act="cab-pocket" data-id="${c.id}" aria-pressed="${on}" title="Pocket: ${on ? 'Pocket doors are on: the doors swing open and slide back into pockets inside the cabinet. Click to turn them off.' : 'Pocket doors: the doors swing open, then slide back into pockets inside the cabinet (Blum REVEGO style). Pockets take width from the inside.'}">${icon('door')}Pocket</button>`;
 }

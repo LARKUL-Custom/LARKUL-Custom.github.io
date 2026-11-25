@@ -151,6 +151,54 @@ function archElevD(f, EX) {
   return { hole: A(k.a0, k.a1, k.r, z0), outer: A(f.off, f.off + f.w, k.r + (f.bare ? 0 : CASE), f.elev || 0) };
 }
 
+/* ---------- Door models ---------- */
+// 0.63.40 (Ayden 2026-11-24: "I want actual doors for doorways"; he picked his own Mozaik door models): the leaves
+// draw with the moving parts cut out of his Mozaik door graphics (tools/door-models.py packs them into models/), each
+// stretched so its leaf fits the opening. Door style picks which one; Plain is the drawn slab from 0.63.33, which also
+// shows while a model is still loading.
+const ROOM_DOOR_STYLES = [
+  { v: 'panel', l: 'Panel', m: 'Door Leaf Panel' },
+  { v: 'slab', l: 'Slab', m: 'Door Leaf Slab' },
+  { v: 'glass', l: 'Full glass', m: 'Door Leaf Glass' },
+  { v: 'halfglass', l: 'Half glass', m: 'Door Leaf Half Glass' },
+  { v: 'closet', l: 'Closet panel', m: 'Door Leaf Closet' },
+  { v: 'patio', l: 'Sliding glass (patio)', m: 'Door Leaf Patio Slider' },
+  { v: 'barn', l: 'Barn door', m: 'Barn Door Leaf' },
+  { v: 'louvred', l: 'Louvred', m: 'Door Leaf Louvred' },
+  { v: 'plain', l: 'Plain (drawn)' },
+];
+const DOOR_STYLE_OF = {
+  single: ['panel', 'slab', 'glass', 'halfglass', 'closet', 'plain'], double: ['panel', 'slab', 'glass', 'halfglass', 'closet', 'plain'],
+  french: ['glass', 'halfglass', 'plain'], pocket: ['panel', 'slab', 'glass', 'halfglass', 'closet', 'plain'], barn: ['barn', 'plain'],
+  bypass: ['patio', 'panel', 'slab', 'closet', 'plain'], bifold: ['louvred', 'closet', 'panel', 'slab', 'plain'],
+};
+function roomDoorStyle(f) { const ok = DOOR_STYLE_OF[doorType(f)] || []; return ok.includes(f.dstyle) ? f.dstyle : ok[0] || ''; }
+const roomDoorStyleOpts = f => (DOOR_STYLE_OF[doorType(f)] || []).map(v => ({ v, l: ROOM_DOOR_STYLES.find(x => x.v === v).l }));
+// Where each piece's leaf body is, in the model's own inches [x0, y0, z0, x1, y1, z1] (the rest is handles, hangers).
+// A piece not listed is all leaf.
+const DM_BODY = (() => {
+  const o = {}, lf = (n, x1) => { o[n] = o[n + ' Bare'] = [3.5, 8.375, 0, x1, 9.875, 80]; };
+  lf('Door Leaf Panel', 32.5); lf('Door Leaf Slab', 32.5); lf('Door Leaf Glass', 39.5); lf('Door Leaf Half Glass', 39.5); lf('Door Leaf Closet', 19.5);
+  o['Door Leaf Patio Slider'] = [3.5, 8.375, 0.5, 37.5, 9.875, 80]; o['Door Leaf Patio Fixed'] = [35.625, 9.875, 0.5, 69.625, 11.375, 80];
+  o['Barn Door Leaf'] = [3, 2.5, 0, 35, 3.5, 84];
+  return o;
+})();
+// The piece sized so its leaf body spans x 0..w and y z0..z0+h, its middle on z = 0 (+z is the side the model's
+// handle or pull faces); depth keeps its own inches. Null until the model is in (it redraws the room then).
+function doorModel3(name, w, h, z0, selCol) {
+  if (typeof modelMesh !== 'function') return null;
+  const key = 'std:' + name, mm = modelMesh(key, 1, 1, 1, selCol); if (!mm) return null;
+  const b = modelGeo[key].box, B = DM_BODY[name] || b, sx = w / (B[3] - B[0]), sz = h / (B[5] - B[2]);
+  mm.scale.set((b[3] - b[0]) * sx, (b[5] - b[2]) * sz, b[4] - b[1]);
+  mm.position.set(-(B[0] - b[0]) * sx, z0 - (B[2] - b[2]) * sz, -(b[4] - (B[1] + B[4]) / 2));
+  return mm;
+}
+// The piece a leaf of this door draws with; pocket, bypass and bifold leaves leave their lever handles off.
+function doorLeafModel(f) {
+  const t = doorType(f), s = ROOM_DOOR_STYLES.find(x => x.v === roomDoorStyle(f)), n = s && s.m; if (!n) return null;
+  return (t === 'pocket' || t === 'bypass' || t === 'bifold') && DM_BODY[n + ' Bare'] ? n + ' Bare' : n;
+}
+
 /* ---------- 3D ---------- */
 // The leaves inside the wall group grp (x along the wall from its start, y up, z through the wall: 0 on the side -1
 // face, T on the side 1 face). Each moving piece carries userData.doorLeaf, which Walk turns, slides or folds.
@@ -168,24 +216,41 @@ function doorLeaves3(f, grp, T, a0, a1, z0, z1, m) {
     g.add(box3(w - 2 * sw, h - rb - rt, 0.25, m.glass, cx, z0 + rb + (h - rb - rt) / 2, 0, false));
     return g;
   };
+  // 0.63.40: a leaf drawn with its door model, the plain slab while that is loading or for Plain.
+  const dm = doorLeafModel(f), plain = slab;
+  const mleaf = (w, h, th, dir, name = dm) => {
+    const mm = name && doorModel3(name, w, h, z0, m.selCol); if (!mm) return plain(w, h, th, dir);
+    const g = new THREE.Group(); g.add(mm); if (dir < 0) g.scale.x = -1; return g;
+  };
   const hang = (o, leafData) => { o.userData.doorLeaf = { id, ...leafData }; grp.add(pose(o)); return o; };
   const lh = ih - 0.15;
   if (t === 'single' || t === 'double' || t === 'french') {
     const zc = f.side === 1 ? T - 0.7 : 0.7, lv = t === 'single' ? [[st ? a0 : a1, st ? 1 : -1, iw]] : [[a0, 1, iw / 2], [a1, -1, iw / 2]];
     lv.forEach(([hx, dir, lw]) => {
-      const piv = new THREE.Group(); piv.position.set(hx, 0, zc); piv.add(slab(lw, lh, 1.375, dir));
+      const piv = new THREE.Group(); piv.position.set(hx, 0, zc); piv.add(mleaf(lw, lh, 1.375, dir));
       // Swings toward the side the door opens to (side 1 is +z here).
       hang(piv, { k: -out * dir });
     });
   } else if (t === 'pocket') {
     // Rides in the middle of the wall and slides into it, leaving 3" out to pull it back by.
     const g = new THREE.Group(); g.position.set(0, 0, T / 2);
-    const lf = slab(iw, lh, 1.375, 1); lf.position.x = a0; g.add(lf);
+    const lf = mleaf(iw, lh, 1.375, 1); lf.position.x = a0; g.add(lf);
+    // Its finger pull (from the Mozaik pocket door) near the edge that stays out.
+    const pl = dm && doorModel3('Door Pocket Pull', 3.696, 3, z0 + 34.5, m.selCol); if (pl) { pl.position.x += st ? a1 - 4.7 : a0 + 1; g.add(pl); }
     hang(g, { kind: 'slide', x0: 0, dx: (st ? -1 : 1) * (iw - 3) });
   } else if (t === 'barn') {
     // Hung on the face of the wall, 2" past the opening each side and 2" above it, on a black track over where it goes.
     const w2 = iw + 4, zc = f.side === 1 ? T + 1.6 : -1.6, g = new THREE.Group(); g.position.set(0, 0, zc);
     const bh = z1 + 2 - Math.max(0, z0 + 0.5), y0 = Math.max(0, z0 + 0.5), x0 = a0 - 2;
+    const t0 = st ? x0 - w2 + 4 : x0, t1 = st ? x0 + w2 : x0 + 2 * w2 - 4;
+    // The Mozaik barn door (door, hangers and pull) and its rail, the pull on the edge away from where it slides.
+    const bm = dm && doorModel3(dm, w2, bh, y0, m.selCol), rail = bm && doorModel3('Barn Door Rail', t1 - t0, 3, y0 + bh * 83.5 / 84, m.selCol);
+    if (bm && rail) {
+      const bw = new THREE.Group(); bw.add(bm); bw.scale.set(st ? 1 : -1, 1, out); bw.position.x = st ? x0 : x0 + w2; g.add(bw);
+      hang(g, { kind: 'slide', x0: 0, dx: (st ? -1 : 1) * (w2 - 4) });
+      rail.position.x += t0; rail.position.z += zc - out * 0.25; grp.add(rail);
+      return;
+    }
     g.add(box3(w2, bh, 1.375, m.hot || m.wood, x0 + w2 / 2, y0 + bh / 2, 0));
     // Rails and a Z brace on the room side (cosmetic, very thin).
     const fz = out * 0.75, br = m.hot || m.wood;
@@ -195,15 +260,17 @@ function doorLeaves3(f, grp, T, a0, a1, z0, z1, m) {
     [[x0 + 5], [x0 + w2 - 5]].forEach(([x]) => g.add(box3(0.4, 5, 0.3, m.hot || m.dark, x, y0 + bh + 1, -out * 0.2)));
     const pa = st ? x0 + w2 - 3 : x0 + 3; g.add(box3(0.75, 16, 0.75, m.hot || m.dark, pa, z0 + 39, out * 1.3));
     hang(g, { kind: 'slide', x0: 0, dx: (st ? -1 : 1) * (w2 - 4) });
-    const t0 = st ? x0 - w2 + 4 : x0, t1 = st ? x0 + w2 : x0 + 2 * w2 - 4;
     grp.add(box3(t1 - t0, 1.5, 0.3, m.hot || m.dark, (t0 + t1) / 2, y0 + bh + 3, zc - out * 0.2));
   } else if (t === 'bypass') {
     // Back panel (side -1 track) on the start half, front panel on the end half; the one away from where they slide
     // to moves over the other.
     const lw = iw / 2 + 1, back = new THREE.Group(), front = new THREE.Group();
     back.position.set(0, 0, T / 2 - 0.8); front.position.set(0, 0, T / 2 + 0.8);
-    const lb = slab(lw, lh, 1.25, 1); lb.position.x = a0; back.add(lb);
-    const lf = slab(lw, lh, 1.25, 1); lf.position.x = a1 - lw; front.add(lf);
+    // Patio: the fixed panel and the slider from the Mozaik patio door; the slider's handle on its outside edge.
+    const pat = dm === 'Door Leaf Patio Slider', lb = mleaf(lw, lh, 1.25, 1, pat ? (st ? 'Door Leaf Patio Fixed' : dm) : dm), lf = mleaf(lw, lh, 1.25, 1, pat ? (st ? dm : 'Door Leaf Patio Fixed') : dm);
+    if (pat && st) { lf.scale.x = -lf.scale.x; lf.position.x = a1; } else lf.position.x = a1 - lw;
+    if (pat && !st) { lb.scale.x = -lb.scale.x; lb.position.x = a0 + lw; } else lb.position.x = a0;
+    back.add(lb); front.add(lf);
     if (st) { grp.add(back); hang(front, { kind: 'slide', x0: 0, dx: -(iw - lw) }); }
     else { grp.add(front); hang(back, { kind: 'slide', x0: 0, dx: iw - lw }); }
   } else if (t === 'bifold') {
@@ -211,8 +278,8 @@ function doorLeaves3(f, grp, T, a0, a1, z0, z1, m) {
     const zc = f.side === 1 ? T - 0.7 : 0.7, stacks = f.swing === 'both' ? [[a0, 1, iw / 2], [a1, -1, iw / 2]] : [st ? [a0, 1, iw] : [a1, -1, iw]];
     stacks.forEach(([hx, dir, sw]) => {
       const pw = sw / 2, p1 = new THREE.Group(), p2 = new THREE.Group();
-      p1.position.set(hx, 0, zc); p1.add(slab(pw, lh, 1.125, dir));
-      p2.position.set(dir * pw, 0, 0); p2.add(slab(pw, lh, 1.125, dir));
+      p1.position.set(hx, 0, zc); p1.add(mleaf(pw, lh, 1.125, dir));
+      p2.position.set(dir * pw, 0, 0); p2.add(mleaf(pw, lh, 1.125, dir));
       p2.userData.doorLeaf = { id, kind: 'fold2', k: -out * dir }; pose(p2); p1.add(p2);
       hang(p1, { kind: 'fold', k: -out * dir });
     });

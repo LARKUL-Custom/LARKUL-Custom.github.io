@@ -81,6 +81,8 @@ function renderJob() {
 const SETTINGS = [
   { k: 'cabMatT', label: 'Cabinet materials', list: () => opts(S.matTemplates.cabinet), tab: 'materials' },
   { k: 'drawerMatT', label: 'Drawer materials', list: () => opts(S.matTemplates.drawer), tab: 'materials' },
+  // 0.63.47: only shown when Drawer materials is a solid wood template (woodbox.js).
+  { k: 'drawerWood', label: 'Drawer wood', list: r => woodOpts(woodThick(drawerMatT(r ? roomSet('drawerMatT', r) : S.job.defaults.drawerMatT)), r ? (r.settings || {}).drawerWood : S.job.defaults.drawerWood), tab: 'materials', blank: 'Same as template' },
   { k: 'doorT', label: 'Door template', list: () => opts(S.doorTemplates), tab: 'doors' },
   { k: 'pull', label: 'Pulls and knobs', list: () => opts(hwOf('pull')), tab: 'hardware', blank: 'From door template' },
   { k: 'slide', label: 'Drawer slides', list: () => opts(hwOf('slide')), tab: 'hardware' },
@@ -111,6 +113,7 @@ function settingPreview(k, id) {
   if (k === 'doorT') { const t = doorTpl(id); return swatch(mat(doorStyle(t.door).mat), 16); }
   if (k === 'cabMatT') return swatch(mat(cabMatT(id).carcass), 16);
   if (k === 'drawerMatT') return swatch(mat(drawerMatT(id).sides), 16);
+  if (k === 'drawerWood') return id && mat(id) ? swatch(mat(id), 16) : '';
   if (k === 'countertop') return swatch(mat(countertop(id).mat), 16);
   if (k === 'panelDoor') return id && id !== 'same' ? swatch(mat(doorStyle(id).mat), 16) : '';
   if (k === 'finish') { const f = finishList().find(x => x.id === id) || finishList()[0]; return f ? swatch(mat(f.front), 16) : ''; }
@@ -140,7 +143,7 @@ function matSetPick() {
 /* ---------- Templates and hardware: picture tiles by category, like Mozaik ---------- */
 const TPL_CATS = [
   ['fronts', 'Doors and fronts', ['doorT', 'dt.door', 'dt.wallDoor', 'dt.drawerTop', 'dt.drawer', 'dt.drawerBot', 'dt.falseFront', 'pull', 'hinge']],
-  ['drawers', 'Drawers', ['drawerMatT', 'slide']],
+  ['drawers', 'Drawers', ['drawerMatT', 'drawerWood', 'slide']],
   ['box', 'Cabinet and panels', ['faceFrame', 'cabMatT', 'finish', 'panelDoor', 'panelStyle', 'shelfpin', 'jointU', 'jointF', 'leg', 'partT']],
   ['tops', 'Tops and molding', ['countertop', 'molding']],
   ['walls', 'Walls', ['wallPaint', 'wallFin', 'ceilPaint', 'wallThick', 'wallHeight']],
@@ -191,6 +194,9 @@ function tplPic(k, id, lc) {
     const t = doorTpl(id), ds = doorStyle(t.door), c = col(mat(ds.mat)), p = hw(t.pull);
     return svg(`${frontPic(ds, c, 33, 5, 54, 80, 15, 22)}<rect x="78" y="34" width="3" height="22" rx="1.5" fill="${(typeof txqColor === 'function' && texPickOf('pulls') && pickColor(texPickOf('pulls'))) || (p && p.finish) || '#333'}"/>`);
   }
+  if (k === 'drawerWood') { const c = col(mat(id));
+    // A drawer box corner with its dovetails, in the wood.
+    return svg(`<path d="M22 40 L58 28 L100 38 L100 62 L64 74 L22 64 Z" fill="${c}" stroke="#555"/><path d="M22 40 L64 50 L100 38 M64 50 L64 74" fill="none" stroke="#555"/><path d="M64 54 l5 -1.5 v5 l-5 1.5 M64 62 l5 -1.5 v5 l-5 1.5" fill="none" stroke="#555" stroke-opacity=".7"/><path d="M28 44 L60 52 L96 42" fill="none" stroke="#555" stroke-opacity=".4"/>`); }
   if (k === 'cabMatT' || k === 'drawerMatT') {
     const t = k === 'cabMatT' ? cabMatT(id) : drawerMatT(id), c = col(mat(k === 'cabMatT' ? t.carcass : t.sides));
     return k === 'cabMatT'
@@ -293,11 +299,14 @@ function renderTplTab() {
       const own = scope && scope[k] !== undefined && scope[k] !== S.job[k];
       return `<div class="tpltile${own ? ' own' : ''}"><div class="tt-h">${TPL_WALL[k]}</div><div class="tt-pic">${tplPic(k)}</div>${scope ? ctl('room:' + scope.id, k, scope[k] ?? S.job[k], 'len', { label: TPL_WALL[k] }) : ctl('job', k, S.job[k], 'len', { label: TPL_WALL[k] })}${own ? '<span class="tt-own">This room</span>' : ''}</div>`;
     }
-    const sd = SETTINGS.find(x => x.k === k), list = sd.list();
-    const v = scope ? (scope.settings || {})[k] || '' : d[k] || '', eff = scope ? roomSet(k, scope) : d[k] || '';
+    // Drawer wood only matters (and only shows) when the drawer boxes are a solid wood template.
+    if (k === 'drawerWood' && !woodTpl(drawerMatT(scope ? roomSet('drawerMatT', scope) : d.drawerMatT))) return '';
+    const sd = SETTINGS.find(x => x.k === k), list = sd.list(scope);
+    const v = scope ? (scope.settings || {})[k] || '' : d[k] || '', eff0 = scope ? roomSet(k, scope) : d[k] || '';
+    const eff = k === 'drawerWood' && !eff0 ? drawerMatT(scope ? roomSet('drawerMatT', scope) : d.drawerMatT).sides : eff0;
     const lc = typeof txqColor === 'function' ? txqColor(k, scope ? scope.id : '') : '';
     const pic = k === 'pull' && !eff ? tplPic('pull', doorTpl(scope ? roomSet('doorT', scope) : d.doorT).pull, lc) : tplPic(k, eff, lc);
-    const qa = typeof qmOpt === 'function' ? qmOpt(k) : [];
+    const qa = k === 'drawerWood' ? woodOtherOpt() : typeof qmOpt === 'function' ? qmOpt(k) : [];
     const sel = scope ? ctl('rset:' + scope.id, k, v, 'select', { options: [...setOpts(k, list), ...qa], label: sd.label + ' for ' + scope.name })
       : ctl('jobd', k, v, 'select', { options: [...(sd.blank ? [{ v: '', l: sd.blank }, ...list] : list), ...qa], label: sd.label });
     return `<div class="tpltile${scope && v ? ' own' : ''}"><div class="tt-h">${sd.label.replace(' (edgebanding)', '')}</div><div class="tt-pic">${pic}</div>${sel}${typeof txqBtn === 'function' ? txqBtn(k, scope ? scope.id : '') : ''}
@@ -329,7 +338,7 @@ function renderDash() {
   const cell = (r, k) => {
     if (TPL_WALL[k]) return ctl('room:' + r.id, k, r[k] ?? S.job[k], 'len', { label: TPL_WALL[k] + ' for ' + r.name });
     const sd = SETTINGS.find(x => x.k === k), v = (r.settings || {})[k] || '';
-    return `<div class="setcell${v ? ' own' : ''}">${settingPreview(k, roomSet(k, r))}${ctl('rset:' + r.id, k, v, 'select', { options: [...setOpts(k, sd.list()), ...(typeof qmOpt === 'function' ? qmOpt(k) : [])], label: sd.label + ' for ' + r.name })}</div>`;
+    return `<div class="setcell${v ? ' own' : ''}">${settingPreview(k, roomSet(k, r))}${ctl('rset:' + r.id, k, v, 'select', { options: [...setOpts(k, sd.list(r)), ...(k === 'drawerWood' ? woodOtherOpt() : typeof qmOpt === 'function' ? qmOpt(k) : [])], label: sd.label + ' for ' + r.name })}</div>`;
   };
   const label = k => TPL_WALL[k] || SETTINGS.find(x => x.k === k).label.replace(' (edgebanding)', '');
   return `<div class="card dashcard"><div class="cardhead"><h3>${icon('home')}Rooms in this job</h3><div class="row-actions"><button class="btn" data-act="dash-csv">${icon('download')}Export</button><button class="btn primary" data-act="room-add">${icon('plus')}Add room</button></div></div>
@@ -344,7 +353,7 @@ function renderDash() {
 // Every room's picks, by name, for a spreadsheet.
 function dashCSV() {
   const ks = dtKeys(TPL_CATS.flatMap(c => c[2]));
-  const name = (k, r) => { if (TPL_WALL[k]) return fmtLen(r[k] ?? S.job[k]); const sd = SETTINGS.find(x => x.k === k), id = roomSet(k, r); return ((sd.list().find(o => o.v === id) || {}).l) || (k === 'pull' ? 'From door template' : sd.blank || ''); };
+  const name = (k, r) => { if (TPL_WALL[k]) return fmtLen(r[k] ?? S.job[k]); const sd = SETTINGS.find(x => x.k === k), id = roomSet(k, r); return ((sd.list(r).find(o => o.v === id) || {}).l) || (k === 'pull' ? 'From door template' : sd.blank || ''); };
   const rows = [['Room', 'Cabinets', ...ks.map(k => TPL_WALL[k] || SETTINGS.find(x => x.k === k).label)], ...S.rooms.map(r => [r.name, r.cabinets.length, ...ks.map(k => name(k, r))])];
   return rows.map(r => r.map(csvq).join(',')).join('\n');
 }

@@ -117,7 +117,7 @@ async function wxImage(tex, ctx) {
   if (!d || tex.isRenderTargetTexture || tex.isCubeTexture || tex.isDataTexture && !(d.data instanceof Uint8Array || d.data instanceof Uint8ClampedArray)) return false;
   if (typeof HTMLImageElement !== 'undefined' && d instanceof HTMLImageElement && !d.complete) { try { await d.decode(); } catch (_) { return false; } }
   const w = d.naturalWidth || d.videoWidth || d.width, h = d.naturalHeight || d.videoHeight || d.height; if (!w || !h) return false;
-  const floor = typeof realFloor3 === 'function' && realFloor3.m && realFloor3.m.map === tex;
+  const floor = typeof realFloor3 === 'function' && realFloor3.m && realFloor3.m.map === tex || !!(tex.userData && (tex.userData.floor || tex.userData.land));
   const k = Math.min(1, (floor ? WX.floorTex : WX.maxTex) / Math.max(w, h)), cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k));
   const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch; const g = cv.getContext('2d');
   try {
@@ -148,7 +148,7 @@ function wxMat(m, ctx) {
 // What the walk file keeps from each object's notes: what blocks the way, what opens, and nothing about parts.
 function wxUserData(o) {
   const u = o.userData || {}, out = {};
-  ['noBounds', 'cut', 'layer', 'fixtId', 'wall'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
+  ['noBounds', 'cut', 'layer', 'fixtId', 'wall', 'land', 'noAO'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
   if (u.cabId) out.cabId = u.cabId;
   if (u.open && u.cabId) {
     const op = u.open;
@@ -220,7 +220,7 @@ function wxWalkCss() {
   return out;
 }
 function wxPlayerCode(lib) {
-  const fns = [Viewer3D, aoSetup, aoTargets, realAO, sunAt, realLight, pocketMove, wg, roomViewDir].map(f => f.toString()).join('\n');
+  const fns = [Viewer3D, aoSetup, aoTargets, realAO, sunAt, realLight, landSun, pocketMove, wg, roomViewDir].map(f => f.toString()).join('\n');
   const consts = `const AO = { on: true };\nconst aoCoarse = ${aoCoarse.toString()};\nconst AO_VERT = ${JSON.stringify(AO_VERT)};\nconst AO_FRAG = ${JSON.stringify(AO_FRAG)};\nconst AO_BLUR = ${JSON.stringify(AO_BLUR)};\nconst sunLabel = ${sunLabel.toString()};\nconst mixHex = ${mixHex.toString()};\nconst ease = ${ease.toString()};\nconst CASE = ${JSON.stringify(CASE)};\nconst fixtInner = ${fixtInner.toString()};\n${doorType.toString()}\n${doorHasLeaf.toString()}\nconst fixtList = () => S.fixtures || [];\nconst fixtById = id => fixtList().find(f => f.id === id);\n`;
   return [lib.three, lib.orbit, lib.icons, WX_SHIM, consts, fns, lib.walk, wxPlayer.toString(), 'wxPlayer(WXDATA);'].join('\n;\n');
 }

@@ -237,7 +237,7 @@ function cornerBox(c) {
     <div class="note">${blind ? 'The blind side goes into the corner, behind the cabinet on the other wall. A blind panel covers it; the doors and drawers fill the rest.' : 'Width runs along this wall and depth runs out along the other wall. Both legs are the leg depth.'}${c.corner.type === 'l' ? ' The two doors are a bi-fold: one hangs on the cabinet, the other folds on it. Pick the hinge each one takes.' : ''}</div></div>`;
 }
 // The Left/Right switch on the bar under the drawing.
-const cornerBtn = c => isCorner(c) ? `<button data-act="corner-flip" data-id="${c.id}" title="Put the ${blindCorner(c) ? 'blind side' : 'corner'} on the ${cornerSide(c) === 'L' ? 'right' : 'left'} end">${icon('flip')}Corner ${cornerSide(c) === 'L' ? 'left' : 'right'}</button>` : '';
+const cornerBtn = c => isCorner(c) ? `<button data-act="corner-flip" data-id="${c.id}" title="Corner: put the ${blindCorner(c) ? 'blind side' : 'corner'} on the ${cornerSide(c) === 'L' ? 'right' : 'left'} end">${icon('flip')}Corner ${cornerSide(c) === 'L' ? 'left' : 'right'}</button>` : '';
 function setCornerSide(c, v) {
   if (!isCorner(c) || cornerSide(c) === v) return;
   mutate(() => { c.corner.side = v; if (typeof cabLog === 'function') cabLog(c, `Corner on the ${v === 'L' ? 'left' : 'right'}`); });

@@ -297,7 +297,7 @@ function cabinetMeshes(c, opts = {}) {
   if (!angledCorner(c)) colShelves(lay).forEach(q => grp.add(box3(q.x1 - q.x0 - 0.06, t, inD - p.shelfFrontSetback, sm, (q.x0 + q.x1) / 2, q.z + t / 2, p.backInset + bt + (inD - p.shelfFrontSetback) / 2)));
   if (lay.divX !== null) grp.add(box3(t, lay.zIn1 - lay.zIn0, inD, cmM, lay.divX, (lay.zIn0 + lay.zIn1) / 2, p.backInset + bt + inD / 2));
   // inserts
-  const dmt = drawerMatT(cabSet(c, 'drawerMatT')), dbx = L3(mat(dmt.sides) || cm, 'drawerBox');
+  const dmt = cabDrawerMatT(c), dbx = L3(mat(dmt.sides) || cm, 'drawerBox');
   const trayBox = (x0, x1, z, h, d, zBack, into) => {
     const w = x1 - x0, st = 0.5, g = into ? { add: o => { o.userData.layer = 'drawerBox'; into.add(o); } } : grp;
     g.add(box3(w, 0.25, d, dbx, (x0 + x1) / 2, z + 0.125, zBack + d / 2, false));
@@ -770,12 +770,27 @@ function buildRoomScene(v) {
     else { const cl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), ceilLook3(R3 ? realCeil3() : flat3(cssVar('--wall3d'))));
       cl.rotation.x = Math.PI / 2; cl.position.set((x0 + x1) / 2, hgt, (y0 + y1) / 2); cl.userData.noBounds = true; cl.userData.wall = true; v.root.add(cl); }
   }
+  // 0.63.48: with a landscape outside (Room tab › Outside, landscape.js) the floor stops at the walls and the ground takes over.
+  const landOn = R3 && pts.length && typeof landOf === 'function' && landOf() !== 'plain';
+  const loop = landOn && typeof roomLoop === 'function' ? roomLoop() : null;
+  if (landOn) {
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), t = Math.max(4, ...S.walls.map(w => +w.thick || 4));
+    landAdd(v, { x0: Math.min(...xs) - t, x1: Math.max(...xs) + t, y0: Math.min(...ys) - t, y1: Math.max(...ys) + t });
+  }
   if (pts.length && L.floor) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-    // Well past the walls, so open sides and wide views never run off the edge of the floor.
-    const pad = Math.max(120, 0.6 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)));
+    // Well past the walls, so open sides and wide views never run off the edge of the floor (a closed room with a landscape: just inside).
+    const pad = landOn ? (loop ? 0 : 24) : Math.max(120, 0.6 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)));
     const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
-    const fg = new THREE.PlaneGeometry(x1 - x0, y1 - y0);
+    let fg = new THREE.PlaneGeometry(x1 - x0, y1 - y0);
+    if (loop) {
+      // The room's own outline, with the same UVs a plain floor over its box would have. Built in the plane's own
+      // coordinates (x across, y up the page = -plan y), so the turn and place below stay the same.
+      const cx0 = (x0 + x1) / 2, cy0 = (y0 + y1) / 2;
+      fg = new THREE.ShapeGeometry(new THREE.Shape(loop.map(p => new THREE.Vector2(p[0] - cx0, cy0 - p[1]))));
+      const uv = fg.attributes.uv, ps = fg.attributes.position;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, (ps.getX(i) + (x1 - x0) / 2) / (x1 - x0), (ps.getY(i) + (y1 - y0) / 2) / (y1 - y0));
+    }
     const fpk = texPickOf('floor');
     if (R3 && !fpk) { const uv = fg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 96, uv.getY(i) * (y1 - y0) / 96); }
     const fl = new THREE.Mesh(fg, floorLook3(R3 ? realFloor3() : flat3(cssVar('--floor3d')), fg, x1 - x0, y1 - y0));
@@ -860,7 +875,7 @@ function buildRoomScene(v) {
       if (rightRet) piece(fz - rBack, 0, x1 - m.d, rBack);
       v.root.add(grp); return;
     }
-    const steps = m.profile === 'flat' ? [[1, 1]] : m.profile === 'crown' ? [[0.45, 0.4], [0.55, 1]] : [[0.5, 0.55], [0.5, 1]];
+    const steps = m.profile === 'flat' ? [[1, 1]] : m.profile === 'base' ? [[0.8, 1], [0.2, 0.55]] : m.profile === 'crown' ? [[0.45, 0.4], [0.55, 1]] : [[0.5, 0.55], [0.5, 1]];
     let y = r.z;
     steps.forEach(([hf, df]) => {
       const h = r.h * hf, d = m.d * df;

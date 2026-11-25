@@ -306,3 +306,50 @@ document.addEventListener('change', e => {
   const t = e.target; if (!t.classList || !t.classList.contains('ctr-size')) return;
   ctjSize(t.dataset.id, t.dataset.k, parseLen(t.value));
 });
+
+/* ---------- 0.63.41: click a top to pick it, drag it to move it ---------- */
+// Ayden 2026-11-24: "when the top tab is selected let me click on the tops to adjust, i also need to be able to move them
+// around". With the bottom panel's Tops tab open, a click on a top in the plan picks it (its row lights up in the table,
+// with its Length, Depth and overhang boxes) instead of the cabinet under it, and dragging slides it along its wall.
+// The Tops page drawing works the same. An automatic top moves by its end overhangs (one grows as the other shrinks);
+// a top placed by hand moves its From wall start. Never refused: a top dragged into something shows there.
+const ctjTopsMode = () => ui.tab === 'room' && ui.dock === 'tops' && ui.dockOpen !== false && !ui.dockMin;
+// Starts a top drag at plan point p (null when no top is there).
+function ctjDragStart(p, tol) {
+  const hit = ctjSideAt(p, tol); if (!hit) return null;
+  const r = hit.r, fr = ctjFrame(r), g = r.generic && (S.genTops || []).find(x => x.id === r.generic);
+  ui.topRun = r.key;
+  return { mode: 'ctmove', key: r.key, t0: fr.along(p), ovS: r.ovS || 0, ovE: r.ovE || 0, off: g ? +g.off || 0 : 0, gen: r.generic || '', snap: JSON.stringify(S), live: false, hadS: has(S.ctRuns[r.key] || {}, 'ovS'), hadE: has(S.ctRuns[r.key] || {}, 'ovE') };
+}
+// Moves the dragged top to plan point p. Snaps to 1/8" (1/16" with Shift).
+function ctjDragMove(d, p, fine) {
+  const r = countertopRuns().find(q => q.key === d.key); if (!r) return;
+  const st = fine ? 16 : 8, dt = Math.round((ctjFrame(r).along(p) - d.t0) * st) / st;
+  if (d.gen) { const g = (S.genTops || []).find(x => x.id === d.gen); if (g) g.off = r3(d.off + dt); return; }
+  const o = S.ctRuns[d.key] = S.ctRuns[d.key] || {};
+  o.ovS = r3(d.ovS - dt); o.ovE = r3(d.ovE + dt);
+}
+// The Tops page drawing: press on a top and drag to move it; a click without moving picks it (data-act top-run).
+let ctjPageDrag = null;
+document.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const svg = e.target.closest && e.target.closest('.ctp-svg:not(.ctp-print)'); if (!svg || e.target.closest('[data-ctj]')) return;
+  const ctm = svg.getScreenCTM(); if (!ctm) return;
+  const was = ui.topRun, p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse()), d = ctjDragStart(p, 0);
+  ui.topRun = was; if (!d) return;
+  d.svg = svg; d.x = e.clientX; d.y = e.clientY; ctjPageDrag = d;
+}, true);
+document.addEventListener('pointermove', e => {
+  const d = ctjPageDrag; if (!d) return;
+  if (!d.live && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) return;
+  const svg = document.querySelector('.ctp-svg:not(.ctp-print)'), ctm = svg && svg.getScreenCTM(); if (!ctm) return;
+  d.live = true; ui.suppressClick = true; ui.topRun = d.key;
+  // The drawing's frame stays put while dragging (its viewBox would follow the top), so move against the first one.
+  ctjDragMove(d, new DOMPoint(e.clientX, e.clientY).matrixTransform((d.ctm || (d.ctm = ctm)).inverse()), e.shiftKey);
+  if (typeof renderCountertops === 'function') renderCountertops();
+});
+document.addEventListener('pointerup', () => {
+  const d = ctjPageDrag; ctjPageDrag = null; if (!d || !d.live) return;
+  undoStack.push(d.snap); redoStack = []; save(); render();
+  setTimeout(() => { ui.suppressClick = false; }, 0);
+});

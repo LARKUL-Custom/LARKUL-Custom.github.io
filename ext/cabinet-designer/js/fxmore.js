@@ -10,7 +10,7 @@ let fxPartBusy = false;
 function fxPartRef(c, base, prop) {
   const k = base.toLowerCase().replace(/_/g, ''), P = prop.toLowerCase();
   if (P === 'th' && PART_TH[k]) { const mt = cabMatT(cabSet(c, 'cabMatT')), m = mat(mt[PART_TH[k]]) || mat(mt.carcass); return m ? m.thick : undefined; }
-  if (P === 'th' && /^drawer(side|box|bottom)?$/.test(k)) { const dm = drawerMatT(cabSet(c, 'drawerMatT')), m = mat(k === 'drawerbottom' ? dm.bottom : dm.sides); return m ? m.thick : undefined; }
+  if (P === 'th' && /^drawer(side|box|bottom)?$/.test(k)) { const dm = cabDrawerMatT(c), m = mat(k === 'drawerbottom' ? dm.bottom : dm.sides); return m ? m.thick : undefined; }
   if (fxPartBusy) return undefined;
   fxPartBusy = true;
   try {

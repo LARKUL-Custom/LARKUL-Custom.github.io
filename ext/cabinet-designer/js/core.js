@@ -324,6 +324,8 @@ function clipSegRect(x1, y1, x2, y2, L, W) {
   if (b - a < 1e-9) return null;
   return [x1 + dx * a, y1 + dy * a, x1 + dx * b, y1 + dy * b];
 }
+// 0.63.46: base molding along the floor at the bottom of base and tall cabinets (c.baseMold).
+const BASE_MOLD_DEF = { id: 'mo-base', name: '4" base molding', profile: 'base', h: 4, d: 0.75, fill: false, mat: 'm-mdf', base: true };
 function seed() {
   const lib = (id, name, cat, w, h, d, elev, rows, params, construction) => ({ id, name, cat, w, h, d, elev, rows, params, construction: construction || defaultConstruction(cat) });
   const S = {
@@ -403,6 +405,7 @@ function seed() {
       { id: 'mo-cove', name: '2" cove', profile: 'cove', h: 2, d: 1.25, fill: false, mat: 'm-mdf' },
       { id: 'mo-fill', name: 'Flat batten to ceiling', profile: 'flat', h: 6, d: 0.75, fill: true, mat: 'm-mdf' },
       { id: 'mo-light', name: 'Light rail 1 1/2"', profile: 'flat', h: 1.5, d: 0.75, fill: false, mat: 'm-mdf', bottom: true },
+      clone(BASE_MOLD_DEF),
     ],
     library: [
       lib('b-1d1dr', 'Base 1 Door 1 Drawer', 'Base', 18, 34.5, 24, 0, FACE_PRESETS[2].rows, { shelfCount: 1 }),
@@ -505,7 +508,7 @@ function attachRoom(st) {
   });
   return st;
 }
-const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'doorT', 'finish', 'pull', 'slide', 'hinge', 'panelStyle', 'panelDoor', 'partT', 'jointU', 'jointF', 'faceFrame'];
+const SETTING_FIELDS = ['cabMatT', 'drawerMatT', 'drawerWood', 'doorT', 'finish', 'pull', 'slide', 'hinge', 'panelStyle', 'panelDoor', 'partT', 'jointU', 'jointF', 'faceFrame'];
 // Older saves had one room and stored the job default on every cabinet. Blank those so cabinets follow room settings.
 // Blum TANDEM plus BLUMOTION 563H, frameless, from Blum's 563H/563 installation sheet (2016).
 // Runner screws: top row 37 mm above the runner bottom (the opening bottom), the box sits 14 mm above it, so 23 mm above the box bottom.
@@ -682,6 +685,8 @@ function migrate(s) {
   s.rooms.forEach(r => { r.shapes = r.shapes || []; r.genTops = r.genTops || []; r.genMolds = r.genMolds || []; r.lights = r.lights || []; r.fixtures = r.fixtures || []; });
   if (!s.shapeLib) s.shapeLib = defaultShapeLib(s);
   // Molding profiles live on the molding (0.21.2); 3/8 HDF for two-piece door panels came with 0.21.0.
+  // 0.63.46: older jobs get the base molding once (deleting it afterwards sticks).
+  if (Array.isArray(s.moldings) && !s.baseMoldAdded) { if (!s.moldings.some(m => m.base || m.id === BASE_MOLD_DEF.id)) s.moldings.push(clone(BASE_MOLD_DEF)); s.baseMoldAdded = 1; }
   (s.moldings || []).forEach(m => { if (m.profile === 'shape' && !(m.pts || []).length) { const l = s.shapeLib.find(x => x.id === m.shape); m.pts = l ? clone(l.pts) : moldStartPts(); } delete m.shape; });
   s.shapeLib = s.shapeLib.filter(l => l.id !== 'sh-crown');
   if (typeof LEG_SHAPE === 'function' && !s.shapeLib.some(l => l.id === 'sh-leg')) s.shapeLib.push(LEG_SHAPE());
@@ -691,6 +696,7 @@ function migrate(s) {
   if (typeof ensureBidLib === 'function') ensureBidLib(s);
   if (s.dollKit && typeof ensureDollKit === 'function') ensureDollKit(s);
   ensureMelBoxes(s);
+  ensureWoodBox(s);
   ensureMelCab(s);
   ensureHwNames(s);
   // 0.58.25 (Ayden 2026-11-19): island back panels from a Mozaik import were cut from the first sheet material (plywood);
@@ -773,6 +779,65 @@ const doorStyle = id => withFinish({ ...DOOR_DEFAULTS, ...(S.doorStyles.find(d =
 const doorTpl = id => S.doorTemplates.find(d => d.id === id) || S.doorTemplates[0];
 const cabMatT = id => S.matTemplates.cabinet.find(t => t.id === id) || S.matTemplates.cabinet[0];
 const drawerMatT = id => S.matTemplates.drawer.find(t => t.id === id) || S.matTemplates.drawer[0];
+/* ---------- Solid wood drawer boxes (0.63.47, Ayden 2026-11-25: "Solid Wood drawers with a way to easily change materials
+   without changing the template, so i can do solid oak drawers or any wood i want, and the texture changeable as well").
+   A drawer material template with wood:1 (Solid wood boxes) takes its sides, front and back from the Drawer wood pick
+   (setting 'drawerWood', job / room / cabinet like the other picks). The pick is a real material in Libraries › Materials,
+   so the cut list, CNC Cutlist and price follow it; picking a species from the list adds it once at the template's thickness
+   (woodT, 5/8 by default) with its wood photo. The bottom stays the template's (1/4 ply). ---------- */
+// $ per board foot is a starting cost only (Ayden can change the material's cost); the photo is from the texture library.
+const WOOD_SPECIES = [
+  { n: 'White oak', tex: 'Wood/Oak/Oak Rift Sawn.jpg', col: '#ceb389', bf: 9 },
+  { n: 'Red oak', tex: 'Wood/Oak/Oak-Red.jpg', col: '#d58f5c', bf: 6 },
+  { n: 'Hard maple', tex: 'Wood/Maple/Clear Maple.jpg', col: '#e0c3a1', bf: 7 },
+  { n: 'Walnut', tex: 'Wood/Walnut/Walnut.jpg', col: '#7b5941', bf: 14 },
+  { n: 'Cherry', tex: 'Wood/Cherry/Cherry Natural.jpg', col: '#e4bf89', bf: 10 },
+  { n: 'Alder', tex: 'Wood/Alder/Alder.jpg', col: '#d29e6d', bf: 6 },
+  { n: 'Hickory', tex: 'Wood/Hickory/Natural Hickory.jpg', col: '#b69566', bf: 7 },
+  { n: 'Ash', tex: 'Wood/Misc/Ash.jpg', col: '#d9c1a9', bf: 7 },
+  { n: 'Birch', tex: 'Wood/Misc/Birch.jpg', col: '#e5c29f', bf: 6 },
+  { n: 'Beech', tex: 'Wood/Misc/Beech.jpg', col: '#bf895d', bf: 7 },
+  { n: 'Poplar', tex: 'Wood/Misc/Whitewood.jpg', col: '#d1d2cc', bf: 4 },
+  { n: 'Pine', tex: 'Wood/Misc/Pine Clear.jpg', col: '#ddc094', bf: 4 },
+  { n: 'Mahogany', tex: 'Wood/Misc/Mahogany.jpg', col: '#9b4624', bf: 12 },
+];
+// Glued-up blanks 12 wide by 8 ft, so a cost per board foot is 8 bd ft a "sheet" (4/4 stock milled down).
+const WOOD_BLANK = { w: 12, l: 96 };
+const WOOD_BOX_TPL = { id: 'dt-solid', name: 'Solid wood boxes', sides: '', bottom: 'm-bot', wood: 1, woodT: 0.625 };
+const woodTpl = t => !!(t && t.wood);
+// The material for a species at a thickness: the job's own when it has one (same species and thickness), else a new one.
+// Only call inside mutate (it may add to S.materials).
+function woodMatFor(s, name, thick, own) {
+  const nm = String(name || '').trim(); if (!nm) return '';
+  const key = nm.toLowerCase(), hit = s.materials.find(m => (m.wood || '').toLowerCase() === key && Math.abs(+m.thick - thick) < 0.02);
+  if (hit) return hit.id;
+  const sp = WOOD_SPECIES.find(x => x.n.toLowerCase() === key) || {}, o = own || {};
+  const tex = o.tex || (sp.tex ? 'textures/' + sp.tex : null), bf = o.bf != null ? +o.bf : sp.bf != null ? sp.bf : 8;
+  const m = { id: uid('m'), name: `${fmtThick(thick)} ${nm} (drawer boxes)`, kind: 'solid', wood: nm, thick, sheetW: WOOD_BLANK.w, sheetL: WOOD_BLANK.l, grain: true,
+    cost: Math.round(bf * WOOD_BLANK.w * WOOD_BLANK.l / 144 * 100) / 100, color: o.col || sp.col || '#c9a77a', texture: tex, procedural: tex ? null : 'oak', texScale: 24 };
+  if (s.matGrouped) m.group = 'Solid wood';
+  s.materials.push(m); return m.id;
+}
+// Every job gets the Solid wood boxes template once, in 5/8 white oak, with a 1/4 bottom the job already has.
+function ensureWoodBox(s) {
+  if (!s || s.woodBox || !Array.isArray(s.materials) || !s.matTemplates || !Array.isArray(s.matTemplates.drawer)) return s;
+  if (!s.matTemplates.drawer.some(t => t.wood)) {
+    const t = clone(WOOD_BOX_TPL), d0 = s.matTemplates.drawer.find(x => s.materials.some(m => m.id === x.bottom && Math.abs(+m.thick - 0.25) < 0.04)) || s.matTemplates.drawer[0] || {};
+    if (!s.materials.some(m => m.id === t.bottom)) t.bottom = d0.bottom || '';
+    t.sides = woodMatFor(s, 'White oak', t.woodT);
+    if (s.matTemplates.drawer.some(x => x.id === t.id)) t.id = uid('dt');
+    s.matTemplates.drawer.push(t);
+  }
+  s.woodBox = 1; return s;
+}
+// The wood a cabinet's (or a room's) drawer boxes are made of: the Drawer wood pick, when its drawer template is solid wood.
+const drawerWoodOf = (c, r) => { const id = c ? cabSet(c, 'drawerWood') : roomSet('drawerWood', r), m = id && mat(id); return m && (m.kind || 'sheet') !== 'top' ? m : null; };
+// The drawer material template a cabinet builds with: its pick, with the sides swapped for the Drawer wood when solid wood.
+function cabDrawerMatT(c, r) {
+  const t = drawerMatT(c ? cabSet(c, 'drawerMatT') : roomSet('drawerMatT', r)); if (!woodTpl(t)) return t;
+  const m = drawerWoodOf(c, r); if (!m || m.id === t.sides) return t;
+  return { ...t, sides: m.id, name: `${t.name}, ${m.wood || m.name}` };
+}
 // Material templates (0.48.2): one pick for the job that sets its door template, cabinet materials and drawer materials together, like Mozaik's.
 const MAT_SET_KEYS = ['doorT', 'finish', 'cabMatT', 'drawerMatT'];
 // The finish a door template's base door was made in before finishes existed.

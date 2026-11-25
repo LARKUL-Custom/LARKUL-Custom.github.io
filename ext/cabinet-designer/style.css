@@ -3890,7 +3890,8 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .ctxmenu .ctx-sides{display:flex;gap:2px;padding:6px 8px 4px;margin-top:3px;border-top:1px solid var(--line)}
 .ctxmenu .ctx-sides button{flex:1;min-width:0;padding:4px 6px;font-size:12px;border:1px solid var(--line);border-radius:4px;background:none;color:inherit;cursor:pointer;justify-content:center}
 .ctxmenu .ctx-sides button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
-.ctp-top{cursor:context-menu}
+.ctp-top{cursor:move}
+.ct-solid.on{stroke:var(--accent);stroke-width:3px;fill-opacity:.6}
 
 /* 0.63.13: shorter item bar with something picked (Ayden 2026-11-24: "it takes up like 25-40% of the drawing
    screen", "i do actually like the very bottom edit and copy", "just reduce the size of everything else").
@@ -4032,3 +4033,38 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
   .room .dock .itembar:not(.ib-empty) .ib-size{grid-template-columns:repeat(3,66px);column-gap:5px}
   .room .dock .itembar:not(.ib-empty) .ib-size .ib-f input{font-size:14px;padding:0 4px}
 }
+
+/* 0.63.37: Edit, Copy, Delete... move up beside the Ends box (Ayden 2026-11-24: "go to the right of the end
+   selection and just shorten up the bottom"), so the bar is one row. Edit on top, the other buttons under it;
+   when the space is narrow the small buttons show only their icons (names in their tooltips). */
+@media (min-width: 961px){
+  .room .dock .itembar:not(.ib-empty){flex-wrap:nowrap!important}
+  .room .dock .itembar:not(.ib-empty) > .ib-acts{flex:1 1 0!important;min-width:96px;flex-direction:column!important;align-items:flex-start!important;justify-content:center;align-self:stretch;gap:4px;flex-wrap:nowrap;container:ibacts / inline-size}
+  .room .dock .itembar:not(.ib-empty) .ib-acts .ib-edit{height:30px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .room .dock .itembar:not(.ib-empty) .ib-small{display:flex!important;flex-wrap:wrap;gap:3px;max-width:100%}
+  .room .dock .itembar:not(.ib-empty) .ib-small button{height:27px}
+  .room .dock .itembar:not(.ib-empty) .ib-ovl{font-size:12px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+}
+@container ibacts (max-width: 420px){
+  .room .dock .itembar .ib-small button{font-size:0!important;gap:0;padding:0 6px;width:30px;justify-content:center}
+  .room .dock .itembar .ib-small button .ic{width:16px;height:16px}
+  .room .dock .itembar .ib-ovl .ib-ovl2{display:none}
+}
+@media (min-width: 961px){
+  .room .dock .ib-ends .endw{display:none}
+  .room .dock .ib-ends .seg button{padding:0 6px}
+  .room .dock:has(.dock-item .itembar:not(.ib-empty)) .docktabs{grid-template-columns:repeat(2,auto);row-gap:0}
+  .room .dock:has(.dock-item .itembar:not(.ib-empty)) .docktabs button{min-height:26px;padding:2px 7px}
+}
+/* Laptop windows: Position labels go back above their boxes, so Position is narrow enough for the buttons. */
+@media (min-width: 961px) and (max-width: 1499px){
+  .room .dock .itembar:not(.ib-empty) .ib-pos{row-gap:0;align-items:end}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f,.room .dock .itembar:not(.ib-empty) .ib-pos > .ib-f:nth-of-type(even){flex-direction:column;align-items:stretch;gap:0}
+  .room .dock .itembar:not(.ib-empty) .ib-pos > .ib-f:nth-of-type(even) > span{text-align:right}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f > span{font-size:12px;line-height:1.15}
+  .room .dock .itembar:not(.ib-empty) .ib-pos .ib-f input{width:68px;height:26px}
+  .room .dock .itembar:not(.ib-empty) .ib-size .ib-f input{height:26px}
+  .room .dock .itembar:not(.ib-empty) .ib-ctr{width:24px;height:24px}
+}
+/* 0.63.46: Auto build base molding sits under the crown box, set apart by a line. */
+.qm-box.bm-box{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}

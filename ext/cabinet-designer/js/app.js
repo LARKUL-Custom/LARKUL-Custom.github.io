@@ -430,6 +430,7 @@ function endsNote(c) {
 const END_CHOICES = [['auto', 'Auto', '', ''], ['filler', 'Filler', 'on', 'off'], ['panel', 'Panel', 'off', 'on'], ['none', 'None', 'off', 'off']];
 function endChoice(c, end) { const f = c['fill' + end] || '', pm = c['panel' + end] || ''; const m = END_CHOICES.find(x => x[2] === f && x[3] === pm); return m ? m[0] : ''; }
 function endRows(c) {
+  if (typeof noAutoEnds === 'function' && noAutoEnds(c)) return '<div class="note">A panel or filler never gets automatic end panels or fillers of its own.</div>';
   const fl = fillersOf(c);
   return ['L', 'R'].map(end => {
     const f = fl.find(x => x.end === end), now = f ? `Filler ${fmtLen(f.gap)}` : hasPanel(c, end) ? 'End panel' : 'Nothing', pick = endChoice(c, end);
@@ -630,6 +631,7 @@ function dockBody(k) {
   if (k === 'cab-tpl') return `<div class="dockgrid">
     ${fld('Cabinet materials', R, 'cabMatT', c.cabMatT || '', 'select', { options: setOpts('cabMatT', opts(S.matTemplates.cabinet), 'cab') })}
     ${fld('Drawer materials', R, 'drawerMatT', c.drawerMatT || '', 'select', { options: setOpts('drawerMatT', opts(S.matTemplates.drawer), 'cab') })}
+    ${woodTpl(drawerMatT(cabSet(c, 'drawerMatT'))) ? fld('Drawer wood', R, 'drawerWood', c.drawerWood || '', 'select', { options: [...setOpts('drawerWood', woodOpts(woodThick(drawerMatT(cabSet(c, 'drawerMatT'))), c.drawerWood), 'cab'), ...woodOtherOpt()] }) : ''}
     ${fld('Door template', R, 'doorT', c.doorT || '', 'select', { options: setOpts('doorT', opts(S.doorTemplates), 'cab') })}
     ${fld('Pulls', R, 'pull', c.pull || '', 'select', { options: setOpts('pull', opts(hwOf('pull')), 'cab') })}
     ${fld('Drawer slide', R, 'slide', c.slide || '', 'select', { options: setOpts('slide', opts(hwOf('slide')), 'cab') })}
@@ -637,6 +639,7 @@ function dockBody(k) {
     ${fld('Part template', R, 'partT', c.partT || '', 'select', { options: setOpts('partT', opts(S.partTemplates), 'cab') })}
     ${fld('Applied panel fit', R, 'panelStyle', c.panelStyle || '', 'select', { options: setOpts('panelStyle', opts(S.panels), 'cab') })}
     ${fld('Top molding', R, 'molding', c.molding || '', 'select', { options: [{ v: '', l: 'None' }, ...opts(S.moldings)] })}
+    ${fld('Base molding', R, 'baseMold', c.baseMold || '', 'select', { options: [{ v: '', l: 'None' }, ...opts(S.moldings)] })}
     <div class="checkrow"><label>${ctl('cabc:' + id, 'toeKick', toeOn(c), 'bool', { label: 'Raised base (feet or toe kick)' })} Feet / toe kick</label>${ctl('cabc:' + id, 'top', (c.construction || {}).top || 'full', 'select', { options: [{ v: 'full', l: 'Full top' }, { v: 'stretchers', l: 'Stretchers' }], label: 'Top' })}</div>
     </div>${SETTING_FIELDS.some(f => c[f]) ? `<div class="row-actions"><button class="btn sm" data-act="cab-follow" data-id="${id}">Use room settings for all of these</button></div>` : ''}`;
   if (k === 'cab-int') return interiorSection(R, c, 'cabp:' + id, c);
@@ -664,7 +667,7 @@ function applyPayload(cabId, kind, val) {
     else if (kind === 'doorT') c.doorT = val;
     else if (kind === 'cabMatT') c.cabMatT = val;
     else if (kind === 'drawerMatT') c.drawerMatT = val;
-    else if (kind === 'mold') c.molding = val || null;
+    else if (kind === 'mold') { if (val && (molding(val) || {}).base) c.baseMold = val; else c.molding = val || null; }
     else if (kind === 'hw') { const h = hw(val); if (h && h.kind === 'slide') c.slide = val; else if (h && h.kind === 'hinge') c.hinge = val; else if (h && h.kind === 'pull') c.pull = val; }
   });
   return true;
@@ -1384,7 +1387,7 @@ document.addEventListener('click', e => {
     case 'mold-pick': pickState().pick.mold = id; ui.moldView = 'styles'; renderMoldings(); break;
     case 'mold-view': ui.moldView = id; renderMoldings(); break;
     case 'mold-run': ui.moldRun = ui.moldRun === +id ? -1 : +id; renderMoldings(); break;
-    case 'mold-del': mutate(() => { S.moldings = S.moldings.filter(m => m.id !== id); allCabs().forEach(c => { if (c.molding === id) c.molding = null; }); unsetPick('molding', id, S.moldings[0].id); }); break;
+    case 'mold-del': mutate(() => { S.moldings = S.moldings.filter(m => m.id !== id); allCabs().forEach(c => { if (c.molding === id) c.molding = null; if (c.baseMold === id) c.baseMold = null; }); unsetPick('molding', id, S.moldings[0].id); }); break;
     case 'mold-quick': {
       const box = el.closest('.qm-box'), q = k => box.querySelector('.qm-' + k);
       // Blank distance: every upper gets it (a crown run along the tops of the uppers, wherever the ceiling is).
@@ -1395,6 +1398,16 @@ document.addEventListener('click', e => {
       flash(n ? `Molding added to ${nCab(n)}` : 'No upper cabinets are that close to the ceiling'); break;
     }
     case 'mold-clear': mutate(() => S.cabinets.forEach(c => { c.molding = null; })); break;
+    case 'bmold-quick': {
+      // 0.63.46: every base (and tall) cabinet standing on the floor gets the base molding; islands too unless unticked.
+      const box = el.closest('.bm-box'), q = k => box.querySelector('.bm-' + k), mid = q('mold').value, tall = q('tall').checked, isl = q('isl').checked;
+      ui.bmMold = mid; ui.bmTall = tall; ui.bmIsl = isl; let n = 0;
+      const onFloor = c => (c.cat === 'Base' || (tall && c.cat === 'Tall')) && (+c.elev || 0) < 1 && !c.autoOf;
+      const island = c => { const w = wall(c.wall); return !!(w && (w.island || w.hidden)); };
+      mutate(() => S.cabinets.forEach(c => { if (!wall(c.wall) || !onFloor(c) || (!isl && island(c))) return; c.baseMold = mid; n++; }));
+      flash(n ? `Base molding added to ${nCab(n)}` : 'No base cabinets on the floor in this room'); break;
+    }
+    case 'bmold-clear': mutate(() => S.cabinets.forEach(c => { c.baseMold = null; })); break;
     case 'exp-fmt': ui.exportFmt = id; renderExport(); break;
     case 'exp-units': ui.exportUnits = id; renderExport(); break;
     case 'door-export': mutate(() => { S.doorExport = id; }); flash(`Buyout doors export for ${(DOOR_EXPORTS.find(x => x.v === id) || {}).l}`); break;

@@ -326,7 +326,7 @@ function priceCab(c, ps) {
   // Pulls and knobs: what the hardware list counts of the job's pull hardware, at the sheet's drilling charge each.
   const pullNames = new Set(S.hardware.filter(h => h.kind === 'pull').map(h => h.name)), nPull = Object.entries(b.bom).reduce((a, [k, q]) => a + (pullNames.has(k) ? q : 0), 0);
   // 0.59.11: each drawer box has its own price by drawer material (Edit prices › Adders), on top of Each drawer.
-  const boxEach = nDr ? dbxPrice(ps, drawerMatT(cabSet(c, 'drawerMatT'))) : 0;
+  const boxEach = nDr ? dbxPrice(ps, cabDrawerMatT(c)) : 0;
   const extras = nPull * (+ad.perPull || 0) + nDr * ((+ad.perDrawer || 0) + boxEach) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = panelPartsOf(b, c);
@@ -512,6 +512,8 @@ function ensureLibPrices(ps) {
   if (legCost2(ps)) savePrices();
   // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
   if (ps && ps.molds && !ps.cmold4 && S.moldings.some(m => m.id === 'mo-cmold')) { ps.molds['mo-cmold'] = 4; ps.cmold4 = 1; savePrices(); }
+  // 0.63.46: the new base molding starts at the same $9/ft as the other moldings.
+  if (ps && ps.molds && !ps.base9 && S.moldings.some(m => m.id === 'mo-base')) { if (!(ps.molds['mo-base'] > 0)) ps.molds['mo-base'] = 9; ps.base9 = 1; savePrices(); }
   // 0.57.0: concealed floating shelf brackets and in-wall blocking start at rough shop prices.
   // 0.59.15 (Ayden 2026-11-19): the drawer box price already has the box and its labor, and slides are hardware, so the old
   // $35 Each drawer charge would count the labor twice. Sheets still on $35 go to $0 once; a different number is kept.

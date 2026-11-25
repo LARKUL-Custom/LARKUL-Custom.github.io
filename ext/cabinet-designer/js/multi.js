@@ -47,7 +47,7 @@ function multiProps() {
   <div class="psec box">${secHead('palette', 'Materials and fronts', 'amber')}<div class="mgrid">
     ${sel('Construction', 'faceFrame', so('faceFrame', ffOpts()))}${sel('Cabinet materials', 'cabMatT', so('cabMatT', opts(S.matTemplates.cabinet)))}${sel('Drawer materials', 'drawerMatT', so('drawerMatT', opts(S.matTemplates.drawer)))}
     ${sel('Door template', 'doorT', so('doorT', opts(S.doorTemplates)))}${sel('Applied panel fit', 'panelStyle', so('panelStyle', opts(S.panels)))}
-    ${sel('Part template', 'partT', so('partT', opts(S.partTemplates)))}${sel('Top molding', 'molding', [{ v: '', l: 'None' }, ...opts(S.moldings)])}
+    ${sel('Part template', 'partT', so('partT', opts(S.partTemplates)))}${sel('Top molding', 'molding', [{ v: '', l: 'None' }, ...opts(S.moldings)])}${sel('Base molding', 'baseMold', [{ v: '', l: 'None' }, ...opts(S.moldings)])}
     ${sel('Finished interior', 'finInt', yn, c => c.finInt ? 'yes' : 'no')}</div></div>
   <div class="psec box">${secHead('sliders', 'Hardware and joints', 'blue')}<div class="mgrid">
     ${sel('Pulls', 'pull', so('pull', opts(hwOf('pull'))))}${sel('Drawer slide', 'slide', so('slide', opts(hwOf('slide'))))}${sel('Hinge', 'hinge', so('hinge', opts(hwOf('hinge'))))}
