@@ -267,7 +267,7 @@ function cornerPlanFronts(c, fr, P, ft, up) {
   const seen = new Set();
   fr.forEach(f => {
     const k = f.idx + '|' + f.x0.toFixed(2); if (seen.has(k)) return; seen.add(k);
-    const q = [facePt(f.face, f.x0), facePt(f.face, f.x1), facePt(f.face, f.x1, ft), facePt(f.face, f.x0, ft)].map(v => P(v.x, v.z));
+    const o = frontOff(c), q = [facePt(f.face, f.x0, o), facePt(f.face, f.x1, o), facePt(f.face, f.x1, o + ft), facePt(f.face, f.x0, o + ft)].map(v => P(v.x, v.z));
     s += `<polygon class="p-front${up} nss" points="${polyPts(q)}"/>`;
   });
   return s;

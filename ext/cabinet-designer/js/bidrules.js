@@ -242,7 +242,7 @@ function bidFlushFillers(rooms) {
       const fit = k => Math.abs((k.elev || 0) - (c.elev || 0)) + Math.abs(k.h - c.h);
       const nb = nbs.sort((a, b) => fit(a) - fit(b))[0], fr = computeFronts(nb).find(f => f.type !== 'open');
       const ft = fr ? ((mat(frontStyle(nb, fr).ds.mat) || {}).thick || 0.75) : 0;
-      c.outset = r3((nb.outset || 0) + nb.d + ft - c.d); n++;
+      c.outset = r3((nb.outset || 0) + nb.d + (ft ? ft + frontOff(nb) : 0) - c.d); n++;
     });
     fl.forEach((a, i) => fl.slice(i + 1).forEach(b => {
       if (a.wall === b.wall || !vOverlap(a, b)) return;

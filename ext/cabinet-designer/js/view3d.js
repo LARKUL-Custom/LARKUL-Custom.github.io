@@ -267,7 +267,7 @@ function cabinetMeshes(c, opts = {}) {
   if (tk && p.toeSkin !== 'off') { if (angledCorner(c)) cornerToe3d(c, tk, sb, t, L3(toeMat(c, mt) || cm, 'toe'), o => grp.add(o)); else grp.add(box3(W, tk, t, L3(toeMat(c, mt) || cm, 'toe'), W / 2, tk / 2, D - sb - t / 2)); }
   // A blind corner's blind panel: inside the face frame's wide stile has it; otherwise it goes on the front beside the doors (blindPanelAt).
   if (blindCorner(c) && !faceFrame(c)) { const q = blindPanelAt(c, p), fr0 = computeFronts(c, p)[0], dm = (fr0 && mat(frontStyle(c, fr0).ds.mat)) || cm, ft = dm.thick;
-    grp.add(box3(q.x1 - q.x0, q.z1 - q.z0, ft, L3(dm, 'doors'), (q.x0 + q.x1) / 2, (q.z0 + q.z1) / 2, c.d + ft / 2)); }
+    grp.add(box3(q.x1 - q.x0, q.z1 - q.z0, ft, L3(dm, 'doors'), (q.x0 + q.x1) / 2, (q.z0 + q.z1) / 2, c.d + frontOff(c) + ft / 2)); }
   // Ladder base: the same rails and rungs as the cut list (buildParts), under the box.
   if (onLadder(c, p) && tk && !angledCorner(c)) {
     const lmat = mat(p.ladderMat) || cm, lt = lmat.thick, lM = L3(lmat, 'inside'), tkt = (toeMat(c, mt) || cm).thick;
@@ -339,7 +339,7 @@ function cabinetMeshes(c, opts = {}) {
   fronts.forEach((f, fi) => {
     if (f.type === 'open') return;
     // A corner's fronts are built on their own face (x along it, z out of it), so here D is that face.
-    const host = f.face ? cornerFaceGroup(f) : grp, D = f.face ? 0 : c.d;
+    const host = f.face ? cornerFaceGroup(f) : grp, D = (f.face ? 0 : c.d) + frontOff(c);
     if (f.face) grp.add(host);
     const { ds, framed } = frontStyle(c, f), fm = mat(ds.mat) || cm, ft = fm.thick, fk = frontKey(f), fmM = L3(fm, fk);
     const fw = f.x1 - f.x0, fh = f.z1 - f.z0, cx = f.x0 + fw / 2, cy = f.z0 + fh / 2;
@@ -407,11 +407,11 @@ function cabinetMeshes(c, opts = {}) {
     addP(box3(pt, h, d, pmM, x, q.z0 + h / 2, q.d0 + d / 2));
   })));
   // Fillers to the wall, flush with the fronts, with a short return behind them.
-  const flm = mat(fillerMat(c)) || cm, flM = L3(flm, 'finished'), fy0 = c.cat === 'Wall' ? 0 : tk;
+  const flm = mat(fillerMat(c)) || cm, flM = L3(flm, 'finished'), fy0 = c.cat === 'Wall' ? 0 : tk, fo = frontOff(c);
   fillersOf(c).forEach(fl => {
     const x0 = fl.end === 'L' ? -fl.gap - (pL ? pt : 0) : W + (pR ? pt : 0), fh = H - fy0;
-    grp.add(box3(fl.gap, fh, flm.thick, flM, x0 + fl.gap / 2, fy0 + fh / 2, D + flm.thick / 2));
-    grp.add(box3(Math.min(fl.gap, flm.thick), fh, 3, flM, fl.end === 'L' ? x0 + Math.min(fl.gap, flm.thick) / 2 : x0 + fl.gap - Math.min(fl.gap, flm.thick) / 2, fy0 + fh / 2, D - 1.5));
+    grp.add(box3(fl.gap, fh, flm.thick, flM, x0 + fl.gap / 2, fy0 + fh / 2, D + fo + flm.thick / 2));
+    grp.add(box3(Math.min(fl.gap, flm.thick), fh, 3, flM, fl.end === 'L' ? x0 + Math.min(fl.gap, flm.thick) / 2 : x0 + fl.gap - Math.min(fl.gap, flm.thick) / 2, fy0 + fh / 2, D + fo - 1.5));
   });
   grp.traverse(o => { o.userData.cabId = c.id; });
   // Layers: drop the meshes of any kind that is turned off (untagged meshes are the box).

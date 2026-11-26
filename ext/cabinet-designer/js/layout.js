@@ -347,7 +347,33 @@ function fillerFlushOutset(c) {
     if (!best) return null;
     const nb = best.nb, fr = computeFronts(nb).find(f => f.type !== 'open');
     const ft = fr ? ((mat(frontStyle(nb, fr).ds.mat) || {}).thick || 0.75) : 0;
-    return Math.round(((nb.outset || 0) + nb.d + ft - c.d) * 1000) / 1000;
+    return Math.round(((nb.outset || 0) + nb.d + (ft ? ft + frontOff(nb) : 0) - c.d) * 1000) / 1000;
+  });
+}
+// 0.63.89 (Ayden 2026-11-26: "our panels always line up with the doors at a default level, so almost always 7/8 so depth
+// plus 7/8"): a panel's front reaches the cabinet's depth plus the panel fit's front overhang (7/8" by default). How far
+// that is out from the wall for cabinet k, outset included.
+const PANEL_FLUSH = 0.875;
+function panelFlushOut(k) {
+  let ov = PANEL_FLUSH;
+  try { const v = +panelFor(k).frontOverhang; if (isFinite(v)) ov = v; } catch (_) {}
+  return (k.outset || 0) + k.d + ov;
+}
+// A standing panel (Base, Wall or Tall End Panel, Support Panel) placed against a cabinet takes that cabinet's depth plus
+// the overhang, so its front lines up with the doors. Returns the depth to use, or null with no cabinet within 1".
+function panelFlushDepth(c) {
+  if (!c || c.made !== 'panel' || c.autoOf || !c.wall) return null;
+  return inRoomOf(c, () => {
+    if (!wall(c.wall)) return null;
+    let best = null;
+    obstacles(c.wall, c.side, { ...c, outset: 0, d: 999 }, c.id).forEach(o => {
+      if (o.kind !== 'cab') return;
+      const nb = cab(o.id); if (!nb || nb.made || nb.moz || nb.autoOf || (typeof isFloatShelf === 'function' && isFloatShelf(nb))) return;
+      const gap = Math.min(Math.abs(o.a0 - (c.off + c.w)), Math.abs(c.off - o.a1));
+      if (gap > 1 + 0.01 || (best && gap >= best.gap)) return;
+      best = { gap, nb };
+    });
+    return best ? r3(panelFlushOut(best.nb) - (c.outset || 0)) : null;
   });
 }
 // Fillers between a cabinet and a wall, by the viewer's end: [{ end, gap, a0, a1 }].
@@ -397,14 +423,35 @@ function panelPieces(c, end) {
     try { return withRoom(r, () => panelPieces(c, end)); } finally { r.cabinets = all; }
   }
   const own = panelPiecesOwn(c, end);
-  const isl = islandPartner(c, end); if (!isl) return own;
+  const isl = islandPartner(c, end); if (!isl) return islandBackReach(c, end, own);
   // 0.61.0 (Ayden 2026-11-23: "the island need end panels that cover all the cabinets even if its double sided"): on an
   // island with cabinets back to back, one end panel runs across both. The taller cabinet carries it (side 1 when they
   // match) out past its back to the other cabinet's front; the other one gets no panel at that end.
   if (!isl.owner) return panelPiecesOwn(isl.k, isl.end) ? null : own;
   if (!own) return own;
-  const w = wall(c.wall), ext = -r3((c.outset || 0) + (w ? w.thick : 0) + faceOut(isl.k)), z0 = isl.k.elev - c.elev, z1 = z0 + isl.k.h;
+  // 0.63.89: out past the other cabinet's front by the panel overhang too (flush with its doors, like this side).
+  const w = wall(c.wall), ext = -r3((c.outset || 0) + (w ? w.thick : 0) + panelFlushOut(isl.k)), z0 = isl.k.elev - c.elev, z1 = z0 + isl.k.h;
   return own.map(pc => ({ ...pc, steps: pc.steps.map(q => { const mid = (q.z0 + q.z1) / 2; return mid > z0 && mid < z1 ? { ...q, d0: Math.min(q.d0, ext) } : q; }) }));
+}
+// 0.63.89 (Ayden 2026-11-26: "if the island has a back panel the sides overlap it always so it needs to go an extra 3/4"):
+// an island end panel runs back past the cabinet over the island's back panel (a panel shape on the other side of the
+// island line, across this end), so it covers the back panel's edge.
+function islandBackReach(c, end, own) {
+  if (!own || !c.wall) return own;
+  const w = wall(c.wall); if (!w || !(w.hidden || w.island)) return own;
+  const dir = (end === 'L') === (c.side === 1) ? -1 : 1, at = dir < 0 ? c.off : c.off + c.w;
+  const bk = (S.shapes || []).filter(s => s.wall === c.wall && s.side === -c.side && s.plane === 'upright'
+    && +s.thick > 0 && +s.thick <= 2 && !(typeof shapeLeg === 'function' && shapeLeg(s))).map(s => {
+    const b = shapeBox(s.pts || []), a0 = (+s.off || 0) + b.x0, a1 = (+s.off || 0) + b.x1, e0 = (+s.elev || 0) + b.y0, e1 = (+s.elev || 0) + b.y1;
+    return { s, a0, a1, z0: e0 - c.elev, z1: e1 - c.elev };
+  }).filter(q => q.a0 <= at + 1 && q.a1 >= at - 1 && q.z1 > 0.5 && q.z0 < c.h - 0.5);
+  if (!bk.length) return own;
+  return own.map(pc => ({ ...pc, steps: pc.steps.map(q => {
+    const mid = (q.z0 + q.z1) / 2, hit = bk.filter(b => mid > b.z0 && mid < b.z1);
+    if (!hit.length) return q;
+    const ext = -r3((c.outset || 0) + w.thick + Math.max(...hit.map(b => (+b.s.outset || 0) + +b.s.thick)));
+    return { ...q, d0: Math.min(q.d0, ext) };
+  }) }));
 }
 // The cabinet back to back with this one at this end, on the other side of an island line: { k, end (k's end), owner
 // (this cabinet carries the shared panel) }, or null.
@@ -459,7 +506,7 @@ function panelZ0(c) { return c.cat === 'Wall' || panelFor(c).toFloor || !hasToe(
 function faceOut(k) {
   let ft = 0;
   if (!k.moz && !k.made) { const fr = computeFronts(k).find(f => f.type !== 'open'); if (fr) ft = (mat(frontStyle(k, fr).ds.mat) || {}).thick || 0.75; }
-  return (k.outset || 0) + k.d + ft;
+  return (k.outset || 0) + k.d + (ft ? ft + frontOff(k) : 0);
 }
 // The parts of an end that cabinets butted against it leave showing, as panel pieces (see panelPieces).
 // Bands up the end: each one is covered out to the deepest neighbour face in it. Strips under 1/2" deep or 1" tall

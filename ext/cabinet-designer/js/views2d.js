@@ -198,7 +198,7 @@ function planLabelsSVG(L) {
 function planFrontsSVG(c) {
   const w = wall(c.wall); if (!w) return '';
   const g = wg(w), fr = computeFronts(c).filter(f => f.type !== 'open'); if (!fr.length) return '';
-  const ft = (mat(frontStyle(c, fr[0]).ds.mat) || {}).thick || 0.75, fb = w.thick / 2 + (c.outset || 0) + c.d, up = c.cat === 'Wall' ? ' up' : '', open = !!ui.open[c.id];
+  const ft = (mat(frontStyle(c, fr[0]).ds.mat) || {}).thick || 0.75, fb = w.thick / 2 + (c.outset || 0) + c.d + frontOff(c), up = c.cat === 'Wall' ? ' up' : '', open = !!ui.open[c.id];
   const P = (x, b) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, fb + b);
   if (fr[0].face) return cornerPlanFronts(c, fr, (x, z) => cabPt(c, c.side === 1 ? x : c.w - x, z), ft, up);
   const cols = new Map();
@@ -223,7 +223,7 @@ function planFrontsSVG(c) {
 // Open cabinet in plan: door swings drawn from the hinge, pulled-out drawers as dashed boxes.
 function planOpenSVG(c) {
   const w = wall(c.wall); if (!w) return '';
-  const g = wg(w), fb = w.thick / 2 + (c.outset || 0) + c.d + 0.75, fr = computeFronts(c), seen = new Set();
+  const g = wg(w), fb = w.thick / 2 + (c.outset || 0) + c.d + 0.75 + frontOff(c), fr = computeFronts(c), seen = new Set();
   const P = (x, b) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, fb + b);
   let s = '';
   fr.forEach(f => {
@@ -616,11 +616,40 @@ function resizeHandlesPlan() {
   const pS = at(-o, c.d / 2), pE = at(c.w + o, c.d / 2), pD = at(c.w / 2, c.d + o);
   return rzHandle('S', pS.x, pS.y, -g.u.x, -g.u.y, k, 'Drag to change the width') + rzHandle('E', pE.x, pE.y, g.u.x, g.u.y, k, 'Drag to change the width') + rzHandle('D', pD.x, pD.y, n.x, n.y, k, 'Drag to change the depth');
 }
-// Elevation: arrows on both sides (width) and on top (height).
+// Elevation: arrows on both sides (width), on top (height) and on the bottom (0.63.87, Ayden 2026-11-26: "no button to
+// scale down"): the bottom arrow moves the bottom edge and keeps the top where it is.
 function resizeHandlesElev(c, ex, L) {
   const k = ui.elevPx || 1, o = rzR() * k * 1.25, by = -c.elev, side = elevSide(wall(c.wall));
   return rzHandle(side === 1 ? 'S' : 'E', ex - o, by - c.h / 2, -1, 0, k, 'Drag to change the width') + rzHandle(side === 1 ? 'E' : 'S', ex + c.w + o, by - c.h / 2, 1, 0, k, 'Drag to change the width')
-    + rzHandle('H', ex + c.w / 2, by - c.h - o, 0, -1, k, 'Drag to change the height');
+    + rzHandle('H', ex + c.w / 2, by - c.h - o, 0, -1, k, 'Drag to change the height')
+    + rzHandle('B', ex + c.w / 2, by + o, 0, 1, k, 'Drag to move the bottom (the top stays put)');
+}
+// 0.63.87 (Ayden 2026-11-26: "handels dont move correctly"): an arrow sits a little outside the edge it moves, and the
+// edge used to jump to the mouse on the first move, so the arrow slid away from under the pointer. The gap between
+// where the arrow was grabbed and its edge is kept for the whole drag, so the arrow stays under the mouse.
+function rzGrab(c, key, t, z) {
+  return { S: t - c.off, E: t - (c.off + c.w), H: z - (c.elev + c.h), B: z - c.elev, D: z - c.d }[key] || 0;
+}
+// Bottom drag: the bottom (height off the floor) of a cabinet beside it, the top of any cabinet on the wall, or the floor,
+// when the drag is close to it.
+function rzBottomSnap(c, v) {
+  const tol = Math.max(0.75, 12 * (ui.elevPx || 0.1));
+  let best = null;
+  const take = (val, why, gap) => { const dd = Math.abs(val - v); if (val >= 0 && dd <= tol && (!best || dd < best.dd - 0.01 || (Math.abs(dd - best.dd) <= 0.01 && gap < best.gap))) best = { v: val, dd, gap, why }; };
+  take(0, 'on the floor', 0);
+  S.cabinets.forEach(o => {
+    if (o.id === c.id || o.wall !== c.wall || o.side !== c.side) return;
+    const gap = Math.max(o.off - (c.off + c.w), c.off - (o.off + o.w), 0), lbl = `${LBL[o.id] || ''} ${o.name}`.trim();
+    if (o.elev > 0) take(o.elev, `bottom lined up with ${lbl}`, gap);
+    take(o.elev + o.h, `sits on ${lbl}`, gap);
+  });
+  return best;
+}
+// Move the bottom edge to v (inches off the floor); the top stays. Never blocked by what is below (RULE: allow it, flag it).
+function rzBottom(c, v, step) {
+  const top = c.elev + c.h;
+  v = Math.min(Math.max(0, Math.round(v / step) * step), top - 6);
+  c.elev = r3(v); c.h = r3(top - v);
 }
 // Try a new size (and spot along the wall).
 // 0.63.66 (Ayden 2026-11-25: "cant extend the corner cabinet to match the others even though i need to"): a size is never
@@ -674,8 +703,8 @@ function rzHeightSnap(c, v) {
 // End of an arrow drag: typed formulas on that size give way to the dragged size, and it goes on the undo list.
 function rzFinish(d) {
   if (!d.live) return;
-  const f = { S: 'w', E: 'w', D: 'd', H: 'h' }[d.key];
-  if (typeof setFormula === 'function') setFormula('cab:' + d.id, f, null);
+  const f = { S: 'w', E: 'w', D: 'd', H: 'h', B: 'h' }[d.key];
+  if (typeof setFormula === 'function') { setFormula('cab:' + d.id, f, null); if (d.key === 'B') setFormula('cab:' + d.id, 'elev', null); }
   undoStack.push(d.snap); redoStack = []; save(); render();
 }
 function initPlan() {
@@ -750,7 +779,10 @@ function initPlan() {
       if (ui.topRun) { ui.topRun = ''; renderDock(); }
     }
     const rz = e.target.closest && e.target.closest('[data-rz]');
-    if (rz && rzShow()) { ui.drag = { mode: 'resize', key: rz.dataset.rz, id: ui.sel.id, snap: JSON.stringify(S), live: false }; return; }
+    if (rz && rzShow()) {
+      const c = cab(ui.sel.id), w = wall(c.wall), g = wg(w), t = segDist(p, w).t, v = ((p.x - w.x1) * g.n.x + (p.y - w.y1) * g.n.y) * c.side - w.thick / 2 - (c.outset || 0);
+      ui.drag = { mode: 'resize', key: rz.dataset.rz, id: c.id, grab: rzGrab(c, rz.dataset.rz, t, v), snap: JSON.stringify(S), live: false }; return;
+    }
     const hd = hitHandle(p);
     if (hd) { ui.drag = { mode: 'handle', ...hd, snap: JSON.stringify(S), st: wallSnapState(), live: false, ox: hd.end === 1 ? hd.w.x1 : hd.w.x2, oy: hd.end === 1 ? hd.w.y1 : hd.w.y2 }; return; }
     const hits = hitCabs(p), sh = hitShapes(p), fx = fixtHit(p), dbl = hits.length || sh.length ? isDouble(e) : false;
@@ -809,11 +841,11 @@ function initPlan() {
     if (d && d.mode === 'resize') {
       if (!d.live && !moved()) return;
       d.live = true; const c = cab(d.id), w = c && wall(c.wall); if (!w) return;
-      const r = segDist(p, w), g = r.g, step = e.shiftKey ? 0.0625 : 0.5;
-      if (d.key === 'E') rzApply(c, 'E', r.t - c.off, step);
-      else if (d.key === 'S') rzApply(c, 'S', c.off + c.w - r.t, step);
+      const r = segDist(p, w), g = r.g, step = e.shiftKey ? 0.0625 : 0.5, t = r.t - (d.grab || 0);
+      if (d.key === 'E') rzApply(c, 'E', t - c.off, step);
+      else if (d.key === 'S') rzApply(c, 'S', c.off + c.w - t, step);
       else {
-        let v = ((p.x - w.x1) * g.n.x + (p.y - w.y1) * g.n.y) * c.side - w.thick / 2 - (c.outset || 0);
+        let v = ((p.x - w.x1) * g.n.x + (p.y - w.y1) * g.n.y) * c.side - w.thick / 2 - (c.outset || 0) - (d.grab || 0);
         const near = !e.shiftKey && rzDepthSnap(c, v); if (near) v = near.d;
         rzApply(c, 'D', v, near ? 0.0625 : step);
         if (near && Math.abs(c.d - near.d) < 0.001) { renderPlan(); renderElev(); $('#hint').textContent = `Depth ${fmtLen(c.d)}, lined up with ${near.lbl}`; return; }
@@ -1294,7 +1326,8 @@ function initElev() {
     const rz = e.target.closest('[data-rz]');
     if (rz && rzShow()) {
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
-      const p = elevPoint(e); ui.edrag = { resize: true, key: rz.dataset.rz, id: ui.sel.id, sx: p.x, sy: p.y, cx: e.clientX, cy: e.clientY, snap: JSON.stringify(S), live: false };
+      const p = elevPoint(e), c = cab(ui.sel.id), w = wall(c.wall), t = elevSide(w) === 1 ? p.x : wg(w).L - p.x;
+      ui.edrag = { resize: true, key: rz.dataset.rz, id: c.id, grab: rzGrab(c, rz.dataset.rz, t, -p.y), sx: p.x, sy: p.y, cx: e.clientX, cy: e.clientY, snap: JSON.stringify(S), live: false };
       return;
     }
     const gf = e.target.closest('[data-fixt]');
@@ -1356,11 +1389,15 @@ function initElev() {
     if (d.resize) {
       const p = elevPoint(e), c = cab(d.id), w = c && wall(c.wall); if (!w) return;
       if (!d.live && Math.abs(p.x - d.sx) < 1 && Math.abs(p.y - d.sy) < 1) return;
-      d.live = true; const L = wg(w).L, t = elevSide(w) === 1 ? p.x : L - p.x, step = e.shiftKey ? 0.0625 : 0.5;
+      d.live = true; const L = wg(w).L, g = d.grab || 0, t = (elevSide(w) === 1 ? p.x : L - p.x) - g, z = -p.y - g, step = e.shiftKey ? 0.0625 : 0.5;
       if (d.key === 'E') rzApply(c, 'E', t - c.off, step);
       else if (d.key === 'S') rzApply(c, 'S', c.off + c.w - t, step);
-      else {
-        let v = -p.y - c.elev; const near = !e.shiftKey && rzHeightSnap(c, v); if (near) v = near.v;
+      else if (d.key === 'B') {
+        const near = !e.shiftKey && rzBottomSnap(c, z);
+        rzBottom(c, near ? near.v : z, near ? 0.0625 : step);
+        $('#hint').textContent = `Off the floor ${fmtLen(c.elev)}, height ${fmtLen(c.h)}${near && Math.abs(c.elev - near.v) < 0.001 ? ', ' + near.why : ''}`;
+      } else {
+        let v = z - c.elev; const near = !e.shiftKey && rzHeightSnap(c, v); if (near) v = near.v;
         if (typeof ceilMax === 'function') v = Math.min(v, ceilMax(c) - c.elev);
         rzApply(c, 'H', v, near ? 0.0625 : step);
         if (near && Math.abs(c.h - near.v) < 0.001) { renderElev(); renderPlan(); $('#hint').textContent = `Height ${fmtLen(c.h)}, ${near.why}`; return; }

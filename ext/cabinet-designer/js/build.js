@@ -15,13 +15,14 @@ function cabPoly(c, o) {
 function panelThick(c) { return (mat(panelFor(c).mat) || { thick: 0.75 }).thick; }
 // One applied panel piece as a part: its length (up the end) and width (front to back, overhang and scribe included),
 // and the notched outline when its back edge steps. Panel x runs up from the piece's bottom, y forward from its back edge.
-// The scribe at the back is only there when the piece reaches the wall; a strip in front of a neighbour gets none.
+// The scribe at the back is only there when the piece reaches the wall; a strip in front of a neighbour gets none, nor does
+// an island panel reaching back past the cabinet (over a back panel or the cabinet behind it, 0.63.89).
 // 0.63.4: a wall marked Scribe adds its scribe extra on top.
 function panelGeom(c, end, pc, ps) {
   ps = ps || panelFor(c);
-  const D = endDepth(c, end), dmin = Math.min(...pc.steps.map(q => q.d0)), sc = dmin < 1e-6 ? ps.scribe + (typeof wallScribeX === 'function' ? wallScribeX(wall(c.wall)) : 0) : 0;
+  const D = endDepth(c, end), dmin = Math.min(...pc.steps.map(q => q.d0)), sc = Math.abs(dmin) < 1e-6 ? ps.scribe + (typeof wallScribeX === 'function' ? wallScribeX(wall(c.wall)) : 0) : 0;
   const L = pc.z1 - pc.z0, W = D - dmin + ps.frontOverhang + sc, y = dd => dd - dmin + sc;
-  const yb = q => q.d0 < 1e-6 ? 0 : r3(y(q.d0));
+  const yb = q => q.d0 - dmin < 1e-6 ? 0 : r3(y(q.d0));
   let outline = null;
   if (pc.steps.some(q => Math.abs(q.d0 - dmin) > 1e-6)) {
     const pts = [];
@@ -59,7 +60,8 @@ function panelPolys(c, explicitOnly) {
 function fillerPolys(c) {
   const w = wall(c.wall); if (!w) return [];
   const g = wg(w), s = c.side, f = w.thick / 2 + (c.outset || 0), t = (mat(fillerMat(c)) || { thick: 0.75 }).thick;
-  return fillersOf(c).map(fl => [wallPt(w, g, s, fl.a0, f + c.d), wallPt(w, g, s, fl.a1, f + c.d), wallPt(w, g, s, fl.a1, f + c.d + t), wallPt(w, g, s, fl.a0, f + c.d + t)]);
+  const b = f + c.d + frontOff(c); // 0.63.91: flush with the fronts, which stand 1/8 off the cabinet
+  return fillersOf(c).map(fl => [wallPt(w, g, s, fl.a0, b), wallPt(w, g, s, fl.a1, b), wallPt(w, g, s, fl.a1, b + t), wallPt(w, g, s, fl.a0, b + t)]);
 }
 const fillerMat = c => finishRole(c, 'sheet');
 // 0.58.38: the toe skin (or built-in toe kick) is a part you see, so it is cut from the cabinet's finish (Ayden 2026-11-19:
@@ -257,7 +259,7 @@ function planBox(P) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -In
 // Where a front sits in plan: P(x, b) is x across the cabinet from its left end, b out from the closed front face.
 function frontFrame(c) {
   const w = wall(c.wall); if (!w) return null;
-  const g = wg(w), fb = w.thick / 2 + (c.outset || 0) + c.d + FRONT_T;
+  const g = wg(w), fb = w.thick / 2 + (c.outset || 0) + c.d + FRONT_T + frontOff(c);
   return { w, P: (x, b) => wallPt(w, g, c.side, c.side === 1 ? c.off + x : c.off + c.w - x, fb + b) };
 }
 // One front's own frame in plan: L(x, out) is x along the front's face and out in front of the face it closes on.
@@ -298,7 +300,7 @@ function drawerPoly(c, f, tr, fr) {
 }
 // A cabinet's footprint in plan; a 45° or 90° corner is its real angled or L shape, not the box around it.
 function cabPlanPoly(o) {
-  if (typeof angledCorner === 'function' && angledCorner(o)) { const fr = frontFrame(o); if (fr) return cornerTop(o).pts.map(q => fr.P(q.x, q.y - o.d - FRONT_T)); }
+  if (typeof angledCorner === 'function' && angledCorner(o)) { const fr = frontFrame(o); if (fr) return cornerTop(o).pts.map(q => fr.P(q.x, q.y - o.d - FRONT_T - frontOff(o))); }
   return cabPoly(o);
 }
 // Things a front of cabinet c between heights z0 and z1 can't go into: other cabinets, other walls, end caps.
@@ -1815,7 +1817,7 @@ function moldingRunsAll() {
     }
     r.h = m.fill ? Math.max(0.5, Math.min(12, w.height - r.top)) : m.h;
     r.z = m.bottom ? r.bottom - r.h : r.top;
-    r.fz = r.d + 0.75;
+    r.fz = r.d + 0.75 + jobFrontOff(); // 0.63.91: on the door faces, which stand 1/8 off the cabinet
     // The heights a neighbor has to fill to stop this run: the molding itself plus the edge it sits on.
     r.lo = m.bottom ? r.z : r.top - 0.01; r.hi = m.bottom ? r.bottom + 0.01 : r.z + r.h;
   });
@@ -1870,7 +1872,7 @@ function moldEnd(r, at, dir, runs) {
   if (nd >= r.d - 0.01) return { ret: false };
   // A shallower neighbor: the return comes back to its doors, or to the face of its own molding.
   const o = runs.find(q => q !== r && q.wall === r.wall && q.side === r.side && Math.abs((dir < 0 ? q.end : q.start) - at) < 0.5 && q.lo < r.hi && q.hi > r.lo);
-  return { ret: true, back: o ? o.fz + o.m.d : nd + (r.base ? 0 : 0.75) };
+  return { ret: true, back: o ? o.fz + o.m.d : nd + (r.base ? 0 : 0.75 + jobFrontOff()) };
 }
 // Inside corners: where runs on two walls that meet come together, the longer one runs through to the other's back
 // face and the other stops against its front, so they never overlap or run over the other wall's cabinets.

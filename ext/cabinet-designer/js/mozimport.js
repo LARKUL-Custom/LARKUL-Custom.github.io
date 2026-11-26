@@ -214,6 +214,8 @@ function mozPick(p, cat) {
   return null;
 }
 function mozLib(p, cat) {
+  // 0.63.90: the library product Bid Reader named for the row.
+  if (p.fromBid && p.lib) { const l = libItem(p.lib); if (l) return l; }
   const same = mozSameName(p); if (same && (same.cat === cat || /shelf/i.test(p.name))) return same;
   // 0.63.75: a Bid Reader row takes the shop's standard cabinet for what its product and code say (door, pair, drawers,
   // sink...), the same as a Mozaik product; the nearest library name only when nothing says what it is.
@@ -483,6 +485,10 @@ function mozRooms(data) {
       // Pieces that aren't cabinets: panel-ready appliances, tops, legs, shelves, trim, standing panels (0.61.0).
       if (!p.fromBid && mozThing(rm, p, at, put, flag, sz)) return;
       if (p.fromBid && /shelf|trim|molding|crown/i.test(p.name) && !p.fronts.length && !mozSameName(p)) { (data.skipped = data.skipped || []).push(p.name); return; }
+      // 0.63.90: a bid row named for a library filler, Support Panel or appliance panel front is placed as that product, at its
+      // spot and size. A named Base/Wall/Tall End Panel still goes on the cabinet beside it below (or stands as itself).
+      const named = p.fromBid && p.lib && libItem(p.lib);
+      if (named && (libGroup(named) === 'filler' || ['made-panel', 'made-apfront', 'made-pocketdoors'].includes(named.id))) { put(named, p, at); return; }
       if (isFiller(p) || isEndPanel(p)) {
         // A filler the library has by name (BTH, TTH, BTF, TTF, Wall fillers) is placed as itself, as in Mozaik.
         const fl = isFiller(p) && !p.fromBid && mozSameName(p);
@@ -578,7 +584,7 @@ function mozRooms(data) {
       if (c && isEndPanel(p) && p.h > c.h + 6) c = null;
       // 0.59.27: an end panel with no cabinet beside it (a fridge panel, a panel at the end of open shelves) stands on its own
       // as a Support Panel instead of being left out.
-      const sp = !c && isEndPanel(p) && typeof libItem === 'function' && libItem('made-panel');
+      const sp = !c && isEndPanel(p) && typeof libItem === 'function' && ((p.lib && /^made-panel-/.test(p.lib) && libItem(p.lib)) || libItem('made-panel'));
       if (sp) {
         const k = put(sp, p, at, { name: p.name && !/^finished panel$/i.test(p.name) ? epName(p.name) : sp.name, h: p.h > 0 ? p.h : sp.h, d: p.d > 3 ? p.d + panelFwd(p) : p.w > 3 ? p.w : sp.d, elev: p.elev || 0, outset: p.outset || 0 });
         return;

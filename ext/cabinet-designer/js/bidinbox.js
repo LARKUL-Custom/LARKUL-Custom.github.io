@@ -31,10 +31,13 @@ const BID_PRICED = r => ['millwork', 'countertop', 'other', 'wood top'].includes
 const bidOwn = r => typeof bidPlan === 'function' && !!bidPlan(r);
 // 0.63.86 (Ayden 2026-11-25: "have the appliances actually put in and sized correctly"; "you still dont understand
 // windows"): Bid Reader's appliance and window rows become the real fixtures from the appliance library, placed and sized.
-const BID_FIX = r => r && (r.category === 'appliance' || r.category === 'window');
-const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => !BID_FIX(r) && (BID_SHELF(r) || BID_PRICED(r) || bidOwn(r)));
+const BID_FIX = r => r && (r.category === 'appliance' || r.category === 'window' || (typeof bidFixtOf === 'function' && !!bidFixtOf(r)));
+// 0.63.90: a row named for a library cabinet, panel or filler (Bid Reader's lib) is drawn as that product, never priced as a line.
+const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => !BID_FIX(r) && (bidOwn(r) || !(typeof bidLibCab === 'function' && bidLibCab(r)) && (BID_SHELF(r) || BID_PRICED(r))));
 // The closest preset in the appliance library: its kind from the row's words, then the style words, then the nearest width.
 function bidFixtPreset(r) {
+  // 0.63.90: the appliance Bid Reader named from the library, as it is.
+  const named = typeof bidFixtOf === 'function' && bidFixtOf(r); if (named) return named;
   const t = [r.code, r.product, r.notes].filter(Boolean).join(' ').toLowerCase(), W = +r.W || 0, H = +r.H || 0;
   let kind = r.category === 'window' ? 'window' : '';
   if (!kind) kind = /dish ?washer|\bdw\b/.test(t) ? 'dw' : /hood|vent/.test(t) ? 'hood' : /micro|\bmw\b|\botr\b/.test(t) ? 'mw'
@@ -107,7 +110,7 @@ const BID_CAB_TYPE = { base: 1, drawer: 1, sink: 1, vanity: 1, wall: 2, tall: 3,
 const BID_DEF = { 1: [24, 34.5, 24], 2: [30, 30, 12], 3: [24, 84, 24] };
 function bidNativeData(tk) {
   const own = new Set(bidTakeoffItems(tk));
-  const rows = (tk.rows || []).filter(r => !own.has(r) && r.category in BID_CAB_TYPE);
+  const rows = (tk.rows || []).filter(r => !own.has(r) && !BID_FIX(r) && (r.category in BID_CAB_TYPE || (typeof bidLibCab === 'function' && bidLibCab(r))));
   const names = [...new Set([...(tk.rooms || []).map(r => r.name), ...rows.map(r => String(r.room || '').trim() || 'Room')])];
   const rooms = names.map(name => {
     const t = (tk.rooms || []).find(r => bidRoomKey(r.name) === bidRoomKey(name)) || { walls: [] };
@@ -127,13 +130,16 @@ function bidNativeData(tk) {
     const upTop = +t.soffit > 0 ? +t.soffit : (+t.height > 0 ? +t.height : 96) - 3;
     mine.forEach(r => {
       let type = BID_CAB_TYPE[r.category];
+      // 0.63.90: the library product the row names sets the kind and the sizes the row leaves out.
+      const L = typeof bidLibOf === 'function' ? bidLibOf(r) : null;
+      if (L && (!type || BID_CAB_TYPE[r.category] == null)) type = { Base: 1, Wall: 2, Tall: 3 }[L.cat] || type;
       const text = [r.code, r.product, r.notes].filter(Boolean).join(' ');
       // 0.60.0: a filler or panel with no height off the floor that butts an upper on its wall is an upper filler.
       const noElev = !(r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0);
       const butts = o => BID_CAB_TYPE[o.category] === 2 && String(o.wall) === String(r.wall) && o.x !== '' && o.x != null && r.x !== '' && r.x != null
         && (Math.abs(+r.x - (+o.x + +o.W)) < 0.3 || Math.abs(+o.x - (+r.x + (+r.W || 0.75))) < 0.3);
       if (!type) type = (+r.H || 0) >= 66 ? 3 : (+r.elev || 0) >= 40 ? 2 : noElev && (+r.H || 0) < 60 && mine.some(butts) ? 2 : 1;
-      const [dw, dh, dd] = BID_DEF[type];
+      const [dw, dh, dd] = L ? [L.w, L.h, L.d] : BID_DEF[type];
       let w = +r.W > 0 ? +r.W : dw, h = +r.H > 0 ? +r.H : dh, d = +r.D > 0 ? +r.D : dd;
       // 0.59.27: a panel is its thickness along the wall and its depth out from it; rows that give the depth as the width
       // (24 x 3/4) are turned round, and a panel with no width is 3/4" thick, so it doesn't push the run along 24".
@@ -143,8 +149,8 @@ function bidNativeData(tk) {
       const elev = r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0 ? +r.elev : type === 2 ? Math.max(0, upTop - h) : 0;
       const key = wi + ':' + back + ':' + (type === 2 ? 'up' : 'low');
       const hasX = r.x !== '' && r.x != null && isFinite(+r.x);
-      const name = r.product || r.code || r.category;
-      const sub = r.category === 'filler' ? 7 : r.category === 'panel' ? 9 : NaN;
+      const name = L ? L.name : r.product || r.code || r.category;
+      const lg = L && libGroup(L), sub = L ? (lg === 'filler' ? 7 : /^made-panel-/.test(L.id) ? 9 : NaN) : r.category === 'filler' ? 7 : r.category === 'panel' ? 9 : NaN;
       for (let k = 0; k < Math.max(1, Math.round(+r.qty || 1)); k++) {
         const shift = (walls[wi - 1] && walls[wi - 1].bidCaps && !back && walls[wi - 1].bidCaps.shift) || 0;
         const x = hasX && k === 0 ? +r.x + shift : (cursor[key] || shift);
@@ -153,7 +159,7 @@ function bidNativeData(tk) {
         // corner filler is left out", "right end open", "over the microwave"), and the import read them as the product: a
         // sink base whose notes said "filler" was taken for a filler and dropped, uppers that said "2 shelves" became hoods.
         prods.push({ name, desc: [r.category, r.code, r.product].filter(Boolean).join(' '), w, h, d, x, y: NaN, elev, outset: 0, rot: 0, wall: wi, back,
-          type: type, sub, num: 0, inserts: [], fronts: [], fromBid: true,
+          type: type, sub, num: 0, inserts: [], fronts: [], fromBid: true, ...(L ? { lib: L.id } : {}),
           notes: [r.code, r.material, r.notes].filter(Boolean).join(' · '), ada: ADA_TOE.test(text), ends: bidEnds(r.notes) });
       }
     });
@@ -164,7 +170,7 @@ function bidNativeData(tk) {
       if (!wi || !pre || !(r.x !== '' && r.x != null && isFinite(+r.x))) return;
       const shift = (walls[wi - 1] && walls[wi - 1].bidCaps && +r.side !== 2 && walls[wi - 1].bidCaps.shift) || 0;
       const win = pre.kind === 'window', given = r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0;
-      appls.push({ src: win ? 'fixt' : 'appl', pid: pre.id, name: r.product || pre.name, type: 0, wall: wi, back: +r.side === 2,
+      appls.push({ src: win ? 'fixt' : 'appl', pid: pre.id, name: (typeof bidFixtOf === 'function' && bidFixtOf(r) ? pre.name : r.product) || pre.name, type: 0, wall: wi, back: +r.side === 2,
         w: +r.W > 0 ? +r.W : pre.w, h: +r.H > 0 ? +r.H : pre.h, d: win ? 0 : +r.D > 0 ? +r.D : pre.d, x: +r.x + shift, elev: given ? +r.elev : pre.elev || 0 });
     });
     return { name, walls, prods, appls, hwNames: {} };
@@ -227,12 +233,13 @@ function bidTakeoffRows(rooms, tk, items, done) {
     rm.block = rooms.length + 1; rooms.push(rm); done.rooms++;
     return rm;
   };
-  const lib = bidShelfLib(), cursor = {};
+  const shelfLib = bidShelfLib(), cursor = {};
   items.forEach(r => {
     if (r._drawn) return;
     const rm = roomFor(r.room), qty = Math.max(1, Math.round(+r.qty || 1));
     const plan = typeof bidPlan === 'function' ? bidPlan(r) : null;
     if (plan && withRoom(rm, () => bidBuild(rm, r, plan, buildAt, done)) !== false) return;
+    const named = typeof bidLibOf === 'function' && bidLibOf(r), lib = BID_LIB_SHELF(named) ? named : shelfLib;
     if (BID_SHELF(r) && lib && +r.W > 0) {
       withRoom(rm, () => {
         const walls = rm.walls.filter(w => !w.island);
@@ -320,7 +327,7 @@ function bidShelfSupports(rm, onlyBid) {
         const z0 = !under.length ? lo : past.length ? Math.max(...past.map(k => k.elev + k.h + (k.cat === 'Base' && !k.noTop && rm.autoTops !== false ? +tp.thick || 0 : 0))) : 0;
         const tops = S.cabinets.filter(k => k.wall === g.wall && k.side === g.side && k.cat === 'Wall' && !isFloatShelf(k) && k.elev + k.h > hi && k.elev + k.h <= hi + 6.01).map(k => k.elev + k.h);
         const z1 = tops.length ? Math.max(...tops) : hi;
-        const d = Math.max(sd, ...under.filter(k => !past.includes(k)).map(k => faceOut(k)));
+        const d = Math.max(sd, ...under.filter(k => !past.includes(k)).map(k => panelFlushOut(k))); // 0.63.89: flush with the doors (+7/8)
         const c = newCab(S, lib, g.wall, g.side, edge);
         Object.assign(c, { h: r3(z1 - z0), d: r3(d), elev: r3(z0), fromBid: true, notes: 'Support panel at the open end of the floating shelves (added on import)' });
         if (typeof madeSync === 'function') madeSync(c);

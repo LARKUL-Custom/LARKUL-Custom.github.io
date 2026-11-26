@@ -54,11 +54,11 @@ const FIXT_LIB = [
   FX('dw', 'dw', 'Dishwashers', 'Dishwasher', 24, 34.5, 26),
   FX('dw-pr', 'dw', 'Dishwashers', 'Dishwasher (PR)', 24, 34.5, 24, { pr: true }),
   FX('dw-pro', 'dw', 'Dishwashers', 'Pro Dishwasher', 24, 34.5, 25),
-  FX('fr-std', 'fridge', 'Refrigerators', 'Standard Fridge', 30, 68, 33),
-  FX('fr-fd', 'fridge', 'Refrigerators', 'French Door Fridge', 33, 69, 31),
-  FX('fr-sbs', 'fridge', 'Refrigerators', 'Side by Side Fridge', 36, 69, 30),
-  FX('fr-bf', 'fridge', 'Refrigerators', 'Bottom Freezer Fridge', 30, 69.5, 31),
-  FX('fr-fdice', 'fridge', 'Refrigerators', 'French Door Fridge w Ice', 36, 70, 31),
+  FX('fr-std', 'fridge', 'Refrigerators', 'Standard Fridge', 30, 72, 33),
+  FX('fr-fd', 'fridge', 'Refrigerators', 'French Door Fridge', 33, 72, 31),
+  FX('fr-sbs', 'fridge', 'Refrigerators', 'Side by Side Fridge', 36, 72, 30),
+  FX('fr-bf', 'fridge', 'Refrigerators', 'Bottom Freezer Fridge', 30, 72, 31),
+  FX('fr-fdice', 'fridge', 'Refrigerators', 'French Door Fridge w Ice', 36, 72, 31),
   FX('fr-fd36', 'fridge', 'Refrigerators', '36in French Door (PR)', 36, 84, 24, { pr: true }),
   FX('fr-fd42', 'fridge', 'Refrigerators', '42in French Door (PR)', 42, 84, 24, { pr: true }),
   FX('fr-profd', 'fridge', 'Refrigerators', 'Pro French Door', 36, 84, 27),
@@ -446,29 +446,148 @@ function fixtElevSVG(w, side, L, fs, holes) {
       s += `<rect class="ev-hit" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
       if (sel) s += `<rect class="ev-halo nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/><rect class="ev-sel nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
     } else {
-      const y = -(f.elev + f.h);
+      const y = -(f.elev + f.h), art = !fixtHole(f) ? fixtElevArt(f, x, y) : null;
       const ad = doorIsArch(f) && archElevD(f, a => side === 1 ? a : L - a);
-      s += ad ? `<path class="${cls}" d="${ad.outer}"/>` : `<rect class="${cls}" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
+      s += art && art.shape ? art.shape.replace(/CLS/g, cls) : ad ? `<path class="${cls}" d="${ad.outer}"/>` : `<rect class="${cls}" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
       if (fixtHole(f)) {
         const [a0, a1, z0, z1] = fixtInner(f), ix = side === 1 ? a0 : L - a1, iw = a1 - a0, iy = -z1, ih = z1 - z0;
         s += ad ? `<path class="fx-hole nss" d="${ad.hole}"/>` : `<rect class="fx-hole nss" x="${ix}" y="${iy}" width="${iw}" height="${ih}"/>`;
         if (f.kind === 'window') s += `<rect class="fx-glass nss" x="${ix + 1}" y="${iy + 1}" width="${iw - 2}" height="${ih - 2}"/><path class="fx-line nss" d="${f.hung ? `M${ix} ${iy + ih / 2}H${ix + iw}` : iw > 40 ? `M${ix + iw / 2} ${iy}V${iy + ih}` : ''}"/>`;
         else if (doorHasLeaf(f)) s += doorElevSVG(f, a => side === 1 ? a : L - a, a0, a1, z0, z1, side);
       }
-      else if (f.kind === 'fridge') s += `<path class="fx-line nss" d="M${x} ${y + f.h * 0.32}H${x + f.w}M${x + f.w / 2} ${y}V${y + f.h * 0.32}M${x + f.w / 2 - 2} ${y + f.h * 0.06}V${y + f.h * 0.26}M${x + f.w / 2 + 2} ${y + f.h * 0.06}V${y + f.h * 0.26}M${x + 3} ${y + f.h * 0.38}H${x + f.w - 3}"/>`;
-      else if (f.kind === 'dw') s += `<path class="fx-line nss" d="M${x} ${y + 4}H${x + f.w}M${x + 3} ${y + 6}H${x + f.w - 3}"/>`;
-      else if (f.kind === 'oven') { const n = Math.max(1, Math.min(2, f.ovens | 0 || (f.h > 40 ? 2 : 1))), st = Math.min(4, f.h * 0.12), dh = (f.h - st) / n; s += `<path class="fx-line nss" d="M${x} ${y + st}H${x + f.w}"/>`; for (let i = 0; i < n; i++) { const t = y + st + i * dh; s += `<path class="fx-line nss" d="M${x} ${t + dh}H${x + f.w}M${x + 2} ${t + 2.2}H${x + f.w - 2}"/><rect class="fx-glass nss" x="${x + 3}" y="${t + dh * 0.33}" width="${f.w - 6}" height="${dh * 0.5}"/>`; } }
-      else if (f.kind === 'ucfridge') s += `<rect class="fx-glass nss" x="${x + 2}" y="${y + 3}" width="${f.w - 4}" height="${f.h - 9}"/>`;
-      else if (f.kind === 'range') s += `<path class="fx-line nss" d="M${x} ${y + 4}H${x + f.w}"/><rect class="fx-glass nss" x="${x + 3}" y="${y + 9}" width="${f.w - 6}" height="${f.h * 0.42}"/>`;
-      else if (f.kind === 'washer' || f.kind === 'dryer') s += `<path class="fx-line nss" d="M${x} ${y + 6}H${x + f.w}"/><circle class="fx-glass nss" cx="${x + f.w / 2}" cy="${y + 6 + (f.h - 6) * 0.48}" r="${Math.min(f.w, f.h) * 0.3}"/>`;
+      // 0.63.92 (Ayden 2026-11-26: "something more detailed than what they were, like ... the range has a section of the
+      // stove that has all like the knobs"): each appliance is a line drawing with its parts (fixtElevArt).
+      else if (art) s += art.art;
       // On paper every appliance is named, so the builders can tell a fridge from an opening.
-      if (fixtDef(f).ab || (ui.printing && !fixtHole(f))) s += `<text class="lbl-m fx-lbl" x="${x + f.w / 2}" y="${y + f.h * 0.82}" font-size="${fs}" text-anchor="middle" pointer-events="none">${esc(fixtName(f))}</text>`;
+      if ((fixtDef(f).ab && !art) || (ui.printing && !fixtHole(f))) s += `<text class="lbl-m fx-lbl" x="${x + f.w / 2}" y="${y + f.h * 0.82}" font-size="${fs}" text-anchor="middle" pointer-events="none">${esc(fixtName(f))}</text>`;
       s += `<rect class="ev-hit" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
       if (sel) s += `<rect class="ev-halo nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/><rect class="ev-sel nss" x="${x}" y="${y}" width="${f.w}" height="${f.h}"/>`;
     }
     if (sel && fixtSink(f)) { const t = fixtCounter(f).top + sinkLift(f); s += `<rect class="ev-sel nss" x="${x}" y="${-t - 14}" width="${f.w}" height="${14 + f.h}"/>`; }
     return s + '</g>';
   }).join('');
+}
+// 0.63.92: an appliance in the elevation as a line drawing of its front (Ayden 2026-11-26: not the exact picture, but
+// more detail than a box: the range's knob panel, handles, oven windows, the fridge's doors and drawer, a hood's chimney).
+// Returns { art } drawn over its box, and { shape } (CLS = its classes) when its outline isn't a plain box (hoods).
+// The parts are placed in inches from the box, so they stretch with any size.
+function fixtElevArt(f, x, y) {
+  const w = +f.w || 0, h = +f.h || 0; if (w < 4 || h < 3) return null;
+  const n3 = v => Math.round(v * 1000) / 1000;
+  const R = (a, b, rw, rh, c = 'fx-line', rx = 0) => rw > 0.05 && rh > 0.05 ? `<rect class="${c} nss" x="${n3(a)}" y="${n3(b)}" width="${n3(rw)}" height="${n3(rh)}"${rx ? ` rx="${n3(rx)}"` : ''}/>` : '';
+  const P = d => `<path class="fx-line nss" d="${d}"/>`;
+  const C = (cx, cy, r, c = 'fx-knb') => `<circle class="${c} nss" cx="${n3(cx)}" cy="${n3(cy)}" r="${n3(r)}"/>`;
+  const H = (a, b, len) => R(a, b - 0.45, len, 0.9, 'fx-hdl', 0.45);         // a bar handle across
+  const V = (a, b, len) => R(a - 0.45, b, 0.9, len, 'fx-hdl', 0.45);         // a bar handle up and down
+  const grille = (b, gh) => { let g = R(x + 0.5, b, w - 1, gh); for (let i = 1, n = Math.max(3, Math.round(w / 2.5)); i < n; i++) { const gx = x + 0.5 + (w - 1) * i / n; g += P(`M${n3(gx)} ${n3(b + 0.6)}V${n3(b + gh - 0.6)}`); } return g; };
+  const id = (f.lib || '') + ' ' + (f.name || '').toLowerCase();
+  let a = '';
+  if (f.kind === 'range') {
+    const pro = /pro/.test(id), guard = !!f.guard, toe = pro ? 2.5 : 1.5;
+    let top = y;
+    if (guard) { const g = Math.min(7, h * 0.15); a += R(x, y, w, g); const kn = 4; for (let i = 0; i < kn; i++) a += C(x + w * (i < 2 ? 0.12 + i * 0.12 : 0.64 + (i - 2) * 0.12), y + g / 2, Math.min(1.1, g * 0.2)); a += R(x + w / 2 - 3, y + g / 2 - 1.1, 6, 2.2, 'fx-dark', 0.3); top = y + g; }
+    a += P(`M${x} ${n3(top + 0.8)}H${x + w}`);                                        // the cooktop's edge
+    if (!guard) a += R(x + 2, top - 0.9, w - 4, 0.9, 'fx-dark');                          // grates over the top
+    const band = pro ? 6 : 4.5, bt = top + 0.8, kn = guard ? 0 : pro ? Math.max(4, Math.round(w / 6)) : (w >= 33 ? 6 : 5);
+    a += P(`M${x} ${n3(bt + band)}H${x + w}`);
+    for (let i = 0; i < kn; i++) {
+      const cx = x + w * (i + 0.5) / kn, skip = !pro && kn >= 5 && i === Math.floor(kn / 2);
+      if (skip) a += R(cx - 2.5, bt + band / 2 - 0.9, 5, 1.8, 'fx-dark', 0.3); else a += C(cx, bt + band / 2, pro ? 1.35 : 1);
+      if (pro) a += P(`M${n3(cx)} ${n3(bt + band / 2 - 1.35)}V${n3(bt + band / 2 - 0.5)}`);
+    }
+    const dt = bt + band + 0.6, drw = pro ? 0 : Math.min(6, h * 0.15), db = y + h - toe - drw - (drw ? 0.4 : 0);
+    const doors = pro && w >= 48 ? [[x, x + w * 0.6], [x + w * 0.6, x + w]] : [[x, x + w]];
+    doors.forEach(([d0, d1]) => {
+      a += R(d0 + 0.6, dt, d1 - d0 - 1.2, db - dt);
+      a += H(d0 + 2.5, dt + 1.8, d1 - d0 - 5);
+      a += R(d0 + 3.5, dt + 4.5, d1 - d0 - 7, Math.max(1, (db - dt) - 8), 'fx-glass', 0.6);
+    });
+    if (drw) { a += R(x + 0.6, db + 0.4, w - 1.2, drw); a += H(x + w * 0.3, db + 0.4 + drw * 0.35, w * 0.4); }
+    a += P(`M${x} ${n3(y + h - toe)}H${x + w}`);
+    return { art: a };
+  }
+  if (f.kind === 'fridge') {
+    const toe = Math.min(4, h * 0.06), bot = y + h - toe, body = bot - y;
+    a += grille(bot, toe);
+    const column = /col/.test(id), sbs = /side/.test(id) || /sbs/.test(id), bfz = /bottom|fr-bf/.test(id), std = /fr-std|standard/.test(id) && !bfz;
+    if (column) { a += R(x + 0.5, y + 0.5, w - 1, body - 1); a += V(x + w - 2.5, y + body * 0.1, body * 0.5); }
+    else if (sbs) { const sx = x + w * 0.42; a += R(x + 0.5, y + 0.5, sx - x - 0.8, body - 1); a += R(sx + 0.3, y + 0.5, x + w - sx - 0.8, body - 1); a += V(sx - 2, y + body * 0.15, body * 0.6); a += V(sx + 2, y + body * 0.15, body * 0.6); a += R(x + w * 0.1, y + body * 0.28, w * 0.2, body * 0.2, 'fx-glass', 0.5); }
+    else if (std) { const s1 = y + body * 0.3; a += R(x + 0.5, y + 0.5, w - 1, s1 - y - 0.8); a += R(x + 0.5, s1 + 0.3, w - 1, bot - s1 - 0.8); a += V(x + 2.5, y + body * 0.08, body * 0.16); a += V(x + 2.5, s1 + body * 0.05, body * 0.3); }
+    else if (bfz) { const s1 = y + body * 0.64; a += R(x + 0.5, y + 0.5, w - 1, s1 - y - 0.8); a += R(x + 0.5, s1 + 0.3, w - 1, bot - s1 - 0.8); a += V(x + w - 2.5, y + body * 0.2, body * 0.38); a += H(x + w * 0.2, s1 + 2.5, w * 0.6); }
+    else {
+      // French doors over a freezer drawer.
+      const s1 = y + body * 0.6, m = x + w / 2;
+      a += R(x + 0.5, y + 0.5, m - x - 0.8, s1 - y - 0.8); a += R(m + 0.3, y + 0.5, x + w - m - 0.8, s1 - y - 0.8); a += R(x + 0.5, s1 + 0.3, w - 1, bot - s1 - 0.8);
+      a += V(m - 1.8, y + body * 0.12, body * 0.38); a += V(m + 1.8, y + body * 0.12, body * 0.38); a += H(x + w * 0.2, s1 + 2.5, w * 0.6);
+      if (/ice|fdice/.test(id)) a += R(x + w * 0.14, y + body * 0.24, w * 0.18, body * 0.17, 'fx-glass', 0.5);
+    }
+    return { art: a };
+  }
+  if (f.kind === 'dw') {
+    const st = 4.5, toe = 4;
+    a += P(`M${x} ${y + st}H${x + w}`) + H(x + 3, y + st + 1.6, w - 6) + P(`M${x} ${n3(y + h - toe)}H${x + w}`) + R(x + 1.5, y + h - toe + 0.8, w - 3, toe - 1.6);
+    if (/pro/.test(id)) for (let i = 0; i < 4; i++) a += R(x + w - 8 + i * 1.6, y + st / 2 - 0.4, 1, 0.8, 'fx-dark');
+    else a += R(x + w - 6, y + st / 2 - 0.5, 4, 1, 'fx-dark', 0.3);
+    return { art: a };
+  }
+  if (f.kind === 'ucfridge') {
+    const toe = 4, gb = y + h - toe;
+    a += R(x + 1, y + 1, w - 2, gb - y - 1.5) + R(x + 3, y + 3, w - 8, gb - y - 5.5, 'fx-glass', 0.4) + V(x + w - 2.6, y + (gb - y) * 0.2, (gb - y) * 0.45) + grille(gb, toe);
+    const step = /wine/.test(id) ? 3.5 : 7;
+    for (let sy = y + 3 + step; sy < gb - 3; sy += step) a += P(`M${x + 3} ${n3(sy)}H${x + w - 5}`);
+    return { art: a };
+  }
+  if (f.kind === 'mw') {
+    const vent = 2.5, dw = w * 0.72;
+    a += P(`M${x} ${y + vent}H${x + w}`);
+    for (let i = 1, n = Math.round(w / 1.5); i < n; i++) a += P(`M${n3(x + w * i / n)} ${y + 0.7}V${y + vent - 0.7}`);
+    a += P(`M${n3(x + dw)} ${y + vent}V${y + h}`) + R(x + 2, y + vent + 2, dw - 6, h - vent - 4.5, 'fx-glass', 0.5) + V(x + dw - 1.8, y + vent + 2, h - vent - 4.5);
+    const kx = x + dw + 1.2, kw = w - dw - 2.4; a += R(kx, y + vent + 1.2, kw, 2, 'fx-dark', 0.3);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) a += R(kx + c * kw / 3 + 0.3, y + vent + 4.2 + r * 2, kw / 3 - 0.6, 1.3, 'fx-line', 0.2);
+    return { art: a };
+  }
+  if (f.kind === 'hood') {
+    const cx = x + w / 2, band = Math.min(3, h * 0.3);
+    if (h <= 12 || /under/.test(id)) {
+      a += P(`M${x} ${n3(y + h - band)}H${x + w}`); for (let i = 0; i < 3; i++) a += R(x + w - 9 + i * 2.2, y + h - band / 2 - 0.4, 1.4, 0.8, 'fx-dark', 0.2);
+      a += R(x + 3, y + h - 0.5, w * 0.25, 0.5, 'fx-glass');
+      return { art: a };
+    }
+    const glassH = /glass/.test(id), proH = /pro|taper|cont/.test(id);
+    const can = Math.min(proH ? h * 0.55 : 11, h * 0.5), ct = y + h - band - can, cw = Math.min(12, w * 0.38), tw = proH ? w * 0.82 : w * 0.45;
+    const shape = `<path class="CLS" d="M${n3(cx - cw / 2)} ${y}H${n3(cx + cw / 2)}V${n3(ct)}H${n3(cx + tw / 2)}L${x + w} ${n3(y + h - band)}V${y + h}H${x}V${n3(y + h - band)}L${n3(cx - tw / 2)} ${n3(ct)}H${n3(cx - cw / 2)}Z"/>`;
+    if (glassH) a += `<path class="fx-glass nss" d="M${n3(cx - tw / 2)} ${n3(ct)}H${n3(cx + tw / 2)}L${x + w} ${n3(y + h - band)}H${x}Z"/>`;
+    a += P(`M${x} ${n3(y + h - band)}H${x + w}M${n3(cx - cw / 2)} ${n3(ct)}H${n3(cx + cw / 2)}`);
+    for (let i = 0; i < 4; i++) a += R(cx - 4 + i * 2.2, y + h - band / 2 - 0.4, 1.4, 0.8, 'fx-dark', 0.2);
+    return { shape, art: a };
+  }
+  if (f.kind === 'washer' || f.kind === 'dryer') {
+    const one = (yy, hh, dry) => {
+      let o = '';
+      if (f.topLoad && !f.stack) {
+        const bk = Math.min(7, hh * 0.17);
+        o += P(`M${x} ${n3(yy + bk)}H${x + w}`) + C(x + w * 0.78, yy + bk / 2, Math.min(2, bk * 0.3)) + R(x + w * 0.38, yy + bk / 2 - 1, w * 0.24, 2, 'fx-dark', 0.3) + C(x + w * 0.18, yy + bk / 2, Math.min(1.4, bk * 0.22));
+        o += P(`M${x + 1} ${n3(yy + bk + 2)}H${x + w - 1}`) + P(`M${x} ${n3(yy + hh - 2)}H${x + w}`);
+        return o;
+      }
+      const cp = Math.min(7, hh * 0.18), r = Math.min(w, hh - cp) * 0.34, cy = yy + cp + (hh - cp - 2) * 0.47;
+      o += P(`M${x} ${n3(yy + cp)}H${x + w}`) + C(x + w * 0.78, yy + cp / 2, Math.min(2.2, cp * 0.32)) + R(x + w * 0.4, yy + cp / 2 - 1, w * 0.2, 2, 'fx-dark', 0.3);
+      if (!dry) o += R(x + 1.5, yy + 1.2, w * 0.25, cp - 2.4, 'fx-line', 0.4);
+      o += C(x + w / 2, cy, r, 'fx-line') + C(x + w / 2, cy, r * 0.72, 'fx-glass') + R(x + w / 2 + r - 0.2, cy - 2, 1, 4, 'fx-hdl', 0.4) + P(`M${x} ${n3(yy + hh - 2)}H${x + w}`);
+      return o;
+    };
+    if (f.stack) { a += one(y, h / 2, true) + P(`M${x} ${n3(y + h / 2)}H${x + w}`) + one(y + h / 2, h / 2, false); }
+    else a += one(y, h, f.kind === 'dryer');
+    return { art: a };
+  }
+  if (f.kind === 'oven') {
+    const n = Math.max(1, Math.min(2, f.ovens | 0 || (h > 40 ? 2 : 1))), st = Math.min(4, h * 0.12), dh = (h - st) / n;
+    a += P(`M${x} ${n3(y + st)}H${x + w}`) + R(x + w / 2 - 3, y + st / 2 - 0.9, 6, 1.8, 'fx-dark', 0.3);
+    [0.15, 0.27, 0.73, 0.85].forEach(k => { a += C(x + w * k, y + st / 2, Math.min(0.9, st * 0.22)); });
+    for (let i = 0; i < n; i++) { const t = y + st + i * dh; if (i) a += P(`M${x} ${n3(t)}H${x + w}`); a += H(x + 2.5, t + 2, w - 5) + R(x + 3.5, t + 4.5, w - 7, Math.max(1, dh - 8), 'fx-glass', 0.6); }
+    return { art: a };
+  }
+  return null;
 }
 // Elevation drag: along the wall, and up and down for windows.
 function fixtElevMove(d, p) {

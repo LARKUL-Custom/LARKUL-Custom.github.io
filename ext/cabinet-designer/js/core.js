@@ -77,6 +77,7 @@ const PARAM_DEFS = [
   { k: 'shelfDrill', g: 'shelves', label: 'Adjustable shelf holes', type: 'select', options: [{ v: 'set', l: 'A set of holes at each shelf' }, { v: 'line', l: 'Line bore the whole opening' }] },
   { k: 'shelfHoles', g: 'shelves', label: 'Holes per set (each row)', type: 'int' },
   { k: 'frontGap', g: 'fronts', label: 'Gap between fronts', type: 'len' },
+  { k: 'doorOff', g: 'fronts', label: 'Gap behind fronts (door off the cabinet)', type: 'len' },
   { k: 'frontSideReveal', g: 'fronts', label: 'Front side reveal', type: 'len' },
   { k: 'frontTopReveal', g: 'fronts', label: 'Front top reveal', type: 'len' },
   { k: 'frontBottomReveal', g: 'fronts', label: 'Front bottom reveal', type: 'len' },
@@ -92,7 +93,7 @@ const PARAM_DEFS = [
 const PARAM_GROUPS = [['base', 'Legs and toe kick'], ['box', 'Cabinet construction'], ['shelves', 'Shelves'], ['fronts', 'Doors and drawer fronts'], ['drawers', 'Drawer boxes']];
 const SHOP_PARAMS = {
   baseType: 'feet', toeSkin: 'on', feetCount: 0, toeKickHeight: 4, toeKickSetback: 3, stretcherWidth: 4, nailers: 'both', nailerWidth: 4, backInset: 0.8125, dadoDepth: 0.25, sinkApron: 7, grooveClear: 0.03125,
-  shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, frontSideReveal: 0.0625,
+  shelfCount: 1, shelfFrontSetback: 0.25, pinZoneInset: 2.5, shelfDrill: 'set', shelfHoles: 5, frontGap: 0.125, doorOff: 0.125, frontSideReveal: 0.0625,
   frontTopReveal: 0.125, frontBottomReveal: 0.125, hingeSide: 'L', hingeInset: 4, hingeInsetB: 4, pocketGap: 2, drawerBottomDado: 0.25, toeSkinMaxL: 96, shelfMinSep: 0, backLBMinW: 0, backLBThru: 'blind', drawerBox: 'dovetail', dovetailPin: 0, drawerRails: 'on',
 };
 const R = (type, h, count = 1) => ({ type, h, count });
@@ -375,8 +376,8 @@ function seed() {
       { id: 'door-5pc', name: '5-piece oak, slab drawers', door: 'd-5pc', drawer: 'd-slab-wo', falseFront: 'd-slab-wo', minFrameHeight: 99, pull: 'hw-knob', drawerPull: 'hw-pull128', pullFromEdge: 2, pullFromEnd: 3, drawerPullFromTop: 0 },
     ],
     panels: [
-      { id: 'p-flat', name: 'Flat end panel, oak', type: 'flat', mat: 'm-wo', frontOverhang: 0.75, scribe: 0.5, toFloor: true, frame: 0, pocketDepth: 0 },
-      { id: 'p-routed', name: 'Routed shaker end', type: 'routed', mat: 'm-mdf', frontOverhang: 0.75, scribe: 0.5, toFloor: true, frame: 3, pocketDepth: 0.25 },
+      { id: 'p-flat', name: 'Flat end panel, oak', type: 'flat', mat: 'm-wo', frontOverhang: 0.875, scribe: 0.5, toFloor: true, frame: 0, pocketDepth: 0 },
+      { id: 'p-routed', name: 'Routed shaker end', type: 'routed', mat: 'm-mdf', frontOverhang: 0.875, scribe: 0.5, toFloor: true, frame: 3, pocketDepth: 0.25 },
     ],
     hardware: [
       { id: 'hw-563h', ...clone(TANDEM_563H) },
@@ -676,6 +677,9 @@ function migrate(s) {
   // 0.55.15: nailers on all cabinets (Ayden 2026-11-09). Jobs from before had 'none' only because it was the default,
   // so they switch to top and bottom, 4" wide like his Mozaik library. A room or cabinet set to None keeps it.
   // 0.58.11 (Ayden 2026-11-18): back dados are 1/4" deep, not 3/8". Saved jobs on the old 3/8" default move to 1/4" once.
+  // 0.63.89 (Ayden 2026-11-26: "our panels always line up with the doors... depth plus 7/8"): panel fits still on the old
+  // 3/4" front overhang move to 7/8" once; one set to anything else by hand keeps it.
+  if (!s.pan78) { (s.panels || []).forEach(p => { if (p.id !== 'mini-panel' && Math.abs((+p.frontOverhang || 0) - 0.75) < 0.001) p.frontOverhang = 0.875; }); s.pan78 = 1; }
   if (!s.dado14) { if (s.job && s.job.params && +s.job.params.dadoDepth === 0.375) s.job.params.dadoDepth = 0.25; s.dado14 = 1; }
   if (!s.nailers2) { if (s.job && s.job.params && (s.job.params.nailers || 'none') === 'none') { s.job.params.nailers = 'both'; if (+s.job.params.nailerWidth === 3.5 || !(+s.job.params.nailerWidth > 0)) s.job.params.nailerWidth = 4; } s.nailers2 = 1; }
   if (s.job && s.job.params) Object.entries(SHOP_PARAMS).forEach(([k, v]) => { if (!(k in s.job.params)) s.job.params[k] = v; });
@@ -998,6 +1002,13 @@ const feetCount = (c, p) => { const n = (p || effParams(c)).feetCount | 0; retur
 // toeOn: the cabinet's raised-base switch. hasToe: it really has one (the base is not set to None).
 const toeOn = c => c.construction ? !!c.construction.toeKick : (c.cat === 'Base' || c.cat === 'Tall');
 const hasToe = c => toeOn(c) && effParams(c).baseType !== 'none';
+// 0.63.91 (Ayden 2026-11-26, yes to moving the doors 1/8" off the cabinet like Mozaik): doors and drawer fronts stand
+// 1/8" in front of the cabinet (the bumper gap), so their faces are at depth + 7/8 and line up with the panels. Drawing
+// only (3D, plan, what sticks out); cut parts, drilling and prices don't change. A face frame cabinet's doors sit on its frame.
+const jobFrontOff = () => { const v = +((S && S.job && S.job.params && S.job.params.doorOff) ?? SHOP_PARAMS.doorOff); return isFinite(v) && v >= 0 ? v : 0.125; };
+function frontOff(c) {
+  try { if (typeof faceFrame === 'function' && faceFrame(c)) return 0; const v = +effParams(c).doorOff; return isFinite(v) && v >= 0 ? v : 0.125; } catch (_) { return 0.125; }
+}
 const effParams = c => { const o = Object.assign({}, SHOP_PARAMS, S.job.params, curRoom().params || {}, c.libParams || c.params0 || {}, c.params || {}); return o.ada === 'on' && typeof adaParams === 'function' ? adaParams(o) : o; };
 /* ---------- Rooms and settings ---------- */
 const curRoom = () => S.rooms.find(r => r.id === S.roomId) || S.rooms[0];

@@ -31,6 +31,9 @@ function pbSource() {
     countertops: S.countertops, moldings: S.moldings,
     products: (S.library || []).filter(l => l.cat !== 'Shape').map(l => ({ id: l.id, name: l.name, cat: l.cat, group: typeof libGroup === 'function' ? libGroup(l) : '', w: l.w, h: l.h, d: l.d, elev: l.elev,
       ...(l.made ? { made: l.made } : {}), ...(l.folder ? { folder: l.folder } : {}), params: l.params, construction: l.construction })),
+    // 0.63.90: the appliance library by name, so Bid Reader names appliance and window rows the way the import finds them.
+    appliances: (typeof FIXT_LIB !== 'undefined' ? FIXT_LIB : []).filter(x => !['door', 'opening'].includes(x.kind) && !(x.kind === 'sink' && !x.cooktop))
+      .map(x => ({ id: x.id, name: x.name, kind: x.cooktop ? 'cooktop' : /microwave/i.test(x.folder || '') ? 'mw' : x.kind, w: x.w, h: x.h, d: x.d })),
   });
 }
 

@@ -204,6 +204,23 @@ document.addEventListener('click', e => {
 // marks the cabinet rows it leaves out of the Mozaik job for this (row.cd); rows a Mozaik job never carries (millwork,
 // countertops, shelves, other) are always ours. Returns { kind, ... } or null.
 const bidTxt = r => [r.code, r.product, r.notes, r.material].filter(Boolean).join(' ').toLowerCase();
+// 0.63.90 (Ayden 2026-11-26: "bid reader doesnt understand in his takeoffs how to actually name it to get it to connect with
+// our library", e.g. "support panels", "range 30 by others"): Bid Reader now sends each row's library name (r.lib), picked
+// from this shop's own library list (the price book). The name is matched loosely (case, °, punctuation) and wins over the
+// words in the code and product.
+const bidKey = s => String(s || '').toLowerCase().replace(/[°º]/g, ' ').replace(/\bdeg(?:ree)?s?\b/g, ' ').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
+function bidLibOf(r) {
+  const k = bidKey(r && r.lib); if (!k) return null;
+  return (S.library || []).find(l => l.cat !== 'Shape' && bidKey(l.name) === k) || null;
+}
+// The appliance or window the row names (Appliance library), or null. Sinks, doors and openings aren't rows.
+function bidFixtOf(r) {
+  const k = bidKey(r && r.lib); if (!k || typeof FIXT_LIB === 'undefined') return null;
+  return FIXT_LIB.find(x => bidKey(x.name) === k && !['door', 'opening'].includes(x.kind) && !(x.kind === 'sink' && !x.cooktop)) || null;
+}
+const BID_LIB_SHELF = l => !!l && (libGroup(l) === 'shelf' || /floating\s*shel/i.test(l.name || ''));
+// A row named for a library cabinet, filler, panel or hood that the native import draws as that product (not a priced line).
+const bidLibCab = r => { const l = bidLibOf(r); return !!l && !BID_LIB_SHELF(l) && !bidPlan(r); };
 const bidNum = (t, rx) => { const m = t.match(rx); return m ? +m[1] : null; };
 // Feet and inches as written on plans: 1'-0", 12", 6'.
 function bidLen(s) {
@@ -221,6 +238,19 @@ function bidPlan(r) {
   const ours = !!r.cd || ['millwork', 'countertop', 'shelf', 'other', 'wood top'].includes(cat);
   if (/window\s*sill|\bsills?\b/.test(t)) return { kind: 'sill' };
   if (/\bcrown\b/.test(t) && !/cabinet|box/.test(cat)) return { kind: 'crown' };
+  // 0.63.90: the library product the row names. Pieces this file builds go to their plan; any other library product is drawn
+  // as itself by the cabinet import (bidNativeData), whatever its words say.
+  const L = bidLibOf(r);
+  if (L) {
+    const made = (L.id.match(/^made-(desk|slatwall|privacy|adatop)$/) || [])[1];
+    if (made === 'adatop') return { kind: 'made', made, sink: /sink|lav|bowl/.test(t) };
+    if (made === 'privacy') return { kind: 'made', made, radius: bidLen((t.match(/(\d+'\s*-?\s*\d*"?|\d+")\s*(radius|rad\b|r\b)/) || t.match(/radius\s*(?:of)?\s*(\d+'\s*-?\s*\d*"?|\d+")/) || [])[1]) };
+    if (made) return { kind: 'made', made };
+    if (L.id === 'w-mw-shelf') return { kind: 'lib', lib: L.id, appl: 'mw-ct' };
+    if (['t-open-pantry', 'b-open-shelf', 'w-open-shelf'].includes(L.id)) return { kind: 'lib', lib: L.id, shelves: bidNum(t, /(\d+)\s*(?:adj(?:ustable)?\.?\s*)?shel/) };
+    if (['b-vanity-legs', 'b-vanity-legs-sink', 'b-mw-drawer', 'b-mw-drawer-ada'].includes(L.id)) return { kind: 'lib', lib: L.id };
+    return null;
+  }
   if (!ours) return null;
   if (/microwave\s*drawer|\bmwd\b|mw\s*drawer/.test(t)) return { kind: 'lib', lib: ada ? 'b-mw-drawer-ada' : 'b-mw-drawer' };
   if ((/microwave|\bmw\b/.test(named) && /shelf|open/.test(t)) || BID_MW_SPACE.test(t)) return { kind: 'lib', lib: 'w-mw-shelf', appl: 'mw-ct' };

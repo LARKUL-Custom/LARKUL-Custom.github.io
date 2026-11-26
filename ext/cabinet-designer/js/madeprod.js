@@ -103,7 +103,7 @@ const MADE = {
   // (a shelf gable), stands beside a fridge, or is any panel from a bid with no box beside it. Cut from the Finish material,
   // as wide as that sheet is thick. A panel beside a cabinet covers that cabinet's end, so the cabinet gets no automatic panel there.
   panel: {
-    name: 'Support Panel', cat: 'Tall', w: 0.75, h: 84, d: 24, elev: 0, folder: 'Desks and Panels',
+    name: 'Support Panel', cat: 'Tall', w: 0.75, h: 84, d: 24.875, elev: 0, folder: 'Desks and Panels',
     mp: {}, price: { base: 0, perFt: 0 }, fields: [],
     build(c, mp, x) {
       // 0.61.3: an automatic end panel piece is cut and priced by its cabinet (panelPieces); here it is only drawn.
@@ -482,11 +482,15 @@ function madePrice(c, ps) {
 // 0.63.81 (Ayden 2026-11-26: "add panels to each cabinet type, like bases have base panels, wall cabinets have wall panels,
 // same thing for talls"): each one sits in its own category's End Panels folder (Base, Wall, Tall Cabinets), and a Tall End
 // Panel joins them at the default tall cabinet size.
+// 0.63.89 (Ayden 2026-11-26: panels line up with the doors, "depth plus 7/8"): each one is its cabinet type's depth plus
+// 7/8" (24 7/8", 12 7/8"); placed against a cabinet it takes that cabinet's depth plus 7/8 (panelFlushDepth in layout.js).
 const MADE_PANEL_SIZES = [
-  { id: 'made-panel-base', name: 'Base End Panel', cat: 'Base', h: 34.5, d: 24.75, elev: 0, group: 'base', folder: 'End Panels' },
-  { id: 'made-panel-wall', name: 'Wall End Panel', cat: 'Wall', h: 30, d: 12.75, elev: 54, group: 'wall', folder: 'End Panels' },
-  { id: 'made-panel-tall', name: 'Tall End Panel', cat: 'Tall', h: 90, d: 24.75, elev: 0, group: 'tall', folder: 'End Panels' },
+  { id: 'made-panel-base', name: 'Base End Panel', cat: 'Base', h: 34.5, d: 24.875, elev: 0, group: 'base', folder: 'End Panels' },
+  { id: 'made-panel-wall', name: 'Wall End Panel', cat: 'Wall', h: 30, d: 12.875, elev: 54, group: 'wall', folder: 'End Panels' },
+  { id: 'made-panel-tall', name: 'Tall End Panel', cat: 'Tall', h: 90, d: 24.875, elev: 0, group: 'tall', folder: 'End Panels' },
 ];
+// Their depths before 0.63.89, moved once to the new ones unless changed by hand.
+const MADE_PANEL_OLD_D = { 'made-panel': 24, 'made-panel-base': 24.75, 'made-panel-wall': 12.75, 'made-panel-tall': 24.75 };
 function madeLibItems() {
   const item = (k, d, o = {}) => ({ id: 'made-' + k, name: d.name, cat: d.cat, w: d.w, h: d.h, d: d.d, elev: d.elev, rows: [], params: {},
     construction: { toeKick: false, top: 'full' }, made: k, mp: clone(d.mp), noTop: true, folder: d.folder, group: 'made', ...o });
@@ -500,6 +504,11 @@ function ensureMadeLib(s, lib) {
   if (!had.has('-epcat')) {
     had.add('-epcat');
     MADE_PANEL_SIZES.forEach(o => { const l = lib.find(x => x.id === o.id); if (l && l.group === 'made' && (!l.folder || l.folder === 'Desks and Panels')) Object.assign(l, { group: o.group, folder: o.folder }); });
+  }
+  if (!had.has('-ep78')) {
+    had.add('-ep78');
+    const now = Object.fromEntries(madeLibItems().map(l => [l.id, l.d]));
+    lib.forEach(l => { const o = MADE_PANEL_OLD_D[l.id]; if (o !== undefined && Math.abs((+l.d || 0) - o) < 0.001) l.d = now[l.id]; });
   }
   s.madeLibKeys = [...had];
 }
@@ -730,9 +739,9 @@ function addFridgePanels(rm, fx) {
         if (rm.cabinets.some(k => k.fromBid) && !o.fx) c.fromBid = true;
         madeSync(c);
         const t = c.w; c.off = r3(dir < 0 ? edge - t : edge);
-        // Depth: the cabinet over the fridge, or the floor cabinet beside it, with its door.
+        // Depth: the cabinet over the fridge, or the floor cabinet beside it, plus 7/8" so it lines up with the doors (0.63.89).
         const side = S.cabinets.filter(k => k.wall === o.wall && k.side === o.side && k.elev < 1 && !k.made && (dir < 0 ? Math.abs(k.off + k.w - o.a0) < 1.5 : Math.abs(k.off - o.a1) < 1.5));
-        c.d = r3(Math.max(...o.up.map(k => faceOut(k)), ...side.map(k => faceOut(k)), 24.75));
+        c.d = r3(Math.max(...o.up.map(k => panelFlushOut(k)), ...side.map(k => panelFlushOut(k)), 24.875));
         const L = wg(wall(o.wall)).L; if (c.off < -0.01 || c.off + c.w > L + 0.01) return;
         // What stands past this side, nearest first (gap from the opening's edge).
         const near = obstacles(o.wall, o.side, c, c.id).map(b => ({ ...b, gap: dir < 0 ? edge - b.a1 : b.a0 - edge })).filter(b => b.gap > -0.01 && !(o.fx && b.id === o.fx.id));
