@@ -29,7 +29,31 @@ const BID_SHELF = r => r.category === 'shelf';
 const BID_PRICED = r => ['millwork', 'countertop', 'other', 'wood top'].includes(r.category) && !(r.category === 'wood top' && +r.W > 0);
 // 0.57.0: and the rows Cabinet Designer now builds itself (desks, slat walls, microwave drawer bases... see bidPlan in bidprod.js).
 const bidOwn = r => typeof bidPlan === 'function' && !!bidPlan(r);
-const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => BID_SHELF(r) || BID_PRICED(r) || bidOwn(r));
+// 0.63.86 (Ayden 2026-11-25: "have the appliances actually put in and sized correctly"; "you still dont understand
+// windows"): Bid Reader's appliance and window rows become the real fixtures from the appliance library, placed and sized.
+const BID_FIX = r => r && (r.category === 'appliance' || r.category === 'window');
+const bidTakeoffItems = tk => (tk && tk.rows || []).filter(r => !BID_FIX(r) && (BID_SHELF(r) || BID_PRICED(r) || bidOwn(r)));
+// The closest preset in the appliance library: its kind from the row's words, then the style words, then the nearest width.
+function bidFixtPreset(r) {
+  const t = [r.code, r.product, r.notes].filter(Boolean).join(' ').toLowerCase(), W = +r.W || 0, H = +r.H || 0;
+  let kind = r.category === 'window' ? 'window' : '';
+  if (!kind) kind = /dish ?washer|\bdw\b/.test(t) ? 'dw' : /hood|vent/.test(t) ? 'hood' : /micro|\bmw\b|\botr\b/.test(t) ? 'mw'
+    : /cooktop|cook top|rangetop/.test(t) ? 'cooktop' : /wall oven|double oven|\boven\b(?!.*range)/.test(t) && !/range/.test(t) ? 'oven'
+    : /range|stove/.test(t) ? 'range' : /under.?counter|beverage|wine|\buc\b/.test(t) && /fridge|refrig|cool|bev|wine/.test(t) ? 'ucfridge'
+    : /fridge|refrig|\bref\b|freezer/.test(t) ? 'fridge' : /washer/.test(t) ? 'washer' : /dryer/.test(t) ? 'dryer' : /sink/.test(t) ? 'sink' : '';
+  if (!kind || kind === 'sink') return null;
+  let list = FIXT_LIB.filter(x => kind === 'cooktop' ? x.kind === 'sink' && x.cooktop : kind === 'mw' ? /microwave/i.test(x.folder || '') : kind === 'window' ? x.kind === 'window' : x.kind === kind);
+  if (!list.length) return null;
+  const words = [['side by side', /side.?by.?side|\bsxs\b|\bsbs\b/], ['french', /french/], ['bottom', /bottom/], ['slide', /slide/], ['free', /free.?stand/],
+    ['pro', /\bpro\b|commercial/], ['under cabinet', /under.?cab/], ['chimney', /chimney|wall.?mount/], ['over the range', /otr|over.?the.?range/],
+    ['countertop', /counter.?top/], ['induction', /induc/], ['gas', /\bgas\b/], ['single hung', /single.?hung/], ['picture', /picture/], ['casement', /casement/], ['(pr)', /panel.?ready|\(pr\)/]];
+  const want = words.filter(([, re]) => re.test(t)).map(([w]) => w);
+  const score = x => { const n = x.name.toLowerCase(); return want.filter(w => n.includes(w)).length * 1000 - (W ? Math.abs(x.w - W) : 0) - (H && kind !== 'window' ? Math.abs(x.h - H) / 10 : 0); };
+  if (!want.length && kind === 'hood') list = list.filter(x => /under/i.test(x.name)).concat(list);
+  if (!want.length && kind === 'range') list = list.filter(x => /free/i.test(x.name)).concat(list);
+  if (!want.length && kind === 'mw') list = list.filter(x => /over the range/i.test(x.name)).concat(list);
+  return list.slice().sort((a, b) => score(b) - score(a))[0];
+}
 
 // Bid Reader's walls ({ len, turn } chained clockwise, islands free-standing) as Mozaik walls in inches, the
 // same layout Bid Reader writes into the Mozaik job, so a room that only has shelves still gets its walls.
@@ -133,7 +157,17 @@ function bidNativeData(tk) {
           notes: [r.code, r.material, r.notes].filter(Boolean).join(' · '), ada: ADA_TOE.test(text), ends: bidEnds(r.notes) });
       }
     });
-    return { name, walls, prods, appls: [], hwNames: {} };
+    // Appliances and windows on a wall, as the real fixtures (sized from the row, else the preset).
+    const appls = [];
+    (tk.rows || []).filter(r => BID_FIX(r) && bidRoomKey(r.room || 'Room') === bidRoomKey(name)).forEach(r => {
+      const wi = parseInt(r.wall) > 0 && tw[parseInt(r.wall) - 1] ? parseInt(r.wall) : 0, pre = bidFixtPreset(r);
+      if (!wi || !pre || !(r.x !== '' && r.x != null && isFinite(+r.x))) return;
+      const shift = (walls[wi - 1] && walls[wi - 1].bidCaps && +r.side !== 2 && walls[wi - 1].bidCaps.shift) || 0;
+      const win = pre.kind === 'window', given = r.elev !== '' && r.elev != null && isFinite(+r.elev) && +r.elev >= 0;
+      appls.push({ src: win ? 'fixt' : 'appl', pid: pre.id, name: r.product || pre.name, type: 0, wall: wi, back: +r.side === 2,
+        w: +r.W > 0 ? +r.W : pre.w, h: +r.H > 0 ? +r.H : pre.h, d: win ? 0 : +r.D > 0 ? +r.D : pre.d, x: +r.x + shift, elev: given ? +r.elev : pre.elev || 0 });
+    });
+    return { name, walls, prods, appls, hwNames: {} };
   });
   return { rooms, jobName: tk.job || '', inches: true };
 }

@@ -472,6 +472,17 @@ function endExposed(c, end, dir) {
   let wallHit = false;
   obstacles(c.wall, c.side, c, c.id).forEach(o => {
     const gap = dir < 0 ? lo - o.a1 : o.a0 - hi; if (gap < -0.01 || gap > reach) return;
+    // 0.63.86 (Ayden 2026-11-25, Johnson kitchen): an appliance beside the end covers it only over its own height and out to
+    // its own front (an under-cabinet hood beside a 42" upper left the rest of the upper's side bare and unpanelled), and a
+    // window or door opening covers nothing: the end beside a window shows (LARKUL rule 9.8).
+    if (o.kind === 'fx') {
+      const f = (typeof fixtList === 'function' ? fixtList() : S.fixtures || []).find(x => x.id === o.id);
+      if (!f) { wallHit = true; return; }
+      if (typeof fixtHole === 'function' && fixtHole(f)) return;
+      const fe = +f.elev || 0;
+      covers.push({ z0: Math.max(z0, fe - c.elev), z1: Math.min(c.h, fe + (+f.h || 0) - c.elev), d: Math.min(D, (+f.d || 0) - back) });
+      return;
+    }
     if (o.kind !== 'cab') { wallHit = true; return; }
     const k = cab(o.id); if (!k) return;
     // 0.63.84 (Ayden 2026-11-26: "wall panels arent going full height when they need too"): a cabinet standing a panel's

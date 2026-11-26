@@ -616,7 +616,7 @@ function mozRooms(data) {
     });
     // Appliances, sinks, openings and windows, placed along their wall like the cabinets.
     (src.appls || []).forEach(a => {
-      const pid = mozFixtPreset(a), wl = walls[a.wall - 1];
+      const pid = a.pid || mozFixtPreset(a), wl = walls[a.wall - 1];
       if (pid === 'quiet') return;
       if (!pid || !wl) { if (a.type !== 20) (data.skipped = data.skipped || []).push(a.name); return; }
       const f = fixtNew(pid), w = sz(a.w), x = cv(a.x);
