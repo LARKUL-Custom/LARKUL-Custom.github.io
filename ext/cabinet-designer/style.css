@@ -4099,3 +4099,31 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .in-names{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:2px}
 .in-split{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
 .in-split-btns{display:flex;flex-wrap:wrap;gap:6px}
+/* 0.63.79: Split vertical or horizontal (right-click), and a leg's sides in the door style */
+.ctxmenu .ctxsub{padding:6px 10px 2px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.ctxmenu .ck{display:inline-block;width:16px;color:var(--accent);font-weight:700}
+.ctxmenu.splmenu{min-width:300px;max-width:min(380px,calc(100vw - 16px))}
+.ctxmenu .splrow{display:flex;flex-direction:column;gap:5px;padding:7px 10px;border-top:1px solid var(--line)}
+.ctxmenu .splrow.first{border-top:0}
+.ctxmenu .spllbl{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:13px}
+.ctxmenu .spllbl span{color:var(--muted);font-size:12px;white-space:nowrap}
+.ctxmenu .splbtns{display:flex;gap:6px}
+.ctxmenu .splbtns button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--panel);font-weight:600;padding:7px 8px}
+.ctxmenu .splbtns button:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+.ctxmenu .splbtns button:disabled{opacity:.45;cursor:default}
+.ctxmenu .splbtns button[data-act="spl-auto"]{flex:0 0 auto}
+.ctxmenu .splbtns svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5}
+.ctxmenu .splnone{padding:8px 10px}
+.psides{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.psides .psd{border:0;border-left:1px solid var(--line);background:var(--panel);padding:5px 9px;font-size:12px;cursor:pointer;color:var(--muted)}
+.psides .psd:first-child{border-left:0}
+.psides .psd.on{background:var(--accent);color:#fff;font-weight:600}
+.psides.sm .psd{padding:3px 7px;min-width:24px}
+.psdrow{display:flex;flex-direction:column;gap:5px;margin:6px 0}
+.psdrow>span{font-size:13px;color:var(--muted)}
+.psdrow .psides{display:flex;width:100%}
+.psdrow .psd{flex:1}
+/* 0.63.80: the picked countertop in the elevation */
+.ev-topsel{fill:none;stroke:var(--accent);stroke-width:3px}
+.room .dock .itembar.xbar.topbar > .ib-size{grid-template-columns:repeat(4,calc(112 * var(--u)));gap:calc(6 * var(--u)) calc(10 * var(--u))}
+.topbar .ib-size .ib-wide{grid-column:span 2}

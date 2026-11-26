@@ -240,7 +240,7 @@ function printInstallPage(room, head, pr = {}) {
     // Countertops only when the shop makes them (Ayden 2026-11-24): the Print pick 'insttops', and never when the room's
     // tops are priced at $0 (by others).
     const topsOurs = (pr.items || []).includes('insttops') && !(ps && typeof topSqFor === 'function' && !(topSqFor(ps, room) > 0));
-    const tp = !topsOurs ? [] : countertopRuns().filter(t => t.on).sort((a, b) => wi(a.wall) - wi(b.wall)).map(t => `<tr>${box}<td>Countertop${t.tpl && mat(t.tpl.mat) ? ' · ' + esc(mat(t.tpl.mat).name) : ''}</td><td>${esc(wn(t.wall))}</td><td>${fmtLen(t.len)} long${t.bs > 0 ? `, ${fmtLen(t.bs)} backsplash` : ''}</td></tr>`);
+    const tp = !topsOurs ? [] : countertopRuns().filter(t => t.on && t.priced).sort((a, b) => wi(a.wall) - wi(b.wall)).map(t => `<tr>${box}<td>Countertop${t.tpl && mat(t.tpl.mat) ? ' · ' + esc(mat(t.tpl.mat).name) : ''}</td><td>${esc(wn(t.wall))}</td><td>${fmtLen(t.len)} long${t.bs > 0 ? `, ${fmtLen(t.bs)} backsplash` : ''}</td></tr>`);
     const H4 = ['✓', 'What', 'Wall', 'Size'];
     // Trim products (C mold, ceiling trim) go with the molding.
     all.filter(isTrim).forEach(c => md.unshift(`<tr>${box}<td><b>${esc(LBL[c.id] || '')}</b> ${esc(c.name)}</td><td>${esc(wn(c.wall))}</td><td><b>${ft(c.w)}</b> <span class="muted">(${fmtLen(c.w)}, ${fmtLen(c.elev || 0)} off the floor)</span></td></tr>`));

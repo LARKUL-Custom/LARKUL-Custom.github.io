@@ -401,8 +401,10 @@ function cabinetMeshes(c, opts = {}) {
   // 0.63.22: a one-piece panel in a framed door style shows its frame and field on the outside face.
   [['L', -pt / 2, pdL], ['R', W + pt / 2, pdR]].forEach(([sd, x, pd]) => (drawnPanels(() => panelPieces(c, sd)) || []).forEach(pc => pc.steps.forEach(q => {
     const h = q.z1 - q.z0, d = pd - q.d0; if (!(h > 0 && d > 0)) return;
-    if (pc.steps.length === 1 && endPanel3(o => grp.add(o), panelLook(c, d, h, ps.door, sd), sd, sd === 'L' ? 0 : W, q.z0, h, q.d0, d, pt, pmM)) return;
-    grp.add(box3(pt, h, d, pmM, x, q.z0 + h / 2, q.d0 + d / 2));
+    // 0.63.79: each piece knows its end, so a right-click on it can split that panel.
+    const addP = o => { o.userData.endP = sd; grp.add(o); };
+    if (pc.steps.length === 1 && endPanel3(addP, panelLook(c, d, h, ps.door, sd), sd, sd === 'L' ? 0 : W, q.z0, h, q.d0, d, pt, pmM)) return;
+    addP(box3(pt, h, d, pmM, x, q.z0 + h / 2, q.d0 + d / 2));
   })));
   // Fillers to the wall, flush with the fronts, with a short return behind them.
   const flm = mat(fillerMat(c)) || cm, flM = L3(flm, 'finished'), fy0 = c.cat === 'Wall' ? 0 : tk;
@@ -565,7 +567,9 @@ class Viewer3D {
     el.addEventListener('pointerup', e => {
       const down = downs.get(e.pointerId), wasMulti = multi; downs.delete(e.pointerId); if (!downs.size) multi = false;
       if (this.walk || !down || wasMulti || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || e.button !== 0) return;
-      const id = this.pick(e.clientX, e.clientY); if (this.onPick) this.onPick(id);
+      // 0.63.80: a countertop in front of everything else picks the top (not the cabinet under it).
+      const ht = this.hitTop && this === (typeof roomViewer !== 'undefined' && roomViewer) ? this.hitTop(e.clientX, e.clientY) : null;
+      const id = ht ? 'top:' + ht.key : this.pick(e.clientX, e.clientY); if (this.onPick) this.onPick(id);
     });
     if (typeof onAllFingersUp === 'function') onAllFingersUp(() => { downs.clear(); multi = false; });
     host.addEventListener('pointerdown', e => {
@@ -679,6 +683,21 @@ class Viewer3D {
     const rc = new THREE.Raycaster(); rc.setFromCamera(v, this.cam);
     const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && (h.object.userData.cabId || h.object.userData.shapeId || h.object.userData.fixtId) && !(h.object.userData.room && h.object.userData.room !== S.roomId));
     return hit ? hit.object.userData.cabId || hit.object.userData.shapeId || hit.object.userData.fixtId : null;
+  }
+  // 0.63.79: what part of a cabinet is under the cursor: { id, fi } on a front (its index in computeFronts), { id, end }
+  // on an end panel, or { id } elsewhere. null when nothing is there.
+  pickPart(cx, cy) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const v = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    const rc = new THREE.Raycaster(); rc.setFromCamera(v, this.cam);
+    const hit = rc.intersectObjects(this.root.children, true).find(h => h.object.isMesh && (h.object.userData.cabId || h.object.userData.shapeId) && !(h.object.userData.room && h.object.userData.room !== S.roomId));
+    if (!hit) return null;
+    const id = hit.object.userData.cabId || hit.object.userData.shapeId;
+    for (let o = hit.object; o; o = o.parent) {
+      if (o.userData.endP) return { id, end: o.userData.endP };
+      if (o.userData.coFront) { const [cid, fi] = String(o.userData.coFront).split(':'); if (cid === id) return { id, fi: +fi }; }
+    }
+    return { id };
   }
   // 0.63.12: the countertop piece nearest under the cursor (nothing in front of it): { key, part, p } with p the plan
   // point hit; part only when a backsplash, side splash or waterfall was hit. null when something else is in front.

@@ -185,9 +185,34 @@ function shapePost(s) {
   const buy = typeof panelBuys === 'function' && panelBuys(ds, m.id); if (buy) ds = buyStyle(ds);
   // A face shows the frame when there is at least 1" of field between its stiles and rails.
   const framed = w => ds.type !== 'slab' && w >= 2 * (+ds.stile || 0) + 1 && b.h >= 2 * (+ds.rail || 0) + 1;
+  // 0.63.79 (Ayden 2026-11-25: "with columns usually multiple sides need to be the style"): s.postSides = the sides in the
+  // door style (none set = all four). The other sides are flat faces, cut in the shop even when the styled ones are bought.
+  const sides = postSides(s), flat = pd === 'slab' ? ds : withFinish(doorStyle(panelDoorPick('', doorTpl(roomSet('doorT')), 'Base')), null);
   // 0.63.35: each face takes the style's split rules for legs (kind 'leg'), e.g. a mid rail on a tall leg.
-  const faces = [['front', b.w], ['back', b.w], ['left', D], ['right', D]].map(([k, w]) => ({ k, w: r3(w), h: r3(b.h), framed: framed(w), ds: framed(w) && typeof splitDs === 'function' ? splitDs(ds, w, b.h, 'leg', s.pSplit) : ds }));
-  return { ds, buy, W: b.w, D, H: b.h, T: +m.thick || 0.75, m, faces };
+  const faces = [['front', b.w], ['back', b.w], ['left', D], ['right', D]].map(([k, w]) => {
+    const on = sides.includes(k), fr = on && framed(w);
+    return { k, on, w: r3(w), h: r3(b.h), framed: fr, buy: on && buy, ds: !on ? flat : fr && typeof splitDs === 'function' ? splitDs(ds, w, b.h, 'leg', s.pSplit) : ds };
+  });
+  return { ds, buy: faces.some(f => f.buy), W: b.w, D, H: b.h, T: +m.thick || 0.75, m, faces };
+}
+// The sides of a leg in its door style: none picked = all four ('front' faces out from the wall, left and right as seen
+// from the front). A leg with no door style has none.
+const POST_SIDES = ['front', 'back', 'left', 'right'], POST_SIDE_NAME = { front: 'Front', back: 'Back', left: 'Left', right: 'Right' };
+const postSides = s => !s || !s.postDoor ? [] : Array.isArray(s.postSides) ? POST_SIDES.filter(k => s.postSides.includes(k)) : POST_SIDES.slice();
+function postSidesText(s) { const on = postSides(s); return on.length === 4 ? 'all four sides' : on.length ? on.map(k => POST_SIDE_NAME[k].toLowerCase()).join(', ').replace(/, ([^,]*)$/, ' and $1') : 'no sides'; }
+// Turn one side on or off (or set them all: k = 'all' or 'none'). A leg with no door style takes the room's doors.
+function postSideSet(s, k) {
+  if (k === 'all') { if (!s.postDoor) s.postDoor = 'same'; delete s.postSides; return; }
+  if (k === 'none') { s.postSides = []; return; }
+  const cur = s.postDoor ? postSides(s) : [];
+  if (!s.postDoor) s.postDoor = 'same';
+  const next = cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k];
+  if (next.length === 4) delete s.postSides; else s.postSides = POST_SIDES.filter(x => next.includes(x));
+}
+// Four small switches, one per side, for the shape's editor and its item bar.
+function postSidesCtl(s, small) {
+  const on = postSides(s);
+  return `<span class="psides${small ? ' sm' : ''}" role="group" aria-label="Sides in the door style">${POST_SIDES.map(k => `<button type="button" class="psd${on.includes(k) ? ' on' : ''}" data-act="psd-side" data-id="${s.id}:${k}" aria-pressed="${on.includes(k)}" title="${POST_SIDE_NAME[k]} side in the door style">${small ? POST_SIDE_NAME[k][0] : POST_SIDE_NAME[k]}</button>`).join('')}</span>`;
 }
 const postDoorOpts = s => [{ v: '', l: shapeLeg(s) ? 'Flat faces' : 'Solid (no door style)' }, { v: 'same', l: 'Same as the doors' }, ...opts(S.doorStyles)];
 function postMeshes(s, P, M, grp) {
@@ -251,7 +276,7 @@ function shapeProps(s) {
     <div class="note">Along the wall is measured from the wall's start to the shape's end nearest it.</div></div>
   <div class="psec box">${secHead('palette', 'Finish', 'amber')}${fld('Name', R, 'name', s.name, 'text', { wide: true })}${fld('Material', R, 'mat', s.mat, 'select', { options: shapeMatOpts() })}
     <div class="f"><span>Look</span>${typeof txqBtn === 'function' ? txqBtn('shape', s.id) : ''}</div>
-    ${s.plane === 'upright' ? fld('Leg door style (miter-folded)', R, 'postDoor', s.postDoor || '', 'select', { options: postDoorOpts(s), wide: true }) + (shapePost(s) ? `<div class="note">A ${fmtLen(+s.thick, 1)} deep post: four faces mitered and folded, each in ${esc(shapePost(s).ds.name)}.${shapePost(s).buy ? ' Bought from the door maker (only HDM/MDF is made here).' : ''}</div>` : '') : ''}
+    ${s.plane === 'upright' ? fld('Leg door style (miter-folded)', R, 'postDoor', s.postDoor || '', 'select', { options: postDoorOpts(s), wide: true }) + (s.postDoor ? `<div class="psdrow"><span>Sides in the door style</span>${postSidesCtl(s)}</div>` : '') + (shapePost(s) ? `<div class="note">A ${fmtLen(+s.thick, 1)} deep post: four faces mitered and folded${s.postDoor ? `, ${esc(postSidesText(s))} in ${esc(shapePost(s).ds.name)}${postSides(s).length < 4 ? ', the rest flat' : ''}` : ''}.${shapePost(s).buy ? ' The styled faces are bought from the door maker (only HDM/MDF is made here).' : ''} Right-click it for its sides and splits.</div>` : '') : ''}
     <div class="note">${s.mat === SHAPE_FIN ? `Cut from ${esc((shapeMat(s) || {}).name || 'the finish material')}, the room's finish. It wears the Finished ends look unless you pick one here.` : 'Look only changes how it looks; the cut list and price stay the same.'}</div>
     <div class="row-actions"><button class="btn sm" data-act="shape-to-lib" data-id="${id}">Save to shape library</button></div></div>${typeof vFitBox === 'function' ? vFitBox(s) : ''}`;
 }
@@ -260,9 +285,8 @@ function shapeParts() {
   return S.shapes.flatMap(s => {
     const P = shapePost(s);
     if (P) {
-      if (P.buy) return [];
       const fr = Math.max(+P.ds.stile || 0, +P.ds.rail || 0);
-      return P.faces.map(f => ({ cabId: s.id, cab: 'Shape', name: `${s.name} face (${f.k})`, kind: 'shape', qty: 1, L: f.h, W: f.w, T: P.T, mat: P.m.id, grain: !!P.m.grain, edges: '', band: {}, fin: true,
+      return P.faces.filter(f => !f.buy).map(f => ({ cabId: s.id, cab: 'Shape', name: `${s.name} face (${f.k})`, kind: 'shape', qty: 1, L: f.h, W: f.w, T: P.T, mat: P.m.id, grain: !!P.m.grain, edges: '', band: {}, fin: true,
         ops: [{ type: 'edge', profile: 'bevel', face: 'show', why: '45° miter on both long edges (miter fold)' }, ...(f.framed && fr > 0 ? (typeof panelFieldPockets === 'function' && panelFieldPockets(f.ds, f.h, f.w, 0, +P.ds.pocketDepth || 0.25, 'show')) || [{ type: 'pocket', x: fr, y: fr, w: r3(f.h - 2 * fr), h: r3(f.w - 2 * fr), depth: +P.ds.pocketDepth || 0.25, face: 'show', why: 'panel recess' }] : [])] }));
     } const b = shapeBox(s.pts); return { cabId: s.id, cab: 'Shape', name: s.name, kind: 'shape', qty: 1, L: r3(b.w), W: r3(b.h), T: shapeT(s), mat: shapeMatId(s), grain: false, edges: '', band: {}, ops: [], outline: shapeOutline(s.pts).map(p => ({ x: r3(p.x - b.x0), y: r3(p.y - b.y0) })) }; });
 }

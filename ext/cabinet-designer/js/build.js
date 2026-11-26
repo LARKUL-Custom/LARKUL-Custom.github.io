@@ -1709,6 +1709,9 @@ function countertopRunsAll() {
     const o = S.ctRuns[r.key] || {}; r.o = o;
     r.tpl = countertop(o.top || roomSet('countertop'));
     r.on = o.off !== true;
+    // 0.63.78 (Ayden 2026-11-25, "only one countertop we would do and its butcherblock custom"): a top can be left out of
+    // the price (o.price false: still drawn, someone else does it) or given its own $/sq ft (o.rate, blank = the room's).
+    r.priced = o.price !== false; r.rate = o.rate;
     r.blockS = endBlocked(r, r.start, -1); r.blockE = endBlocked(r, r.end, 1);
     // 0.63.29 (Ayden 2026-11-24, "doesnt account for panels and true overhang from those panels"): an applied end panel on
     // the run's end cabinet moves that end of the top out to the panel's outside face, so the overhang is past the panel.
@@ -1727,7 +1730,7 @@ function countertopRunsAll() {
   (S.genTops || []).forEach(g => {
     if (!wall(g.wall)) return;
     const tpl = countertop(g.top || roomSet('countertop')), start = +g.off || 0, len = Math.max(0.25, +g.len || 0), depth = +g.depth || 25.5;
-    runs.push({ generic: g.id, key: 'gen:' + g.id, name: g.name, wall: g.wall, side: +g.side || 1, start, end: start + len, top: +g.z || 0, bottom: +g.z || 0, d: depth - tpl.frontOverhang, cabs: [], o: {}, tpl, on: true, ovS: 0, ovE: 0, len, depth, thick: +g.thick || tpl.thick });
+    runs.push({ generic: g.id, key: 'gen:' + g.id, name: g.name, wall: g.wall, side: +g.side || 1, start, end: start + len, top: +g.z || 0, bottom: +g.z || 0, d: depth - tpl.frontOverhang, cabs: [], o: {}, tpl, on: true, priced: g.price !== false, rate: g.rate, ovS: 0, ovE: 0, len, depth, thick: +g.thick || tpl.thick, back: Math.max(0, +g.out || 0) });
   });
   // Corners where two tops meet: mitered or one running through (ctjoint.js). Reshapes the tops and their lengths.
   runs.corners = typeof ctjApply === 'function' ? ctjApply(runs) : [];

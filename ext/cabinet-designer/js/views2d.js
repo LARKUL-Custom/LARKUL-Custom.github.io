@@ -27,7 +27,8 @@ function renderPlan(pr) {
   order.filter(c => c.cat !== 'Wall' && !hot(c)).forEach(c => { s += cabPlanSVG(c); });
   s += fixtPlanSVG(true);
   // Countertops: solid, in their own color, over the base cabinets, so you can see which tops there are and where.
-  if (topOp() > 0 || (!pr && typeof ctjTopsMode === 'function' && ctjTopsMode())) countertopRuns().filter(r => r.on).forEach(r => {
+  const tSel = !pr && typeof topSelKey === 'function' ? topSelKey() : '';
+  if (topOp() > 0 || tSel || (!pr && typeof ctjTopsMode === 'function' && ctjTopsMode())) countertopRuns().filter(r => r.on && (topOp() > 0 || r.key === tSel || (typeof ctjTopsMode === 'function' && ctjTopsMode()))).forEach(r => {
     const w = wall(r.wall), g = wg(w), f = w.thick / 2;
     const poly = r.poly || [wallPt(w, g, r.side, r.start - r.ovS, f), wallPt(w, g, r.side, r.end + r.ovE, f), wallPt(w, g, r.side, r.end + r.ovE, f + r.depth), wallPt(w, g, r.side, r.start - r.ovS, f + r.depth)];
     const mx = poly.reduce((a, p) => a + p.x, 0) / 4, my = poly.reduce((a, p) => a + p.y, 0) / 4;
@@ -37,7 +38,8 @@ function renderPlan(pr) {
     // purple hatch with a purple edge, so the cabinets under them keep their own color (tan bases) instead of mixing.
     if (pr) { s += `<polygon class="ct-solid nss" style="fill-opacity:${topOp()}" points="${polyPts(poly)}"/>`; } else {
     if (!s.includes('id="ctHatch"')) s += `<defs><pattern id="ctHatch" patternUnits="userSpaceOnUse" width="${r3(7 * px)}" height="${r3(7 * px)}" patternTransform="rotate(45)"><rect class="ct-hbg" width="${r3(7 * px)}" height="${r3(7 * px)}"/><line class="ct-hln" x1="0" y1="0" x2="0" y2="${r3(7 * px)}" stroke-width="${r3(2.2 * px)}"/></pattern></defs>`;
-    s += `<polygon class="ct-solid ct-hatch nss${hot && ui.topRun === r.key ? ' on' : ''}" style="fill-opacity:${Math.min(1, (hot ? Math.max(0.45, topOp()) : topOp()) * 2.5)}" points="${polyPts(poly)}"/>`; }
+    const on = (hot && ui.topRun === r.key) || tSel === r.key;
+    s += `<polygon class="ct-solid ct-hatch nss${on ? ' on' : ''}" style="fill-opacity:${Math.min(1, (hot || on ? Math.max(0.45, topOp()) : topOp()) * 2.5)}" points="${polyPts(poly)}"/>`; }
     // The top's name only while drawing tops; otherwise its color says it is there and labels stay clear.
     if (r.len > 8 && ui.drawMold === 'top') s += `<text class="lbl ct-lbl" x="${mx}" y="${my}" font-size="${fs * 0.9}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${ang} ${mx} ${my})">${esc(r.generic ? r.name : (r.tpl && r.tpl.name) || 'Top')} · ${fmtLen(r.len, 1)}</text>`;
   });
@@ -467,8 +469,12 @@ function moldDefaults(w, side) {
   const up = S.cabinets.filter(c => c.wall === w.id && c.side === side && c.cat !== 'Base'), m = molding(roomSet('molding')) || S.moldings[0];
   return { mold: m ? m.id : '', z: up.length ? Math.max(...up.map(c => c.elev + c.h)) : Math.max(0, w.height - (m ? m.h : 3)), d: up.length ? Math.max(...up.map(c => c.d)) : 12 };
 }
-function topDefaults(w, side) {
-  const lo = S.cabinets.filter(c => c.wall === w.id && c.side === side && c.cat !== 'Wall');
+// 0.63.80: from the base cabinets under where the top is drawn (a0..a1) when there are any, so a tall or a deep
+// cabinet elsewhere on the wall doesn't set its depth and height.
+function topDefaults(w, side, a0, a1) {
+  const all = S.cabinets.filter(c => c.wall === w.id && c.side === side && c.cat !== 'Wall'), base = all.filter(c => c.cat === 'Base');
+  const under = a0 === undefined ? [] : base.filter(c => c.off < a1 - 0.01 && c.off + c.w > a0 + 0.01);
+  const lo = under.length ? under : base.length ? base : all;
   const oh = (countertop(roomSet('countertop')) || {}).frontOverhang ?? 1;
   return { depth: lo.length ? r3(Math.max(...lo.map(c => c.d)) + oh) : 25.5, z: lo.length ? r3(Math.max(...lo.map(c => c.elev + c.h))) : 34.5 };
 }
@@ -479,7 +485,7 @@ function moldClick(p) {
     const w = wall(to.wall);
     const off = r3(Math.min(fr.a, to.a)), len = r3(Math.abs(to.a - fr.a));
     // Draw Tops makes a top placed by hand, sitting on the base cabinets of that wall when there are any.
-    if (ui.drawMold === 'top') mutate(() => S.genTops.push({ id: uid('gt'), name: 'Top ' + (S.genTops.length + 1), wall: to.wall, side: to.side, off, len, ...topDefaults(w, to.side) }));
+    if (ui.drawMold === 'top') mutate(() => S.genTops.push({ id: uid('gt'), name: 'Top ' + (S.genTops.length + 1), wall: to.wall, side: to.side, off, len, ...topDefaults(w, to.side, off, off + len) }));
     else mutate(() => S.genMolds.push({ id: uid('gm'), wall: to.wall, side: to.side, off, len, ...moldDefaults(w, to.side) }));
   }
   ui.moldFrom = to; renderRoom();
@@ -743,6 +749,8 @@ function initPlan() {
     const hd = hitHandle(p);
     if (hd) { ui.drag = { mode: 'handle', ...hd, snap: JSON.stringify(S), st: wallSnapState(), live: false, ox: hd.end === 1 ? hd.w.x1 : hd.w.x2, oy: hd.end === 1 ? hd.w.y1 : hd.w.y2 }; return; }
     const hits = hitCabs(p), sh = hitShapes(p), fx = fixtHit(p), dbl = hits.length || sh.length ? isDouble(e) : false;
+    // 0.63.80: a countertop is picked where no cabinet is under it, or once it is picked (then dragging moves it).
+    if (e.button === 0 && !ui.topEdit && !e.shiftKey && !e.ctrlKey && !e.metaKey && typeof topPlanDown === 'function' && !fx.length && !sh.length && topPlanDown(p, hits)) return;
     // Appliances, doors and windows: a sink over a cabinet is picked by clicking again once the cabinet is selected.
     const fxSel = ui.sel && ui.sel.type === 'fixt' && fx.includes(ui.sel.id);
     if (fx.length && (!hits.length || fxSel || (ui.sel && ui.sel.type === 'cab' && hits.includes(ui.sel.id)))) {
@@ -1112,6 +1120,7 @@ function renderElev(pr) {
     // 0.63.12: right-click the top (its ends or front), its backsplash, side splash or waterfall for that side's menu.
     const ce = part => ui.printing ? '' : ` data-ctedge="${esc(rn.key + '|' + part)}"`;
     body += `<rect ${fillFor(m, 'ev-top')} x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}"${ui.printing ? '' : ` data-cttop="${esc(rn.key)}"`}/>`;
+    if (!ui.printing && typeof topSelKey === 'function' && topSelKey() === rn.key) body += `<rect class="ev-topsel nss" x="${a}" y="${-(rn.top + rn.thick)}" width="${rn.len}" height="${rn.thick}" pointer-events="none"/>`;
     if (rn.bs > 0) (rn.bsSegs || [[rn.start, rn.end]]).forEach(([s0, s1]) => { body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? s0 : L - s1}" y="${-(rn.top + rn.thick + rn.bs)}" width="${s1 - s0}" height="${rn.bs}" opacity=".75"${ce('back')}/>`; });
     [['S', ctX0(rn)], ['E', ctX1(rn) - 0.75]].forEach(([e, x]) => { if (rn['ss' + e]) body += `<rect ${fillFor(m, 'ev-top')} x="${side === 1 ? x : L - x - 0.75}" y="${-(rn.top + rn.thick + (rn.ssH || rn.bs))}" width="0.75" height="${rn.ssH || rn.bs}"${ce(e)}/>`; });
     // Waterfall ends: the top turns down to the floor.

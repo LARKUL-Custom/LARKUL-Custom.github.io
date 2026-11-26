@@ -100,6 +100,8 @@ function resolve(ref) {
     case 'top': return S.countertops.find(t => t.id === id);
     case 'ctrun': return (S.ctRuns[id] = S.ctRuns[id] || {});
     case 'gtop': return (S.genTops || []).find(g => g.id === id);
+    // 0.63.80: the picked countertop's item bar (topitem.js): tsel:<run key>
+    case 'tsel': return typeof topSelRef === 'function' ? topSelRef(id) : null;
     case 'gmold': return (S.genMolds || []).find(g => g.id === id);
     case 'light': return (S.lights || []).find(l => l.id === id);
     case 'mold': return molding(id);
@@ -161,7 +163,7 @@ document.addEventListener('change', e => {
   }
   let note = '';
   // Formulas that name a value are kept and worked out again later; sizes worked out from a wall end are not.
-  const raw = el.value.trim(), keepFx = NUM_TYPES.includes(el.dataset.type) && !/^cabpos:|^cabgap:|^wcap|^fixtpos:|^shppos:/.test(ref) && !(ref.startsWith('wall:') && ['len', 'angle'].includes(field));
+  const raw = el.value.trim(), keepFx = NUM_TYPES.includes(el.dataset.type) && !/^cabpos:|^cabgap:|^wcap|^fixtpos:|^shppos:|^tsel:/.test(ref) && !(ref.startsWith('wall:') && ['len', 'angle'].includes(field));
   mutate(() => {
     const o = resolve(ref); if (!o) return;
     if (typeof cabLogField === 'function') cabLogField(ref, field, el);

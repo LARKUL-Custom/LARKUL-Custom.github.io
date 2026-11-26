@@ -184,7 +184,7 @@ function ctjEdgeCtx(id, x, y) {
     h += b('bs=', r.island ? 'Island default (none)' : `Style's backsplash${def ? ` (${fmtLen(def)})` : ' (none)'}`, !own);
     h += num('bs', r.bs, 'Height');
   } else if (part === 'front') {
-    if (r.generic) h += num('depth', r.depth, 'Depth');
+    if (r.generic) { h += num('depth', r.depth, 'Depth'); const v = topOv(r, 'F'); if (v !== null) h += num('ovF', v, 'Overhang'); }
     else {
       const sd = +r.tpl.frontOverhang || 0;
       h += num('ovF', r.ovF, 'Overhang');
@@ -199,14 +199,19 @@ function ctjEdgeCtx(id, x, y) {
       const wf = !!r['wf' + part], ss = !!r['ss' + part];
       if (!wf) h += b('ss' + part + '=' + (ss ? 0 : 1), ss ? 'Take the side splash off' : `Side splash (${fmtLen(r.ssH)})`, false);
       h += b('wf' + part + '=' + (wf ? 0 : 1), wf ? 'Take the waterfall off' : 'Waterfall to the floor', false);
-      if (!r.generic && !wf) h += num('ov' + part, r['ov' + part] || 0, 'Overhang');
+      const ovv = r.generic ? topOv(r, part) : r['ov' + part] || 0;
+      if (!wf && ovv !== null) h += num('ov' + part, ovv, 'Overhang');
       if (!r.generic && has(st, 'ov' + part)) h += b('ov' + part + '=', 'Overhang back to normal', false);
     }
   }
   // The top's other sides, left to right as you face the wall.
   const order = r.side === 1 ? ['S', 'back', 'front', 'E'] : ['E', 'back', 'front', 'S'];
   h += `<div class="ctx-sides" role="group" aria-label="Sides of this top">${order.map(p => `<button data-act="ctj-side" data-id="${esc(key + '|' + p)}" aria-pressed="${p === part}">${{ back: 'Back', front: 'Front' }[p] || ((p === 'S') === (r.side === 1) ? 'Left' : 'Right')}</button>`).join('')}</div>`;
+  // 0.63.78 (Ayden 2026-11-25): which tops are in the price, and a top's own $/sq ft (a custom butcher block).
+  h += `<div class="ctx-note">Price</div>${b('price=' + (r.priced ? 0 : 1), r.priced ? 'Leave out of the price' : 'Put in the price', false)}${b('price=only', 'Only this top in the price', false)}`;
+  if (r.priced) { const ph = typeof topRoomRate === 'function' ? topRoomRate() : ''; h += `<label class="ctx-in"><span>$/sq ft</span><input type="text" class="num cte-rate" inputmode="decimal" data-id="${esc(key)}" value="${esc(r.rate ?? '')}" placeholder="${esc(ph)}" aria-label="Dollars per square foot for this top"></label>`; }
   if (!r.generic) h += b('off=1', 'Leave this top off', false);
+  if (typeof topSelect === 'function' && topSelKey() !== key) h += `<button role="menuitem" data-act="tsel-pick" data-id="${esc(key)}">Move or size this top</button>`;
   m.innerHTML = h; m.hidden = false; m.dataset.ctxAt = `${x},${y}`;
   const rc = m.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(x, innerWidth - rc.width - 8)) + 'px'; m.style.top = Math.max(8, Math.min(y, innerHeight - rc.height - 8)) + 'px';
   ctjHot(r, part);
@@ -261,8 +266,13 @@ function ctjHot(r, part) {
 }
 function ctjEdgeSet(key, k, v) {
   const r = countertopRuns().find(q => q.key === key); if (!r) return;
+  // 0.63.80: a placed top's overhang moves that edge of the top (it keeps its own spot and size).
+  if (r.generic && /^ov[SEF]$/.test(k)) { if (v !== '') mutate(() => topSetOv(r, k[2], +v || 0)); return; }
+  if (k === 'price' && v === 'only') { ctjPriceOnly(key); return; }
   mutate(() => {
     const o = ctjStore(r, true);
+    if (k === 'price') { if (+v) delete o.price; else o.price = false; return; }
+    if (k === 'rate') { if (v === '' || !isFinite(+v)) delete o.rate; else o.rate = +v; return; }
     if (v === '') delete o[k];
     else if (k === 'bs' || k === 'depth') o[k] = Math.max(0, +v || 0);
     else if (/^ov[SEF]$/.test(k)) o[k] = +v || 0;
@@ -271,8 +281,18 @@ function ctjEdgeSet(key, k, v) {
   });
   if (k === 'off' && +v) flash('Top left off. Turn it back on in the Tops tab (Leave off).');
 }
+// Every other top in the job (all rooms) goes out of the price; this one goes in. For jobs where the shop does one top.
+function ctjPriceOnly(key) {
+  const cur = S.roomId;
+  mutate(() => S.rooms.forEach(rm => withRoom(rm, () => countertopRuns().forEach(q => {
+    const o = ctjStore(q, true); if (rm.id === cur && q.key === key) delete o.price; else o.price = false;
+  }))));
+  flash('Only this top is in the price now. The Tops tab has an In price box for each top.');
+}
 document.addEventListener('change', e => {
-  const t = e.target; if (!t.classList || !(t.classList.contains('cte-num') || t.classList.contains('cte-bs'))) return;
+  const t = e.target;
+  if (t.classList && t.classList.contains('cte-rate')) { const v = t.value.trim().replace(/^\$/, ''); hideCtx(); ctjEdgeSet(t.dataset.id, 'rate', v === '' ? '' : (isFinite(+v) ? String(+v) : '')); return; }
+  if (!t.classList || !(t.classList.contains('cte-num') || t.classList.contains('cte-bs'))) return;
   const n = parseLen(t.value); if (!isFinite(n)) return;
   hideCtx(); ctjEdgeSet(t.dataset.id, t.dataset.k || 'bs', r3(n));
 });

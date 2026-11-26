@@ -1002,6 +1002,9 @@ function topTexRow(m) {
     ${fld('Texture size', 'mat:' + m.id, 'texScale', m.texScale || 24, 'len', { wide: true })}</div>
     <div class="note help">The texture is part of the material${others > 1 ? `, so the ${others} styles using ${esc(m.name)} all change` : ''}. Texture size is how many inches one copy of the photo covers.</div>`;
 }
+// 0.63.78 (Ayden 2026-11-25): which tops go in the price, and a top's own $/sq ft (blank = the room's rate).
+const topRoomRate = () => { const ps = typeof priceSheet === 'function' && priceSheet(); return ps && typeof topSqFor === 'function' ? topSqFor(ps, curRoom()) : ''; };
+const topPriceTds = (R, r) => `<td style="text-align:center">${ctl(R, 'price', r.priced !== false, 'bool', { label: 'In the price' })}</td><td style="width:76px">${r.priced === false ? '<span class="muted">–</span>' : ctl(R, 'rate', r.rate ?? '', 'num', { label: 'Dollars per square foot for this top', blank: true, ph: topRoomRate() })}</td>`;
 function renderCountertops() {
   const runs = countertopRuns(), topOpts = opts(S.countertops), room = curRoom(), auto = room.autoTops !== false;
   const on = runs.filter(r => r.on), sq = on.reduce((a, r) => a + (r.area ?? r.len * r.depth) / 144, 0), lf = on.reduce((a, r) => a + r.len, 0) / 12;
@@ -1009,7 +1012,8 @@ function renderCountertops() {
   const id = pickId('top', S.countertops), t = S.countertops.find(x => x.id === id) || S.countertops[0];
   const usedRuns = x => S.rooms.reduce((n, r) => n + withRoom(r, () => countertopRuns().filter(q => q.on && q.tpl && q.tpl.id === x.id).length), 0);
   // Left: the totals, the room's style, and the styles as tiles.
-  const side = `<div class="prx-grand ctx-grand"><span>Countertops in ${esc(room.name)}</span><b>${sq.toFixed(1)} sq ft</b><small>${on.length} run${on.length === 1 ? '' : 's'} · ${lf.toFixed(1)} ft long</small></div>
+  const nP = on.filter(r => r.priced).length;
+  const side = `<div class="prx-grand ctx-grand"><span>Countertops in ${esc(room.name)}</span><b>${sq.toFixed(1)} sq ft</b><small>${on.length} run${on.length === 1 ? '' : 's'} · ${lf.toFixed(1)} ft long${on.length && nP < on.length ? ` · ${nP ? nP + ' in the price' : 'none in the price'}` : ''}</small></div>
     <label class="cl-f"><span>Style for ${esc(room.name)}</span>${ctl('rset:' + room.id, 'countertop', room.settings.countertop || '', 'select', { options: setOpts('countertop', topOpts), label: 'Style for ' + room.name })}</label>
     <div class="prx-navh">Countertop styles</div><div class="cl-mats">${S.countertops.map(x => { const n = usedRuns(x); return `<button class="cl-mat ctx-style${view === 'styles' && x.id === t.id ? ' on' : ''}" data-act="top-pick" data-id="${esc(x.id)}" style="--c:${topTone(x)}">${swatch(mat(x.mat) || {}, 26)}<span><b>${esc(x.name)}</b><small>${fmtLen(x.thick)} thick${n ? ` · ${n} run${n === 1 ? '' : 's'}` : ''}</small></span><i class="ctx-dot"></i></button>`; }).join('')}</div>`;
   const tabs = `<div class="setx-tabs prx-tabs" role="tablist">${[['runs', 'Runs', 'ruler'], ['styles', 'Styles', 'stack']].map(([k, l, ic]) => `<button role="tab" data-act="top-view" data-id="${k}" aria-selected="${view === k}">${icon(ic)}${l}</button>`).join('')}</div>`;
@@ -1018,11 +1022,11 @@ function renderCountertops() {
     if (r.generic) return '';
     const R = 'ctrun:' + r.key, col = topTone(r.tpl);
     return `<tr class="${r.on ? '' : 'off'}${ui.topRun === r.key ? ' on' : ''}"><td><span class="ctx-num" style="background:${r.on ? col : 'var(--muted)'}">${i + 1}</span></td><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(cid => LBL[cid]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts, label: 'Style' })}</td><td style="width:84px">${ctjSizeIn(r, 'len')}</td><td style="width:84px">${ctjSizeIn(r, 'depth')}</td>
-      <td style="width:84px">${ctl(R, 'ovS', r.ovS, 'len', { label: 'Start overhang' })}</td><td style="width:84px">${ctl(R, 'ovE', r.ovE, 'len', { label: 'End overhang' })}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td></tr>`;
+      <td style="width:84px">${ctl(R, 'ovS', r.ovS, 'len', { label: 'Start overhang' })}</td><td style="width:84px">${ctl(R, 'ovE', r.ovE, 'len', { label: 'End overhang' })}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td>${topPriceTds(R, r)}</tr>`;
   }).join('');
   const runsBody = `<div class="psec box ctx-plan">${secHead('home', `${esc(room.name)} from above`, 'amber')}${topsPlanSVG(runs)}<div class="note help">Right-click a top's back edge for its backsplash, an open end to waterfall it${(runs.corners || []).length ? ', or a corner to miter the tops or pick which one runs through' : ''}.</div></div>
     <div class="psec box">${secHead('ruler', 'Automatic runs', 'teal')}${auto ? '' : '<div class="note show">Automatic tops are off in this room. Auto build countertops on the right lays a top on every run of base cabinets.</div>'}
-      ${autoRows ? `<div class="tscroll"><table class="t ctx-t"><thead><tr><th>#</th><th>Wall</th><th>Cabinets</th><th>Style</th><th>Length</th><th>Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${autoRows}</tbody></table></div>` : auto ? '<div class="note show">Place base cabinets to get countertop runs.</div>' : ''}</div>
+      ${autoRows ? `<div class="tscroll"><table class="t ctx-t"><thead><tr><th>#</th><th>Wall</th><th>Cabinets</th><th>Style</th><th>Length</th><th>Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th><th>In price</th><th>$/sq ft</th></tr></thead><tbody>${autoRows}</tbody></table></div>` : auto ? '<div class="note show">Place base cabinets to get countertop runs.</div>' : ''}</div>
     ${(S.genTops || []).length ? genTopsCard(topOpts) : ''}`;
   // Middle, Styles: the picked style drawn in section, its facts, and its boxes.
   const R = 'top:' + t.id, n = usedRuns(t), m = mat(t.mat) || {};
@@ -1041,20 +1045,20 @@ function renderCountertops() {
 
 // Automatic countertop runs of the open room, on the Tops tab and in the Room's Tops panel.
 function autoTopsCard(runs, topOpts) {
-  return `<div class="card">${cardHead('Automatic runs in ' + esc(curRoom().name), curRoom().autoTops === false ? `<button class="btn primary" data-act="tops-auto">${icon('check')}Auto build countertops</button>` : `<button class="btn" data-act="tops-auto">Rebuild</button><button class="btn" data-act="tops-auto-off">Turn off</button>`)}<div class="tscroll"><table class="t"><thead><tr><th>Wall</th><th>Cabinets</th><th>Style</th><th>Length</th><th>Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th></tr></thead><tbody>${runs.filter(r => !r.generic).map(r => {
+  return `<div class="card">${cardHead('Automatic runs in ' + esc(curRoom().name), curRoom().autoTops === false ? `<button class="btn primary" data-act="tops-auto">${icon('check')}Auto build countertops</button>` : `<button class="btn" data-act="tops-auto">Rebuild</button><button class="btn" data-act="tops-auto-off">Turn off</button>`)}<div class="tscroll"><table class="t"><thead><tr><th>Wall</th><th>Cabinets</th><th>Style</th><th>Length</th><th>Depth</th><th>Start overhang</th><th>End overhang</th><th>Leave off</th><th>In price</th><th>$/sq ft</th></tr></thead><tbody>${runs.filter(r => !r.generic).map(r => {
     const R = 'ctrun:' + r.key;
     return `<tr class="${ui.topRun === r.key ? 'on' : ''}" data-ctrow="${esc(r.key)}"><td>${wallName(wall(r.wall))}</td><td>${r.cabs.map(id => LBL[id]).join(', ')}</td><td style="min-width:150px">${ctl(R, 'top', r.tpl.id, 'select', { options: topOpts })}</td><td style="width:80px">${ctjSizeIn(r, 'len')}</td><td style="width:80px">${ctjSizeIn(r, 'depth')}</td>
-      <td style="width:80px">${ctl(R, 'ovS', r.ovS, 'len')}</td><td style="width:80px">${ctl(R, 'ovE', r.ovE, 'len')}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td></tr>`;
-  }).join('') || `<tr><td colspan="8" class="muted">${curRoom().autoTops === false ? 'Automatic tops are off in this room. Auto build countertops lays a top on every run of base cabinets.' : 'Place base cabinets to get countertop runs.'}</td></tr>`}</tbody></table></div></div>`;
+      <td style="width:80px">${ctl(R, 'ovS', r.ovS, 'len')}</td><td style="width:80px">${ctl(R, 'ovE', r.ovE, 'len')}</td><td style="text-align:center">${ctl(R, 'off', !r.on, 'bool', { label: 'Leave off' })}</td>${topPriceTds(R, r)}</tr>`;
+  }).join('') || `<tr><td colspan="10" class="muted">${curRoom().autoTops === false ? 'Automatic tops are off in this room. Auto build countertops lays a top on every run of base cabinets.' : 'Place base cabinets to get countertop runs.'}</td></tr>`}</tbody></table></div></div>`;
 }
 // Tops placed by hand: any length, depth and height on any wall, for islands of loose parts, desks and bars.
 const wallOpts = () => S.walls.map(w => ({ v: w.id, l: `${wallName(w)} · ${fmtLen(wg(w).L, 1)}` }));
 const sideOpts = [{ v: 1, l: 'Front' }, { v: -1, l: 'Back' }];
 function genTopsCard(topOpts) {
-  return `<div class="card">${cardHead('Tops placed by hand', `<button class="btn" data-act="gtop-add">${icon('plus')}Add top</button>`)}<div class="tscroll"><table class="t gentab"><thead><tr><th>Name</th><th>Wall</th><th>Side</th><th>Style</th><th class="r">From wall start</th><th class="r">Length</th><th class="r">Depth</th><th class="r">Height to bottom</th><th class="r">Thickness</th><th></th></tr></thead><tbody>
+  return `<div class="card">${cardHead('Tops placed by hand', `<button class="btn" data-act="gtop-add">${icon('plus')}Add top</button>`)}<div class="tscroll"><table class="t gentab"><thead><tr><th>Name</th><th>Wall</th><th>Side</th><th>Style</th><th class="r">From wall start</th><th class="r">Length</th><th class="r">Depth</th><th class="r">Height to bottom</th><th class="r">Thickness</th><th>In price</th><th>$/sq ft</th><th></th></tr></thead><tbody>
     ${(S.genTops || []).map(g => { const R = 'gtop:' + g.id; return `<tr><td style="min-width:130px">${ctl(R, 'name', g.name, 'text', { label: 'Name' })}</td><td style="min-width:150px">${ctl(R, 'wall', g.wall, 'select', { options: wallOpts(), label: 'Wall' })}</td><td style="width:90px">${ctl(R, 'side', g.side || 1, 'select', { options: sideOpts, label: 'Side' })}</td>
-      <td style="min-width:140px">${ctl(R, 'top', g.top || '', 'select', { options: [{ v: '', l: 'Room style' }, ...topOpts], label: 'Style' })}</td>${['off', 'len', 'depth', 'z'].map(k => `<td style="width:90px">${ctl(R, k, g[k], 'len', { label: k })}</td>`).join('')}<td style="width:80px">${ctl(R, 'thick', g.thick || '', 'len', { label: 'Thickness', blank: true, ph: 'Style' })}</td>
-      <td><button class="btn sm danger" data-act="gtop-del" data-id="${g.id}" aria-label="Delete top">${icon('trash')}</button></td></tr>`; }).join('') || `<tr><td colspan="10" class="muted">None. Add top puts a ${fmtLen(25.5)} deep top on the wall shown in the elevation; set its size and place here.</td></tr>`}</tbody></table></div></div>`;
+      <td style="min-width:140px">${ctl(R, 'top', g.top || '', 'select', { options: [{ v: '', l: 'Room style' }, ...topOpts], label: 'Style' })}</td>${['off', 'len', 'depth', 'z'].map(k => `<td style="width:90px">${ctl(R, k, g[k], 'len', { label: k })}</td>`).join('')}<td style="width:80px">${ctl(R, 'thick', g.thick || '', 'len', { label: 'Thickness', blank: true, ph: 'Style' })}</td>${topPriceTds(R, { priced: g.price !== false, rate: g.rate })}
+      <td><button class="btn sm danger" data-act="gtop-del" data-id="${g.id}" aria-label="Delete top">${icon('trash')}</button></td></tr>`; }).join('') || `<tr><td colspan="12" class="muted">None. Add top puts a ${fmtLen(25.5)} deep top on the wall shown in the elevation; set its size and place here.</td></tr>`}</tbody></table></div></div>`;
 }
 
 // Molding runs placed by hand or drawn along the walls in plan, not tied to cabinets.
@@ -1492,7 +1496,7 @@ function buyPanelList() {
     S.cabinets.forEach(c => { if (c.noCut) return; let b; try { b = buildParts(c); } catch (_) { return; }
       (b.buyPanels || []).forEach(pt => { for (let k = 0; k < (pt.qty || 1); k++) out.push({ rm, ri, c, ds: pt.ds, w: pt.W, h: pt.L }); }); });
     // Miter-folded legs bought in their door style (shapes.js): their four faces.
-    (S.shapes || []).forEach(sh => { const P = typeof shapePost === 'function' && shapePost(sh); if (P && P.buy) P.faces.forEach(f => out.push({ rm, ri, c: { id: sh.id, name: (sh.name || 'Leg') + ' face' }, ds: f.ds || P.ds, w: f.w, h: f.h })); });
+    (S.shapes || []).forEach(sh => { const P = typeof shapePost === 'function' && shapePost(sh); if (P && P.buy) P.faces.filter(f => f.buy).forEach(f => out.push({ rm, ri, c: { id: sh.id, name: (sh.name || 'Leg') + ' face' }, ds: f.ds || P.ds, w: f.w, h: f.h })); });
   }));
   return out;
 }

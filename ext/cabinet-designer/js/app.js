@@ -36,6 +36,7 @@ function fixSel() {
   if (ui.sel && ui.sel.type === 'wall' && !wall(ui.sel.id)) ui.sel = null;
   if (ui.sel && ui.sel.type === 'shape' && !shapeById(ui.sel.id)) ui.sel = null;
   if (ui.sel && ui.sel.type === 'fixt' && !fixtById(ui.sel.id)) ui.sel = null;
+  if (ui.sel && ui.sel.type === 'top' && !(typeof topRunByKey === 'function' && topRunByKey(ui.sel.id))) ui.sel = null;
   if (!wall(ui.elevWall)) { const c = S.cabinets[0]; ui.elevWall = c ? c.wall : S.walls[0] ? S.walls[0].id : null; }
   if (!libItem(ui.libSel) && !(String(ui.libSel || '').startsWith('shape:') && shapeLibItem(ui.libSel.slice(6)))) ui.libSel = S.library[0] && S.library[0].id;
   if (ui.placing && !libItem(ui.placing) && !shapeLibItem(String(ui.placing).replace(/^shape:/, '')) && !fixtPreset(String(ui.placing).replace(/^fixt:/, ''))) ui.placing = null;
@@ -285,8 +286,9 @@ function renderRoom() {
   setHTML($('#openctl'), `<button data-act="open-all" aria-pressed="${anyOpen}" title="Open or close every door and drawer in this room">${vic('Open all')}<span>${anyOpen ? 'Close All' : 'Open All'}</span></button>`
     + `<button data-act="open-toggle" data-id="${ocOn ? oc.id : ''}" aria-pressed="${!!(ocOn && ui.open[oc.id])}"${ocOn ? '' : ' disabled'} title="${ocOn ? 'Open or close the doors and drawers of the selected cabinet (O)' : 'Select a cabinet with doors or drawers to open it'}">${vic('Open all')}<span>${ocOn && ui.open[oc.id] ? 'Close Cabinet' : 'Open Cabinet'}</span></button>`);
   // Every cabinet and shape in the room by name and number, grouped by wall, to select without clicking it.
-  const cur = ui.sel && (ui.sel.type === 'cab' ? ui.sel.id : ui.sel.type === 'shape' ? 'shape:' + ui.sel.id : ui.sel.type === 'fixt' ? 'fixt:' + ui.sel.id : '');
-  const byWall = w => [...S.cabinets.filter(c => c.wall === w.id).sort((a, b) => a.off - b.off).map(c => [c.id, `${c.name} ${LBL[c.id]}`]), ...(S.shapes || []).filter(x => x.wall === w.id).map(x => ['shape:' + x.id, x.name || 'Shape']), ...(S.fixtures || []).filter(x => x.wall === w.id).map(x => ['fixt:' + x.id, fixtName(x)])];
+  const cur = ui.sel && (ui.sel.type === 'cab' ? ui.sel.id : ui.sel.type === 'shape' ? 'shape:' + ui.sel.id : ui.sel.type === 'fixt' ? 'fixt:' + ui.sel.id : ui.sel.type === 'top' ? 'top:' + ui.sel.id : '');
+  const topsN = countertopRuns().filter(r => r.on);
+  const byWall = w => [...S.cabinets.filter(c => c.wall === w.id).sort((a, b) => a.off - b.off).map(c => [c.id, `${c.name} ${LBL[c.id]}`]), ...(S.shapes || []).filter(x => x.wall === w.id).map(x => ['shape:' + x.id, x.name || 'Shape']), ...(S.fixtures || []).filter(x => x.wall === w.id).map(x => ['fixt:' + x.id, fixtName(x)]), ...topsN.filter(r => r.wall === w.id).map(r => ['top:' + r.key, `Countertop: ${r.generic ? r.name || 'Top' : 'Top ' + (topsN.indexOf(r) + 1)}`])];
   setHTML($('#itemsel'), `<option value="">Select item…</option>` + S.walls.map(w => { const it = byWall(w); return it.length ? `<optgroup label="${wallName(w)}">${it.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>` : ''; }).join(''));
   $('#views').dataset.mode = ui.viewMode;
   $('#v3sel').disabled = !(ui.sel && ui.sel.type === 'cab');
@@ -313,7 +315,7 @@ function renderRoom() {
 }
 function ensureRoomViewer() {
   if (roomViewer) return;
-  roomViewer = new Viewer3D($('#room3d'), id => { if (id) select({ type: shapeById(id) ? 'shape' : fixtById(id) ? 'fixt' : 'cab', id }); else if (ui.sel) select(null); });
+  roomViewer = new Viewer3D($('#room3d'), id => { if (id && String(id).startsWith('top:')) { topSelect(id.slice(4)); return; } if (id) select({ type: shapeById(id) ? 'shape' : fixtById(id) ? 'fixt' : 'cab', id }); else if (ui.sel) select(null); });
   roomViewer.onDouble = id => shapeById(id) ? editShape(id) : fixtById(id) ? null : openQuick(id);
   viewers.push(roomViewer);
 }
@@ -577,7 +579,7 @@ function dockTabs() {
 }
 function renderDock() {
   const el = $('#dock'); if (!el) return;
-  const tabs = dockTabs(), sc = ui.sel && ui.sel.type === 'cab' && multiIds().length < 2 ? ui.sel.id : null;
+  const tabs = dockTabs(), sc = ui.sel && ui.sel.type === 'cab' && multiIds().length < 2 ? ui.sel.id : ui.sel && ui.sel.type === 'top' && ui.dock !== 'tops' ? 'top:' + ui.sel.id : null;
   // Picking a cabinet opens the panel on its Size tab; letting go of it puts the panel back as it was.
   if (sc !== ui.dockCab) {
     const was = ui.dockOpen;
@@ -763,8 +765,23 @@ function cabAt(e) {
   if (el.closest('#room3d') && roomViewer && roomViewer.ok) return roomViewer.pick(e.clientX, e.clientY);
   return null;
 }
-function hideCtx() { const m = $('#ctxmenu'); if (m && !m.hidden) m.hidden = true; }
+// The shape under a right-click in the plan or elevation.
+function shapeAtPt(e) {
+  const el = document.elementFromPoint(e.clientX, e.clientY); if (!el) return null;
+  if (el.closest('#plan') && typeof hitShapes === 'function') return hitShapes(toWorld(e))[0] || null;
+  const g = el.closest('#elev') && el.closest('[data-shape]'); if (g) return g.dataset.shape;
+  // While a picked shape is held for dragging its outline lets clicks through, so find it by where the click is.
+  const svg = el.closest('#elev'), w = wall(ui.elevWall); if (!svg || !w || !svg.getScreenCTM()) return null;
+  const q = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse()), L = wg(w).L, side = elevSide(w);
+  const s = (S.shapes || []).find(s => { if (s.wall !== w.id || s.side !== side) return false;
+    const b = shapeBox(s.pts), x0 = side === 1 ? s.off : L - s.off - b.w, h = s.plane === 'flat' ? shapeT(s) : b.h;
+    return q.x >= x0 - 0.5 && q.x <= x0 + b.w + 0.5 && -q.y >= (s.elev || 0) - 0.5 && -q.y <= (s.elev || 0) + h + 0.5; });
+  return s ? s.id : null;
+}
+function hideCtx() { const m = $('#ctxmenu'); if (m && !m.hidden) { m.hidden = true; m.classList.remove('splmenu'); } }
 function showCtx(id, x, y) {
+  // 0.63.79: a leg or other shape (the 3D view picks those too) has its own menu.
+  if (!cab(id) && typeof showShapeCtx === 'function' && (S.shapes || []).some(s => s.id === id)) { showShapeCtx(id, x, y); return; }
   const c = cab(id); if (!c) return;
   if (inMulti(id)) { showMultiCtx(x, y); return; }
   select({ type: 'cab', id });
@@ -774,11 +791,12 @@ function showCtx(id, x, y) {
     + (openable(c) ? item('open-toggle', ui.open[id] ? 'Close doors and drawers' : 'Open doors and drawers', ' data-kb="O"') : '')
     + item('light-draw-one', cabStrips(id).some(x => x.where === stripWhereFor(c)) ? 'Remove LED strip' : 'Add LED strip', ` data-kb="${esc((STRIP_SPOTS.find(x => x.v === stripWhereFor(c)) || {}).l || '')}"`) + (cabStrips(id).length ? item('light-copy', 'Copy its lights') : '') + (lightClip && lightClip.length ? item('light-paste', `Paste lights (${lightClip.length})`) : '')
     + (hasFace(c) ? item('multi-faces', 'Faces…') + item('multi-doors', 'Door style…') : '')
+    + (typeof splitTargets === 'function' && splitTargets(c, null).some(t => t.info) ? item('spl-open', 'Split vertical or horizontal…') : '')
     + item('q-copyset', 'Copy settings') + (typeof setClip !== 'undefined' && setClip ? item('q-pasteset', 'Paste settings') : '')
-    + (ui.ctxTop && typeof ctjSideName === 'function' ? (() => { const [k, p] = ui.ctxTop.split('|'), r = countertopRuns().find(q => q.key === k); return r ? `<button role="menuitem" data-act="ctj-side" data-id="${esc(ui.ctxTop)}">Countertop: ${ctjSideName(r, p).toLowerCase()}</button>` : ''; })() : '')
+    + (ui.ctxTop && typeof ctjSideName === 'function' ? (() => { const [k, p] = ui.ctxTop.split('|'), r = countertopRuns().find(q => q.key === k); return r ? `<button role="menuitem" data-act="tsel-pick" data-id="${esc(k)}">Move or size the countertop</button><button role="menuitem" data-act="ctj-side" data-id="${esc(ui.ctxTop)}">Countertop: ${ctjSideName(r, p).toLowerCase()}</button>` : ''; })() : '')
     + item('te-start', 'Edit top shape here') + item('cab-zoom3d', 'Zoom to it in 3D') + item('clip-copy', 'Copy', ' data-kb="Ctrl+C"') + item('clip-cut', 'Cut', ' data-kb="Ctrl+X"') + item('cab-dup', 'Duplicate', ' data-kb="Ctrl+D"') + item('cab-to-designer', 'Open in Designer')
     + item('cab-del', 'Delete', ' class="danger"');
-  m.hidden = false; m.dataset.ctxAt = `${x},${y}`;
+  m.hidden = false; m.classList.remove('splmenu'); m.dataset.ctxAt = `${x},${y}`;
   const r = m.getBoundingClientRect();
   m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
   m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
@@ -822,6 +840,8 @@ document.addEventListener('pointerdown', e => {
   // 0.63.60 (Ayden 2026-11-25): no right-click menu (or picking) on the 3D while walking.
   const walking = typeof WALK === 'object' && WALK.on && e.target.closest('#room3d');
   ctxDown = e.button === 2 && !walking && !ui.drawWalls && !ui.placing && e.target.closest('#plan,#elev,#room3d') ? { x: e.clientX, y: e.clientY } : null;
+  // 0.63.79: the shape under the press (picking it can redraw the view before the button comes up).
+  if (ctxDown && !e.target.closest('#room3d')) ctxDown.shape = shapeAtPt(e);
 }, true);
 document.addEventListener('pointerup', e => {
   const d = ctxDown; ctxDown = null;
@@ -833,7 +853,12 @@ document.addEventListener('pointerup', e => {
   const tp = typeof ctjTopAt === 'function' && !ui.topEdit ? ctjTopAt(e) : null;
   if (tp && tp.direct) { ctjEdgeCtx(tp.id, e.clientX, e.clientY); return; }
   ui.ctxTop = tp ? tp.id : null;
-  const id = cabAt(e); ui.ctxTop = id ? ui.ctxTop : null; if (id) { showCtx(id, e.clientX, e.clientY); ui.ctxTop = null; return; }
+  const id = cabAt(e); ui.ctxTop = id ? ui.ctxTop : null;
+  // 0.63.79: which front or end panel was clicked, for Split vertical or horizontal.
+  ui.ctxHit = id && typeof splitHitAt === 'function' ? splitHitAt(e, id) : null;
+  if (id) { showCtx(id, e.clientX, e.clientY); ui.ctxTop = null; return; }
+  // A leg, column or other shape in the plan or elevation.
+  const sh = typeof showShapeCtx === 'function' ? d.shape || shapeAtPt(e) : null; if (sh) { showShapeCtx(sh, e.clientX, e.clientY); return; }
   ui.ctxPt = e.target.closest && e.target.closest('#plan') ? toWorld(e) : null;
   const wa = wallAt(e); if (wa) showWallCtx(wa.wid, wa.a, e.clientX, e.clientY);
   else if (clip && ui.ctxPt) showPasteCtx(e.clientX, e.clientY);
@@ -919,6 +944,8 @@ document.addEventListener('click', e => {
   if (/^te-/.test(a) && typeof topEditAct === 'function' && topEditAct(a, id)) return;
   if (/^fixt-/.test(a) && typeof fixtAct === 'function' && fixtAct(a, id)) return;
   if (/^ctj-/.test(a) && typeof ctjAct === 'function' && ctjAct(a, id)) return;
+  if (/^(spl|psd)-/.test(a) && typeof splitCtxAct === 'function' && splitCtxAct(a, id, el)) return;
+  if (/^tsel-/.test(a) && typeof topSelAct === 'function' && topSelAct(a, id)) return;
   switch (a) {
     case 'tab': goTab(id); break;
     case 'walls-draw': if (ui.drawWalls) stopWalls(); else startWalls(); break;
@@ -1602,6 +1629,7 @@ function deleteSelected() {
   if (s.type === 'cab') mutate(() => { S.cabinets = S.cabinets.filter(c => c.id !== s.id); });
   else if (s.type === 'shape') mutate(() => { S.shapes = S.shapes.filter(x => x.id !== s.id); });
   else if (s.type === 'fixt') mutate(() => { S.fixtures = (S.fixtures || []).filter(x => x.id !== s.id); });
+  else if (s.type === 'top') { ui.sel = s; topSelAct(String(s.id).startsWith('gen:') ? 'tsel-del' : 'tsel-off', s.id); return; }
   else if (s.type === 'wall') mutate(() => { S.walls = S.walls.filter(w => w.id !== s.id); S.cabinets = S.cabinets.filter(c => c.wall !== s.id); S.shapes = S.shapes.filter(x => x.wall !== s.id); S.fixtures = (S.fixtures || []).filter(x => x.wall !== s.id); });
   render();
 }
@@ -1654,6 +1682,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if
 })();
 document.addEventListener('change', e => {
   if (e.target.id !== 'itemsel' || !e.target.value) return;
+  if (e.target.value.startsWith('top:')) { if (typeof topSelect === 'function') topSelect(e.target.value.slice(4)); ui.measure = null; renderRoom(); return; }
   const v = e.target.value, sh = v.startsWith('shape:') ? shapeById(v.slice(6)) : null, fx = v.startsWith('fixt:') ? fixtById(v.slice(5)) : null, c = sh || fx ? null : cab(v);
   if (fx) { select({ type: 'fixt', id: fx.id }); ui.elevWall = fx.wall; } else if (sh) { select({ type: 'shape', id: sh.id }); ui.elevWall = sh.wall; } else if (c) { select({ type: 'cab', id: c.id }); ui.elevWall = c.wall; }
   ui.measure = null; renderRoom();

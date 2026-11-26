@@ -50,7 +50,8 @@ const CAT_FT = [['Base', 'Base cabinets'], ['Wall', 'Wall cabinets'], ['Tall', '
 // mantels, anything classified Specialty). An installer with no Specialty price installs them as Base/Wall/Tall, as before.
 const INST_FT = [...CAT_FT, ['Specialty', 'Specialty items']];
 const SPEC_GROUPS = ['special', 'hood', 'shelf', 'mantel'];
-const isSpecialty = c => { const l = c && c.libId && typeof libItem === 'function' && libItem(c.libId); return !!l && typeof libGroup === 'function' && SPEC_GROUPS.includes(libGroup(l)); };
+// 0.63.81: a standing panel stays on the Specialty install line it was on, now that the end panels sit under Base/Wall/Tall.
+const isSpecialty = c => { const l = c && c.libId && typeof libItem === 'function' && libItem(c.libId); return !!l && (c.made === 'panel' && !c.autoOf || typeof libGroup === 'function' && SPEC_GROUPS.includes(libGroup(l))); };
 const ftLen = v => (Math.round(v * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const addSq = list => PAINT_PARTS.concat([['total'], ['eb']]).reduce((o, [k]) => (o[k] = list.reduce((a, x) => a + x[k], 0), o), {});
 // Set values copied from Ayden's Mozaik pricing sheet (Detailed Pricing.mzkprice), turned from metric to feet:
@@ -169,7 +170,7 @@ function instCounts(cabs, own) {
   });
   // Panels drawn as shapes (an island back, Mozaik end panels): by their size, island ones by the 48" piece.
   (S.shapes || []).forEach(s => { if (s.plane && s.plane !== 'upright') return; const b = shapeBox(s.pts || []); panelOne(s.name, wallOf(s.wall), b.h, b.w); });
-  const tops = countertopRuns().filter(t => t.on), molds = moldingRuns();
+  const tops = countertopRuns().filter(t => t.on && t.priced), molds = moldingRuns();
   n.top8 = tops.reduce((a, t) => a + Math.ceil((t.area ?? t.len * t.depth) / 144 / 8 - 1e-9), 0);
   n.moldCut = molds.reduce((a, m) => a + 2 + 2 * ((m.retS ? 1 : 0) + (m.retE ? 1 : 0)), 0);
   n.caulk = molds.length + tops.length;
@@ -544,7 +545,7 @@ function priceJob(ps) {
     const own = all.filter(k => k.own).map(k => ({ name: `${k.label} ${k.c.name} (${fmtLen(k.c.w, 1)} wide)`, amount: k.total, own: true }));
     // Tops and molding are one line each for the room, not one per wall (Ayden 2026-11-06). The kinds used go in brackets.
     const oneLine = (name, runs, kind, amt, top) => { if (!runs.length) return []; const kinds = [...new Set(runs.map(kind))]; return [{ name: `${name} (${kinds.join(', ')})`, amount: runs.reduce((a, x) => a + amt(x), 0), ...(top ? { top: true } : {}) }]; };
-    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on), t => t.tpl.name, t => (t.area ?? t.len * t.depth) / 144 * topSqFor(ps, r), true);
+    const tops = oneLine('Countertops', countertopRuns().filter(t => t.on && t.priced), t => t.tpl.name, t => (t.area ?? t.len * t.depth) / 144 * topRateOf(ps, r, t), true);
     const molds = oneLine('Molding', moldingRuns(), m => m.m.name, m => m.len / 12 * (+ps.molds[m.m.id] || 0));
     const xs = ps.extras.filter(x => x.per === 'room').map(x => ({ name: x.name, amount: +x.amount || 0 }))
       .concat(ps.extras.filter(x => x.per === 'cabinet' && cabs.length).map(x => ({ name: `${x.name} (${cabs.length} × ${money(+x.amount || 0)})`, amount: (+x.amount || 0) * cabs.length })));
@@ -655,6 +656,8 @@ const topSqRate = ps => { const v = ((ps || {}).topSq || {}).rate; return v !== 
 const numOr = (v, d) => v !== '' && v != null && isFinite(+v) ? +v : d;
 const topSqJob = ps => numOr(S.job.topSq, topSqRate(ps));
 const topSqFor = (ps, r) => numOr(r && r.topSq, topSqJob(ps));
+// One top's own $/sq ft (Tops tab, a custom butcher block), else its room's.
+const topRateOf = (ps, room, t) => numOr(t && t.rate, topSqFor(ps, room));
 const PRICE_SECS = [['lib', 'Library prices', 'tag'], ['sheet', 'Markup and tax', 'tag'], ['install', 'Installers', 'home'], ['cab', 'Cabinets by type', 'box'], ['prod', 'Products', 'stack'], ['add', 'Adders', 'shelf'], ['panel', 'Panels', 'box'], ['doors', 'Doors and fronts', 'door'], ['mats', 'Materials', 'palette'], ['hw', 'Hardware', 'sliders'], ['paint', 'Paint', 'palette'], ['tops', 'Tops and molding', 'ruler'], ['extra', 'Extra charges', 'plus'], ['pay', 'Payment schedule', 'list']];
 // Quote's installer pick, down the right with the quote buttons.
 function installerPick(ps) {

@@ -479,9 +479,13 @@ function madePrice(c, ps) {
 // 0.61.0 (Ayden 2026-11-23: "an option to put down base panels and wall panels that arent automatic so i can change it"):
 // a Base End Panel and a Wall End Panel, the same finished panel as the Support Panel at base and upper sizes. Placed by
 // hand like a cabinet, so they can be moved, resized or deleted; the cabinet beside one gets no automatic panel there.
+// 0.63.81 (Ayden 2026-11-26: "add panels to each cabinet type, like bases have base panels, wall cabinets have wall panels,
+// same thing for talls"): each one sits in its own category's End Panels folder (Base, Wall, Tall Cabinets), and a Tall End
+// Panel joins them at the default tall cabinet size.
 const MADE_PANEL_SIZES = [
-  { id: 'made-panel-base', name: 'Base End Panel', cat: 'Base', h: 34.5, d: 24.75, elev: 0 },
-  { id: 'made-panel-wall', name: 'Wall End Panel', cat: 'Wall', h: 30, d: 12.75, elev: 54 },
+  { id: 'made-panel-base', name: 'Base End Panel', cat: 'Base', h: 34.5, d: 24.75, elev: 0, group: 'base', folder: 'End Panels' },
+  { id: 'made-panel-wall', name: 'Wall End Panel', cat: 'Wall', h: 30, d: 12.75, elev: 54, group: 'wall', folder: 'End Panels' },
+  { id: 'made-panel-tall', name: 'Tall End Panel', cat: 'Tall', h: 90, d: 24.75, elev: 0, group: 'tall', folder: 'End Panels' },
 ];
 function madeLibItems() {
   const item = (k, d, o = {}) => ({ id: 'made-' + k, name: d.name, cat: d.cat, w: d.w, h: d.h, d: d.d, elev: d.elev, rows: [], params: {},
@@ -491,6 +495,12 @@ function madeLibItems() {
 function ensureMadeLib(s, lib) {
   const had = new Set(s.madeLibKeys || []);
   madeLibItems().forEach(l => { if (had.has(l.id)) return; had.add(l.id); if (!lib.some(x => x.id === l.id)) lib.push(l); });
+  // 0.63.81: Base and Wall End Panels already in a library move once from Specialty › Desks and Panels to their own
+  // category's End Panels folder, unless the product was given another classification or folder by hand.
+  if (!had.has('-epcat')) {
+    had.add('-epcat');
+    MADE_PANEL_SIZES.forEach(o => { const l = lib.find(x => x.id === o.id); if (l && l.group === 'made' && (!l.folder || l.folder === 'Desks and Panels')) Object.assign(l, { group: o.group, folder: o.folder }); });
+  }
   s.madeLibKeys = [...had];
 }
 
