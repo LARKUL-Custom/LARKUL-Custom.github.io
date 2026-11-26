@@ -402,7 +402,11 @@ function openSolve() {
   const items = [];
   S.cabinets.forEach((c, ci) => { if (!ui.open[c.id]) return; computeFronts(c).forEach(f => { if (f.type === 'door' || f.type === 'drawer') items.push({ c, f, ci, area: (f.x1 - f.x0) * (f.z1 - f.z0) }); }); });
   const drw = it => typeof cornerFoldOf === 'function' && it.f.type === 'door' && cornerFoldOf(it.c, it.f) ? 0 : it.f.type === 'drawer' ? 1 : 2;
-  items.sort((a, b) => drw(a) - drw(b) || b.area - a.area || a.ci - b.ci || a.f.row - b.f.row || a.f.idx - b.f.idx || (a.f.x0 - b.f.x0));
+  // 0.64.23 (Ayden: opening one door snapped the open one beside it shut, both ways): a cabinet that was already
+  // open keeps its fronts (up to 90°), and one opened after it opens only as far as it clears them.
+  // Cabinets opened together (Open all) share a turn, so drawers, then bigger fronts, still go first among them.
+  const turn = it => typeof ui.open[it.c.id] === 'number' ? ui.open[it.c.id] : 0;
+  items.sort((a, b) => turn(a) - turn(b) || drw(a) - drw(b) || b.area - a.area || a.ci - b.ci || a.f.row - b.f.row || a.f.idx - b.f.idx || (a.f.x0 - b.f.x0));
   // Every front in the room, shut, with its pull: a door or drawer can't swing or slide into one that stays closed.
   const shutAll = shutCache && shutCache.cabs === S.cabinets ? shutCache.list : [];
   if (!(shutCache && shutCache.cabs === S.cabinets)) S.cabinets.forEach(c => { const fr = frontFrame(c); if (!fr) return; computeFronts(c).forEach(f => { if (f.type !== 'door' && f.type !== 'drawer' && f.type !== 'false') return;
@@ -411,6 +415,8 @@ function openSolve() {
   shutCache = { cabs: S.cabinets, list: shutAll };
   const placed = [], byKey = {}, SQUARE = Math.PI / 2 - 0.02;
   items.forEach(it => { const r = openOne(it.c, it.f, placed, SQUARE, shutAll); const p = { c: it.c, f: it.f, ...r }; if (r.poly) placed.push(p); byKey[frontKey3(it.c, it.f)] = p; });
+  // Past 90° comes last for everyone: a door opened earlier keeps up to 90°, but gives back what it swung past
+  // square when a cabinet opened after it needs that room (it glides there, see glideLimit in view3d.js).
   placed.forEach(p => {
     if (p.f.type !== 'door' || p.v < SQUARE - 1e-6) return;
     const r = openOne(p.c, p.f, placed, 0, shutAll); if (r.v > p.v) Object.assign(p, r);
@@ -454,6 +460,10 @@ function frontBaseStyle(c, f, dt) {
   const ty = f.was || f.type;
   return doorStyle(f.style && S.doorStyles.some(d => d.id === f.style) ? f.style : ty === 'door' ? (c.cat === 'Wall' && dt.wallDoor) || dt.door : ty === 'drawer' || drawerLike(f) ? drawerSlotStyle(c, f, dt) : dt.falseFront);
 }
+// 0.64.20 (Ayden 2026-11-26: "painted hdm doors dont have this 5 piece look because they are made from one piece with a panel put in"):
+// a shop-made HDM/MDF framed door is one solid frame, so it is drawn with no stile/rail joints, only the panel seam.
+// Bought framed doors (wood, Bywater 5 piece melamine) keep their five-piece joints.
+const onePieceFrame = ds => !!ds && (cncFramed(ds) || (ds.type === 'fivepiece' && ds.source !== 'buyout' && !ds.bwBuy && typeof shopMadeDoorMat === 'function' && shopMadeDoorMat(mat(ds.mat))));
 function frontStyle(c, f) {
   const dt = doorTpl(cabSet(c, 'doorT'));
   let ds = frontBaseStyle(c, f, dt);
@@ -701,7 +711,7 @@ function interiorLayout(c, p, fronts) {
   const hasDoors = fronts.some(f => f.type === 'door');
   // Pocket doors: each pocket (slot + pocket panel) takes its width out of the inside (pocket.js).
   const pk = typeof pocketInfo === 'function' ? pocketInfo(c, p, fronts, t, zIn0, zIn1) : null;
-  const out = { t, zIn0, zIn1, inW: pk ? inW - pk.wL - pk.wR : inW, x0: t + (pk ? pk.wL : 0), pocket: pk, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? t : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], pulls: [], bom: [] };
+  const out = { p, t, zIn0, zIn1, inW: pk ? inW - pk.wL - pk.wR : inW, x0: t + (pk ? pk.wL : 0), pocket: pk, zones, low, spacer: Math.max(hasDoors && !faceFrame(c) ? t : 0, ffOverhang(c, t)), divX: null, rollouts: [], trays: [], bins: [], lazy: [], pulls: [], bom: [] };
   // An insert goes in the door opening it names (it.row), or else the bottom one.
   const used = new Set();
   ins.forEach((it, ii) => {
@@ -776,17 +786,59 @@ function colLeaf(c, cell) {
   return Number.isFinite(k) ? (col.rows || [])[k] || null : col;
 }
 
-// 0.63.0: the adjustable shelves of side-by-side sections: { x0, x1, z (bottom face) } each, spread evenly in the section.
-function colShelves(lay) {
-  return (lay.colZones || []).flatMap(zn => Array.from({ length: zn.k }, (_, i) => ({ x0: zn.x0, x1: zn.x1, z: zn[0] + (zn[1] - zn[0]) * (i + 1) / (zn.k + 1) })));
+/* ---------- Shelf pin rows ---------- */
+// 0.64.19 (Ayden 2026-11-26: "the upper top adjustable shelf is one pin above where it should be ... see the bottom one
+// is centered in the holes"): shelves were drawn where an even spread put them, while the holes were drilled at the
+// nearest pin row, and a set near the end of the zone was pushed back inside it. Now one rule places both: each shelf
+// picks the pin row nearest its even-spread height (kept far enough in that its whole set fits), the set of holes is
+// centred on that row, and the shelf is drawn resting on the pins in it (bottom face on top of the pin).
+const shelfPin = () => hwPick(roomSet('shelfpin'), 'shelfpin');
+// The pin rows an opening from a to b can take, on the pin pitch from the zone inset.
+function pinGrid(p, pin, a, b) {
+  const g = [], pitch = pin.pitchMM * MM; if (!(pitch > 0)) return g;
+  for (let z = a + p.pinZoneInset; z <= b - p.pinZoneInset + 1e-6; z += pitch) g.push(z);
+  return g;
 }
-// Shelf heights (bottom face) spread over the openings shelves can use.
-function shelfHeights(lay, n) {
-  if (lay.perRow) return lay.perRow.flatMap(({ z, k }) => Array.from({ length: k }, (_, i) => z[0] + (z[1] - z[0]) * (i + 1) / (k + 1)));
+// The row a shelf wanted at height want sits on (an index into g, -1 for none). With sets of holes, far enough from
+// the ends that the whole set fits round it.
+function pinCentre(p, g, want) {
+  if (!g.length) return -1;
+  let c0 = g.reduce((m, z, j) => Math.abs(z - want) < Math.abs(g[m] - want) ? j : m, 0);
+  if (p.shelfDrill !== 'line') { const n = Math.max(1, p.shelfHoles | 0), h = Math.floor(n / 2); if (g.length >= n) c0 = Math.max(h, Math.min(g.length - n + h, c0)); }
+  return c0;
+}
+// The holes drilled in an opening (a..b) for shelves wanted at the heights in wants: every row for line bore, else a
+// set (Shelf holes, 5 to start) centred on each shelf's row.
+function pinHoleZs(p, pin, a, b, wants) {
+  const g = pinGrid(p, pin, a, b);
+  if (p.shelfDrill === 'line' || !g.length) return g;
+  const n = Math.max(1, p.shelfHoles | 0), out = new Set();
+  wants.forEach(w => { const c0 = pinCentre(p, g, w), lo = Math.max(0, Math.min(g.length - n, c0 - Math.floor(n / 2))); g.slice(lo, lo + n).forEach(z => out.add(z)); });
+  return [...out].sort((x, y) => x - y);
+}
+// Where a shelf wanted at want in the opening a..b is drawn: its bottom face on top of the pin in its row. No pins
+// (or no row fits): where it was wanted.
+function pinRest(p, a, b, want) {
+  const pin = p && shelfPin(); if (!pin) return want;
+  const g = pinGrid(p, pin, a, b), c0 = pinCentre(p, g, want);
+  return c0 < 0 ? want : r3(g[c0] + pin.pinDiaMM * MM / 2);
+}
+// 0.63.0: the adjustable shelves of side-by-side sections: { x0, x1, z (bottom face) } each, spread evenly in the section.
+const colWants = zn => Array.from({ length: zn.k }, (_, i) => zn[0] + (zn[1] - zn[0]) * (i + 1) / (zn.k + 1));
+function colShelves(lay) {
+  return (lay.colZones || []).flatMap(zn => colWants(zn).map(z => ({ x0: zn.x0, x1: zn.x1, z: pinRest(lay.p, zn[0], zn[1], z) })));
+}
+// Shelf heights (bottom face) spread over the openings shelves can use, each with its opening: [{ z, zone }].
+function shelfWants(lay, n) {
+  if (lay.perRow) return lay.perRow.flatMap(({ z: zn, k }) => Array.from({ length: k }, (_, i) => ({ z: zn[0] + (zn[1] - zn[0]) * (i + 1) / (k + 1), zone: zn })));
   if (!n || !lay.shelfZones.length) return [];
   const z0 = Math.min(...lay.shelfZones.map(z => z[0])), z1 = Math.max(...lay.shelfZones.map(z => z[1])), out = [];
-  for (let i = 1; i <= n; i++) { const z = z0 + (z1 - z0) * i / (n + 1); if (lay.shelfZones.some(([a, b]) => z > a + 1 && z < b - 1)) out.push(z); }
+  for (let i = 1; i <= n; i++) { const z = z0 + (z1 - z0) * i / (n + 1), zone = lay.shelfZones.find(([a, b]) => z > a + 1 && z < b - 1); if (zone) out.push({ z, zone }); }
   return out;
+}
+// Shelf heights (bottom face) as drawn: each resting on the pins drilled for it.
+function shelfHeights(lay, n) {
+  return shelfWants(lay, n).map(w => pinRest(lay.p, w.zone[0], w.zone[1], w.z));
 }
 
 /* ---------- Edgebanding ---------- */
@@ -1261,20 +1313,12 @@ function buildParts(c) {
   if (shelves && pin) {
     const pitch = pin.pitchMM * MM, ys = [pin.pinSetbackMM * MM, inD - pin.pinSetbackMM * MM], divOps = [];
     // Line bore drills the whole opening on the pin pitch; a set drills a few holes (5 to start) centered on each shelf.
-    const perZone = lay.perRow ? lay.perRow.filter(r => r.k).map(r => r.k) : zones.map((_, i) => Math.floor(shelves / zones.length) + (i < shelves % zones.length ? 1 : 0));
-    const holeZs = (a, b, k) => {
-      const grid = []; for (let z = a + p.pinZoneInset; z <= b - p.pinZoneInset + 1e-6; z += pitch) grid.push(z);
-      if (p.shelfDrill === 'line' || !grid.length) return grid;
-      const n = Math.max(1, p.shelfHoles | 0), out = new Set();
-      for (let i = 1; i <= k; i++) {
-        const want = a + (b - a) * i / (k + 1), c0 = grid.reduce((m, z, j) => Math.abs(z - want) < Math.abs(grid[m] - want) ? j : m, 0);
-        const lo = Math.max(0, Math.min(grid.length - n, c0 - Math.floor(n / 2)));
-        grid.slice(lo, lo + n).forEach(z => out.add(z));
-      }
-      return [...out].sort((x, y) => x - y);
-    };
-    zones.forEach(([a, b], zi) => {
-      for (const z of holeZs(a, b, perZone[zi] || 0)) {
+    // 0.64.19: the holes go where the shelves are drawn (shelfWants / pinHoleZs, the same rule as shelfHeights).
+    const wants = shelfWants(lay, shelves);
+    zones.forEach(zn => {
+      const [a, b] = zn, mine = wants.filter(w => w.zone === zn).map(w => w.z);
+      if (!mine.length && p.shelfDrill !== 'line') return;
+      for (const z of pinHoleZs(p, pin, a, b, mine)) {
         ys.forEach(y => {
           [leftOps, rightOps].forEach(ops => {
             const clash = ops.some(o => o.why !== 'shelf pin' && o.type === 'bore' && Math.hypot(o.x - z, o.y - y) < 12 * MM)
@@ -1301,13 +1345,7 @@ function buildParts(c) {
   if (pin && lay.colZones.length) {
     const pitch = pin.pitchMM * MM, ys = [pin.pinSetbackMM * MM, inD - pin.pinSetbackMM * MM], L = faceLetters(c);
     lay.colZones.filter(zn => zn.k > 0).forEach(zn => {
-      const [a, b] = zn, k = zn.k, grid = []; for (let z = a + p.pinZoneInset; z <= b - p.pinZoneInset + 1e-6; z += pitch) grid.push(z);
-      let zs = grid;
-      if (p.shelfDrill !== 'line' && grid.length) {
-        const n = Math.max(1, p.shelfHoles | 0), set = new Set();
-        for (let i = 1; i <= k; i++) { const want = a + (b - a) * i / (k + 1), c0 = grid.reduce((m, z, j) => Math.abs(z - want) < Math.abs(grid[m] - want) ? j : m, 0), lo = Math.max(0, Math.min(grid.length - n, c0 - Math.floor(n / 2))); grid.slice(lo, lo + n).forEach(z => set.add(z)); }
-        zs = [...set].sort((x, y) => x - y);
-      }
+      const [a, b] = zn, k = zn.k, zs = pinHoleZs(p, pin, a, b, colWants(zn));
       const pl = dParts.find(q => q.cols && q.row === zn.row && q.k === zn.col), pr = dParts.find(q => q.cols && q.row === zn.row && q.k === zn.col + 1);
       const sides = [[pl, leftOps, 'right'], [pr, rightOps, 'left']];
       zs.forEach(z => ys.forEach(y => sides.forEach(([pp, so, face]) => {

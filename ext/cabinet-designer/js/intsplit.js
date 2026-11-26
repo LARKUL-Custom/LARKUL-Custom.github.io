@@ -73,7 +73,9 @@ function innerTree(c, p, lay, t) {
   return out.rows.length ? out : null;
 }
 // Adjustable shelf heights (bottom face) in an inside opening.
-const inLeafShelves = zn => Array.from({ length: zn.k }, (_, i) => r3(zn[0] + (zn[1] - zn[0]) * (i + 1) / (zn.k + 1)));
+// Where an opening's adjustable shelves are wanted (even spread); with p, where they are drawn: resting on the pins
+// drilled for them (pinRest in build.js, 0.64.19).
+const inLeafShelves = (zn, p) => Array.from({ length: zn.k }, (_, i) => { const w = r3(zn[0] + (zn[1] - zn[0]) * (i + 1) / (zn.k + 1)); return p ? pinRest(p, zn[0], zn[1], w) : w; });
 
 /* ---------- Cut list (called by buildParts in build.js) ---------- */
 // A split part's name: the two openings it is between, "B1/B2".
@@ -100,9 +102,6 @@ function innerParts(c, x) {
   };
   if (!pin) return out;
   const pitch = pin.pitchMM * MM, ys = [pin.pinSetbackMM * MM, inD - pin.pinSetbackMM * MM], n = Math.max(1, p.shelfHoles | 0);
-  const grid = (a, b) => { const g = []; for (let z = a + p.pinZoneInset; z <= b - p.pinZoneInset + 1e-6; z += pitch) g.push(z); return g; };
-  // A set of holes (Shelf holes, 5 to start) centred on each shelf; line bore drills the whole opening.
-  const near = (g, want, set) => { if (!g.length) return; const c0 = g.reduce((m, z, j) => Math.abs(z - want) < Math.abs(g[m] - want) ? j : m, 0), lo = Math.max(0, Math.min(g.length - n, c0 - Math.floor(n / 2))); g.slice(lo, lo + n).forEach(z => set.add(z)); };
   const drill = (zs, x0, x1) => {
     const sides = [vert(x0, false), vert(x1, true)].filter(Boolean);
     zs.forEach(z => ys.forEach(y => sides.forEach(sd => {
@@ -112,9 +111,7 @@ function innerParts(c, x) {
     })));
   };
   inr.zones.filter(zn => zn.k > 0).forEach(zn => {
-    const g = grid(zn[0], zn[1]); let zs = g;
-    if (p.shelfDrill !== 'line' && g.length) { const set = new Set(); inLeafShelves(zn).forEach(w => near(g, w, set)); zs = [...set].sort((a, b) => a - b); }
-    drill(zs, zn.x0, zn.x1);
+    drill(pinHoleZs(p, pin, zn[0], zn[1], inLeafShelves(zn)), zn.x0, zn.x1);
     part(`Adjustable shelf (${inLabel(c, zn.key, L)})`, sm, r3(zn.x1 - zn.x0 - 0.0625), r3(inD - p.shelfFrontSetback), { qty: zn.k, kind: 'shelf' });
     addB(pin.name, 4 * zn.k);
   });
@@ -175,9 +172,9 @@ function inPickParts(c) {
     (per[zn.row] = per[zn.row] || []).push(z);
   });
   Object.entries(per).forEach(([ri, zs]) => zs.sort((a, b) => a - b).forEach((z, j) => out.push({ key: `adj|${ri}|${j}`, kind: 'adj', name: `Adjustable shelf, opening ${L[ri] || +ri + 1}`, x0: xa, x1: xb, z0: z, z1: z + t, open: String(ri) })));
-  (lay.colZones || []).forEach(zn => Array.from({ length: zn.k }, (_, j) => zn[0] + (zn[1] - zn[0]) * (j + 1) / (zn.k + 1)).forEach((z, j) => out.push({ key: `cs|${zn.cell}|${j}`, kind: 'cs', name: `Adjustable shelf, section ${L[zn.cell] || ''}`, x0: zn.x0, x1: zn.x1, z0: z, z1: z + t, open: zn.cell })));
+  (lay.colZones || []).forEach(zn => colWants(zn).map(z => pinRest(p, zn[0], zn[1], z)).forEach((z, j) => out.push({ key: `cs|${zn.cell}|${j}`, kind: 'cs', name: `Adjustable shelf, section ${L[zn.cell] || ''}`, x0: zn.x0, x1: zn.x1, z0: z, z1: z + t, open: zn.cell })));
   if (lay.inner) {
-    lay.inner.zones.forEach(zn => inLeafShelves(zn).forEach((z, j) => out.push({ key: `adj|${zn.key}|${j}`, kind: 'adj', name: `Adjustable shelf, opening ${inLabel(c, zn.key, L)}`, x0: zn.x0, x1: zn.x1, z0: z, z1: z + t, open: zn.key })));
+    lay.inner.zones.forEach(zn => inLeafShelves(zn, p).forEach((z, j) => out.push({ key: `adj|${zn.key}|${j}`, kind: 'adj', name: `Adjustable shelf, opening ${inLabel(c, zn.key, L)}`, x0: zn.x0, x1: zn.x1, z0: z, z1: z + t, open: zn.key })));
     lay.inner.shelves.forEach(q => out.push({ key: `bd|${q.key}|${q.j}`, kind: q.adj ? 'bdadj' : 'bdfix', name: `${q.adj ? 'Adjustable' : 'Fixed'} shelf under ${inLabel(c, q.key + IN_SEP + q.j, L)}`, x0: q.x0, x1: q.x1, z0: q.z, z1: q.z + t, open: q.key + IN_SEP + q.j }));
     lay.inner.parts.forEach(q => out.push({ key: `bd|${q.key}|${q.j}`, kind: 'bdpart', name: `Partition right of ${inLabel(c, q.key + IN_SEP + q.j, L)}`, x0: q.x, x1: q.x + t, z0: q.z0, z1: q.z1, open: q.key + IN_SEP + q.j }));
   }
@@ -240,7 +237,8 @@ function inShelvesToFixed(c, key, js) {
   const k = inShelfCount(c, key); js = [...new Set(js)].filter(j => j >= 0 && j < k).sort((a, b) => a - b); if (!js.length) return;
   const p = effParams(c), lay = interiorLayout(c, p), t = lay.t;
   const zn = inIsInner(key) ? lay.inner.zones.find(z => z.key === key) : lay.zones.find(z => z.row === +key); if (!zn) return;
-  const h = zn[1] - zn[0], at = j => h * (j + 1) / (k + 1);
+  // 0.64.19: each fixed shelf stays where the adjustable one was drawn (on its pins).
+  const h = zn[1] - zn[0], at = j => pinRest(p, zn[0], zn[1], zn[0] + h * (j + 1) / (k + 1)) - zn[0];
   // Parts top to bottom; each keeps the shelves between its fixed shelves, sized so the fixed shelves stay put.
   const cuts = [...js].reverse(), parts = []; let top = h, prev = k;
   cuts.forEach(j => { parts.push({ k: prev - j - 1, s: r3(top - at(j) - t) }); top = at(j); prev = j; });
@@ -439,5 +437,5 @@ function inDrawParts(lay) {
   const inr = lay.inner, t = lay.t; if (!inr) return [];
   return [...inr.parts.map(q => ({ x0: q.x, x1: q.x + t, z0: q.z0, z1: q.z1, kind: 'part' })),
     ...inr.shelves.map(q => ({ x0: q.x0, x1: q.x1, z0: q.z, z1: q.z + t, kind: q.adj ? 'adj' : 'fixed' })),
-    ...inr.zones.flatMap(zn => inLeafShelves(zn).map(z => ({ x0: zn.x0, x1: zn.x1, z0: z, z1: z + t, kind: 'adj' })))];
+    ...inr.zones.flatMap(zn => inLeafShelves(zn, lay.p).map(z => ({ x0: zn.x0, x1: zn.x1, z0: z, z1: z + t, kind: 'adj' })))];
 }

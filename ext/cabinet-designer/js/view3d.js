@@ -354,7 +354,7 @@ function cabinetMeshes(c, opts = {}) {
       if (!pp.hw.ccMM) add(box3(L, L, 0.9, pm, px, py, pz - 0.1, false), 'pulls');
       else add(box3(pp.vertical ? 0.45 : L, pp.vertical ? L : 0.45, 0.45, pm, px, py, pz, false), 'pulls');
     }
-    if (hwOn && typeof hw3dFront === 'function') hw3dFront(c, p, f, ft, D, add);
+    if (hwOn && typeof hw3dFront === 'function') hw3dFront(c, p, f, ft, D, add, o => host.add(o));
     if (f.type === 'drawer' && f.face) host.add(fg);
     else if (f.type === 'drawer') {
       // The box as it is cut (drawerBoxAt in build.js): runner length, width and height, bottom let in its recess.
@@ -375,6 +375,7 @@ function cabinetMeshes(c, opts = {}) {
       pivot.position.set(hx, 0, pz); fg.position.set(-hx, 0, -pz); pivot.add(fg);
       // A bi-fold's second door turns the other way from a plain door: it straightens out of the L (0.63.72).
       pivot.userData.open = { kind: 'door', sign: (f.hinge === 'R' ? 1 : -1) * (fold ? -1 : 1), f };
+      pivot.userData.hwP = [hx, pz];   // hinge links (hw3d.js) turn about here with the door
       // A pocket door swings to 90°, steps in off the side into its slot, then slides back (pocket.js, pocketMove).
       const pko = pocketOf(c, f, pk3);
       if (pko) {
@@ -463,13 +464,15 @@ function doorMeshes(ds, framed, f, ft, fmM, panelM, D, add) {
   if (!framed) {
     add(box3(fw, fh, ft, fmM, f.x0 + fw / 2, f.z0 + fh / 2, D + ft / 2));
   } else {
-    const routed = cncFramed(ds), pd = routed ? Math.min(ds.pocketDepth, ft * 0.6) : ft * 0.5;
-    if (routed && !R3) {
+    const routed = cncFramed(ds), one = onePieceFrame(ds), pd = routed ? Math.min(ds.pocketDepth, ft * 0.6) : ft * 0.5;
+    if (one && !R3) {
       // One piece: outline of the whole door, frame at full thickness, fields recessed.
       const ol = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(fw, fh, ft)), edgeMat3()); ol.position.set(f.x0 + fw / 2, f.z0 + fh / 2, D + ft / 2); add(ol);
     }
     // Realistic: rails (wider than tall) run their grain across, like a real five-piece door.
-    lay.frame.forEach(m => box(m.x0, m.z0, m.x1, m.z1, ft, D + ft / 2, R3 && m.x1 - m.x0 > m.z1 - m.z0 ? grainAcross3(fmM) : fmM, !routed));
+    // 0.64.20: a shop-made HDM/MDF frame is one solid piece (onePieceFrame), so no joints show where stiles meet rails.
+    if (one && lay.frame.length) add(frame3(lay, fw, fh, ft, fmM, f.x0, f.z0, D));
+    else lay.frame.forEach(m => box(m.x0, m.z0, m.x1, m.z1, ft, D + ft / 2, R3 && m.x1 - m.x0 > m.z1 - m.z0 ? grainAcross3(fmM) : fmM, !one));
     lay.fields.forEach(fl => {
       const w = fl.x1 - fl.x0, h = fl.z1 - fl.z0, r = Math.min(ds.raiseW, w / 2 - 0.5, h / 2 - 0.5);
       if (fl.pt === 'glass') { const g = box3(w, h, 0.15, glass3(), X((fl.x0 + fl.x1) / 2), Z((fl.z0 + fl.z1) / 2), D + ft * 0.4, false); add(g); g.userData.layer = 'glass'; return; }
@@ -490,6 +493,19 @@ function doorMeshes(ds, framed, f, ft, fmM, panelM, D, add) {
     }));
   }
 }
+// One-piece door frame: the whole face with a hole for each opening, eased on its outside and inside edges in Realistic.
+// Front-local x right and z up, placed with its back on D. UVs in inches over the material's scale, grain running up.
+function frame3(lay, fw, fh, ft, m, x0, z0, D) {
+  const V = (x, y) => new THREE.Vector2(x, y), sh = new THREE.Shape([V(0, 0), V(fw, 0), V(fw, fh), V(0, fh)]);
+  lay.fields.forEach(fl => sh.holes.push(new THREE.Path([V(fl.x0, fl.z0), V(fl.x0, fl.z1), V(fl.x1, fl.z1), V(fl.x1, fl.z0)])));
+  const r = R3 && !BEVEL3.off && !m.transparent ? Math.min(0.07, ft / 5) : 0;
+  const g = new THREE.ExtrudeGeometry(sh, r ? { depth: ft - 2 * r, bevelEnabled: true, bevelThickness: r, bevelSize: r, bevelOffset: -r, bevelSegments: 2, curveSegments: 1 } : { depth: ft, bevelEnabled: false, curveSegments: 1 });
+  if (r) g.translate(0, 0, r);
+  const k = (m.userData && m.userData.texScale) || 24, uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / k, uv.getY(i) / k);
+  const me = new THREE.Mesh(g, m); me.position.set(x0, z0, D);
+  return me;
+}
 const glass3 = () => glass3.m || (glass3.m = new THREE.MeshStandardMaterial({ color: 0xbcd9e8, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false }));
 
 /* ---------- Opening doors and drawers ---------- */
@@ -503,11 +519,31 @@ function applyOpen(root, t) {
 // A bi-fold's second door straightens as the pair swings, late (cornerFoldShare, 0.63.72).
 const stageT = (op, t) => op.lead ? cornerFoldShare(t) : t;
 // Puts one door or drawer at open amount t (0 shut .. 1 open).
-function moveFront(o, t) {
+// dt (seconds, from the open animation) lets a front whose room changed glide to its new limit.
+function moveFront(o, t, dt) {
   const op = o.userData.open;
   if (op.kind === 'pocket') { const m = pocketMove(o, t); o.rotation.y = op.sign * m.a; o.position.set(op.base.x + m.dx, 0, op.base.z + m.dz); }
-  else if (op.kind === 'door') o.rotation.y = op.sign * (op.lead ? stageT(op, ease(t)) : ease(t)) * doorSwing(o);
-  else o.position.z = ease(t) * drawerOut(o);
+  else if (op.kind === 'door') o.rotation.y = op.sign * (op.lead ? stageT(op, ease(t)) : ease(t)) * glideLimit(o, doorSwing(o), dt, 2.6);
+  else o.position.z = ease(t) * glideLimit(o, drawerOut(o), dt, 40);
+  if (typeof hwFollow === 'function') hwFollow(o);
+}
+// How far each front is shown able to open, by cabinet and front. When another front opens or closes beside an
+// open one and its limit changes, it moves there at a door's or drawer's opening speed (radians or inches a second)
+// instead of jumping (0.64.23, Ayden: the open door closed "very suddenly").
+// A front starting to open from shut takes its limit straight away; each front moves once a frame in every viewer.
+const shownLimit = {};
+let limitGliding = false, limitFrame = 0;
+function glideLimit(o, goal, dt, rate) {
+  const f = o.userData.open.f, k = o.userData.cabId + ':' + (f ? (f.cell !== undefined ? f.cell : f.row) + ':' + f.idx + ':' + f.type : '');
+  const s = shownLimit[k], t = openT[o.userData.cabId] || 0;
+  if (!s || !(s.t > 0) || !(t > 0)) { shownLimit[k] = { v: goal, t, fr: limitFrame }; return goal; }
+  // Drawn again (the room redraws when a cabinet opens): stay where it was shown and glide from there.
+  if (dt === undefined) { if (s.v !== goal) requestAnimationFrame(animateOpen); return s.v; }
+  if (s.fr === limitFrame) return s.v;
+  const d = goal - s.v, step = dt * rate;
+  s.v = Math.abs(d) <= step ? goal : s.v + Math.sign(d) * step; s.t = t; s.fr = limitFrame;
+  if (s.v !== goal) limitGliding = true;
+  return s.v;
 }
 // A door opens as far as it can before it hits something (see doorLimit).
 // A joined room's cabinet (House, Walk) works out its moves in its own room.
@@ -529,8 +565,9 @@ function animateOpen() {
       const c = cab(id), dur = c && (c.pocket === 'on' || c.made === 'pocketdoors') ? 1.1 : 0.45;
       openT[id] = cur + Math.sign(goal - cur) * Math.min(Math.abs(goal - cur), dt / dur); moving = true;
     });
-    viewers.forEach(v => { if (!v.ok) return; v.root.traverse(o => { if (o.userData.open && o.userData.cabId) moveFront(o, openT[o.userData.cabId] || 0); }); v.requestRender(); });
-    openAnim = moving ? requestAnimationFrame(step) : 0;
+    limitGliding = false; limitFrame++;
+    viewers.forEach(v => { if (!v.ok) return; v.root.traverse(o => { if (o.userData.open && o.userData.cabId) moveFront(o, openT[o.userData.cabId] || 0, dt); }); v.requestRender(); });
+    openAnim = moving || limitGliding ? requestAnimationFrame(step) : 0;
   };
   openAnim = requestAnimationFrame(step);
 }

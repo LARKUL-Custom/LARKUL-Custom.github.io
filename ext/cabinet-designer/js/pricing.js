@@ -449,7 +449,17 @@ function shelvesOf(c, b, p) {
 // Picked by the drawer material's name unless the price sheet has its own number for it (Edit prices › Adders).
 const DBX_PRICES = [[/melamine/i, 28], [/solid|hardwood/i, 110], [/birch|ply/i, 70]];
 const dbxDefault = t => { const n = (t && t.name) || '', hit = DBX_PRICES.find(([re]) => re.test(n)); return hit ? hit[1] : 0; };
-const dbxPrice = (ps, t) => { if (!t) return 0; const v = (ps.drawerBox || {})[t.id]; return v !== '' && v != null && isFinite(+v) ? +v : dbxDefault(t); };
+// 0.64.18 (Ayden 2026-11-26: "i want to change the cost in like the library with the drawer box templates so i can adjust it
+// when i need too"): each drawer material template carries its own Price per box (Libraries › Materials › Material templates).
+// Blank uses the shop price for that kind of box. The sheet's old per-material boxes (Adders) were moved onto the templates
+// once (dbxToTpl) and are no longer read, so there is one place to set it, the same on every price level.
+const dbxPrice = (ps, t) => { if (!t) return 0; const v = t.price; return v !== '' && v != null && isFinite(+v) ? +v : dbxDefault(t); };
+function dbxToTpl(ps) {
+  if (!S || !S.matTemplates || !Array.isArray(S.matTemplates.drawer) || S.dbxTpl) return false;
+  const src = ps && ps.drawerBox || {};
+  S.matTemplates.drawer.forEach(t => { const v = src[t.id]; if ((t.price === '' || t.price == null) && v !== '' && v != null && isFinite(+v)) t.price = +v; });
+  S.dbxTpl = 1; return true;
+}
 // 0.59.22 (Ayden 2026-11-19: fillers "need to be closer to 40 because we have to cut them to fit"): each wall filler is its
 // material by the sq ft plus the sheet's charge per filler ($35 by default), so about $37-40.
 function fillerPrice(c, b, ps) {
@@ -596,6 +606,7 @@ function ensureLibPrices(ps) {
   // 0.58.8 (Ayden 2026-11-19: countertops aren't his main thing): every top is one price per square foot, $70 to start.
   if (ps && !ps.topSq) { ps.topSq = { rate: 70 }; savePrices(); }
   if (hwCosts1119(ps)) savePrices();
+  dbxToTpl(ps);
   // 0.64.9 gave the base blind corner its own $70/ft; 0.64.12 puts it back on the Base rates (rates1126b).
   if (legCost2(ps)) savePrices();
   // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
@@ -855,8 +866,7 @@ function priceEditor(ps) {
   <div class="psec box prx-sec wide" id="ps-prod">${secHead('stack', 'Products', 'violet')}<div class="prx-h"><span class="note">Give any library product its own price. Blank uses its type. Tick Own price for items like floating shelves.</span><button class="btn sm" data-act="ps-prod">${showProd ? 'Show priced only' : `Show all ${S.library.filter(l => l.cat !== 'Shape').length}`}</button></div>${prods.length ? `<div class="tscroll"><table class="t"><thead><tr><th>Product</th><th>Type</th><th title="Priced only by this row: not a cabinet, not in the cabinet count, no installation, doors, materials or hardware">Own price</th><th class="r">Base price</th><th class="r">Per foot</th></tr></thead><tbody>
     ${prods.map(l => { const o = ps.products[l.id] || {}, ph = k => String(o.own ? 0 : ps.cab[l.cat][k]); return `<tr${o.own ? ' class="own"' : ''}><td>${esc(l.name)}</td><td><span class="catpill cat-${l.cat}">${l.cat}</span></td><td style="width:90px">${ctl(P('products.' + l.id), 'own', !!o.own, 'bool', { label: l.name + ' has its own price' })}</td><td style="width:110px">${num(P('products.' + l.id), 'base', o.base, { blank: true, ph: ph('base') })}</td><td style="width:110px">${num(P('products.' + l.id), 'perFt', o.perFt, { blank: true, ph: ph('perFt') })}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="cardbody"><div class="note">No product has its own price yet. Show all to set one.</div></div>'}</div>
   <div class="psec box prx-sec" id="ps-add">${secHead('shelf', 'Adders', 'blue')}<div class="prx-h"></div><div class="cardbody">${PRICE_ADDERS.map(([k, l]) => fld(l, P('adders'), k, ps.adders[k], 'num')).join('')}
-    <div class="prx-dbx"><div class="eyebrow">Drawer box, each, by drawer material</div><table class="t"><tbody>${S.matTemplates.drawer.map(t => `<tr><td>${esc(t.name)}</td><td style="width:110px">${num(P('drawerBox'), t.id, (ps.drawerBox || {})[t.id], { blank: true, ph: String(dbxDefault(t)), label: t.name + ' box price' })}</td></tr>`).join('')}</tbody></table>
-    <div class="note">Box and labor for each drawer (slides are priced as hardware). Blank uses the shop price for that kind of box: melamine $28, Baltic birch or ply $70, solid wood $110.</div></div>
+    <div class="note">Each drawer box has its own price on its drawer material template in Libraries › Materials › Material templates (Price per box).</div>
     <div class="note">Each insert has its own price in Libraries › Inserts.</div></div></div>
   <div class="psec box prx-sec" id="ps-panel">${secHead('box', 'Panels', 'teal')}<div class="prx-h"><span class="note">Each panel, by height</span></div><div class="cardbody">${PANEL_CATS.map(([k, l]) => fld(l, P('panelAdd'), k, (ps.panelAdd || {})[k] ?? 0, 'num')).join('')}
     <div class="note">Each flat slab end panel and loose panel is its material by the sq ft plus this. An end panel in a framed door style (Settings › Cabinet and panels) is priced as that door instead.</div></div></div>

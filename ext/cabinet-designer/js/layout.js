@@ -499,6 +499,35 @@ function islandBackReach(c, end, own) {
     return { ...q, d0: Math.min(q.d0, ext) };
   }) }));
 }
+// 0.64.22 (Ayden 2026-11-26: "the back overlaps the side instead of the side overtaking the back"): an end panel product
+// (Support/Base/Tall End Panel) standing at the end of an island or peninsula whose back panel runs across behind it is
+// pushed back over the back panel (deeper by the back panel's thickness), and the back panel stops at the end panel's
+// inside face, so the end panel covers the back panel's edge. Done once per panel (c.bkCover) and never again, so hand
+// changes to either stay. Only back panels that are plain upright boards (straight ends) are cut back.
+function islandBackCover(st) {
+  const isLeg = s => typeof shapeLeg === 'function' && shapeLeg(s), rooms = (st && st.rooms) || [];
+  let n = 0;
+  rooms.forEach(r => (r.cabinets || []).forEach(c => {
+    if (c.made !== 'panel' || c.autoOf || c.bkCover || !c.wall || Math.abs(+c.outset || 0) > 0.01) return;
+    const w = (r.walls || []).find(x => x.id === c.wall); if (!w || !(w.hidden || w.island)) return;
+    const a0 = c.off, a1 = c.off + c.w, e0 = c.elev || 0, e1 = e0 + c.h;
+    const s = (r.shapes || []).find(q => q.wall === c.wall && q.side === -c.side && q.plane === 'upright' && +q.thick > 0 && +q.thick <= 2 && !isLeg(q) && (() => {
+      const b = shapeBox(q.pts || []), q0 = (+q.off || 0), q1 = q0 + b.w, z0 = (+q.elev || 0) + b.y0, z1 = (+q.elev || 0) + b.y1;
+      // The back panel runs across the end panel and goes on past it on one side only (the island's back).
+      return q0 <= a0 + 0.01 && q1 >= a1 - 0.01 && (Math.abs(q0 - a0) < 0.01 || Math.abs(q1 - a1) < 0.01) && q1 - q0 > c.w + 1 && Math.min(z1, e1) - Math.max(z0, e0) > 1;
+    })());
+    if (!s) return;
+    const b = shapeBox(s.pts), xs = s.pts.map(p => p.x);
+    if (xs.some(x => Math.abs(x - b.x0) > 0.01 && Math.abs(x - b.x1) > 0.01) || s.pts.some(p => p.r || p.b)) return;
+    const q0 = +s.off || 0, q1 = q0 + b.w, atStart = Math.abs(q0 - a0) < 0.01, nw = r3(b.w - c.w);
+    // The along-the-wall start is off; a shape on side -1 is drawn mirrored, but its run along the wall is the same.
+    s.pts = s.pts.map(p => Math.abs(p.x - b.x1) <= 0.01 ? { ...p, x: r3(b.x0 + nw) } : p);
+    if (atStart) s.off = r3(a1);
+    const t = r3((+w.thick || 0) + (+s.outset || 0) + +s.thick);
+    c.outset = -t; c.d = r3(+c.d + t); c.bkCover = s.id; n++;
+  }));
+  return n;
+}
 // The cabinet back to back with this one at this end, on the other side of an island line: { k, end (k's end), owner
 // (this cabinet carries the shared panel) }, or null.
 function islandPartner(c, end) {

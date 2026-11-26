@@ -720,6 +720,8 @@ function migrate(s) {
   // 0.59.32 (Ayden 2026-11-20: full-height fridge panels "on by default for most jobs"): bid jobs get theirs once. Other saved
   // jobs keep what they have; a fridge placed from now on brings its panels.
   if (!out.fridgeP && typeof addFridgePanels === 'function') { const keep = S; S = out; const rid = out.roomId; try { if (lay().fridgePanels) out.rooms.forEach(r => { if ((r.cabinets || []).some(c => c.fromBid)) addFridgePanels(r); }); } catch (_) {} finally { out.roomId = rid; S = keep; } out.fridgeP = 1; }
+  // 0.64.22: end panel products at an island end run back over the island's back panel (islandBackCover in layout.js).
+  if (typeof islandBackCover === 'function') try { islandBackCover(out); } catch (_) {}
   return out;
 }
 function loadLocal() { try { return migrate(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return null; } }
@@ -739,7 +741,7 @@ function save() {
 function snapshot() { undoStack.push(JSON.stringify(S)); if (undoStack.length > 80) undoStack.shift(); redoStack = []; }
 function mutate(fn, defer) {
   ui.intSel = []; // picked interior lines point at places that may move
-  snapshot(); fn(); attachRoom(S); if (typeof apFrontSync === 'function') apFrontSync(); if (typeof pocketDoorsSync === 'function') pocketDoorsSync(); if (typeof cornerDepthSync === 'function') cornerDepthSync(); if (typeof panelItemSync === 'function') panelItemSync(); if (typeof recalcFormulas === 'function') recalcFormulas(); save();
+  snapshot(); fn(); attachRoom(S); if (typeof apFrontSync === 'function') apFrontSync(); if (typeof pocketDoorsSync === 'function') pocketDoorsSync(); if (typeof cornerDepthSync === 'function') cornerDepthSync(); if (typeof panelItemSync === 'function') panelItemSync(); if (typeof islandBackCover === 'function') islandBackCover(S); if (typeof recalcFormulas === 'function') recalcFormulas(); save();
   if (defer) setTimeout(() => { const id = document.activeElement && document.activeElement.id; render(); if (id) { const el = document.getElementById(id); if (el) el.focus({ preventScroll: true }); } }, 0);
   else render();
 }

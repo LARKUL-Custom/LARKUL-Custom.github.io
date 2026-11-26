@@ -964,7 +964,7 @@ function texDefs(ids) {
 function doorFaceSVG(ds, framed, x, y, w, h) {
   const lay = doorLayout(ds, w, h, framed), Y = z => y + h - z;
   let s = '';
-  if (framed && ds.type === 'fivepiece') lay.frame.filter(m => m.kind !== 'stile').forEach(m => { s += `<rect class="ev-frame nss" x="${x + m.x0}" y="${Y(m.z1)}" width="${m.x1 - m.x0}" height="${m.z1 - m.z0}"/>`; });
+  if (framed && ds.type === 'fivepiece' && !onePieceFrame(ds)) lay.frame.filter(m => m.kind !== 'stile').forEach(m => { s += `<rect class="ev-frame nss" x="${x + m.x0}" y="${Y(m.z1)}" width="${m.x1 - m.x0}" height="${m.z1 - m.z0}"/>`; });
   lay.fields.forEach(fl => {
     const fx = x + fl.x0, fy = Y(fl.z1), fw = fl.x1 - fl.x0, fh = fl.z1 - fl.z0;
     if (framed) {

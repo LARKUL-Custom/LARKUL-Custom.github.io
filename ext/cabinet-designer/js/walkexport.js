@@ -162,6 +162,8 @@ function wxMat(m, ctx) {
 function wxUserData(o) {
   const u = o.userData || {}, out = {};
   ['noBounds', 'cut', 'layer', 'fixtId', 'wall', 'land', 'noAO', 'wallDetail', 'room'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
+  // 0.64.21: hinge links and guide middle members follow their door or drawer (hwFollow) in the file too.
+  if (u.hwLink) out.hwLink = u.hwLink; if (u.hwP) out.hwP = u.hwP; if (u.hwHalf) out.hwHalf = true;
   if (u.cabId) out.cabId = u.cabId;
   if (u.open && u.cabId) {
     const op = u.open;
@@ -238,7 +240,7 @@ function wxWalkCss() {
   return out;
 }
 function wxPlayerCode(lib) {
-  const fns = [Viewer3D, aoSetup, aoTargets, realAO, sunAt, sunTurn, realLight, landSun, pocketMove, wg, roomViewDir].map(f => f.toString()).join('\n');
+  const fns = [Viewer3D, aoSetup, aoTargets, realAO, sunAt, sunTurn, realLight, landSun, pocketMove, wg, roomViewDir, hwLinkSet, hwFollow].map(f => f.toString()).join('\n');
   const consts = `const AO = { on: true };\nconst aoCoarse = ${aoCoarse.toString()};\nconst AO_VERT = ${JSON.stringify(AO_VERT)};\nconst AO_FRAG = ${JSON.stringify(AO_FRAG)};\nconst AO_BLUR = ${JSON.stringify(AO_BLUR)};\nconst sunLabel = ${sunLabel.toString()};\nconst mixHex = ${mixHex.toString()};\nconst ease = ${ease.toString()};\nconst CASE = ${JSON.stringify(CASE)};\nconst fixtInner = ${fixtInner.toString()};\n${doorType.toString()}\n${doorHasLeaf.toString()}\nconst fixtList = () => S.fixtures || [];\nconst fixtById = id => fixtList().find(f => f.id === id);\n`;
   return [lib.three, lib.orbit, lib.icons, WX_SHIM, consts, fns, lib.walk, wxPlayer.toString(), 'wxPlayer(WXDATA);'].join('\n;\n');
 }
@@ -371,6 +373,7 @@ function wxPlayer(W) {
         if (op.kind === 'pocket') { const m = pocketMove(o, t); o.rotation.y = op.sign * m.a; o.position.set(op.base.x + m.dx, 0, op.base.z + m.dz); }
         else if (op.kind === 'door') o.rotation.y = op.sign * (op.lead ? ease(t) * ease(t) : ease(t)) * op.swing;
         else o.position.z = ease(t) * op.travel;
+        hwFollow(o);
       });
       v.requestRender();
       openAnim = moving ? requestAnimationFrame(step) : 0;

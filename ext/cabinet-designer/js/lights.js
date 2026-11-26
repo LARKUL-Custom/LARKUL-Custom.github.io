@@ -265,6 +265,7 @@ function windowSky3(v) {
 // front, and its small shadow picture (512 px over the whole room below it) shaded the door in stripes. The shadow test
 // now starts this far (inches) off each surface, more than one shadow picture pixel there.
 const SHADOW_NB = 1.6;
+const CAN_FOCUS = 0.7;
 /* Which way the sun comes from (0.64.8, Ayden 2026-11-26: "the window doesnt actually cast shadows and i think thats
    because the side of the house the window is on but for an example i kind of need it, i can specify for future jobs if
    i really want to"). Room setting 'sun': Through the windows (default) turns the sun round so it always shines in
@@ -386,7 +387,10 @@ function addLights3d(v, R3, layerOn, ceilOn) {
     const sl = new THREE.SpotLight(new THREE.Color(p.col || col), k, dist, 1.4, 1, 1.2);
     sl.position.set(p.x, p.h - 0.6, p.y); sl.target.position.set(p.x, 0, p.y); sl.userData.puck = true;
     // A few cast shadows (under wall cabinets, beside talls); phones and tablets skip it.
-    if (!coarse && sh < 4 && LAMPS3.sh > 0) { sl.castShadow = true; sl.shadow.mapSize.set(512, 512); sl.shadow.bias = -0.0015; sl.shadow.normalBias = SHADOW_NB; sl.shadow.radius = 3; sl.shadow.camera.near = 1; sl.shadow.camera.far = dist; sh++; LAMPS3.sh--; }
+    // 0.64.22 (Ayden 2026-11-26: lines across the island end panel): the can's cone is 160° wide, so its 512 px shadow
+    // picture was over an inch a pixel at the cabinets and striped flat faces it grazes. The shadow now covers the
+    // middle of the cone (focus) in a 1024 px picture, about six times finer; past it the light fades out anyway.
+    if (!coarse && sh < 4 && LAMPS3.sh > 0) { sl.castShadow = true; sl.shadow.mapSize.set(1024, 1024); sl.shadow.focus = CAN_FOCUS; sl.shadow.bias = -0.0015; sl.shadow.normalBias = SHADOW_NB; sl.shadow.radius = 3; sl.shadow.camera.near = 1; sl.shadow.camera.far = dist; sh++; LAMPS3.sh--; }
     sl.userData.k0 = k; g.add(sl); g.add(sl.target); lamps++;
   }
   // Light from the cans bouncing off the floor and counters lights the ceiling and upper walls a little (a real room

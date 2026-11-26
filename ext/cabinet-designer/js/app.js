@@ -748,9 +748,12 @@ function dndDrop() {
 const openable = c => c.made === 'pocketdoors' || computeFronts(c).some(f => f.type === 'door' || f.type === 'drawer');
 // 0.63.31: the 3D room is not built again: the doors and drawers already in it swing and slide (animateOpen), so a
 // cabinet opens smoothly even in a big room and in Walk. Only which fronts are open is worked out again.
+// Each open cabinet remembers when it was opened (a number, counting up): what was open first keeps its room (openSolve).
+let openTurn = 0;
 function setOpen(ids, v) {
   if (ui.tab === 'room') clearOpenSolve(); else clearDoorLimits();
-  ids.forEach(id => { if (v === undefined ? !ui.open[id] : v) ui.open[id] = true; else delete ui.open[id]; });
+  const turn = ++openTurn;
+  ids.forEach(id => { if (v === undefined ? !ui.open[id] : v) ui.open[id] = ui.open[id] || turn; else delete ui.open[id]; });
   animateOpen();
   if (ui.tab === 'designer') renderDesigner();
   else if (ui.tab === 'room') { renderRoom.keep3d = true; renderRoom(); }
