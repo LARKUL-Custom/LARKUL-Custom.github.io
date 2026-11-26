@@ -337,10 +337,11 @@ function openOne(c, f, placed, cap, shutAll) {
   // fronts: that is how they were placed, not the doors running into them. Else the pair stays shut and only the
   // folding door seems to move.
   const own = fold ? cabPlanPoly(c) : null, over = new Set(own ? S.cabinets.filter(o => o.id !== c.id && over2(o)).map(o => o.id) : []);
+  // An open drawer of such a cabinet still counts: drawers go first, so the pair opens only as far as the drawer lets it.
   // That includes a cabinet right against it with no filler between: the pair could not clear it, so the pair opens
   // square instead (below), as far as it can go without a filler.
   function over2(o) { const q = cabPlanPoly(o); return q && (o.elev || 0) < z1 - 0.25 && (o.elev || 0) + o.h > z0 + 0.25 && polysHit(q, own); }
-  const near = placed.filter(p => !(p.c.id === c.id && (frontKey3(p.c, p.f) === frontKey3(c, f) || frontKey3(p.c, p.f) === foldKey)) && !over.has(p.c.id) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
+  const near = placed.filter(p => !(p.c.id === c.id && (frontKey3(p.c, p.f) === frontKey3(c, f) || frontKey3(p.c, p.f) === foldKey)) && (!over.has(p.c.id) || p.f.type === 'drawer') && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
   const still = fixedObstacles(c, z0, z1).concat(near.filter(p => p.v <= 0).reduce((a, p) => a.concat(p.poly), []))
     .concat((shutAll || []).filter(q => q.key !== frontKey3(c, f) && q.key !== foldKey && !over.has(q.key.slice(0, q.key.indexOf(':'))) && q.z0 < z1 - 0.25 && q.z1 > z0 + 0.25).reduce((a, q) => a.concat(q.poly), []));
   const moving = near.filter(p => p.v > 0).reduce((a, p) => a.concat(p.poly), []);
@@ -370,13 +371,16 @@ function clearDoorLimits() { openCache = null; shutCache = null; }
 // Only which cabinets are open changed (setOpen): the shut fronts of the room are the same, so they are kept.
 function clearOpenSolve() { openCache = null; }
 // Every open cabinet's doors and drawers, worked out together so none of them run into each other.
-// First every door goes to 90° at most and every drawer slides out, bigger fronts first: a smaller one that would hit
-// them opens only as far as it can. Then doors swing on past 90° where nothing is in the way.
+// First every drawer slides out, then every door goes to 90° at most, bigger fronts first: a front that would hit
+// one already placed opens only as far as it can. Drawers go first (Ayden 2026-11-26: "give drawer cabinet priority"),
+// so an open door next to a drawer cabinet swings less instead of holding its drawers back.
+// Then doors swing on past 90° where nothing is in the way.
 function openSolve() {
   if (openCache) return openCache;
   const items = [];
   S.cabinets.forEach((c, ci) => { if (!ui.open[c.id]) return; computeFronts(c).forEach(f => { if (f.type === 'door' || f.type === 'drawer') items.push({ c, f, ci, area: (f.x1 - f.x0) * (f.z1 - f.z0) }); }); });
-  items.sort((a, b) => b.area - a.area || a.ci - b.ci || a.f.row - b.f.row || a.f.idx - b.f.idx || (a.f.x0 - b.f.x0));
+  const drw = it => it.f.type === 'drawer' ? 0 : 1;
+  items.sort((a, b) => drw(a) - drw(b) || b.area - a.area || a.ci - b.ci || a.f.row - b.f.row || a.f.idx - b.f.idx || (a.f.x0 - b.f.x0));
   // Every front in the room, shut, with its pull: a door or drawer can't swing or slide into one that stays closed.
   const shutAll = shutCache && shutCache.cabs === S.cabinets ? shutCache.list : [];
   if (!(shutCache && shutCache.cabs === S.cabinets)) S.cabinets.forEach(c => { const fr = frontFrame(c); if (!fr) return; computeFronts(c).forEach(f => { if (f.type !== 'door' && f.type !== 'drawer' && f.type !== 'false') return;

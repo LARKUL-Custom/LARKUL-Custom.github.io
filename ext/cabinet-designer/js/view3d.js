@@ -511,7 +511,7 @@ function moveFront(o, t) {
 // A joined room's cabinet (House, Walk) works out its moves in its own room.
 function inRoomOf3(o, fn) { const id = o.userData.room, r = id && id !== S.roomId && typeof roomById === 'function' && typeof withRoom === 'function' && roomById(id); return r ? withRoom(r, fn) : fn(); }
 function doorSwing(o) { return inRoomOf3(o, () => { const c = cab(o.userData.cabId), f = o.userData.open.f; return c && f ? doorLimit(c, f) : 1.75; }); }
-// A drawer slides out as far as it can; a bigger front in the way gets the room first (see openSolve).
+// A drawer slides out as far as it can; drawers go before doors, then bigger fronts first (see openSolve).
 function drawerOut(o) { return inRoomOf3(o, () => { const c = cab(o.userData.cabId), f = o.userData.open.f; return c ? (f ? frontTravel(c, f) : drawerTravel(c)) : 0; }); }
 let openAnim = 0;
 function animateOpen() {
