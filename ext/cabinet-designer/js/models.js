@@ -66,7 +66,9 @@ const STD_MODELS = ['Standard Fridge (L)', 'French Door Fridge', 'French Door Fr
   'Undermount Bar Sink', 'Drop In Vanity Oval', 'Undermount Vanity Oval', 'Faucet_Kitchen 1', 'Faucet_Kitchen 4', 'Faucet_Kitchen 5',
   'Faucet_Kitchen 7', 'Faucet_Pot Filler 1', 'Faucet_Vanity 1', 'Faucet_Vanity 5', 'Chimney Hood', 'Glass Hood', 'Contemorary Hood',
   'Metal Hood_Taper 3s', 'Professional Hood w Full Extention', 'Standard Hood'];
-const STD_BY_LOW = new Map(STD_MODELS.concat(STD_DOOR_MODELS, STD_WINDOW_MODELS).map(n => [n.toLowerCase(), n]));
+// 0.64.24: Blum's own hinge, plate, locking device and TANDEM 563H runners (tools/blum-models.py), drawn by js/hw3d.js.
+const STD_HW_MODELS = ['Blum Hinge Cup', 'Blum Hinge Arm', 'Blum Plate', 'Blum Lock'].concat(...[15, 18, 21].map(l => ['Blum 563H ' + l + ' Cabinet', 'Blum 563H ' + l + ' Drawer']));
+const STD_BY_LOW = new Map(STD_MODELS.concat(STD_DOOR_MODELS, STD_WINDOW_MODELS, STD_HW_MODELS).map(n => [n.toLowerCase(), n]));
 const stdSlug = n => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 // The built-in model for an imported model key ("products/standard fridge (l)"), by its file name.
 const stdFor = key => { const n = STD_BY_LOW.get(String(key || '').split('/').pop().toLowerCase()); return n ? 'std:' + n : null; };

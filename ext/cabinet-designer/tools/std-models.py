@@ -117,4 +117,5 @@ def main():
     print('%-40s %7d KB' % (n, len(b) // 1024))
   print('total %.1f MB' % (total / 1048576))
 
-main()
+if __name__ == "__main__":
+  main()
