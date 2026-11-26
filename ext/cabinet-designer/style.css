@@ -291,6 +291,10 @@ svg text{font-family:var(--f-label)}
 .apanel{fill:var(--wood-edge);stroke:var(--wood-edge)}
 .ghost{fill:var(--accent);fill-opacity:.2;stroke:var(--accent);stroke-dasharray:4 3}
 .ghost.bad{fill:var(--warn);stroke:var(--warn)}
+.ghost.ghatch{fill:url(#ghHatch);fill-opacity:1;stroke:#1f6fff;stroke-width:2px;stroke-dasharray:none;vector-effect:non-scaling-stroke}
+.ghost.ghatch.bad{fill:url(#ghHatchBad);stroke:#e8590c}
+.gh-ln{stroke:#1f6fff;stroke-opacity:.55}
+.gh-ln.bad{stroke:#e8590c}
 .lbl{fill:var(--ink)}
 .lbl-m{fill:var(--muted)}
 .dimln{stroke:var(--muted);fill:none}
@@ -332,6 +336,10 @@ svg text{font-family:var(--f-label)}
 .elevarrow.prev{left:8px}
 .elevarrow.next{right:8px}
 .ev-cap{fill:var(--wall);fill-opacity:.8;stroke:var(--wall)}
+.ev-sidecab{fill:url(#evSideHatch);stroke:var(--muted);stroke-width:1px}
+.ev-sidehln{stroke:var(--ink);stroke-width:.2;stroke-opacity:.55}
+.mp-draw .ev-sidecab{stroke:#333}
+.mp-draw .ev-sidehln{stroke:#222;stroke-opacity:.85;stroke-width:.25}
 .wallpoly.cap{fill-opacity:.85}
 .capbox{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:6px}
 .capbox.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
@@ -4127,3 +4135,18 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .ev-topsel{fill:none;stroke:var(--accent);stroke-width:3px}
 .room .dock .itembar.xbar.topbar > .ib-size{grid-template-columns:repeat(4,calc(112 * var(--u)));gap:calc(6 * var(--u)) calc(10 * var(--u))}
 .topbar .ib-size .ib-wide{grid-column:span 2}
+/* 0.63.85: Measure tool dimensions (js/dimtool.js) */
+.mdim path{stroke:#1d4ed8;stroke-width:1.5;fill:none}
+.mdim .md-ext{stroke-dasharray:4 3;stroke-width:1}
+.mdim text{fill:#1d4ed8;stroke:var(--paper,#fff);stroke-width:3px;paint-order:stroke;stroke-linejoin:round;vector-effect:non-scaling-stroke;font-weight:700}
+.mdim.live path{stroke:#2563eb;stroke-dasharray:6 4}
+.mdim.live text{fill:#2563eb}
+.md-del{cursor:pointer}.md-del circle{fill:#fff;stroke:#dc2626;stroke-width:1.5;vector-effect:non-scaling-stroke}.md-del path{stroke:#dc2626;stroke-width:1.8}
+.md-del:hover circle{fill:#dc2626}.md-del:hover path{stroke:#fff}
+.md-snap{fill:none;stroke:#f97316;stroke-width:2.2}
+.md-free{stroke:#2563eb;stroke-width:1.4;fill:none}
+.md-pt{fill:#2563eb;stroke:#fff;stroke-width:1.5}
+.mdimhint{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;z-index:6;background:var(--paper,#fff);border:1.5px solid #2563eb;color:var(--ink,#111);border-radius:10px;padding:5px 12px;font-size:12.5px;line-height:1.5;box-shadow:0 2px 10px rgba(0,0,0,.12);max-width:calc(100% - 32px);text-align:center}
+.mdimhint .btn{margin-left:4px}
+.room.full3d .mdimhint{display:none}
+@media print{.mp-draw .mdim text{stroke-width:2px}}

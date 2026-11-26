@@ -34,10 +34,61 @@ function pasteSpot(o, W, at, free) {
   return null;
 }
 function pasteCab(src, at) {
-  const g = pasteSpot(src, src.w, at, (wid, side, want) => pasteFit(src, wid, side, want));
+  // 0.63.83: pasting at the pointer (plan or elevation) only goes into the open spot under it.
+  const ex = pasteAtWall(at);
+  let g;
+  if (ex) { g = pasteGapFit(src, ex); if (!g) { flash(pasteNoFit(src, ex)); return; } }
+  else g = pasteSpot(src, src.w, at, (wid, side, want) => pasteFit(src, wid, side, want));
   if (!g) { flash('There is no room for the copy there.'); return; }
   let nc; mutate(() => { nc = { ...clone(src), id: uid('c'), num: null, ...g }; S.cabinets.push(nc); ensureNums(); addCabStrips(nc.id, (clip && clip.lights) || []); });
   ui.sel = { type: 'cab', id: nc.id }; ui.elevWall = g.wall; renderRoom();
+}
+/* 0.63.83 (Ayden 2026-11-26): "paste where the cursor is so it can fit into spots, make size matter so it can only
+   copy paste where its size can fit". A paste at the pointer goes into the open stretch of wall under the pointer
+   (between cabinets, walls, doors and windows at the copy's height), lands as close to the pointer as it can there
+   and butts up to a neighbour inside the snap reach. When the copy is wider than that spot, nothing is pasted and it
+   says how wide the spot is. In the elevation the pointer height picks which normal height an upper settles at. */
+function pasteAtWall(at) {
+  if (!at) return null;
+  if (at.wid && wall(at.wid)) return { wid: at.wid, side: at.side, t: +at.a, y: isFinite(at.y) ? +at.y : NaN };
+  if (!at.p) return null;
+  let best = null; S.walls.forEach(w => { const r = segDist(at.p, w); if (r.d < 80 && (!best || r.d < best.r.d)) best = { w, r }; });
+  return best ? { wid: best.w.id, side: best.r.side, t: best.r.t, y: NaN } : null;
+}
+// The open offsets for c on that wall side, as [lo, hi] stretches of where its left end may go.
+function pasteFreeOffs(c, wid, side) {
+  const L = wg(wall(wid)).L, e = 0.005; let iv = L - c.w >= -e ? [[0, Math.max(0, L - c.w)]] : [];
+  blockedOffs(c, wid, side, null).forEach(([x0, x1]) => {
+    iv = iv.flatMap(([a, b]) => x1 <= a + e || x0 >= b - e ? [[a, b]] : [[a, Math.min(b, x0)], [Math.max(a, x1), b]].filter(([p, q]) => q >= p - e));
+  });
+  return iv;
+}
+// The spot in the open stretch under pointer spot t, or null when the copy is too big for it.
+function pasteGapOff(c, wid, side, t) {
+  const e = 0.005, g = pasteFreeOffs(c, wid, side).find(([a, b]) => t >= a - e && t <= b + c.w + e);
+  if (!g) return null;
+  const clamp = v => Math.max(g[0], Math.min(g[1], v)), want = clamp(t - c.w / 2);
+  let off = clamp(snapOff(c, wid, side, want, null, 0));
+  const reach = lay().snapReach; if (off - g[0] < reach) off = g[0]; else if (g[1] - off < reach) off = g[1];
+  return r3(off);
+}
+function pasteGapFit(src, ex) {
+  const h = +src.h || 0, y = ex.y, vd = e => !isFinite(y) ? 0 : y < e ? e - y : y > e + h ? y - e - h : 0;
+  const els = pasteElevs(src, ex.wid, ex.side, ex.t - src.w / 2).map((e, i) => ({ e, i }));
+  els.sort((a, b) => vd(a.e) - vd(b.e) || a.i - b.i);
+  for (const { e } of els) { const off = pasteGapOff({ ...src, elev: e }, ex.wid, ex.side, ex.t); if (off !== null) return { wall: ex.wid, side: ex.side, off, elev: e }; }
+  return null;
+}
+// Why it did not go in: the pointer is on something, or the open spot there is narrower than the copy.
+function pasteNoFit(src, ex) {
+  const el = pasteElevs(src, ex.wid, ex.side, ex.t - src.w / 2)[0], spec = { ...src, elev: el };
+  const L = wg(wall(ex.wid)).L, ly = lay(), obs = obstacles(ex.wid, ex.side, spec, null), t = ex.t;
+  const name = LBL[src.id] || src.name || 'the cabinet';
+  if (obs.some(o => t > o.a0 + 0.01 && t < o.a1 - 0.01)) return `That spot is taken. Point at open wall to paste ${name}.`;
+  const pad = o => o.kind === 'wall' && ly.autoFillers ? ly.fillerW : 0;
+  const lo = obs.filter(o => o.a1 <= t + 0.01).reduce((m, o) => Math.max(m, o.a1 + pad(o)), 0);
+  const hi = obs.filter(o => o.a0 >= t - 0.01).reduce((m, o) => Math.min(m, o.a0 - pad(o)), L);
+  return `${name} is ${fmtLen(src.w, 1)} wide and the open spot there is only ${fmtLen(Math.max(0, hi - lo), 1)}. Nothing was pasted.`;
 }
 /* 0.59.29 (Ayden 2026-11-20): a pasted cabinet goes where it fits and settles at its normal height, not the
    copy's odd one; he moves it up or down himself after. Bases and talls go to the floor (their library height),
@@ -84,7 +135,7 @@ function pasteShape(src, at) {
 let clipOverPlan = false, clipOverElev = null;
 document.addEventListener('pointermove', e => { clipOverPlan = !!(e.target.closest && e.target.closest('#plan')); clipOverElev = e.target.closest && e.target.closest('#elev') ? { clientX: e.clientX, clientY: e.clientY } : null; }, true);
 // Ctrl+V over the elevation pastes at the pointer along that wall.
-function clipElevAt() { const wa = clipOverElev && typeof wallAt === 'function' ? wallAt(clipOverElev) : null, w = wa && wall(wa.wid); return w ? { wid: w.id, a: wa.a, side: elevSide(w) } : null; }
+function clipElevAt() { const wa = clipOverElev && typeof wallAt === 'function' ? wallAt(clipOverElev) : null, w = wa && wall(wa.wid); if (!w) return null; const q = typeof elevPoint === 'function' ? elevPoint(clipOverElev) : null; return { wid: w.id, a: wa.a, side: elevSide(w), y: q ? -q.y : NaN }; }
 document.addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || jobs.shown || ui.tab !== 'room' || ui.quick) return;
   const tag = (e.target.tagName || '').toLowerCase();

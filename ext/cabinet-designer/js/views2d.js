@@ -78,7 +78,7 @@ function renderPlan(pr) {
   s += fixtPlanSVG();
   // ghost (placing from the library, or drag and drop)
   const gl = ui.ghost && libItem(ui.ghostLib || ui.placing);
-  if (gl) { const poly = cabPoly({ ...gl, w: ui.ghost.w || gl.w, ...(ui.ghost.cside && gl.corner ? { corner: { ...gl.corner, side: ui.ghost.cside } } : {}) }, ui.ghost); if (poly) s += `<polygon class="ghost nss" points="${polyPts(poly)}"/>`; }
+  if (gl) { const poly = cabPoly({ ...gl, w: ui.ghost.w || gl.w, ...(ui.ghost.cside && gl.corner ? { corner: { ...gl.corner, side: ui.ghost.cside } } : {}) }, ui.ghost); if (poly) s += ghostDefs(px) + `<polygon class="ghost ghatch nss${ui.ghost.bad ? ' bad' : ''}" points="${polyPts(poly)}"/>`; }
   if (ui.ghostBlocked && ui.mouse) s += `<text class="lbl dimtxt warntxt" x="${ui.mouse.x}" y="${ui.mouse.y - 14 * px}" font-size="${fs}" text-anchor="middle">No room here</text>`;
   // molding runs, drawn along the cabinet fronts or where they were placed
   moldingRuns().forEach(r => {
@@ -96,8 +96,11 @@ function renderPlan(pr) {
   s += resizeHandlesPlan();
   if (typeof topEditSVG === 'function') s += topEditSVG();
   s += boxSVG();
+  // 0.63.85: dimensions added with the Measure tool (dimtool.js).
+  if (typeof mdimSVG === 'function') s += mdimSVG('plan', px);
   if (pr) return { vb, html: s };
   setHTML(svg, s);
+  if (typeof mdimAfter === 'function') mdimAfter(svg);
   renderHint();
 }
 // Preview of the wall being drawn: dashed segment, live length, snap marker and alignment guides.
@@ -529,6 +532,8 @@ function hitHandle(p) {
 }
 function renderHint() {
   const h = $('#hint'); if (!h) return;
+  // 0.63.85: the Measure tool shows its own hint (dimtool.js).
+  if (typeof mdOn === 'function' && mdOn()) { h.hidden = true; h._html = null; return; }
   h.classList.remove('idle');
   // Phones and tablets get touch wording and a Stop button, since there is no Esc key or right-click,
   // and a Length box (which brings up the keyboard) with arrow buttons in place of typing a length.
@@ -1038,6 +1043,28 @@ function frontsSVG(c, ex, by, opts = {}) {
   });
   return opts.withDefs ? { svg: s, mats } : s;
 }
+// Cabinets not on this wall side whose plan footprint comes within 2" of its face: each drawn as a hatched block over
+// the stretch of this wall it covers, from its bottom to its top. They sit behind this wall's own cabinets.
+function sideCabs(w, side, L, cs) {
+  const g = wg(w), f0 = w.thick / 2, own = new Set(cs.map(c => c.id)), out = [];
+  S.cabinets.forEach(c => {
+    if (own.has(c.id)) return;
+    const poly = cabPoly(c); if (!poly) return;
+    const pr = poly.map(q => { const dx = q.x - w.x1, dy = q.y - w.y1; return { a: dx * g.u.x + dy * g.u.y, d: (dx * g.n.x + dy * g.n.y) * side - f0 }; });
+    const dMin = Math.min(...pr.map(q => q.d)), dMax = Math.max(...pr.map(q => q.d));
+    if (dMin > 2 || dMax < 1) return;
+    const a0 = Math.max(0, Math.min(...pr.map(q => q.a))), a1 = Math.min(L, Math.max(...pr.map(q => q.a)));
+    if (a1 - a0 < 0.25) return;
+    out.push({ c, x0: side === 1 ? a0 : L - a1, x1: side === 1 ? a1 : L - a0, z0: c.elev || 0, z1: (c.elev || 0) + c.h });
+  });
+  return out;
+}
+function sideCabsElevSVG(w, side, L, cs) {
+  const list = sideCabs(w, side, L, cs); if (!list.length) return '';
+  let s = `<defs><pattern id="evSideHatch" patternUnits="userSpaceOnUse" width="3" height="3" patternTransform="rotate(45)"><line class="ev-sidehln nss" x1="0" y1="0" x2="0" y2="3"/></pattern></defs>`;
+  list.forEach(q => { s += `<rect class="ev-sidecab nss" x="${r3(q.x0)}" y="${r3(-q.z1)}" width="${r3(q.x1 - q.x0)}" height="${r3(q.z1 - q.z0)}" pointer-events="none"><title>${esc((LBL[q.c.id] ? LBL[q.c.id] + ' ' : '') + 'on the next wall')}</title></rect>`; });
+  return s;
+}
 // pr (printing, print.js): { wall, side, w, h } draws that wall side for a page of w × h pixels and returns { vb, html }.
 function renderElev(pr) {
   const svg = pr ? null : $('#elev'), w = pr ? pr.wall : wall(ui.elevWall), note = pr ? null : $('#elevnote');
@@ -1065,6 +1092,9 @@ function renderElev(pr) {
     if (eL > 0.01) body += `<rect class="ev-cap ev-endwall nss" x="0" y="${-H}" width="${eL}" height="${H}"><title>The wall at this end</title></rect>`;
     if (eR > 0.01) body += `<rect class="ev-cap ev-endwall nss" x="${L - eR}" y="${-H}" width="${eR}" height="${H}"><title>The wall at this end</title></rect>`; }
   const mats = [], dims = []; let labels = '';
+  // 0.63.82: cabinets on the next wall that reach into this one's corner are seen end-on here: a hatched block over
+  // the depth they take up, as Mozaik draws them, so that space doesn't read as empty wall.
+  body += sideCabsElevSVG(w, side, L, cs);
   // Doors and windows sit in the wall, behind the cabinets.
   body += fixtElevSVG(w, side, L, fs, true);
   cs.forEach(c => {
@@ -1104,7 +1134,7 @@ function renderElev(pr) {
   });
   // ghost while dragging a library cabinet over the elevation
   const gl = ui.ghost && ui.ghost.wall === w.id && ui.ghost.side === side && libItem(ui.ghostLib);
-  if (gl) { const gw = ui.ghost.w || gl.w, gx = elevX({ ...gl, w: gw, side, off: ui.ghost.off }, L); body += `<rect class="ghost nss" x="${gx}" y="${-gl.elev - gl.h}" width="${gw}" height="${gl.h}"/>`; }
+  if (gl) { const gw = ui.ghost.w || gl.w, gx = elevX({ ...gl, w: gw, side, off: ui.ghost.off }, L); body += ghostDefs(ui.elevPx || 0.25) + `<rect class="ghost ghatch nss${ui.ghost.bad ? ' bad' : ''}" x="${gx}" y="${-gl.elev - gl.h}" width="${gw}" height="${gl.h}"/>`; }
   body += shapesElevSVG(w, side, L, mats);
   body += fixtElevSVG(w, side, L, fs, false);
   // The room standard gap under the ceiling: a dashed line that uppers and talls stay below.
@@ -1154,9 +1184,11 @@ function renderElev(pr) {
   }
   const rc = rzShow(); if (rc && rc.wall === w.id && rc.side === side) labels += resizeHandlesElev(rc, elevX(rc, L), L);
   if (typeof vChainSVG === 'function') labels += vChainSVG(w, side, fs, px);
+  if (typeof mdimSVG === 'function') labels += mdimSVG('elev', px, w.id, side);
   const html = `<defs>${texDefs(mats.filter(Boolean))}</defs>` + body + labels;
   if (pr) return { vb, html };
   setHTML(svg, html);
+  if (typeof mdimAfter === 'function') mdimAfter(svg);
 }
 // The open span at elevation point (x, z): out to the nearest thing at that height on each side, or the wall ends.
 // Spans are in elevation x, so they match what is drawn whichever side of the wall is shown.
@@ -1176,15 +1208,23 @@ function elevMeasure(x, z) {
   const a = Math.max(0, ...spans.filter(sp => sp[1] <= x + 0.01).map(sp => sp[1])), b = Math.min(L, ...spans.filter(sp => sp[0] >= x - 0.01).map(sp => sp[0]));
   return b - a > 0.05 ? { wall: w.id, side, z, a, b } : null;
 }
+// 0.63.84 (Ayden 2026-11-26: "i dont have a great idea where im placing this so a nice like blue outline hatched could
+// help"): where a dragged product will land shows as a blue outline with blue hatching (orange when it will overlap).
+function ghostDefs(px) {
+  const k = Math.max(0.5, Math.min(4, 8 * px)), ln = (id, cls) => `<pattern id="${id}" patternUnits="userSpaceOnUse" width="${r3(k)}" height="${r3(k)}" patternTransform="rotate(45)"><line class="${cls}" x1="0" y1="0" x2="0" y2="${r3(k)}" stroke-width="${r3(Math.max(0.08, 1.6 * px))}"/></pattern>`;
+  return `<defs>${ln('ghHatch', 'gh-ln')}${ln('ghHatchBad', 'gh-ln bad')}</defs>`;
+}
 // Where a library cabinet would land if dropped at elevation point p on the wall being shown.
 function elevGhost(l, p) {
   const w = wall(ui.elevWall); if (!w || !p) return null;
   const L = wg(w).L, side = elevSide(w);
-  const fit = fitOpening(l, w.id, side, side === 1 ? p.x : L - p.x);
+  const t = side === 1 ? p.x : L - p.x, thin = thinGapSpot(l, w.id, side, t, ui.elevPx || 1);
+  if (thin) return { wall: w.id, side, off: thin.off, ...(thin.bad ? { bad: true } : {}) };
+  const fit = fitOpening(l, w.id, side, t);
   if (fit) return { wall: w.id, side, off: fit.off, w: fit.w };
-  const want = snapOff(l, w.id, side, side === 1 ? p.x - l.w / 2 : L - p.x - l.w / 2, null, ui.elevPx || 1);
-  const off = findFree(l, w.id, side, want, null);
-  return off === null ? null : { wall: w.id, side, off };
+  const want = snapOff(l, w.id, side, t - l.w / 2, null, ui.elevPx || 1);
+  const d = dropOff(l, w.id, side, want, findFree(l, w.id, side, want, null), ui.elevPx || 1);
+  return d && { wall: w.id, side, ...d };
 }
 // Placing from the library (a product picked, then clicked onto the drawing) works in the elevation too:
 // the ghost follows the pointer along the wall being shown, and a click puts it there.
@@ -1357,7 +1397,9 @@ function initElev() {
   });
   function end() {
     const d = ui.edrag; ui.edrag = null; if (!d) return;
-    if (d.pan) { if (!d.moved && d.measure) { ui.measure = elevMeasure(d.measure.x, -d.measure.y); renderElev(); } return; }
+    // 0.63.84 (Ayden 2026-11-26: "when clicking off the selected cabinet it doesnt stop the selection"): a click on open
+    // wall or empty space lets go of what was picked, as in the plan and 3D, and still measures the opening there.
+    if (d.pan) { if (!d.moved && d.measure) { if (ui.sel || (ui.multi || []).length) select(null); ui.measure = elevMeasure(d.measure.x, -d.measure.y); renderElev(); } return; }
     if (d.resize) { rzFinish(d); return; }
     if (d.live) { undoStack.push(d.snap); redoStack = []; save(); render(); }
   }

@@ -330,6 +330,8 @@ function qPasteMany(at) {
   const fits = (w2, sd, st) => items.every(it => { const off = r3(st + it.data.off - first.off), nc = { ...it.data, id: '__probe', wall: w2, side: sd, off, elev: elevAt(it, w2, sd, off) }, f = findFree(nc, w2, sd, nc.off, null); return f !== null && Math.abs(f - nc.off) < 0.01; });
   const tries = [[wid, side, start]], explicit = !!at;
   // 0.59.29: then the nearest open spot along the originals' own wall, then the room side of every wall, then the backs.
+  // 0.63.83: at the pointer the group slides along the open stretch there (still covering the pointer), never off it.
+  if (explicit) { const t = start + span / 2; for (let d = 0.25; d <= span / 2 + 1e-6; d += 0.25) tries.push([wid, side, t - span / 2 - d], [wid, side, t - span / 2 + d]); }
   if (!explicit) {
     const sw = wall(wid);
     if (sw) { const L = wg(sw).L, near = []; for (let st = 0; st <= L - span + 1e-6; st += 1) near.push(st); near.sort((a, b) => Math.abs(a - start) - Math.abs(b - start) || a - b).forEach(st => tries.push([wid, side, st])); }

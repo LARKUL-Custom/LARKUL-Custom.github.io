@@ -118,6 +118,9 @@ function obstacles(wallId, side, spec, excludeId) {
     if (k.id !== w.id) add(sl ? wallPoly(k).concat(sl) : wallPoly(k), 'wall', k.id); capsOf(k).forEach(cp => add(capPoly(k, cp), 'wall', k.id)); });
   S.cabinets.forEach(k => {
     if (k.id === excludeId || !vOverlap(k, spec)) return;
+    // 0.63.84 (Ayden 2026-11-26: "cant actually dragndrop a panel into this 3/4 gap"): a panel put down by hand takes the
+    // place of an automatic end panel piece standing there (the cabinet then needs none, so panelItemSync drops it).
+    if (k.autoOf && spec.made === 'panel' && !spec.autoOf) return;
     // Pocket Doors (0.61.9) are fronts standing in front of other pieces: nothing is kept out of their space.
     if (k.made === 'pocketdoors') return;
     const p = cabPoly(k); if (!p) return;
@@ -200,6 +203,37 @@ function cornerSnap(spec, w, side, want, excludeId, px) {
   });
   return best;
 }
+// 0.63.84 (Ayden 2026-11-26: "i cant drag and drop into areas where it could fit, for example i want to drop a 3/4 tall
+// panel here"): a thin piece (an end panel, a filler strip, 1 1/2" or less) dropped on or near a narrow gap goes into it,
+// against the side nearer the pointer. A gap a little too narrow still takes it (the rule: never block, flag the overlap).
+// Returns { off, bad } or null when no such gap is near spot t.
+function thinGapSpot(spec, wallId, side, t, px) {
+  if (!spec || !(spec.w <= 1.5) || spec.made === 'pocketdoors') return null;
+  const w = wall(wallId); if (!w) return null;
+  const L = wg(w).L, e = 0.01, reach = Math.max(2, 12 * (px || 0));
+  const obs = obstacles(wallId, side, spec, null).map(o => [Math.max(0, o.a0), Math.min(L, o.a1)]).filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0]);
+  // The open stretches between what stands on this wall side (walls count, so a gap at a wall's end is one too).
+  const free = []; let x = 0;
+  obs.forEach(([a, b]) => { if (a > x + e) free.push([x, a]); x = Math.max(x, b); });
+  if (L > x + e) free.push([x, L]);
+  let best = null;
+  free.forEach(([a, b]) => {
+    const gw = b - a; if (gw < spec.w - 0.25 || gw > 3) return;
+    const d = t < a ? a - t : t > b ? t - b : 0; if (d > reach || (best && d >= best.d)) return;
+    const off = gw <= spec.w + e ? a : (t - a <= b - t ? a : b - spec.w);
+    best = { d, off: Math.round(off * 1000) / 1000, bad: gw < spec.w - e };
+  });
+  return best && { off: best.off, bad: best.bad };
+}
+// 0.63.84: a new piece dropped where it does not fit goes where it was dropped anyway, flagged as an overlap (Ayden 2026-11-24
+// rule: never block an edit for overlaps), instead of jumping far down the wall or saying there is no room.
+function dropOff(spec, wallId, side, want, off, px) {
+  const reach = Math.max(lay().snapReach, 12 * (px || 0), spec.w / 2);
+  if (off !== null && Math.abs(off - want) <= reach) return { off: Math.round(off * 1000) / 1000 };
+  const w = wall(wallId); if (!w) return off === null ? null : { off };
+  const L = wg(w).L; if (spec.w > L + 0.01) return null;
+  return { off: Math.round(Math.max(0, Math.min(L - spec.w, want)) * 1000) / 1000, bad: true };
+}
 function snapToWall(pt, spec, excludeId, delta, px) {
   let best = null;
   S.walls.forEach(w => {
@@ -210,12 +244,15 @@ function snapToWall(pt, spec, excludeId, delta, px) {
   if (!best) return null;
   const { w, r } = best;
   // A new cabinet over an opening takes the opening's width.
+  const thin = !excludeId && thinGapSpot(spec, w.id, r.side, r.t, px);
+  if (thin) return { wall: w.id, side: r.side, off: thin.off, ...(thin.bad ? { bad: true } : {}) };
   const fit = !excludeId && fitOpening(spec, w.id, r.side, r.t);
   if (fit) return { wall: w.id, side: r.side, off: fit.off, w: fit.w };
   const raw = r.t - spec.w / 2 - (delta || 0), cs = cornerSnap(spec, w, r.side, raw, excludeId, px);
   if (cs) return { wall: w.id, side: r.side, off: cs.off, cside: cs.cside };
   const want = snapOff(spec, w.id, r.side, raw, excludeId, px);
   const off = findFree(spec, w.id, r.side, want, excludeId);
+  if (!excludeId) { const d = dropOff(spec, w.id, r.side, want, off, px); return d && { wall: w.id, side: r.side, ...d }; }
   return off === null ? null : { wall: w.id, side: r.side, off: Math.round(off * 1000) / 1000 };
 }
 // True when a cabinet's box runs into a wall or another cabinet (at its own spot, or at o).
@@ -437,6 +474,13 @@ function endExposed(c, end, dir) {
     const gap = dir < 0 ? lo - o.a1 : o.a0 - hi; if (gap < -0.01 || gap > reach) return;
     if (o.kind !== 'cab') { wallHit = true; return; }
     const k = cab(o.id); if (!k) return;
+    // 0.63.84 (Ayden 2026-11-26: "wall panels arent going full height when they need too"): a cabinet standing a panel's
+    // thickness or more away leaves room for the whole panel beside it, so it does not cut the panel short (a tall's end
+    // panel in the 3/4" gap beside the cabinet over the fridge runs full height instead of stopping under it). Only one
+    // panel goes in a gap: the cabinet reaching higher and lower than the other one carries it (two the same: the one
+    // nearer the wall's start), and the other cabinet's end stays covered by it.
+    const ce = c.elev || 0, ke = k.elev || 0, spans = ce <= ke + 0.01 && ce + c.h >= ke + k.h - 0.01, same = Math.abs(ce - ke) < 0.01 && Math.abs(c.h - k.h) < 0.01;
+    if (gap >= panelThick(c) - 0.01 && spans && (!same || c.off < k.off)) return;
     // A filler beside the end (a Mozaik filler product) is that end's finish: a filler and a panel are never both needed.
     // A fridge panel that wants fillers too is set to Always.
     const kd = k.moz && typeof mozDef === 'function' && mozDef(k.moz);

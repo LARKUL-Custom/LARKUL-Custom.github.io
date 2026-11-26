@@ -278,7 +278,7 @@ function renderRoom() {
   renderSources();
   // View bar pills, from the main screen design: views, Draw, dimensions, open all.
   setHTML($('#viewmode'), [['plan', 'Plan view (1)', 'Plan'], ['elev', 'Elevation view (2)', 'Elevation'], ['3d', '3D view (3)', '3D']].map(([k, l, ic]) => `<button data-act="viewmode" data-id="${k}" aria-pressed="${ui.viewMode === k}" title="${l}" aria-label="${l}">${vic(ic)}</button>`).join(''));
-  setHTML($('#dimctl'), `<span class="seglbl" title="Dimensions">${vic('Dimensions')}</span>` + [['cab', 'Cabinet', 'Show cabinet sizes'], ['fronts', 'Door', 'Show door and drawer front sizes']].map(([k, l, t]) => `<button data-act="dims" data-id="${k}" aria-pressed="${!!ui.dims[k]}" title="${t}">${l}</button>`).join('') + (typeof vChainBtn === 'function' ? vChainBtn() : ''));
+  setHTML($('#dimctl'), `<span class="seglbl" title="Dimensions">${vic('Dimensions')}</span>` + [['cab', 'Cabinet', 'Show cabinet sizes'], ['fronts', 'Door', 'Show door and drawer front sizes']].map(([k, l, t]) => `<button data-act="dims" data-id="${k}" aria-pressed="${!!ui.dims[k]}" title="${t}">${l}</button>`).join('') + (typeof vChainBtn === 'function' ? vChainBtn() : '') + (typeof mdBtn === 'function' ? mdBtn() : ''));
   const anyOpen = S.cabinets.some(c => ui.open[c.id]), dm = ui.drawMold;
   const drawBtn = (act, on, ic, l, t) => `<button data-act="${act}" aria-pressed="${on}" title="${t}" class="drawbtn">${on ? icon('check') : vic(ic)}<span>${on ? 'Done' : l}</span></button>`;
   setHTML($('#drawctl'), `<span class="seglbl">Draw</span>${drawBtn('walls-draw', !!ui.drawWalls, 'Walls', 'Walls', 'Draw walls (W). Right-click or Esc stops.')}${drawBtn(dm === true ? 'gmold-stop' : 'gmold-draw', dm === true, 'Molding', 'Molding', 'Draw molding runs along the walls. Right-click or Esc stops.')}${drawBtn(dm === 'top' ? 'gmold-stop' : 'gtop-draw', dm === 'top', 'Tops', 'Tops', 'Draw countertops along the walls. Right-click or Esc stops.')}`);
@@ -806,6 +806,7 @@ function showCtx(id, x, y) {
 function showWallCtx(wid, a, x, y) {
   const w = wall(wid); if (!w) return;
   if (inMultiW(wid)) { showMultiWallCtx(x, y); return; }
+  ui.ctxClient = { clientX: x, clientY: y };
   const es = elevSide(w), L = wg(w).L, from = es === 1 ? a : L - a, m = $('#ctxmenu');
   const item = (act, id, label) => `<button role="menuitem" data-act="${act}" data-id="${id}">${label}</button>`;
   const end = side => (es === 1) === (side === 'L') ? 'S' : 'E', on = side => (w['cap' + end(side)] || {}).on || wallEndJoined(w, end(side));
@@ -1259,7 +1260,8 @@ document.addEventListener('click', e => {
       // On a wall: the side clicked in the plan, or the side the elevation looks at.
       const [wid, at] = id.split(':'), w = wall(wid); hideCtx(); if (!w) break;
       const side = ui.viewMode === 'plan' && ui.ctxPt ? segDist(ui.ctxPt, w).side : elevSide(w);
-      clipPaste({ wid, a: +at, side }); break;
+      const q = ui.viewMode !== 'plan' && ui.ctxClient && typeof elevPoint === 'function' ? elevPoint(ui.ctxClient) : null;
+      clipPaste({ wid, a: +at, side, y: q ? -q.y : NaN }); break;
     }
     case 'cab-dup': {
       const c = cab(id), off = findFree(c, c.wall, c.side, c.off + c.w, null);
