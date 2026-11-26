@@ -246,6 +246,7 @@ function walkStart() {
   // rebuilt room, the sun). Before, every light's shadow was drawn again every frame, the biggest cost in a frame.
   // A high-resolution screen walks at one picture pixel per screen pixel (not two), a quarter of the work.
   WALK.pr0 = v.renderer.getPixelRatio(); if (WALK.pr0 > 1) { v.renderer.setPixelRatio(1); v.resize(); }
+  WALK.prW = v.renderer.getPixelRatio(); WALK.resOn = 0; WALK.resLv = 0; WALK.ft = 16;
   v.renderer.shadowMap.autoUpdate = false; v.renderer.shadowMap.needsUpdate = true;
   WALK.on = true; v.walk = true; WALK.keys = {}; WALK.stick = null; WALK.solids = null; WALK.vx = WALK.vz = WALK.turnV = 0;
   walkRooms(v);
@@ -262,7 +263,7 @@ function walkStop() {
   if (WALK.raf) cancelAnimationFrame(WALK.raf); WALK.raf = 0;
   // Lights back on: lights off is only for the walk.
   if (WALK.dark || WALK.darkOn) { WALK.dark = false; walkLights(v, false); v.requestRender(); }
-  walkRoomsOff(v);
+  walkRoomsOff(v); walkHwShow(); walkResOff(v);
   walkUI(v, false);
   v.renderer.shadowMap.autoUpdate = true; v.renderer.shadowMap.needsUpdate = true;
   if (WALK.pr0 > 1) { v.renderer.setPixelRatio(WALK.pr0); v.resize(); } WALK.pr0 = 0;
@@ -479,6 +480,41 @@ function walkLoop() {
   };
   WALK.raf = requestAnimationFrame(step);
 }
+
+/* ---------- Less to draw (0.64.25, Ayden 2026-11-26: "make as many performance changes as possible to get it running
+   so smooth its like air") ---------- */
+// Hinges, drawer guides, pull screws and shelf holes inside a cabinet whose doors and drawers are all shut can't be
+// seen, and the real Blum models are most of the triangles in a kitchen (about 270,000 of 320,000 in the Johnson
+// kitchen). While walking they are hidden until that cabinet opens (marked hwHide when the room is drawn: no glass,
+// no open shelf). Runs before every Walk frame (Viewer3D.draw), in the walk file too.
+function walkHwCull(v) {
+  if (WALK.hwFirst !== v.root.children[0] || WALK.hwN !== v.root.children.length) {
+    WALK.hw = []; v.root.traverse(o => { if (o.userData.hwHide) WALK.hw.push(o); });
+    WALK.hwFirst = v.root.children[0]; WALK.hwN = v.root.children.length;
+  }
+  const ot = typeof openT === 'object' ? openT : {}, uo = (typeof ui === 'object' && ui.open) || {};
+  for (const o of WALK.hw) { const id = o.userData.cabId; o.visible = !!(uo[id] || ot[id] > 0); }
+}
+// 0.64.25: while moving, a slow computer draws the picture a little smaller (down to 55%) so the walk keeps up;
+// the frame time decides, checked every half second. Standing still always draws at full size, so the still look never changes.
+const WALK_RES = [1, 0.85, 0.7, 0.55];
+function walkRes(v) {
+  const now = performance.now(), moving = now - (WALK.movedAt || 0) < 250, gap = now - (WALK.lastDraw || 0);
+  WALK.lastDraw = now;
+  if (moving && gap < 100) WALK.ft = (WALK.ft || 16) * 0.85 + gap * 0.15;
+  if (moving && now - (WALK.resAt || 0) > 500) {
+    WALK.resAt = now; const lv = WALK.resLv || 0;
+    // Slower than about 42 frames a second: one step smaller. Keeping up with the screen for 2 s: try one step bigger.
+    if (WALK.ft > 24 && lv < WALK_RES.length - 1) { WALK.resLv = lv + 1; WALK.upAt = now; }
+    else if (WALK.ft < 18.5 && lv > 0 && now - (WALK.upAt || 0) > 2000) { WALK.resLv = lv - 1; WALK.upAt = now; }
+  }
+  const want = moving ? (WALK.resLv || 0) : 0;
+  if (want === (WALK.resOn || 0)) return;
+  WALK.resOn = want; const w = v.host.clientWidth, h = v.host.clientHeight; if (!w || !h) return;
+  v.renderer.setPixelRatio((WALK.prW || 1) * WALK_RES[want]); v.renderer.setSize(w, h, false);
+}
+function walkResOff(v) { if (WALK.resOn) { v.renderer.setPixelRatio(WALK.prW || 1); WALK.resOn = 0; v.resize(); } WALK.ft = 16; WALK.resLv = 0; }
+function walkHwShow() { (WALK.hw || []).forEach(o => { o.visible = true; }); WALK.hw = null; WALK.hwFirst = null; }
 
 // Keys while walking go to the walk only (so W does not start drawing walls and F does not change the view).
 window.addEventListener('keydown', e => {

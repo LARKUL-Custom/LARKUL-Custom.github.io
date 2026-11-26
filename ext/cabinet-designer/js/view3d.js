@@ -633,7 +633,7 @@ class Viewer3D {
     this.requestRender();
   }
   requestRender() { if (!this.ok || this.raf) return; this.raf = requestAnimationFrame(() => { this.raf = 0; this.draw(); }); }
-  draw() { if (this.beforeDraw) this.beforeDraw(); this.renderer.render(this.scene, this.cam); if (this.real && typeof realAO === 'function') realAO(this); }
+  draw() { if (this.walk && typeof walkHwCull === 'function') { walkHwCull(this); if (typeof walkRes === 'function') walkRes(this); } if (this.beforeDraw) this.beforeDraw(); this.renderer.render(this.scene, this.cam); if (this.real && typeof realAO === 'function') realAO(this); }
   // Realistic look: tone mapping, soft shadows from one sun and reflections from a soft studio around the room.
   setReal(on) {
     if (!this.ok || this.real === on) return;
@@ -830,7 +830,8 @@ function buildRoomScene(v) {
   }
   if (!v.fitted && !v.walk) { v.fitted = true; v.look(roomViewDir(0.75)); }
   if (R3) {
-    v.root.traverse(o => { if (o.isMesh && !o.material.transparent && !o.receiveShadow && o.userData.layer !== 'lights') { o.castShadow = true; o.receiveShadow = true; } });
+    // 0.64.25: hardware (hinges, guides, shelf holes) casts no shadow: too small to see, and every shadow redraw drew it.
+    v.root.traverse(o => { if (o.isMesh && !o.material.transparent && !o.receiveShadow && o.userData.layer !== 'lights' && !o.userData.hw) { o.castShadow = true; o.receiveShadow = true; } });
     // Walls and the ceiling cast shadows too, so daylight only gets in through windows, doorways and open sides.
     v.fitShadow();
   }
@@ -912,6 +913,8 @@ function roomScene3(v, o) {
     const grp = wallGroup(w, c.side, c.side === 1 ? c.off : c.off + c.w, c.outset || 0);
     const hot = ui.dropCab === c.id ? dropCol : selId === c.id ? selCol : null;
     const m = cabinetMeshes(c, hot ? { sel: hot, layers: L } : { layers: L }); m.position.y = c.elev; grp.add(m);
+    // 0.64.25: hardware behind shut doors and drawers is hidden while walking (walk3d.js walkHwCull) until it opens.
+    if (hwHideable(c)) m.traverse(o => { if (o.userData.hw) o.userData.hwHide = true; });
     const p = effParams(c), D = c.d;
     if (ui.dims.fronts && !R3 && L.labels && L.fronts) computeFronts(c, p).filter(f => f.type !== 'open').forEach(f => {
       const fw = f.x1 - f.x0, fh = f.z1 - f.z0, ft = (mat(frontStyle(c, f).ds.mat) || { thick: 0.75 }).thick;
@@ -999,6 +1002,14 @@ function roomScene3(v, o) {
     v.root.add(grp);
   });
   addLights3d(v, R3, L.lights, L.ceiling);
+}
+// Every opening of the cabinet is closed off by a door or drawer front you can't see through (no open shelf, no glass).
+function hwHideable(c) {
+  try {
+    if (typeof openable === 'function' && !openable(c)) return false;
+    const fr = computeFronts(c); if (!fr.length || fr.some(f => f.type === 'open')) return false;
+    return !fr.some(f => { const ds = (frontStyle(c, f) || {}).ds || {}; return ds.panelType === 'glass' || (ds.fields || []).some(q => q.pt === 'glass'); });
+  } catch (_) { return false; }
 }
 // Presentation picture of the 3D view at about 2400 pixels wide, without the selection highlight.
 function roomImage() {

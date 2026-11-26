@@ -161,7 +161,7 @@ function wxMat(m, ctx) {
 // What the walk file keeps from each object's notes: what blocks the way, what opens, and nothing about parts.
 function wxUserData(o) {
   const u = o.userData || {}, out = {};
-  ['noBounds', 'cut', 'layer', 'fixtId', 'wall', 'land', 'noAO', 'wallDetail', 'room'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
+  ['noBounds', 'cut', 'layer', 'fixtId', 'wall', 'land', 'noAO', 'wallDetail', 'room', 'hw', 'hwHide'].forEach(k => { if (u[k] !== undefined && typeof u[k] !== 'object') out[k] = u[k]; });
   // 0.64.21: hinge links and guide middle members follow their door or drawer (hwFollow) in the file too.
   if (u.hwLink) out.hwLink = u.hwLink; if (u.hwP) out.hwP = u.hwP; if (u.hwHalf) out.hwHalf = true;
   if (u.cabId) out.cabId = u.cabId;
