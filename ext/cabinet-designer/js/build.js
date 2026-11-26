@@ -1725,6 +1725,9 @@ function countertopRunsAll() {
     // 0.63.5: in front of a wall's stone or panels the top starts at their face (r.back off the wall face).
     const wdw = typeof wdDepthAt === 'function' && wall(r.wall);
     r.back = wdw && wdw.detail ? wdDepthAt(wdw, r.side, r.top, r.top + r.thick) : 0;
+    // 0.63.93 (Ayden 2026-11-26: tops "dont account for the back panel on the island"): an island top runs back over the
+    // island's back panel and past it by the open end overhang (ovB on the top to change it), like an open end.
+    const ib = islandTopBack(r); if (ib) { r.back = -r3(ib + (has(o, 'ovB') ? Math.max(0, +o.ovB || 0) : +r.tpl.endOverhang || 0)); r.backPanel = ib; }
     // 0.63.12: a front overhang set on this top by right-clicking its front edge (ovF), else the style's.
     r.ovF = has(o, 'ovF') ? Math.max(-r.d + 1, +o.ovF || 0) : +r.tpl.frontOverhang || 0;
     r.depth = r.d + r.ovF - r.back;
@@ -1732,8 +1735,18 @@ function countertopRunsAll() {
   (S.genTops || []).forEach(g => {
     if (!wall(g.wall)) return;
     const tpl = countertop(g.top || roomSet('countertop')), start = +g.off || 0, len = Math.max(0.25, +g.len || 0), depth = +g.depth || 25.5;
-    runs.push({ generic: g.id, key: 'gen:' + g.id, name: g.name, wall: g.wall, side: +g.side || 1, start, end: start + len, top: +g.z || 0, bottom: +g.z || 0, d: depth - tpl.frontOverhang, cabs: [], o: {}, tpl, on: true, priced: g.price !== false, rate: g.rate, ovS: 0, ovE: 0, len, depth, thick: +g.thick || tpl.thick, back: Math.max(0, +g.out || 0) });
+    const r = { generic: g.id, key: 'gen:' + g.id, name: g.name, wall: g.wall, side: +g.side || 1, start, end: start + len, top: +g.z || 0, bottom: +g.z || 0, d: depth - tpl.frontOverhang, cabs: [], o: {}, tpl, on: true, priced: g.price !== false, rate: g.rate, ovS: 0, ovE: 0, len, depth, thick: +g.thick || tpl.thick, back: Math.max(0, +g.out || 0) };
+    // 0.63.93: a top placed by hand on an island line runs back over the back panel too, unless it was set off the wall.
+    if (!(+g.out > 0)) { const ib = islandTopBack(r); if (ib) { const x = r3(ib + (has(g, 'ovB') ? Math.max(0, +g.ovB || 0) : +tpl.endOverhang || 0)); r.back = -x; r.depth = r3(depth + x); r.backPanel = ib; } }
+    runs.push(r);
   });
+  // 0.63.93 (Ayden 2026-11-26, Johnson kitchen: "some weird pushed out area" where the peninsula top meets the sink run): a
+  // filler on its own under a top placed by hand (its cabinets' tops turned off) carries no top of its own. It made a
+  // little top 1/2" proud of the hand-placed one, which took the corner joint from it. A lone filler with no top over it
+  // (beside a range) keeps its strip.
+  const fillerOnly = r => r.cabs.length && r.cabs.every(id => { const k = S.cabinets.find(x => x.id === id), d = k && k.moz && typeof mozDef === 'function' && mozDef(k.moz); return d && d.group === 'filler'; });
+  const covered = r => runs.some(g => g.generic && g.wall === r.wall && g.side === r.side && Math.min(g.end, r.end) - Math.max(g.start, r.start) > 0.5);
+  for (let i = runs.length - 1; i >= 0; i--) if (!runs[i].generic && fillerOnly(runs[i]) && covered(runs[i])) runs.splice(i, 1);
   // Corners where two tops meet: mitered or one running through (ctjoint.js). Reshapes the tops and their lengths.
   runs.corners = typeof ctjApply === 'function' ? ctjApply(runs) : [];
   // 0.59.1 (Ayden 2026-11-19, right-click a top's edge in the Tops tab): each top's backsplash height (bs on the run, or
@@ -1763,6 +1776,21 @@ function countertopRunsAll() {
   return runs;
 }
 
+// How far behind an island top's cabinets the island's back panel reaches (the line's thickness plus the panel), or 0:
+// an upright panel shape on the other side of an island line, along the top and standing up under it.
+function islandTopBack(r) {
+  const w = wall(r.wall); if (!w || !(w.island || w.hidden)) return 0;
+  const a0 = r.start, a1 = r.end;
+  const bk = (S.shapes || []).filter(s => s.wall === r.wall && (+s.side || 1) === -r.side && s.plane === 'upright' && +s.thick > 0 && +s.thick <= 2
+    && !(typeof shapeLeg === 'function' && shapeLeg(s)) && (s.pts || []).length).filter(s => {
+    const b = shapeBox(s.pts), s0 = (+s.off || 0) + b.x0, s1 = (+s.off || 0) + b.x1, top = (+s.elev || 0) + b.y1;
+    return Math.min(s1, a1) - Math.max(s0, a0) > 1 && Math.abs(top - r.top) < 3;
+  });
+  if (!bk.length) return 0;
+  // Cabinets back to back on the other side carry their own top there.
+  if (S.cabinets.some(k => k.wall === r.wall && k.side === -r.side && k.cat === 'Base' && Math.min(k.off + k.w, a1) - Math.max(k.off, a0) > 1)) return 0;
+  return r3((+w.thick || 0) + Math.max(...bk.map(s => (+s.outset || 0) + +s.thick)));
+}
 // How thick the applied end panel is on a run's end cabinet at that end (0 when none reaches up under the top).
 function ctEndPanel(r, e) {
   const at = e === 'S' ? r.start : r.end, c = r.cabs.map(id => S.cabinets.find(x => x.id === id)).find(k => k && Math.abs((e === 'S' ? k.off : k.off + k.w) - at) < 0.3);
