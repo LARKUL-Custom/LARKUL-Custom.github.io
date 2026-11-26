@@ -886,7 +886,11 @@ function roomScene3(v, o) {
     if (hot) {
       // Outline drawn on top of everything so the selection shows through walls and other cabinets.
       grp.updateMatrixWorld(true);
-      const bh = new THREE.BoxHelper(m, new THREE.Color(hot)); bh.material.depthTest = false; bh.material.transparent = true; bh.renderOrder = 15; bh.update();
+      // 0.63.98 (Ayden 2026-11-26: "select looks odd on the btf left"): the box goes round the piece itself, not its name tag
+      // (a 3" filler's tag is wider than it is, so the box ballooned out past it).
+      const bb = new THREE.Box3();
+      m.traverse(o => { if (o.isSprite || o.userData.noBounds) return; const g = o.geometry; if (!g || o.visible === false) return; if (!g.boundingBox) g.computeBoundingBox(); if (g.boundingBox && !g.boundingBox.isEmpty()) bb.union(g.boundingBox.clone().applyMatrix4(o.matrixWorld)); });
+      const bh = new THREE.Box3Helper(bb.isEmpty() ? new THREE.Box3().setFromObject(m) : bb, new THREE.Color(hot)); bh.material.depthTest = false; bh.material.transparent = true; bh.renderOrder = 15;
       bh.userData.noBounds = true; v.root.add(bh);
     }
   });

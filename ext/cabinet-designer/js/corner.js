@@ -285,6 +285,7 @@ function cornerBox(c) {
     ${c.corner.type === 'l' ? fld('Door widths', K, 'doors', c.corner.doors || '', 'select', { options: [{ v: '', l: 'Second door past the first' }, { v: 'pair', l: 'Each as wide as its face (Mozaik)' }] })
       + fld('Door on the cabinet', K, 'hingeMain', c.corner.hingeMain || '', 'select', { options: [{ v: '', l: 'Cabinet hinge' }, ...opts(hwOf('hinge'))] })
       + fld('Between the doors', K, 'hingeFold', c.corner.hingeFold || '', 'select', { options: [{ v: '', l: '110° hinge' }, ...opts(hwOf('hinge'))] }) : ''}</div>
+    ${blind ? '' : `<div class="note">${c.fromMozaik || c.moz ? 'Depths as drawn in Mozaik.' : cornerHand(c) ? 'Depth set by hand: it no longer follows the cabinets beside it. ' + cornerFollowBtn(c) : 'Depth on each wall matches the cabinet beside it there, until you change it.'}</div>`}
     <div class="note">${blind ? 'The blind side goes into the corner, behind the cabinet on the other wall. A blind panel covers it; the doors and drawers fill the rest.' : 'Width runs along this wall and depth runs out along the other wall. Depth on each wall is how deep the cabinet is there; Angled back cuts off the back corner where the walls meet (0 is square).'}${c.corner.type === 'l' ? ' The two doors are a bi-fold: one hangs on the cabinet, the other hangs on it and they straighten out as they open. One pull, on the second door.' : ''}</div></div>`;
 }
 // The Left/Right switch on the bar under the drawing.
@@ -331,3 +332,84 @@ function cornerFromTop(c, pts) {
   }
   return false;
 }
+
+/* ---------- Depth follows the cabinets beside it (0.63.94) ---------- */
+// Ayden 2026-11-26: "i want the corner cabinets to auto adjust and match the depth of cabinets connected to it, but i can
+// still change it manually in the shape tab". A corner's depth on each wall follows the cabinet butted against it there:
+// a 45° or 90° corner's leg on this wall (corner.leg) follows the cabinet past its open end, and its return leg
+// (corner.leg2) the cabinet on the other wall in front of the return leg's end. 0.63.99 (Ayden: "only for actual corner
+// cabinets like 90s and 45s"): blind corners keep their own depth. Like the automatic end panel pieces, it follows until you change it: the value it last set is
+// kept (corner.autoLeg / autoLeg2) and a different value means you set it (corner.handLeg / handLeg2),
+// from the Shape tab, the Corner box or the item bar. Follow again (corner-follow) clears that. Mozaik jobs keep their
+// depths (the import copies the design as drawn). Nothing beside it: the depth stays as it is.
+const CORNER_REACH = 2; // a 3/4" end panel or a 1 1/2" filler between still counts as beside it
+// The cabinet a corner's depth follows: a real cabinet (not a panel piece, filler, leg or another corner) standing on the
+// same height, within reach.
+function cornerFollowable(k, c) {
+  if (!k || k === c || k.autoOf || k.made || isCorner(k) || !vOverlap(k, c)) return false;
+  const l = k.libId && typeof libItem === 'function' && libItem(k.libId);
+  if (l && typeof libGroup === 'function' && libGroup(l) === 'filler') return false;
+  const d = k.moz && typeof mozDef === 'function' && mozDef(k.moz); if (d && d.group === 'filler') return false;
+  return !(/\b(?:filler|scribe|legs?|levelers?)\b|\bpanel\b/i.test(String(k.name || '')) && !/\bvanity\b/i.test(String(k.name || '')));
+}
+// How deep this wall's neighbour wants the corner, from the corner's own back (null when there is none).
+function cornerDepthHere(c) {
+  const open = cornerSide(c) === 'L' ? 'R' : 'L', dir = (open === 'L') === (c.side === 1) ? -1 : 1, lo = c.off, hi = c.off + c.w;
+  let best = null;
+  obstacles(c.wall, c.side, { ...c, outset: 0, d: 999 }, c.id).forEach(o => {
+    if (o.kind !== 'cab' || Math.min(o.a1, hi) - Math.max(o.a0, lo) > 0.01) return;
+    const gap = dir < 0 ? lo - o.a1 : o.a0 - hi, k = cab(o.id);
+    if (gap < -0.01 || gap > CORNER_REACH || !cornerFollowable(k, c) || k.wall !== c.wall || (best && gap >= best.gap)) return;
+    best = { gap, k };
+  });
+  return best ? r3((best.k.outset || 0) + best.k.d - (c.outset || 0)) : null;
+}
+// How deep the cabinet on the other wall wants the corner's return leg, from the corner's end (null when there is none).
+function cornerDepthThere(c) {
+  const ce = cornerSide(c), n = nearestAt(c, (ce === 'L') === (c.side === 1) ? -1 : 1);
+  if (!n || n.kind !== 'wall' || n.gap > CORNER_REACH) return null;
+  const R = wall(n.id); if (!R) return null;
+  const xs = v => ce === 'L' ? v : c.w - v, at = (x, y) => cabPt(c, c.side === 1 ? x : c.w - x, y);
+  const face = at(xs(cornerLeg2(c) / 2), c.d), end = at(xs(0), c.d / 2);
+  let best = null;
+  S.cabinets.forEach(k => {
+    if (k.wall !== R.id || !cornerFollowable(k, c)) return;
+    const F = wallFrame(R, k.side), p = F(face), back = R.thick / 2 + (k.outset || 0);
+    if (p.b < back - 0.5 || p.b > back + k.d + 0.5) return; // the leg's end is not in front of this cabinet's depth
+    const gap = Math.min(Math.abs(p.a - k.off), Math.abs(p.a - (k.off + k.w))); if (gap > CORNER_REACH || (best && gap >= best.gap)) return;
+    best = { gap, k, g: F(end).b - R.thick / 2 };
+  });
+  return best ? r3((best.k.outset || 0) + best.k.d - best.g) : null;
+}
+// One depth: keeps following while the value is the one it last set (or, for a corner from before this, the library's).
+// Match beside (corner.follow) takes whatever is there now as the start.
+function cornerFollowOne(o, auto, hand, cur, libV, want, set) {
+  if (o[hand]) return;
+  if (o[auto] === undefined ? !o.follow && !(libV === undefined || Math.abs(cur - libV) < 1e-3) : Math.abs(cur - o[auto]) > 1e-3) { o[hand] = 1; delete o[auto]; return; }
+  if (want === null || !(want >= 3)) return;
+  if (Math.abs(cur - want) > 1e-3) set(want);
+  o[auto] = want;
+}
+function cornerDepthSync() {
+  (S.rooms || []).forEach(r => withRoom(r, () => r.cabinets.forEach(c => {
+    if (!angledCorner(c) || c.fromMozaik || c.moz || !c.wall || !wall(c.wall)) return;
+    const o = c.corner, l = c.libId && typeof libItem === 'function' && libItem(c.libId), lc = (l && l.corner) || {};
+    const raw = () => +o.leg > 0 ? +o.leg : (c.cat === 'Wall' ? 12 : 24), raw2 = () => +o.leg2 > 0 ? +o.leg2 : raw();
+    const libLeg = +lc.leg > 0 ? +lc.leg : (c.cat === 'Wall' ? 12 : 24);
+    // Read the return leg first: it falls back to the leg, so a change to the leg must not look like a hand edit.
+    const leg2Before = raw2(), legBefore = raw();
+    cornerFollowOne(o, 'autoLeg', 'handLeg', legBefore, libLeg, cornerDepthHere(c), v => { o.leg = v; });
+    if (!(+o.leg2 > 0) && !o.handLeg2 && o.autoLeg2 === undefined) o.leg2 = leg2Before; // keep the return leg its own value
+    cornerFollowOne(o, 'autoLeg2', 'handLeg2', raw2(), +lc.leg2 > 0 ? +lc.leg2 : libLeg, cornerDepthThere(c), v => { o.leg2 = v; });
+    delete o.follow;
+  })));
+}
+// Set by hand: whether a depth stopped following, and the button that makes it follow again.
+const cornerHand = c => angledCorner(c) && !!(c.corner.handLeg || c.corner.handLeg2);
+const cornerFollowBtn = c => cornerHand(c) ? `<button class="btn sm" data-act="corner-follow" data-id="${c.id}" title="Depths set by hand. Make them match the cabinets beside this corner again">Match beside</button>` : '';
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-act="corner-follow"]'); if (!b) return;
+  e.stopPropagation();
+  const c = cab(b.dataset.id); if (!c || !angledCorner(c)) return;
+  mutate(() => { ['handLeg', 'handLeg2', 'autoLeg', 'autoLeg2'].forEach(k => delete c.corner[k]); c.corner.follow = 1; if (typeof cabLog === 'function') cabLog(c, 'Corner depth matches the cabinets beside it'); });
+}, true);

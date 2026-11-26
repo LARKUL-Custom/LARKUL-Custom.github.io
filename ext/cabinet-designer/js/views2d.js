@@ -932,7 +932,7 @@ function initPlan() {
       else commitWallSegment();
       return;
     }
-    if (d.mode === 'cab' && d.live) { const c = cab(d.id); if (c) ['L', 'R'].forEach(e => { if (c['fill' + e] === 'on') c['fill' + e] = ''; }); }
+    if (d.mode === 'cab' && d.live) { const c = cab(d.id); if (c) { ['L', 'R'].forEach(e => { if (c['fill' + e] === 'on') c['fill' + e] = ''; }); fillerSettle(c); } }
     if ((d.mode === 'cab' || d.mode === 'handle' || d.mode === 'wall' || d.mode === 'shape' || d.mode === 'fixt') && d.live) { undoStack.push(d.snap); redoStack = []; save(); render(); }
     else if (d.mode === 'cab' && d.was && d.hits.length > 1) { const i = d.hits.indexOf(d.id); select({ type: 'cab', id: d.hits[(i + 1) % d.hits.length] }); }
   };

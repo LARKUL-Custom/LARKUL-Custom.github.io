@@ -344,11 +344,57 @@ function fillerFlushOutset(c) {
       if (gap > 1 + 0.01 || (best && gap >= best.gap)) return;
       best = { gap, nb };
     });
+    // 0.63.95 (Ayden 2026-11-26: the filler went in at the wall beside the dishwasher): beside an appliance it lines up
+    // with the door faces of the nearest cabinet on the same run.
+    if (!best && obstacles(c.wall, c.side, { ...c, outset: 0, d: 999 }, c.id).some(o => o.kind === 'fx' && Math.min(Math.abs(o.a0 - (c.off + c.w)), Math.abs(c.off - o.a1)) <= 1.01)) {
+      const mid = c.off + c.w / 2;
+      S.cabinets.forEach(k => {
+        if (k === c || k.wall !== c.wall || k.side !== c.side || k.moz || k.made || k.autoOf || !vOverlap(k, c)) return;
+        const gap = Math.abs(k.off + k.w / 2 - mid);
+        if (!best || gap < best.gap) best = { gap, nb: k };
+      });
+    }
     if (!best) return null;
     const nb = best.nb, fr = computeFronts(nb).find(f => f.type !== 'open');
     const ft = fr ? ((mat(frontStyle(nb, fr).ds.mat) || {}).thick || 0.75) : 0;
     return Math.round(((nb.outset || 0) + nb.d + (ft ? ft + frontOff(nb) : 0) - c.d) * 1000) / 1000;
   });
+}
+// 0.63.95 (Ayden 2026-11-26: "filler isnt being placed right, it needs to go from the dishwasher to the cabinet on the
+// other wall to form like a fake connection or seamless look"): a Mozaik filler put in a narrow gap (6" or less, at its own
+// front) stretches across it, and where the gap ends at a cabinet on the other wall of a corner it runs to that cabinet's
+// door face, so the two runs meet. Returns { off, w } or null when it is not in such a gap.
+const FILLER_GAP_MAX = 6;
+function fillerGapFit(c) {
+  const d = c && c.moz && typeof mozDef === 'function' && mozDef(c.moz);
+  if (!d || d.group !== 'filler' || /corner|ceiling/.test(c.moz) || !c.wall) return null;
+  return inRoomOf(c, () => {
+    const w = wall(c.wall); if (!w) return null;
+    const L = wg(w).L, F = wallFrame(w, c.side), e = 0.01, b0 = w.thick / 2 + (c.outset || 0), b1 = b0 + c.d;
+    const spans = obstacles(c.wall, c.side, c, c.id).map(o => {
+      const k = o.kind === 'cab' && cab(o.id);
+      // A cabinet on another wall: its doors count too (the box alone stops short of the face the filler meets).
+      if (k && k.wall !== c.wall) {
+        const p = cabPoly({ ...k, d: faceOut(k) - (k.outset || 0) }); if (p) {
+          const q = p.map(F), bl = Math.min(...q.map(v => v.b)), bh = Math.max(...q.map(v => v.b));
+          if (Math.min(bh, b1) - Math.max(bl, b0) > e) return [Math.min(...q.map(v => v.a)), Math.max(...q.map(v => v.a))];
+        }
+      }
+      return [o.a0, o.a1];
+    }).map(([a, b]) => [Math.max(0, a), Math.min(L, b)]).filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0]);
+    const free = []; let x = 0;
+    spans.forEach(([a, b]) => { if (a > x + e) free.push([x, a]); x = Math.max(x, b); });
+    if (L > x + e) free.push([x, L]);
+    const mid = c.off + c.w / 2, g = free.find(([a, b]) => mid >= a - e && mid <= b + e);
+    if (!g || g[1] - g[0] > FILLER_GAP_MAX + e || g[1] - g[0] < 0.125) return null;
+    const off = r3(g[0]), fw = r3(g[1] - g[0]);
+    return Math.abs(off - c.off) < 0.001 && Math.abs(fw - c.w) < 0.001 ? null : { off, w: fw };
+  });
+}
+// A Mozaik filler just put down or moved: flush with the doors beside it, then across the gap it stands in.
+function fillerSettle(c) {
+  const fo = fillerFlushOutset(c); if (fo !== null) c.outset = fo;
+  const g = fillerGapFit(c); if (g) { c.off = g.off; c.w = g.w; }
 }
 // 0.63.89 (Ayden 2026-11-26: "our panels always line up with the doors at a default level, so almost always 7/8 so depth
 // plus 7/8"): a panel's front reaches the cabinet's depth plus the panel fit's front overhang (7/8" by default). How far

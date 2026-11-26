@@ -309,6 +309,20 @@ function priceCab(c, ps) {
     const sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0, total: 0, eb: 0 };
     return { own: true, each, box: 0, doors: 0, extras: 0, ends: 0, hardware: 0, materials: 0, sq, paint: 0, banding: 0, custom, upcharge, total: each + custom + upcharge };
   }
+  // 0.63.98 (Ayden 2026-11-26: "its over $180 for one filler?"): a Mozaik filler product (BTH, BTF, TTH, TTF, Wall, Corner
+  // Filler) was priced as a cabinet of its category (the Base charge, its shelves). It is priced like any filler: its
+  // material by the sq ft plus the sheet's charge per filler (0.59.22), plus paint on its faces.
+  const md = c.moz && typeof mozDef === 'function' && mozDef(c.moz);
+  if (md && md.group === 'filler' && !/ceiling/.test(c.moz)) {
+    const b = buildParts(c), parts = b.parts.filter(pt => pt.cabId == null || pt.cabId === c.id);
+    // Shown under Panels, fillers like a wall filler (material and charge together), whether or not Materials is on.
+    const ends = parts.reduce((a, pt) => { const m = mat(pt.mat); return a + (m ? pt.L * pt.W * (pt.qty || 1) * matSqIn(m, ps) : 0); }, 0) + (+ps.adders.perFiller || 0), materials = 0, sq = paintCab(c, ps, b, []), paint = sq.total * (+paintOf(ps).rate || 0), banding = sq.eb * (+paintOf(ps).ebRate || 0);
+    const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = materials + ends + paint + banding + custom, upcharge = base * (+c.pxUp || 0) / 100;
+    let cMat = 0; parts.forEach(pt => { const m = mat(pt.mat); if (m) cMat += pt.L * pt.W * (pt.qty || 1) * matSqIn(m, ps) + bandCost(pt) * (pt.qty || 1); });
+    const lab = { parts: parts.reduce((a, pt) => a + (pt.qty || 1), 0), area: {}, doors: 0, drawers: 0, panels: 0, fillers: 1 };
+    parts.forEach(pt => { const m = mat(pt.mat); if (m && (m.kind || 'sheet') === 'sheet') lab.area[m.id] = (lab.area[m.id] || 0) + pt.L * pt.W * (pt.qty || 1); });
+    return { box: 0, doors: 0, extras: 0, ends, hardware: 0, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom, cost: { mat: cMat, doors: 0, hw: 0, ins: 0, lab } };
+  }
   const b = buildParts(c), fr = computeFronts(c), rule = { ...ps.cab[c.cat], ...(ps.products[c.libId] || {}) };
   const box = (+rule.base || 0) + (+rule.perFt || 0) * c.w / 12;
   ensureLibPrices(ps);

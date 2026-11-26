@@ -1616,7 +1616,8 @@ function allParts() {
 // bridges: spans a run carries on over without a cabinet (a dishwasher under the countertop). A run that is
 // only bridges is left out; one that starts on a bridge takes the height of the first cabinet after it.
 // anyTop (0.63.46, base molding): cabinets of different heights stay in one run.
-function runsBy(filter, keyOf, bridges, anyTop) {
+// same(cur, c, k), when given, decides whether cabinet c carries on the current run instead of an exact key match.
+function runsBy(filter, keyOf, bridges, anyTop, same) {
   const runs = [];
   S.walls.forEach(w => [1, -1].forEach(side => {
     const cs = S.cabinets.filter(c => c.wall === w.id && c.side === side && filter(c)).concat((bridges || []).filter(b => b.wall === w.id && b.side === side)).sort((a, b) => a.off - b.off);
@@ -1632,7 +1633,7 @@ function runsBy(filter, keyOf, bridges, anyTop) {
       // other wall's cabinets, carried by a bridge on that wall).
       const cd = angledCorner(c) ? cornerLeg(c) : cfLeg(c, true) || c.d;
       const top = (typeof apronTop === 'function' && apronTop(c)) || c.elev + c.h, k = keyOf(c), fl = fillersOf(c), s0 = Math.min(c.off, ...fl.map(x => x.a0)), s1 = Math.max(c.off + c.w, ...fl.map(x => x.a1));
-      if (cur && s0 <= cur.end + 0.25 && (cur.top === null || ((anyTop || Math.abs(top - cur.top) < 0.01) && cur.k === k))) {
+      if (cur && s0 <= cur.end + 0.25 && (cur.top === null || ((anyTop || Math.abs(top - cur.top) < 0.01) && (same ? same(cur, c, k) : cur.k === k)))) {
         if (cur.top === null) { cur.top = top; cur.k = k; cur.bottom = c.elev; }
         cur.end = Math.max(cur.end, s1); cur.d = Math.max(cur.d, cd + (c.outset || 0)); cur.bottom = Math.min(cur.bottom, c.elev); cur.cabs.push(c.id);
       }
@@ -1823,29 +1824,40 @@ function bsSegsOf(r, onTop) {
 // Every run carries: fz (front of the doors), extS / extE (how far the front piece goes past the run's ends),
 // backS / backE (where a return stops, out from the wall face), front, returns and len.
 const moldCabD = c => (angledCorner(c) ? cornerLeg(c) : c.d) + (c.outset || 0);
-// 0.61.3: worked out with automatic end panel pieces left out, so tops and molding are as with panels on the cabinets.
-function moldingRuns() { return withoutPieces(moldingRunsAll); }
+// 0.63.97 (Ayden 2026-11-26: "the molding goes back to the wall when it doesn't need to"): runs follow the faces the
+// molding sits on, not the cabinet boxes. A panel or filler has no doors, so its face is its own front (made flush with
+// the doors); a cabinet's face is its doors, 3/4 + the door gap past the box. Faces within 1/4" are one run, so a filler
+// or panel beside the cabinets no longer breaks the run into pieces that each return to the wall. Base molding sits on
+// the box front, so for base runs every face is the box (or panel) front.
+const moldNoFront = c => !!c.autoOf || (noAutoEnds(c) && !(c.rows || []).length);
+const moldFace = (c, base) => moldCabD(c) + (base || moldNoFront(c) ? 0 : 0.75 + jobFrontOff());
+const MOLD_FACE_TOL = 0.25;
+// Automatic end panel pieces carry their cabinet's molding, so the crown runs over them instead of stopping at a 3/4" gap.
+const moldOf = (c, key) => c[key] || (c.autoOf && (k => k && k[key])(S.cabinets.find(x => x.id === c.autoOf))) || null;
+function moldingRuns() { return moldingRunsAll(); }
 // 0.63.46 (Ayden 2026-11-25: "from the molding tab auto add bases as well"): base molding is its own pick on a cabinet
 // (c.baseMold), so a cabinet can have crown on top and base at the floor. A base run sits on the floor (the cabinet's
 // bottom), its back against the cabinet face (flush with the box front, over the toe space), and ends the same way crown
 // does: returns at open ends, short returns to a shallower neighbor, butts at inside corners, stops at appliances.
 function moldingRunsAll() {
-  const top = runsBy(c => !!c.molding && !!molding(c.molding), c => c.molding + '@' + Math.round(moldCabD(c) * 16));
-  const base = runsBy(c => !!c.baseMold && !!molding(c.baseMold), c => c.baseMold + '@' + Math.round(moldCabD(c) * 16), null, true);
+  const sameFace = base => (cur, c, k) => cur.k === k && Math.abs(Math.max(...cur.cabs.map(id => moldFace(S.cabinets.find(x => x.id === id), base))) - moldFace(c, base)) <= MOLD_FACE_TOL;
+  const top = runsBy(c => !!molding(moldOf(c, 'molding')), c => moldOf(c, 'molding'), null, false, sameFace(false));
+  const base = runsBy(c => !!molding(moldOf(c, 'baseMold')), c => moldOf(c, 'baseMold'), null, true, sameFace(true));
   base.forEach(r => { r.base = true; });
   const runs = top.concat(base);
+  runs.forEach(r => { r.face = Math.max(...r.cabs.map(id => moldFace(S.cabinets.find(x => x.id === id), r.base))); });
   runs.forEach(r => {
     r.k = String(r.k).split('@')[0];
     const m = molding(r.k), w = wall(r.wall);
     r.m = m;
     if (r.base) {
-      r.h = m.h; r.z = r.bottom; r.fz = r.d;
+      r.h = m.h; r.z = r.bottom; r.fz = r.face;
       r.lo = r.z - 0.01; r.hi = r.z + r.h;
       return;
     }
     r.h = m.fill ? Math.max(0.5, Math.min(12, w.height - r.top)) : m.h;
     r.z = m.bottom ? r.bottom - r.h : r.top;
-    r.fz = r.d + 0.75 + jobFrontOff(); // 0.63.91: on the door faces, which stand 1/8 off the cabinet
+    r.fz = r.face; // 0.63.91: on the door faces, which stand 1/8 off the cabinet (0.63.97: a panel's own front)
     // The heights a neighbor has to fill to stop this run: the molding itself plus the edge it sits on.
     r.lo = m.bottom ? r.z : r.top - 0.01; r.hi = m.bottom ? r.bottom + 0.01 : r.z + r.h;
   });
@@ -1894,13 +1906,13 @@ function moldEnd(r, at, dir, runs) {
   S.cabinets.forEach(k => {
     if (k.wall !== r.wall || k.side !== r.side || r.cabs.includes(k.id) || !(k.elev < r.hi && k.elev + k.h > r.lo)) return;
     const fl = fillersOf(k), e = dir < 0 ? Math.max(k.off + k.w, ...fl.map(x => x.a1)) : Math.min(k.off, ...fl.map(x => x.a0));
-    if (Math.abs(e - at) < 0.5) nd = Math.max(nd, moldCabD(k));
+    if (Math.abs(e - at) < 0.5) nd = Math.max(nd, moldFace(k, r.base));
   });
   if (nd < 0) return { ret: true, back: 0 };
-  if (nd >= r.d - 0.01) return { ret: false };
+  if (nd >= r.fz - MOLD_FACE_TOL) return { ret: false };
   // A shallower neighbor: the return comes back to its doors, or to the face of its own molding.
   const o = runs.find(q => q !== r && q.wall === r.wall && q.side === r.side && Math.abs((dir < 0 ? q.end : q.start) - at) < 0.5 && q.lo < r.hi && q.hi > r.lo);
-  return { ret: true, back: o ? o.fz + o.m.d : nd + (r.base ? 0 : 0.75 + jobFrontOff()) };
+  return { ret: true, back: o ? o.fz + o.m.d : nd };
 }
 // Inside corners: where runs on two walls that meet come together, the longer one runs through to the other's back
 // face and the other stops against its front, so they never overlap or run over the other wall's cabinets.

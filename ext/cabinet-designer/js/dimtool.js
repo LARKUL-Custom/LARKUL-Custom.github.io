@@ -140,10 +140,12 @@ function mdHint() {
   h.hidden = false;
 }
 function mdStart() {
+  // 0.63.96: D is a Walk key (step right) and the 3D view has no Measure, so the tool only starts from the plan or elevation
+  // (Ayden 2026-11-26: walking kept throwing him out of Walk into the plan with Measure on).
+  if (ui.viewMode === '3d' || (typeof WALK !== 'undefined' && WALK.on)) return;
   if (typeof stopDrawing === 'function') stopDrawing();
   ui.chainDim = null;
   ui.mdim = { a: null, at: null, shift: false };
-  if (ui.viewMode === '3d' && typeof setView === 'function') setView('plan');
   render(); mdHint();
 }
 function mdStop() { ui.mdim = null; mdHot = null; render(); mdHint(); }
@@ -191,7 +193,7 @@ function mdMove(e) {
     const typing = e.target && e.target.closest && e.target.closest('input,textarea,select,[contenteditable],dialog,.qe');
     if (mdOn() && e.key === 'Escape') { e.stopImmediatePropagation(); if (ui.mdim.a) { ui.mdim.a = null; mdRedraw(); } else mdStop(); return; }
     if (mdOn() && e.key === 'Shift' && ui.mdim.a) { ui.mdim.shift = true; mdLive(); }
-    if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'd' || e.key === 'D') && ui.tab === 'room' && !ui.quick) { e.preventDefault(); if (ui.mdim) mdStop(); else mdStart(); }
+    if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'd' || e.key === 'D') && ui.tab === 'room' && !ui.quick && (ui.viewMode === 'plan' || ui.viewMode === 'elev') && !(typeof WALK !== 'undefined' && WALK.on)) { e.preventDefault(); if (ui.mdim) mdStop(); else mdStart(); }
   }, true);
   window.addEventListener('keyup', e => { if (typeof ui !== 'undefined' && mdOn() && e.key === 'Shift') { ui.mdim.shift = false; mdLive(); } });
 })();
