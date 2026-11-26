@@ -88,17 +88,46 @@ const gMark = (ps, g) => 1 + (+((ps.groupMarkup || {})[g]) || 0) / 100;
 // the foot with no flat charge per cabinet (the old $150 made a 9" base $240 before anything was on it), and the materials
 // are charged by what the cabinet is cut from. Base $70/ft, Wall $60/ft, Tall $140/ft.
 const CAB_RATES1126 = { Base: { base: 0, perFt: 70 }, Wall: { base: 0, perFt: 60 }, Tall: { base: 0, perFt: 140 } };
+// 0.64.12 (Ayden 2026-11-26: "i still like the flat number per base plus per ft, that way even if its small the cost is always
+// covered, and that would be $50 and $20 ft, and same for uppers but talls are like $100 $30ft"): a flat charge per cabinet
+// plus a price per foot. Materials stay on, so the per-foot is labor; doors, panels, hardware and paint go on top as before.
+// 0.64.14 (Ayden 2026-11-26: "lets change the cabinet cost to $65 plus $25 per ft, uppers will have $45 and $30 per ft, talls
+// will have $115 $25 per ft").
+const CAB_RATES = { Base: { base: 65, perFt: 25 }, Wall: { base: 45, perFt: 30 }, Tall: { base: 115, perFt: 25 } };
+const CAB_RATES_0412 = { Base: { base: 50, perFt: 20 }, Wall: { base: 50, perFt: 20 }, Tall: { base: 100, perFt: 30 } };
 const CAB_RATES_OLD = { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } };
-// A sheet still on the old starting rates moves to these once, with Materials on and the 10% doors markup Ayden gave
-// (2026-11-04). A sheet whose cabinet rates were changed by hand is left as it is.
-function rates1126(ps) {
-  if (!ps || ps.rates1126) return false;
-  const same = ['Base', 'Wall', 'Tall'].every(k => +((ps.cab || {})[k] || {}).base === CAB_RATES_OLD[k].base && +((ps.cab || {})[k] || {}).perFt === CAB_RATES_OLD[k].perFt);
-  if (same) {
-    ps.cab = JSON.parse(JSON.stringify(CAB_RATES1126)); ps.materials = { waste: 15, ...(ps.materials || {}), on: true };
+// A sheet on the old starting rates or on 0.64.11's moves to these once; one whose rates were changed by hand stays.
+// The base blind corner's own $70/ft row from 0.64.9 is taken off, so it follows the Base rates like any cabinet.
+const sameCab = (a, b) => ['Base', 'Wall', 'Tall'].every(k => +((a || {})[k] || {}).base === b[k].base && +((a || {})[k] || {}).perFt === b[k].perFt);
+function rates1126b(ps) {
+  if (!ps || ps.rates1126c) return false;
+  if (sameCab(ps.cab, CAB_RATES_OLD) || sameCab(ps.cab, CAB_RATES1126) || sameCab(ps.cab, CAB_RATES_0412)) {
+    ps.cab = JSON.parse(JSON.stringify(CAB_RATES)); ps.materials = { waste: 15, ...(ps.materials || {}), on: true };
     if (ps.groupMarkup && +ps.groupMarkup.doors === 15) ps.groupMarkup.doors = 10;
   }
-  ps.rates1126 = 1; return true;
+  const o = (ps.products || {})['b-blind'];
+  if (o && !o.own && +o.base === 0 && +o.perFt === 70) { delete o.base; delete o.perFt; if (!Object.keys(o).length) delete ps.products['b-blind']; }
+  ps.rates1126 = 1; ps.blind70 = 1; ps.rates1126b = 1; ps.rates1126c = 1; return true;
+}
+// 0.64.17 (Ayden 2026-11-26: insurance work for Servpro "needs to stay on the relatively cheaper side", "yes add it to pricing
+// as an option to pick from"): three price levels, each a price sheet the job picks with the Price sheet box on Pricing.
+// Insurance = the shop's first sheet (renamed from Standard), Retail = cabinet rates about 30% higher, High-end = Retail's
+// rates plus 50% (a starting point; Ayden hasn't set them). Each is a full copy of the first sheet, so everything else
+// (doors, hardware, paint, adders) starts the same and is edited on its own sheet. Added once; deleting one keeps it gone.
+const LEVEL_RATES = {
+  Retail: { Base: { base: 85, perFt: 33 }, Wall: { base: 60, perFt: 39 }, Tall: { base: 150, perFt: 33 } },
+  'High-end': { Base: { base: 128, perFt: 50 }, Wall: { base: 90, perFt: 59 }, Tall: { base: 225, perFt: 50 } },
+};
+function priceLevels() {
+  if (!PRICES.length || PRICES.some(p => p.levels1126)) return false;
+  const ins = PRICES[0];
+  if (/^standard( pricing)?$/i.test((ins.name || '').trim())) ins.name = 'Insurance';
+  ins.levels1126 = 1;
+  Object.entries(LEVEL_RATES).forEach(([name, cab]) => {
+    if (PRICES.some(p => (p.name || '').trim().toLowerCase() === name.toLowerCase())) return;
+    PRICES.push({ ...JSON.parse(JSON.stringify(ins)), id: uid('ps'), name, cab: JSON.parse(JSON.stringify(cab)), levels1126: 1 });
+  });
+  return true;
 }
 function defaultPriceSheet(name = 'Standard pricing') {
   // Hardware with its own price (Ayden's Mozaik prices) starts there; the rest get rough shop numbers.
@@ -111,10 +140,10 @@ function defaultPriceSheet(name = 'Standard pricing') {
   const hardware = {};
   if (S) allCabs().forEach(c => inRoomOf(c, () => Object.keys(buildParts(c).bom).forEach(k => { if (!(k in hardware)) hardware[k] = hwPrice(k); })));
   return {
-    id: uid('ps'), name, markup: 0, tax: 0, mzk: 1, rates1126: 1,
+    id: uid('ps'), name, markup: 0, tax: 0, mzk: 1, rates1126: 1, rates1126b: 1, rates1126c: 1,
     // Set values from Ayden's Mozaik "Detailed Pricing" sheet.
     groupMarkup: { ...MZK.groupMarkup, doors: 10 }, payments: MZK.payments.map(x => ({ ...x })),
-    cab: { ...CAB_RATES1126 },
+    cab: JSON.parse(JSON.stringify(CAB_RATES)),
     products: {},
     adders: { scribeWall: 50, perDrawer: 0, perShelf: 12, perFiller: 35, perPull: 3 },
     panelAdd: { Base: 25, Wall: 25, Tall: 25 },
@@ -298,11 +327,15 @@ async function loadPrices() {
   else if (PRICES.map(ensureMzk).some(Boolean)) changed = true;
   if (PRICES.map(takeInstall).some(Boolean)) changed = true;
   if (PRICES.map(mergeHwKeys).some(Boolean)) changed = true;
-  if (PRICES.map(rates1126).some(Boolean)) changed = true;
+  if (PRICES.map(rates1126b).some(Boolean)) changed = true;
+  if (priceLevels()) changed = true;
   if (!INSTALLERS.length) { const r = blankInstaller('Richard', MZK.install); r.def = true; INSTALLERS.push(r); changed = true; }
   if (ensureSawStruck()) changed = true;
   // 0.60.6 (Ayden 2026-11-20): Richard installs specialty items at $50 per foot. Set once; after that it is the shop's to change.
   INSTALLERS.filter(i => /^Richard\b/.test(i.name || '') && !i.specFt).forEach(i => { i.rates = i.rates || {}; if (!(+i.rates.Specialty > 0)) i.rates.Specialty = 50; i.specFt = 1; changed = true; });
+  // 0.64.16 (Ayden 2026-11-26: "raise richards install cost per ft by $15 in every category", then "reduce them all by $5"):
+  // Base, Wall, Tall and Specialty each go up $10 a foot from what they are, once.
+  INSTALLERS.filter(i => /^Richard\b/.test(i.name || '') && !i.up10).forEach(i => { i.rates = i.rates || {}; INST_FT.forEach(([k]) => { i.rates[k] = (+i.rates[k] || 0) + 10; }); i.up10 = 1; changed = true; });
   if (changed) savePrices();
 }
 let priceTimer = null;
@@ -563,10 +596,7 @@ function ensureLibPrices(ps) {
   // 0.58.8 (Ayden 2026-11-19: countertops aren't his main thing): every top is one price per square foot, $70 to start.
   if (ps && !ps.topSq) { ps.topSq = { rate: 70 }; savePrices(); }
   if (hwCosts1119(ps)) savePrices();
-  // 0.64.9 (Ayden 2026-11-26: "base blind corners should almost follow regular rules, like 70ft + panel + materials + hardware
-  // + doors"): the base blind corner's cabinet charge is $70 per foot of its width with no flat charge per cabinet; the blind
-  // panel, materials, hardware and doors are added as on any cabinet. Set once on its Products row, then it is the shop's to change.
-  if (ps && ps.products && !ps.blind70) { const o = ps.products['b-blind'] || {}; if (!o.own && (o.base === '' || o.base == null) && (o.perFt === '' || o.perFt == null)) ps.products['b-blind'] = { ...o, base: 0, perFt: 70 }; ps.blind70 = 1; savePrices(); }
+  // 0.64.9 gave the base blind corner its own $70/ft; 0.64.12 puts it back on the Base rates (rates1126b).
   if (legCost2(ps)) savePrices();
   // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
   if (ps && ps.molds && !ps.cmold4 && S.moldings.some(m => m.id === 'mo-cmold')) { ps.molds['mo-cmold'] = 4; ps.cmold4 = 1; savePrices(); }
@@ -687,6 +717,22 @@ function renderPricing() {
     <section class="prx-main"><div class="prx-top"><h2>Pricing</h2>${tabs}<div class="prx-r">${sheetPick}${installerPick(ps)}</div></div><div class="prx-body ${view}">${body}</div></section>${acts}</div>`;
 }
 // The left column: the job total, price per foot by type, the totals with markup, tax and payments, and where to jump.
+// 0.64.13 (Ayden 2026-11-26: "give me subtotals in pricing"): each room's cabinets add up column by column under the
+// cabinets, and the totals card shows the job by group (cabinets, doors, drawers and inserts, panels, hardware, materials,
+// paint, then tops, molding, installation and other lines) before the percent charges. Display only: no price changes.
+const sumK = (ks, f) => ks.reduce((a, k) => a + (+k[f] || 0), 0);
+function cabSubRow(ps, ks) {
+  return `<tr class="sub"><td colspan="2">Cabinets subtotal (${ks.length})</td><td class="n">${money(sumK(ks, 'box'))}</td>${ps.doors.on ? `<td class="n">${money(sumK(ks, 'doors'))}</td>` : ''}<td class="n">${money(sumK(ks, 'extras'))}</td><td class="n">${money(sumK(ks, 'ends'))}</td>${ps.hardware.on ? `<td class="n">${money(sumK(ks, 'hardware'))}</td>` : ''}${ps.materials.on ? `<td class="n">${money(sumK(ks, 'materials'))}</td>` : ''}<td class="n">${sqft(ks.reduce((a, k) => a + k.sq.total, 0))}</td><td class="n"><b>${money(sumK(ks, 'total'))}</b></td></tr>`;
+}
+function jobSubtotals(q) {
+  const ks = q.rooms.flatMap(R => R.cabs), ls = q.rooms.flatMap(R => R.lines).concat(q.jobLines.filter(l => l.xi == null));
+  const lsum = f => ls.filter(f).reduce((a, l) => a + l.amount, 0), isMold = l => /^Molding \(/.test(l.name);
+  const rows = [['Cabinet charge', sumK(ks, 'box')], ['Doors and fronts', sumK(ks, 'doors')], ['Drawers, shelves, inserts', sumK(ks, 'extras')], ['Panels, fillers', sumK(ks, 'ends')],
+    ['Hardware', sumK(ks, 'hardware')], ['Materials', sumK(ks, 'materials')], ['Paint and edgebanding', sumK(ks, 'paint') + sumK(ks, 'banding')], ['Custom and upcharges', sumK(ks, 'custom') + sumK(ks, 'upcharge')]];
+  const cabT = sumK(ks, 'total');
+  const more = [['Countertops', lsum(l => l.top)], ['Molding', lsum(isMold)], ['Installation', lsum(l => l.inst)], ['Other lines', lsum(l => !l.top && !l.inst && !isMold(l))]];
+  return { rows: rows.filter(r => Math.abs(r[1]) >= 0.005), cabT, more: more.filter(r => Math.abs(r[1]) >= 0.005) };
+}
 function priceSide(ps, q, view) {
   const nCab = q.rooms.reduce((a, R) => a + R.cabs.length, 0);
   const tone = { Base: 'amber', Wall: 'blue', Tall: 'violet' };
@@ -697,7 +743,8 @@ function priceSide(ps, q, view) {
     return `<tr><td>${esc(x.name)} ${pin(X(i), 'amount', x.amount, x.name + ' percent')}</td><td class="n">${money(l ? l.amount : 0)}</td></tr>`; }).join('');
   const topAmt = q.rooms.reduce((a, Rm) => a + Rm.lines.filter(l => l.top).reduce((b, l) => b + l.amount, 0), 0);
   const topRow = q.rooms.some(Rm => Rm.lines.some(l => l.top)) || S.job.topSq != null ? `<tr class="prx-topsq"><td>Countertops <span class="prx-pct">$${ctl('job', 'topSq', topSqJob(ps), 'num', { label: 'Countertops dollars per square foot for the job', blank: true, ph: topSqRate(ps) })}/sq ft</span></td><td class="n">${money(topAmt)}</td></tr>` : '';
-  const tot = `<table class="prx-tot"><tbody>${topRow}${q.jobLines.filter(l => l.xi == null).map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}${pcts}
+  const st = jobSubtotals(q), subs = `<tr class="subh"><td colspan="2">Subtotals</td></tr>${st.rows.map(([n, v]) => `<tr class="subi"><td>${esc(n)}</td><td class="n">${money(v)}</td></tr>`).join('')}<tr class="sub"><td>Cabinets</td><td class="n">${money(st.cabT)}</td></tr>${st.more.filter(([n]) => n !== 'Countertops' || !topRow).map(([n, v]) => `<tr class="sub"><td>${esc(n)}</td><td class="n">${money(v)}</td></tr>`).join('')}`;
+  const tot = `<table class="prx-tot"><tbody>${subs}${topRow}${q.jobLines.filter(l => l.xi == null).map(l => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.amount)}</td></tr>`).join('')}${pcts}
     <tr><td>Subtotal</td><td class="n">${money(q.sub)}</td></tr><tr><td>Markup ${pin(R, 'markup', ps.markup, 'Markup percent')}</td><td class="n">${money(q.markup)}</td></tr><tr><td>Tax ${pin(R, 'tax', ps.tax, 'Tax percent')}</td><td class="n">${money(q.tax)}</td></tr>
     <tr class="grand"><td>Total</td><td class="n">${money(q.total)}</td></tr>${(ps.payments || []).map((x, i) => { const p = q.payments.find(y => y.pi === i);
       return `<tr class="pay"><td>${esc(x.name)} ${pin(`pshp:${ps.id}:payments.${i}`, 'pct', x.pct, x.name + ' percent')}</td><td class="n">${money(p ? p.amount : 0)}</td></tr>`; }).join('')}</tbody></table>`;
@@ -748,7 +795,7 @@ function priceQuote(ps, q = priceJob(ps)) {
   // A room can fold to one line (name and total) so every room's price shows at a glance. Folding only hides the table.
   const room = (R, i) => { const shut = roomShut(R.r); return `<div class="psec box prx-room${shut ? ' shut' : ''}" id="prx-room-${i}"><button class="sechead teal prx-fold" data-act="prx-fold" data-id="${esc(R.r.id)}" aria-expanded="${!shut}" title="${shut ? 'Show' : 'Hide'} this room's cabinets">${icon('chevr', shut ? '' : 'rot90')}<span>${esc(R.r.name)}</span>${shut ? `<span class="prx-n">${R.cabs.length} ${R.cabs.length === 1 ? 'cabinet' : 'cabinets'}</span>` : ''}</button><div class="prx-roomh">${shut ? '' : paintNote(R)}${!shut && R.lines.some(l => l.top) ? `<span class="prx-pct prx-roomtop">Tops $${ctl('room:' + R.r.id, 'topSq', R.r.topSq ?? '', 'num', { label: R.r.name + ' countertops dollars per square foot', blank: true, ph: topSqJob(ps) })}/sq ft</span>` : ''}${INSTALLERS.length ? `<span class="prx-pct prx-roominst">Installer ${ctl('room:' + R.r.id, 'installer', R.r.installer || '', 'select', { label: R.r.name + ' installer', options: [{ v: '', l: `Same as the job${jobInstaller(ps) ? ` (${jobInstaller(ps).name})` : ' (none)'}` }, ...INSTALLERS.map(i => ({ v: i.id, l: i.name })), { v: 'none', l: 'No installer' }] })}</span>` : ''}<b class="money">${money(R.total)}</b></div>${shut ? '</div>' : `<div class="tscroll"><table class="t quote">
     <thead><tr><th>Cabinet</th><th>Size</th><th class="r">Cabinet</th>${ps.doors.on ? '<th class="r">Doors and fronts</th>' : ''}<th class="r">Drawers, shelves, inserts</th><th class="r">Panels, fillers</th>${ps.hardware.on ? '<th class="r">Hardware</th>' : ''}${ps.materials.on ? '<th class="r">Materials</th>' : ''}<th class="r">Paint sq ft</th><th class="r">Total</th></tr></thead>
-    <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || (R.lines.some(l => l.own) ? '' : '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>')}
+    <tbody>${R.cabs.map(k => `<tr><td><span class="chip cab">${k.label}</span> ${esc(k.c.name)}</td><td class="n">${fmtLen(k.c.w)} × ${fmtLen(k.c.h)} × ${fmtLen(k.c.d)}</td><td class="n">${money(k.box)}</td>${ps.doors.on ? `<td class="n">${money(k.doors)}</td>` : ''}<td class="n">${money(k.extras)}</td><td class="n">${money(k.ends)}</td>${ps.hardware.on ? `<td class="n">${money(k.hardware)}</td>` : ''}${ps.materials.on ? `<td class="n">${money(k.materials)}</td>` : ''}<td class="n">${sqft(k.sq.total)}</td><td class="n"><b>${money(k.total)}</b></td></tr>`).join('') || (R.lines.some(l => l.own) ? '' : '<tr><td colspan="11" class="muted">No cabinets yet</td></tr>')}${R.cabs.length ? cabSubRow(ps, R.cabs) : ''}
     ${R.lines.map(l => `<tr class="extra"><td colspan="2">${esc(l.name)}</td><td colspan="${4 + ps.doors.on + ps.hardware.on + ps.materials.on}"></td><td class="n">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>`}`; };
   const anyOpen = q.rooms.some(R => !roomShut(R.r));
   const fold = q.rooms.length > 1 ? `<button class="btn" data-act="prx-fold-all" data-id="${anyOpen ? 'shut' : 'open'}">${icon('chevr', anyOpen ? '' : 'rot90')}${anyOpen ? 'Collapse all rooms' : 'Expand all rooms'}</button>` : '';
