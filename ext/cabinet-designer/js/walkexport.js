@@ -210,6 +210,7 @@ function wxRoom(r, k, M, cam) {
   return {
     id: r.id, name: r.name || 'Room', cam: cam && cam.mode !== 'ortho' ? cam : null, scene: k, M,
     lamps: L.some(l => l.kind === 'ceiling') || (typeof AUTO_CEIL === 'object' && AUTO_CEIL.n > 0),
+    sunFace: typeof sunFacing === 'function' ? sunFacing() : null,
     walls: S.walls.map(w => ({ id: w.id, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, thick: w.thick, height: w.height, hidden: !!w.hidden })),
     fixtures: (S.fixtures || []).filter(f => /door|opening|window|arch|pass/i.test(f.kind || f.type || '')).map(f => wxFixt(f)),
     cabs: (S.cabinets || []).map(c => ({ wall: c.wall, side: c.side, w: c.w })),
@@ -237,7 +238,7 @@ function wxWalkCss() {
   return out;
 }
 function wxPlayerCode(lib) {
-  const fns = [Viewer3D, aoSetup, aoTargets, realAO, sunAt, realLight, landSun, pocketMove, wg, roomViewDir].map(f => f.toString()).join('\n');
+  const fns = [Viewer3D, aoSetup, aoTargets, realAO, sunAt, sunTurn, realLight, landSun, pocketMove, wg, roomViewDir].map(f => f.toString()).join('\n');
   const consts = `const AO = { on: true };\nconst aoCoarse = ${aoCoarse.toString()};\nconst AO_VERT = ${JSON.stringify(AO_VERT)};\nconst AO_FRAG = ${JSON.stringify(AO_FRAG)};\nconst AO_BLUR = ${JSON.stringify(AO_BLUR)};\nconst sunLabel = ${sunLabel.toString()};\nconst mixHex = ${mixHex.toString()};\nconst ease = ${ease.toString()};\nconst CASE = ${JSON.stringify(CASE)};\nconst fixtInner = ${fixtInner.toString()};\n${doorType.toString()}\n${doorHasLeaf.toString()}\nconst fixtList = () => S.fixtures || [];\nconst fixtById = id => fixtList().find(f => f.id === id);\n`;
   return [lib.three, lib.orbit, lib.icons, WX_SHIM, consts, fns, lib.walk, wxPlayer.toString(), 'wxPlayer(WXDATA);'].join('\n;\n');
 }
@@ -347,7 +348,7 @@ function wxPlayer(W) {
       while (v.root.children.length) v.root.remove(v.root.children[0]);
       (WXP.scenes[r.scene] || []).forEach(o => v.root.add(o)); WXP.shown = r.scene;
     }
-    S.roomId = id; S.walls = r.walls || []; S.fixtures = r.fixtures || []; S.cabinets = r.cabs || []; WXP.lamps = !!r.lamps;
+    S.roomId = id; S.walls = r.walls || []; S.fixtures = r.fixtures || []; S.cabinets = r.cabs || []; WXP.lamps = !!r.lamps; WXP.sunFace = r.sunFace || null;
     if (!same) { WXP.ceil = null; v.root.traverse(x => { if (x.material) [].concat(x.material).forEach(m => { if (m && m.userData && m.userData.ceil) WXP.ceil = m; }); }); v.fitShadow(); }
     if (!(typeof WALK !== 'undefined' && WALK.on)) { if (r.cam) v.setView(r.cam); else v.look(roomViewDir(0.75)); }
     v.requestRender();

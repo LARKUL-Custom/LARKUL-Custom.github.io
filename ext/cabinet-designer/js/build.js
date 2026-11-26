@@ -619,6 +619,13 @@ const PANEL_FIELD = t => t === 'flat' || t === 'raised';
 // A two-piece door drops a separate panel into every flat or raised opening.
 const twoPt = (ds, pt) => ds.type === 'twopiece' && PANEL_FIELD(pt) ? 'insert' : pt;
 // Pull position on a front, in front-local inches: x from the left edge, z up from the bottom edge.
+// Each hinge's height up a door of height fh (from the door's own bottom), the same spots the cups are drilled at.
+// Measured from the door's own bottom and top, so the hinges (and the plates that follow them) fit any door height.
+function hingeHeights(p, fh, hg) {
+  const n = fh <= hg.max2 ? 2 : fh <= hg.max3 ? 3 : 4, a = p.hingeInsetB ?? p.hingeInset, b = fh - p.hingeInset, out = [];
+  for (let i = 0; i < n; i++) out.push(a + (b - a) * i / (n - 1));
+  return out;
+}
 function pullPlacement(c, f) {
   // A false front gets a pull only when its row asks for one (glued-on drawer fronts that should look like drawers).
   if (f.type !== 'door' && f.type !== 'drawer' && !(f.type === 'false' && f.pull)) return null;
@@ -1038,10 +1045,7 @@ function buildParts(c) {
     const cupY = hg ? (hg.cupEdgeMM + hg.cupDiaMM / 2) * MM : 0; // no hinge: the front is glued on
     const hinges = [];
     if (isDoor && hg) {
-      const n = fh <= hg.max2 ? 2 : fh <= hg.max3 ? 3 : 4;
-      // Measured from the door's own bottom and top, so the hinges (and the plates that follow them) fit any door height.
-      const a = p.hingeInsetB ?? p.hingeInset, b = fh - p.hingeInset;
-      for (let i = 0; i < n; i++) hinges.push(a + (b - a) * i / (n - 1));
+      hinges.push(...hingeHeights(p, fh, hg)); const n = hinges.length;
       const hk = cornerHinge(c, f, hg);
       // On a face frame the plates screw to the frame's stile, so the box sides get no plate holes.
       addB(hk.name, n); if (hk.plate) addB(hk.name + (ffr ? ' face frame mounting plate' : ' mounting plate'), n);

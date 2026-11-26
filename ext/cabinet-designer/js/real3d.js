@@ -191,7 +191,10 @@ function sunAt(h) {
 }
 const mixHex = (a, b, k) => new THREE.Color(a).lerp(new THREE.Color(b), Math.max(0, Math.min(1, k)));
 function realLight(v) {
-  const S0 = sunAt(SUN.hour), d = S0.day, hasLamps = typeof roomLights === 'function' && (roomLights().some(l => l.kind === 'ceiling') || (typeof AUTO_CEIL === 'object' && AUTO_CEIL.n > 0));
+  const S0 = sunAt(SUN.hour), F0 = typeof sunFacing === 'function' ? sunFacing() : typeof WXP === 'object' ? WXP.sunFace : null;
+  // 0.64.8: the sun comes from the room's facing (lights.js sunFacing; the walk file carries it per room).
+  if (F0 && typeof sunTurn === 'function') S0.dir = sunTurn(S0.dir, F0); else if (F0 && typeof WXP === 'object' && WXP.sunTurn) S0.dir = WXP.sunTurn(S0.dir, F0);
+  const d = S0.day, hasLamps = typeof roomLights === 'function' && (roomLights().some(l => l.kind === 'ceiling') || (typeof AUTO_CEIL === 'object' && AUTO_CEIL.n > 0));
   v.sunDir = S0.dir;
   // Sun: warm and orange when low, white at midday, gone at night.
   v.sun.intensity = 2.4 * d; v.sun.castShadow = d > 0.01; v.sun.color.copy(mixHex(0xfff3e2, 0xffa860, S0.low));

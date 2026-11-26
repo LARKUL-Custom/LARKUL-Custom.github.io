@@ -335,7 +335,7 @@ function cabinetMeshes(c, opts = {}) {
   const lzAt = angledCorner(c) ? cornerSusan(c, p, t, bt) : null;
   (lay.pulls || []).forEach(pl => grp.add(box3(idx * 0.4, pl.z1 - pl.z0 - 2, inD * 0.85, flat3('#9aa1a7'), ix0 + idx / 2, (pl.z0 + pl.z1) / 2, p.backInset + bt + inD * 0.45)));
   lay.lazy.forEach(lz => { const r = lzAt ? lzAt.r : Math.min(W - 2 * t, inD) / 2 - 0.75; [0.3, 0.72].forEach(k => { const m = new THREE.Mesh(lzAt && lzAt.pie !== null ? new THREE.CylinderGeometry(r, r, 0.6, 40, 1, false, lzAt.pie, Math.PI * 1.5) : new THREE.CylinderGeometry(r, r, 0.6, 40), flat3('#d9cfbf')); m.position.set(lzAt ? lzAt.cx : W / 2, lz.z0 + (lz.z1 - lz.z0) * k, lzAt ? lzAt.cz : p.backInset + bt + inD / 2); grp.add(m); }); });
-  const cornerPivots = [];
+  const cornerPivots = [], hwOn = typeof hw3dOn === 'function' && hw3dOn(opts);
   fronts.forEach((f, fi) => {
     if (f.type === 'open') return;
     // A corner's fronts are built on their own face (x along it, z out of it), so here D is that face.
@@ -354,6 +354,7 @@ function cabinetMeshes(c, opts = {}) {
       if (!pp.hw.ccMM) add(box3(L, L, 0.9, pm, px, py, pz - 0.1, false), 'pulls');
       else add(box3(pp.vertical ? 0.45 : L, pp.vertical ? L : 0.45, 0.45, pm, px, py, pz, false), 'pulls');
     }
+    if (hwOn && typeof hw3dFront === 'function') hw3dFront(c, p, f, ft, D, add);
     if (f.type === 'drawer' && f.face) host.add(fg);
     else if (f.type === 'drawer') {
       // The box as it is cut (drawerBoxAt in build.js): runner length, width and height, bottom let in its recess.
@@ -413,6 +414,7 @@ function cabinetMeshes(c, opts = {}) {
     grp.add(box3(fl.gap, fh, flm.thick, flM, x0 + fl.gap / 2, fy0 + fh / 2, D + fo + flm.thick / 2));
     grp.add(box3(Math.min(fl.gap, flm.thick), fh, 3, flM, fl.end === 'L' ? x0 + Math.min(fl.gap, flm.thick) / 2 : x0 + fl.gap - Math.min(fl.gap, flm.thick) / 2, fy0 + fh / 2, D + fo - 1.5));
   });
+  if (hwOn && typeof hw3dCab === 'function') hw3dCab(c, grp);
   grp.traverse(o => { o.userData.cabId = c.id; });
   // Layers: drop the meshes of any kind that is turned off (untagged meshes are the box).
   const lay3 = opts.layers;
@@ -743,7 +745,7 @@ function hiddenLine3d(v) {
   v.setReal(false); v.setBackground('#ffffff');
   const face = side => HL.face[side] || (HL.face[side] = new THREE.MeshBasicMaterial({ color: 0xffffff, side, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
   const meshes = [];
-  v.root.traverse(o => { if (o.isMesh && !o.isSprite) meshes.push(o); else if ((o.isLineSegments || o.isLine) && !o.userData.keepLine) o.material = HL.line; });
+  v.root.traverse(o => { if (o.userData.hw) o.visible = false; else if (o.isMesh && !o.isSprite) meshes.push(o); else if ((o.isLineSegments || o.isLine) && !o.userData.keepLine) o.material = HL.line; });
   meshes.forEach(o => {
     const m0 = Array.isArray(o.material) ? o.material[0] : o.material;
     if (!m0 || m0.visible === false || m0.colorWrite === false) return;
@@ -763,7 +765,7 @@ function realWall3(op = 1) {
 // The ceiling faces away from the sun; in a real room it is lit by light bouncing off the floor and counters.
 function realCeil3() { return realCeil3.m || (realCeil3.m = new THREE.MeshStandardMaterial({ color: 0xf2f0ec, emissive: 0x5a5854, roughness: 0.95, envMapIntensity: 0.3 })); }
 // What the 3D room shows. Each is on unless turned off in the Layers menu (the ceiling only shows from below).
-const LAYERS3D = [['walls', 'Walls'], ['ceiling', 'Ceiling'], ['floor', 'Floor'], ['box', 'Cabinet boxes'], ['fronts', 'Doors and drawer fronts'], ['drawerBox', 'Drawer boxes'], ['pulls', 'Pulls'], ['tops', 'Countertops'], ['molding', 'Molding'], ['shapes', 'Shapes, appliances and fixtures'], ['lights', 'Lights'], ['labels', 'Labels and sizes'], ['glass', 'Glass (3D and elevation)'], ['fasteners', 'Joint fasteners']];
+const LAYERS3D = [['walls', 'Walls'], ['ceiling', 'Ceiling'], ['floor', 'Floor'], ['box', 'Cabinet boxes'], ['fronts', 'Doors and drawer fronts'], ['drawerBox', 'Drawer boxes'], ['pulls', 'Pulls'], ['hardware', 'Hinges, pull screws and shelf holes'], ['tops', 'Countertops'], ['molding', 'Molding'], ['shapes', 'Shapes, appliances and fixtures'], ['lights', 'Lights'], ['labels', 'Labels and sizes'], ['glass', 'Glass (3D and elevation)'], ['fasteners', 'Joint fasteners']];
 // Fasteners start hidden; everything else starts shown.
 const layers3d = () => ({ ...Object.fromEntries(LAYERS3D.map(([k]) => [k, k !== 'fasteners'])), ...(ui.layers || {}) });
 function realFloor3() {

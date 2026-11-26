@@ -49,7 +49,7 @@ function wire3d(v) {
   }
   v.setReal(false); v.setBackground('#ffffff');
   const meshes = [];
-  v.root.traverse(o => { if (o.isMesh && !o.isSprite) meshes.push(o); else if ((o.isLineSegments || o.isLine) && !o.userData.keepLine) o.material = ED3W.line; });
+  v.root.traverse(o => { if (o.userData.hw) o.visible = false; else if (o.isMesh && !o.isSprite) meshes.push(o); else if ((o.isLineSegments || o.isLine) && !o.userData.keepLine) o.material = ED3W.line; });
   meshes.forEach(o => {
     const m0 = Array.isArray(o.material) ? o.material[0] : o.material;
     if (!m0 || m0.visible === false || m0.colorWrite === false) return;

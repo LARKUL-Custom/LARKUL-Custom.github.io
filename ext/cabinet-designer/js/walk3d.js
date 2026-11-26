@@ -308,7 +308,10 @@ function walkCam(v) {
   v.persp.position.set(WALK.x, WALK.eye, WALK.z);
   v.persp.rotation.set(WALK.pitch, WALK.yaw, 0, 'YXZ');
   v.persp.updateMatrixWorld();
-  // 0.64.6: moving draws the shade at half size (realAO); once still for a moment, one sharp frame.
+  walkMoved();
+}
+// 0.64.6: moving draws the shade at half size (realAO); once still for a moment, one sharp frame.
+function walkMoved() {
   WALK.movedAt = performance.now(); clearTimeout(WALK.sharpT);
   WALK.sharpT = setTimeout(() => { if (WALK.on && WALK.v) WALK.v.requestRender(); }, 300);
 }
@@ -458,7 +461,14 @@ function walkLoop() {
     const doors = doorStep(v, dt);
     // Shadows follow anything that moved this frame (and once more when it stops).
     const anim = typeof openAnim !== 'undefined' && !!openAnim;
-    if (rebuilt || doors || anim || WALK.doorsMoving || WALK.animWas) v.renderer.shadowMap.needsUpdate = true;
+    // 0.64.8 (Ayden 2026-11-26: "slightly framey when i open doors or drawers"): while a door or drawer swings, its
+    // shadows are drawn again every 4th frame (each redraw draws the room once per shadow-casting light), and once
+    // more when it stops, so the opening itself stays smooth.
+    const moved = doors || anim;
+    WALK.shN = moved ? (WALK.shN || 0) + 1 : 0;
+    // The soft shading is worked out at half size while it swings too (as while walking), sharp again once it stops.
+    if (moved) walkMoved();
+    if (rebuilt || (moved && WALK.shN % 4 === 1) || (!doors && WALK.doorsMoving) || (!anim && WALK.animWas)) v.renderer.shadowMap.needsUpdate = true;
     if (!anim && WALK.animWas) v.requestRender();
     WALK.animWas = anim;
     // Doors swinging: read where they are now and then, and once more when they stop.

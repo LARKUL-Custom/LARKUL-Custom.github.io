@@ -261,6 +261,48 @@ function windowSky3(v) {
     b.position.copy(P).addScaledVector(N, 36); b.userData.winBounce = Math.min(1.6, 0.8 * Math.sqrt(area)); b.userData.noBounds = true; v.root.add(b);
   });
 }
+// 0.64.8 (Ayden 2026-11-26: "all the weird lines in the door"): a ceiling light shining straight down grazes a door
+// front, and its small shadow picture (512 px over the whole room below it) shaded the door in stripes. The shadow test
+// now starts this far (inches) off each surface, more than one shadow picture pixel there.
+const SHADOW_NB = 1.6;
+/* Which way the sun comes from (0.64.8, Ayden 2026-11-26: "the window doesnt actually cast shadows and i think thats
+   because the side of the house the window is on but for an example i kind of need it, i can specify for future jobs if
+   i really want to"). Room setting 'sun': Through the windows (default) turns the sun round so it always shines in
+   through the room's biggest window, whatever the hour (it still rises, sets and changes colour with the time of day);
+   or the real compass: which way the top of the plan faces. Look only. */
+const SUN_FACES = [{ v: '', l: 'Through the windows' }, { v: 'N', l: 'Plan top faces North' }, { v: 'E', l: 'Plan top faces East' }, { v: 'S', l: 'Plan top faces South' }, { v: 'W', l: 'Plan top faces West' }];
+// For realLight, in the 3D scene: { x, z } the way out through the main window, or { m } turning compass (east, south)
+// into the scene's (x, z). Null: plan top is north, as before.
+function sunFacing() {
+  const rm = typeof curRoom === 'function' ? curRoom() : null; if (!rm) return null;
+  const M = (typeof HOUSE3 === 'object' && HOUSE3.M && HOUSE3.M[rm.id]) || { c: 1, s: 0, x: 0, y: 0 };
+  const dir = (x, y) => ({ x: M.c * x - M.s * y, z: M.s * x + M.c * y });
+  const k = rm.sun || '';
+  if (k) {
+    const m = { N: [1, 0, 0, 1], E: [0, 1, -1, 0], S: [-1, 0, 0, -1], W: [0, -1, 1, 0] }[k]; if (!m) return null;
+    // Plan (x, y) of compass east and south, then into the scene.
+    const e = dir(m[0], m[2]), so = dir(m[1], m[3]);
+    return { m: [e.x, so.x, e.z, so.z] };
+  }
+  const ws = (rm.walls || []).filter(w => !w.hidden); if (!ws.length || typeof fixtInner !== 'function') return null;
+  const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]), mx = (Math.min(...xs) + Math.max(...xs)) / 2, my = (Math.min(...ys) + Math.max(...ys)) / 2;
+  let best = null, bestA = 0;
+  (rm.fixtures || []).forEach(f => {
+    if (f.kind !== 'window') return; const w = ws.find(x => x.id === f.wall); if (!w) return;
+    const [a0, a1, z0, z1] = fixtInner(f), A = (a1 - a0) * (z1 - z0); if (!(A > bestA)) return;
+    const g = wg(w), a = (a0 + a1) / 2, cx = w.x1 + g.u.x * a, cy = w.y1 + g.u.y * a, out = (cx - mx) * g.n.x + (cy - my) * g.n.y >= 0 ? 1 : -1;
+    bestA = A; best = dir(g.n.x * out, g.n.y * out);
+  });
+  return best;
+}
+// The sun's direction (x east, y up, z south) turned to the room's facing F.
+function sunTurn(d, F) {
+  if (!F) return d;
+  if (F.m) { const [a, b, c, e] = F.m; return new THREE.Vector3(a * d.x + b * d.z, d.y, c * d.x + e * d.z).normalize(); }
+  // Straight through the window would light only a narrow strip; a little to the side, the way the hour leans.
+  const h = Math.hypot(d.x, d.z) || 0.01, side = Math.max(-0.5, Math.min(0.5, d.x)), px = -F.z, pz = F.x;
+  return new THREE.Vector3((F.x + px * side) * h, d.y, (F.z + pz * side) * h).normalize();
+}
 function addLights3d(v, R3, layerOn, ceilOn) {
   if (R3) AUTO_CEIL.n = 0;
   if (winOnly3(R3)) { windowSky3(v); winSeal3(v); }
@@ -275,7 +317,7 @@ function addLights3d(v, R3, layerOn, ceilOn) {
     // The first few ceiling lights cast soft shadows (under wall cabinets, beside tall ones), so a room lit by its
     // ceiling lights looks different from one lit by a window. Phones and tablets skip this for speed.
     if (ceiling && shadows < 4 && LAMPS3.sh > 0 && !(typeof aoCoarse === 'function' && aoCoarse())) {
-      pl.castShadow = true; pl.shadow.mapSize.set(512, 512); pl.shadow.bias = -0.002; pl.shadow.normalBias = 0.4; pl.shadow.radius = 3; pl.shadow.camera.near = 1; pl.shadow.camera.far = dist; shadows++; LAMPS3.sh--;
+      pl.castShadow = true; pl.shadow.mapSize.set(512, 512); pl.shadow.bias = -0.002; pl.shadow.normalBias = SHADOW_NB; pl.shadow.radius = 3; pl.shadow.camera.near = 1; pl.shadow.camera.far = dist; shadows++; LAMPS3.sh--;
     }
   };
   roomLights().forEach(l => {
@@ -344,7 +386,7 @@ function addLights3d(v, R3, layerOn, ceilOn) {
     const sl = new THREE.SpotLight(new THREE.Color(p.col || col), k, dist, 1.4, 1, 1.2);
     sl.position.set(p.x, p.h - 0.6, p.y); sl.target.position.set(p.x, 0, p.y); sl.userData.puck = true;
     // A few cast shadows (under wall cabinets, beside talls); phones and tablets skip it.
-    if (!coarse && sh < 4 && LAMPS3.sh > 0) { sl.castShadow = true; sl.shadow.mapSize.set(512, 512); sl.shadow.bias = -0.0015; sl.shadow.normalBias = 0.4; sl.shadow.radius = 3; sl.shadow.camera.near = 1; sl.shadow.camera.far = dist; sh++; LAMPS3.sh--; }
+    if (!coarse && sh < 4 && LAMPS3.sh > 0) { sl.castShadow = true; sl.shadow.mapSize.set(512, 512); sl.shadow.bias = -0.0015; sl.shadow.normalBias = SHADOW_NB; sl.shadow.radius = 3; sl.shadow.camera.near = 1; sl.shadow.camera.far = dist; sh++; LAMPS3.sh--; }
     sl.userData.k0 = k; g.add(sl); g.add(sl.target); lamps++;
   }
   // Light from the cans bouncing off the floor and counters lights the ceiling and upper walls a little (a real room

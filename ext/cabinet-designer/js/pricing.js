@@ -83,6 +83,23 @@ function bandCost(pt) {
 }
 const gMark = (ps, g) => 1 + (+((ps.groupMarkup || {})[g]) || 0) / 100;
 // A starting sheet: rough shop numbers to edit, with doors, hardware and materials priced from this job's libraries.
+// 0.64.11 (Ayden 2026-11-26: "the prices seem very high", "base blind corners should almost follow regular rules, like 70ft +
+// panel + materials + hardware + doors", "just price it as the best you can for utah county"): the cabinet charge is labor by
+// the foot with no flat charge per cabinet (the old $150 made a 9" base $240 before anything was on it), and the materials
+// are charged by what the cabinet is cut from. Base $70/ft, Wall $60/ft, Tall $140/ft.
+const CAB_RATES1126 = { Base: { base: 0, perFt: 70 }, Wall: { base: 0, perFt: 60 }, Tall: { base: 0, perFt: 140 } };
+const CAB_RATES_OLD = { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } };
+// A sheet still on the old starting rates moves to these once, with Materials on and the 10% doors markup Ayden gave
+// (2026-11-04). A sheet whose cabinet rates were changed by hand is left as it is.
+function rates1126(ps) {
+  if (!ps || ps.rates1126) return false;
+  const same = ['Base', 'Wall', 'Tall'].every(k => +((ps.cab || {})[k] || {}).base === CAB_RATES_OLD[k].base && +((ps.cab || {})[k] || {}).perFt === CAB_RATES_OLD[k].perFt);
+  if (same) {
+    ps.cab = JSON.parse(JSON.stringify(CAB_RATES1126)); ps.materials = { waste: 15, ...(ps.materials || {}), on: true };
+    if (ps.groupMarkup && +ps.groupMarkup.doors === 15) ps.groupMarkup.doors = 10;
+  }
+  ps.rates1126 = 1; return true;
+}
 function defaultPriceSheet(name = 'Standard pricing') {
   // Hardware with its own price (Ayden's Mozaik prices) starts there; the rest get rough shop numbers.
   const own = n => { for (const h of (S ? S.hardware : [])) {
@@ -94,15 +111,15 @@ function defaultPriceSheet(name = 'Standard pricing') {
   const hardware = {};
   if (S) allCabs().forEach(c => inRoomOf(c, () => Object.keys(buildParts(c).bom).forEach(k => { if (!(k in hardware)) hardware[k] = hwPrice(k); })));
   return {
-    id: uid('ps'), name, markup: 0, tax: 0, mzk: 1,
+    id: uid('ps'), name, markup: 0, tax: 0, mzk: 1, rates1126: 1,
     // Set values from Ayden's Mozaik "Detailed Pricing" sheet.
-    groupMarkup: { ...MZK.groupMarkup }, payments: MZK.payments.map(x => ({ ...x })),
-    cab: { Base: { base: 150, perFt: 120 }, Wall: { base: 100, perFt: 90 }, Tall: { base: 250, perFt: 220 } },
+    groupMarkup: { ...MZK.groupMarkup, doors: 10 }, payments: MZK.payments.map(x => ({ ...x })),
+    cab: { ...CAB_RATES1126 },
     products: {},
     adders: { scribeWall: 50, perDrawer: 0, perShelf: 12, perFiller: 35, perPull: 3 },
     panelAdd: { Base: 25, Wall: 25, Tall: 25 },
     doors: { on: true },
-    materials: { on: false, waste: 15 },
+    materials: { on: true, waste: 15 },
     hardware: { on: true, items: hardware },
     tops: Object.fromEntries((S ? S.countertops : []).map(t => [t.id, 55])), molds: Object.fromEntries((S ? S.moldings : []).map(m => [m.id, 9])),
     extras: MZK.extras.map(x => ({ ...x })),
@@ -281,6 +298,7 @@ async function loadPrices() {
   else if (PRICES.map(ensureMzk).some(Boolean)) changed = true;
   if (PRICES.map(takeInstall).some(Boolean)) changed = true;
   if (PRICES.map(mergeHwKeys).some(Boolean)) changed = true;
+  if (PRICES.map(rates1126).some(Boolean)) changed = true;
   if (!INSTALLERS.length) { const r = blankInstaller('Richard', MZK.install); r.def = true; INSTALLERS.push(r); changed = true; }
   if (ensureSawStruck()) changed = true;
   // 0.60.6 (Ayden 2026-11-20): Richard installs specialty items at $50 per foot. Set once; after that it is the shop's to change.
@@ -313,7 +331,17 @@ function priceCab(c, ps) {
   // Filler) was priced as a cabinet of its category (the Base charge, its shelves). It is priced like any filler: its
   // material by the sq ft plus the sheet's charge per filler (0.59.22), plus paint on its faces.
   const md = c.moz && typeof mozDef === 'function' && mozDef(c.moz);
-  if (md && md.group === 'filler' && !/ceiling/.test(c.moz)) {
+  // 0.64.9 (Ayden 2026-11-26: "the prices seem very high"): the Mozaik Ceiling trim is the C mold strip along the ceiling,
+  // but it was priced as a Wall cabinet as long as it is ($820 for 8 ft). It is priced like the C mold molding run it is:
+  // its length in feet at the sheet's Cmold price per foot (Tops and molding), nothing else.
+  if (md && md.group === 'filler' && /ceiling/.test(c.moz)) {
+    const b = buildParts(c), rate = +((ps.molds || {})['mo-cmold']) || 0, ends = c.w / 12 * rate;
+    const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = ends + custom, upcharge = base * (+c.pxUp || 0) / 100;
+    const sq = { fronts: 0, panels: 0, fillers: 0, toe: 0, interior: 0, total: 0, eb: 0 };
+    let cMat = 0; b.parts.forEach(pt => { if (pt.cabId != null && pt.cabId !== c.id) return; const m = mat(pt.mat); if (m) cMat += pt.L * pt.W * (pt.qty || 1) * matSqIn(m, ps); });
+    return { box: 0, doors: 0, extras: 0, ends, hardware: 0, materials: 0, sq, paint: 0, banding: 0, custom, upcharge, total: base + upcharge, bom: b.bom, cost: { mat: cMat, doors: 0, hw: 0, ins: 0, lab: { parts: 1, area: {}, doors: 0, drawers: 0, panels: 0, fillers: 0 } } };
+  }
+  if (md && md.group === 'filler') {
     const b = buildParts(c), parts = b.parts.filter(pt => pt.cabId == null || pt.cabId === c.id);
     // Shown under Panels, fillers like a wall filler (material and charge together), whether or not Materials is on.
     const ends = parts.reduce((a, pt) => { const m = mat(pt.mat); return a + (m ? pt.L * pt.W * (pt.qty || 1) * matSqIn(m, ps) : 0); }, 0) + (+ps.adders.perFiller || 0), materials = 0, sq = paintCab(c, ps, b, []), paint = sq.total * (+paintOf(ps).rate || 0), banding = sq.eb * (+paintOf(ps).ebRate || 0);
@@ -323,9 +351,9 @@ function priceCab(c, ps) {
     parts.forEach(pt => { const m = mat(pt.mat); if (m && (m.kind || 'sheet') === 'sheet') lab.area[m.id] = (lab.area[m.id] || 0) + pt.L * pt.W * (pt.qty || 1); });
     return { box: 0, doors: 0, extras: 0, ends, hardware: 0, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom, cost: { mat: cMat, doors: 0, hw: 0, ins: 0, lab } };
   }
+  ensureLibPrices(ps);
   const b = buildParts(c), fr = computeFronts(c), rule = { ...ps.cab[c.cat], ...(ps.products[c.libId] || {}) };
   const box = (+rule.base || 0) + (+rule.perFt || 0) * c.w / 12;
-  ensureLibPrices(ps);
   let doors = 0, cDoors = 0;
   if (ps.doors.on) fr.forEach(f => {
     if (f.type === 'open') return;
@@ -342,7 +370,7 @@ function priceCab(c, ps) {
   const pullNames = new Set(S.hardware.filter(h => h.kind === 'pull').map(h => h.name)), nPull = Object.entries(b.bom).reduce((a, [k, q]) => a + (pullNames.has(k) ? q : 0), 0);
   // 0.59.11: each drawer box has its own price by drawer material (Edit prices › Adders), on top of Each drawer.
   const boxEach = nDr ? dbxPrice(ps, cabDrawerMatT(c)) : 0;
-  const extras = nPull * (+ad.perPull || 0) + nDr * ((+ad.perDrawer || 0) + boxEach) + ins.reduce((a, it) => a + insertPrice(it), 0) + Math.max(0, p.shelfCount | 0) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
+  const extras = nPull * (+ad.perPull || 0) + nDr * ((+ad.perDrawer || 0) + boxEach) + ins.reduce((a, it) => a + insertPrice(it), 0) + shelvesOf(c, b, p) * (+ad.perShelf || 0) + (typeof shelfExtrasPrice === 'function' ? shelfExtrasPrice(c, ps) : 0);
   // Applied end panels are priced as a front in their door style, plus the sheet's charge for a panel that tall.
   const pds = panelDoor(c), panelParts = panelPartsOf(b, c);
   // 0.59.21 (Ayden 2026-11-19): a flat slab end panel is its material by the sq ft plus the sheet's charge per panel ($25), like a
@@ -366,6 +394,8 @@ function priceCab(c, ps) {
   if (ps.materials.on) b.parts.forEach(pt => {
     // Door parts are paid for by the door's own material cost.
     const m = mat(pt.mat); if (!m || (ps.doors.on && (FRONT_KINDS.includes(pt.kind) || pt.kind === 'applied'))) return;
+    // 0.64.11: a drawer box with its own price (Adders › drawer boxes) already pays for its sides and bottom.
+    if (boxEach && (pt.kind === 'drawerBox' || pt.kind === 'drawerBottom')) return;
     // Edge banding, priced by the roll in Libraries › Edgebanding, rides with the materials.
     materials += pt.L * pt.W * pt.qty * matSqIn(m, ps) + bandCost(pt) * pt.qty;
   });
@@ -374,6 +404,13 @@ function priceCab(c, ps) {
   // Per-cabinet extras from its Price tab: price per foot and per square foot of face, then an upcharge on the lot.
   const custom = (+c.pxFt || 0) * c.w / 12 + (+c.pxSq || 0) * c.w * c.h / 144, base = box + doors + extras + ends + hardware + materials + paint + banding + custom, upcharge = base * (+c.pxUp || 0) / 100;
   return { box, doors, extras, ends, hardware, materials, sq, paint, banding, custom, upcharge, total: base + upcharge, bom: b.bom, cost: { mat: cMat, doors: cDoors, hw: cHw, ins: cIns, lab } };
+}
+// 0.64.9: the adjustable shelves a cabinet is charged for. A Mozaik product (hood, mantel, bracket shelf, filler) has no
+// adjustable shelves, only the parts its Mozaik design cuts (an F.Shelf is a fixed part of it), but it carried the
+// category's Shelves setting of 1 and was charged a shelf it doesn't have.
+function shelvesOf(c, b, p) {
+  if (c.moz) return b.parts.filter(pt => pt.cabId === c.id && pt.kind === 'shelf' && /adjustable/i.test(pt.name || '')).reduce((a, pt) => a + (pt.qty || 1), 0);
+  return Math.max(0, p.shelfCount | 0);
 }
 // Drawer box prices, each (Ayden 2026-11-19): 3/4 melamine about $25-30, 5/8 Baltic birch ply about $70, solid wood about $110.
 // Picked by the drawer material's name unless the price sheet has its own number for it (Edit prices › Adders).
@@ -526,6 +563,10 @@ function ensureLibPrices(ps) {
   // 0.58.8 (Ayden 2026-11-19: countertops aren't his main thing): every top is one price per square foot, $70 to start.
   if (ps && !ps.topSq) { ps.topSq = { rate: 70 }; savePrices(); }
   if (hwCosts1119(ps)) savePrices();
+  // 0.64.9 (Ayden 2026-11-26: "base blind corners should almost follow regular rules, like 70ft + panel + materials + hardware
+  // + doors"): the base blind corner's cabinet charge is $70 per foot of its width with no flat charge per cabinet; the blind
+  // panel, materials, hardware and doors are added as on any cabinet. Set once on its Products row, then it is the shop's to change.
+  if (ps && ps.products && !ps.blind70) { const o = ps.products['b-blind'] || {}; if (!o.own && (o.base === '' || o.base == null) && (o.perFt === '' || o.perFt == null)) ps.products['b-blind'] = { ...o, base: 0, perFt: 70 }; ps.blind70 = 1; savePrices(); }
   if (legCost2(ps)) savePrices();
   // 0.58.3: Cmold (flat crown) starts at $4/ft, once per price sheet; after that the sheet's own price stands.
   if (ps && ps.molds && !ps.cmold4 && S.moldings.some(m => m.id === 'mo-cmold')) { ps.molds['mo-cmold'] = 4; ps.cmold4 = 1; savePrices(); }

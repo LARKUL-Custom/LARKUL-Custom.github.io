@@ -357,7 +357,8 @@ function roomLookFields(rm) {
   const jn = job ? texName(job) : 'Oak planks';
   const fo = [{ v: '', l: `Default · ${jn}` }, ...FLOORS.map(f => ({ v: 'fl:' + f.k, l: f.n, g: f.g }))];
   if (fp && !fp.startsWith('fl:')) fo.push({ v: fp, l: texName(fp) + ' (Textures)', last: true });
-  return fld('Floor', 'rfloor', 'f', fp, 'select', { options: fo }) + fld('Outside', 'room', 'land', landOf(rm), 'select', { options: LAND_KINDS, title: 'Realistic 3D and Walk' });
+  return fld('Floor', 'rfloor', 'f', fp, 'select', { options: fo }) + fld('Outside', 'room', 'land', landOf(rm), 'select', { options: LAND_KINDS, title: 'Realistic 3D and Walk' })
+    + (typeof SUN_FACES === 'object' ? fld('Sun', 'room', 'sun', (rm || {}).sun || '', 'select', { options: SUN_FACES, title: 'Where the sun comes from in Realistic 3D and Walk. Through the windows: it always shines in through the biggest window. Or set which way the top of the plan really faces.' }) : '');
 }
 // Bottom panel Room tab: the ceiling (height, slope, gap above the cabinets) and the walls.
 function roomDockBody() {
