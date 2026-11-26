@@ -108,6 +108,16 @@ function modelLoad(key) {
 }
 // The model's own size in inches [w, d, h] once loaded (SketchUp's x, y, z), else null.
 const modelSize = key => { const g = modelGeo[key]; if (!g || g.then || g.missing) return null; const b = g.box; return [b[3] - b[0], b[4] - b[1], b[5] - b[2]]; };
+// 0.64.5 (Ayden 2026-11-26: "faucet isnt lined up with the center of the sink"): where the model stands on the floor,
+// across its width, in inches from its left side: the middle of its points in the bottom 1/2". A faucet's box takes in its
+// side handle, so centring the box put the spout about 1" off the sink's centre; its base (under the spout) is centred instead.
+const modelBaseX = key => {
+  const g = modelGeo[key]; if (!g || g.then || g.missing) return null;
+  if (g.baseX != null) return g.baseX;
+  const [x0, , z0, x1] = g.box; let lo = Infinity, hi = -Infinity;
+  g.mats.forEach(m => { const p = m.p; for (let j = 0; j < p.length; j += 3) if (p[j + 2] - z0 <= 0.5) { if (p[j] < lo) lo = p[j]; if (p[j] > hi) hi = p[j]; } });
+  return g.baseX = lo <= hi ? (lo + hi) / 2 - x0 : (x1 - x0) / 2;
+};
 const mdlMats = {};
 function mdlMat(c, o, tex, steel) {
   const k = c + '|' + o + '|' + (tex ? tex.uuid : '') + (steel ? '|s' : '');

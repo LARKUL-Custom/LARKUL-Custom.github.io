@@ -630,14 +630,15 @@ function flatSlab3(pts, holes, y, t, material) {
   me.rotation.x = Math.PI / 2; me.position.y = y;
   return me;
 }
-// A sink's faucet model at its own size: centred on the sink, its back 1/2" off the back of the top's cutout space
+// A sink's faucet model at its own size: its base centred on the sink (0.64.5, not its box, which takes in the handle), its back 1/2" off the back of the top's cutout space
 // (never past the wall), standing on the top. Null until the model is in.
 function fixtFaucetMesh(f, k, c, selCol) {
   const key = 'std:' + fixtFaucet(f); modelLoad(key);
   const ms = modelSize(key); if (!ms) return null;
   const [mw, md, mh] = ms, mm = modelMesh(key, mw, mh, md, selCol); if (!mm) return null;
   const back = k.open ? Math.max(0.5, k.y0 - 3) : Math.max(0.5, Math.min(k.sy0, k.y0 - 0.5) - 2.25);
-  mm.position.set(f.w / 2 - mw / 2, c.top, Math.max(0.5, back - 0.5));
+  const bx = modelBaseX(key);
+  mm.position.set(f.w / 2 - (bx == null ? mw / 2 : bx), c.top, Math.max(0.5, back - 0.5));
   return mm;
 }
 // 0.63.48: Realistic glass for windows and glass doors is clear (a faint tint and a sharp reflection), so what is outside shows.
