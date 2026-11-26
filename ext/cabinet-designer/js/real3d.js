@@ -86,7 +86,10 @@ function aoSetup(v) {
   const blurX = blur(), mix = blur();
   // dst = dst * src: the shade only ever darkens the picture.
   Object.assign(mix, { blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor });
-  const normal = new THREE.MeshNormalMaterial();
+  // 0.64.1: one normal picture material per face side. Built-in SketchUp models (fridges, ranges...) are drawn
+  // two-sided because many of their faces are wound inward; a one-sided normal pass dropped those faces, so the shade
+  // came from the parts inside the appliance and its door looked see-through (Ayden 2026-11-26, Johnson fridge).
+  const normal = [THREE.FrontSide, THREE.BackSide, THREE.DoubleSide].map(side => new THREE.MeshNormalMaterial({ side }));
   return (v.aoS = { cam, shade, blurX, mix, normal, shadeScene: quad(shade), blurScene: quad(blurX), mixScene: quad(mix), w: 0, h: 0 });
 }
 function aoTargets(S, w, h) {
@@ -106,15 +109,20 @@ function realAO(v) {
   const k = aoCoarse() || sz.x * sz.y > 5e6 ? 2 : 1, w = Math.max(1, Math.round(sz.x / k)), h = Math.max(1, Math.round(sz.y / k));
   aoTargets(S, w, h);
   // Only solid things shade: glass, glows, light washes, labels and lines stay out of the shade picture.
-  const hide = [];
+  // Each solid draws its normals with its own face side (two-sided models stay solid in the shade picture).
+  const hide = [], swap = [];
   v.scene.traverse(o => {
     if (!o.visible) return;
     if (o.isSprite || o.isLine || o.isLineSegments || o.isPoints || o.isLight) { if (!o.isLight) { hide.push(o); o.visible = false; } return; }
-    if (o.isMesh) { const m = Array.isArray(o.material) ? o.material[0] : o.material; if (!m || o.userData.noAO || m.transparent || m.depthWrite === false || m.colorWrite === false || m.visible === false) { hide.push(o); o.visible = false; } }
+    if (o.isMesh) {
+      const m = Array.isArray(o.material) ? o.material[0] : o.material;
+      if (!m || o.userData.noAO || m.transparent || m.depthWrite === false || m.colorWrite === false || m.visible === false) { hide.push(o); o.visible = false; }
+      else { swap.push([o, o.material]); o.material = S.normal[m.side === THREE.DoubleSide ? 2 : m.side === THREE.BackSide ? 1 : 0]; }
+    }
   });
   const keep = { bg: v.scene.background, ov: v.scene.overrideMaterial, tm: r.toneMapping, sh: r.shadowMap.autoUpdate, ac: r.autoClear, cc: r.getClearColor(new THREE.Color()), ca: r.getClearAlpha() };
   try {
-    v.scene.background = null; v.scene.overrideMaterial = S.normal; r.toneMapping = THREE.NoToneMapping; r.shadowMap.autoUpdate = false;
+    v.scene.background = null; v.scene.overrideMaterial = null; r.toneMapping = THREE.NoToneMapping; r.shadowMap.autoUpdate = false;
     r.setClearColor(0x8080ff, 1); r.setRenderTarget(S.nt); r.clear(); r.render(v.scene, v.cam);
     const cam = v.cam;
     S.shade.uniforms.tDepth.value = S.nt.depthTexture; S.shade.uniforms.tNormal.value = S.nt.texture;
@@ -132,6 +140,7 @@ function realAO(v) {
     v.scene.background = keep.bg; v.scene.overrideMaterial = keep.ov; r.toneMapping = keep.tm; r.shadowMap.autoUpdate = keep.sh; r.autoClear = keep.ac;
     r.setClearColor(keep.cc, keep.ca); r.setRenderTarget(null);
     hide.forEach(o => { o.visible = true; });
+    swap.forEach(([o, m]) => { o.material = m; });
   }
 }
 
@@ -193,7 +202,7 @@ function realLight(v) {
   v.envK = 0.25 + 0.75 * d;
   // Only through windows (Lights tab): no fill from overhead, almost no sky everywhere, a dark ceiling, and the sky
   // light at each window (windowSky3 in lights.js) follows the daylight. The sun still comes in where walls let it.
-  if (typeof lay === 'function' && lay().winOnly) {
+  if (typeof winOnlyNow === 'function' ? winOnlyNow() : typeof lay === 'function' && lay().winOnly) {
     v.hemi.intensity = 0; v.hemi.color.set(0xf4efe6); v.hemi.groundColor.set(0xb8a894); v.fill.intensity = 0;
     v.renderer.toneMappingExposure = 1.05;
     if (typeof realCeil3 === 'function') realCeil3().emissive.set(0x000000);

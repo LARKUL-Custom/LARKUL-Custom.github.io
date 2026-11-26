@@ -128,6 +128,13 @@ function capPoly(w, cp) {
 const elevX = (c, L) => c.side === 1 ? c.off : L - c.off - c.w;
 /* ---------- Fronts ---------- */
 const falseOn = c => !!c && c.falseFront === 'on';
+// 0.64.3 (Ayden 2026-11-26: "we always give the sink top drawer a false handle to look more fitting, and it also follows
+// reduced rail rules and other top drawer rules"): a false front in a base cabinet's top row of fronts (the sink base's
+// tip-out panel) gets a drawer pull unless its row says no pull (row.pull false), and a false front with a pull counts as
+// a drawer: drawer style, top drawer style and the style's Top drawer fronts rules. Mozaik's own pull choice comes in
+// as row.pull (mozimport.js).
+const falsePullDefault = (c, r, top) => !!r && r.type === 'false' && (r.pull === true || (r.pull !== false && top && !!c && c.cat === 'Base'));
+const drawerLike = f => !!f && (f.type === 'drawer' || (f.type === 'false' && (f.was ? f.was === 'drawer' : !f.apron && !!f.pull)));
 function computeFronts(c, p) {
   if (c.moz && typeof isMoz === 'function' && isMoz(c)) return [];
   if (c.made && typeof madeDef === 'function' && madeDef(c)) return [];
@@ -163,13 +170,13 @@ function computeFronts(c, p) {
     const zs = rows.map(r => { const h = r.h === '*' ? starH : (+r.h || 0), z1 = z; z = z1 - h - gap; return [z1 - h, z1]; });
     return Object.assign(cornerFronts(c, p, rows, zs), { overfull: fixed > avail + 0.001 });
   }
-  const rowZ = {};
+  const rowZ = {}, topRow = rows.findIndex(r => r.type !== 'open');
   rows.forEach((r, ri) => {
     const h = r.h === '*' ? starH : (+r.h || 0), z1 = z, z0 = z - h;
     rowZ[ri] = [z0, z1];
     // 0.63.0: a row split side by side into sections, each its own front (or a stack of them), like Mozaik's face splits.
     const cols = !bw ? rowCols(c, r) : null;
-    if (cols) { colFronts(c, p, r, ri, cols, xl, xr, z0, z1, gap, out); z = z0 - gap; return; }
+    if (cols) { colFronts(c, p, r, ri, cols, xl, xr, z0, z1, gap, out, ri === topRow); z = z0 - gap; return; }
     const n = Math.max(1, r.count | 0), fw = ((xr - xl) - gap * (n - 1)) / n;
     for (let i = 0; i < n; i++) {
       const x0 = xl + i * (fw + gap);
@@ -180,7 +187,7 @@ function computeFronts(c, p) {
       // interior parts that aren't needed"): with False front on, every door and drawer front stays where it is, in its
       // own style and with its pull, but is glued on (no hinges, slides or drawer box). f.was keeps what it looked like.
       if (falseOn(c) && (r.type === 'door' || r.type === 'drawer')) out.push({ type: 'false', was: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', pull: true, ...fMids(r) });
-      else out.push({ type: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', ...(r.pull ? { pull: true } : {}), ...fMids(r) });
+      else out.push({ type: r.type, row: ri, idx: i, n, x0, x1: x0 + fw, z0, z1, hinge, style: r.style || '', ...(r.type === 'false' ? (falsePullDefault(c, r, ri === topRow) ? { pull: true } : {}) : r.pull ? { pull: true } : {}), ...fMids(r) });
     }
     z = z0 - gap;
   });
@@ -214,7 +221,7 @@ function secSizes(list, span, gap) {
   const avail = span - gap * Math.max(0, list.length - 1), sh = stars ? Math.max(0, (avail - fixed) / stars) : 0;
   return { sizes: list.map(q => q === '*' || q === '' || q === undefined ? sh : (+q || 0)), over: fixed > avail + 0.001 };
 }
-function colFronts(c, p, r, ri, cols, xl, xr, z0, z1, gap, out) {
+function colFronts(c, p, r, ri, cols, xl, xr, z0, z1, gap, out, topRow) {
   // 0.63.25: a Mozaik face keeps Mozaik's own space between its columns (r.colGap, 1" on the Ryan Servro vanity) and
   // between the fronts of a column (col.vgap).
   const cg = isFinite(r.colGap) ? +r.colGap : gap;
@@ -237,7 +244,7 @@ function colFronts(c, p, r, ri, cols, xl, xr, z0, z1, gap, out) {
         if (type === 'door') hinge = n === 1 ? (lf.hinge === 'L' || lf.hinge === 'R' ? lf.hinge : j === 0 ? 'L' : j === nc - 1 ? 'R' : p.hingeSide) : n === 2 ? (i === 0 ? 'L' : 'R') : (i % 2 ? 'R' : 'L');
         const base = { row: ri, cell, col: j, ncol: nc, sub: leaves.length > 1 ? k : null, idx: i, n, x0: fx0, x1: fx0 + fw, z0: lz0, z1: lz1, hinge, style: lf.style || '', gxL, gxR, ...fMids(lf) };
         if (falseOn(c) && (type === 'door' || type === 'drawer')) out.push({ type: 'false', was: type, ...base, pull: true });
-        else out.push({ type, ...base, ...(lf.pull ? { pull: true } : {}) });
+        else out.push({ type, ...base, ...(type === 'false' ? (falsePullDefault(c, lf, topRow && k === 0) ? { pull: true } : {}) : lf.pull ? { pull: true } : {}) });
       }
     });
   });
@@ -307,6 +314,10 @@ function cabPlanPoly(o) {
 function fixedObstacles(c, z0, z1) {
   const w = wall(c.wall), over = (a0, a1) => a0 < z1 - 0.25 && a1 > z0 + 0.25, obs = [];
   S.cabinets.forEach(o => { if (o.id === c.id) return; const poly = cabPlanPoly(o); if (poly && over(o.elev || 0, (o.elev || 0) + o.h)) obs.push(poly); });
+  // Standing appliances (dishwasher, range, fridge, laundry) are in the way too, so a door beside one stops at its face
+  // instead of swinging through it (0.64.4).
+  (S.fixtures || []).forEach(fx => { if (!['dw', 'range', 'fridge', 'ucfridge', 'washer', 'dryer'].includes(fx.kind) || !wall(fx.wall)) return;
+    if (over(fx.elev || 0, (fx.elev || 0) + (fx.h || 34.5))) { const p = cabPoly(fx); if (p) obs.push(p); } });
   S.walls.forEach(ww => { if (ww !== w) { const gg = wg(ww), t = ww.thick / 2; obs.push([wallPt(ww, gg, 1, 0, -t), wallPt(ww, gg, 1, gg.L, -t), wallPt(ww, gg, 1, gg.L, t), wallPt(ww, gg, 1, 0, t)]); }
     // End caps are short walls too, on any wall, including the one this cabinet hangs on.
     capsOf(ww).forEach(cp => { if (cp.height === undefined || over(0, cp.height)) obs.push(capPoly(ww, cp)); }); });
@@ -333,26 +344,35 @@ function openOne(c, f, placed, cap, shutAll) {
   const fold = f.type === 'door' && typeof cornerFoldOf === 'function' && cornerFoldOf(c, f), foldKey = fold ? frontKey3(c, fold) : null;
   // Cabinets, walls and fronts that stay shut are still; anything one of them already touches with this front shut
   // (a corner door's edge over the next front, say) is how the cabinets were placed, not this front running into it.
-  // A bi-fold pair (0.63.71) also ignores a cabinet placed over its own (flagged as an overlap) and that cabinet's
-  // fronts: that is how they were placed, not the doors running into them. Else the pair stays shut and only the
-  // folding door seems to move.
-  const own = fold ? cabPlanPoly(c) : null, over = new Set(own ? S.cabinets.filter(o => o.id !== c.id && over2(o)).map(o => o.id) : []);
-  // An open drawer of such a cabinet still counts: drawers go first, so the pair opens only as far as the drawer lets it.
-  // That includes a cabinet right against it with no filler between: the pair could not clear it, so the pair opens
-  // square instead (below), as far as it can go without a filler.
-  function over2(o) { const q = cabPlanPoly(o); return q && (o.elev || 0) < z1 - 0.25 && (o.elev || 0) + o.h > z0 + 0.25 && polysHit(q, own); }
-  const near = placed.filter(p => !(p.c.id === c.id && (frontKey3(p.c, p.f) === frontKey3(c, f) || frontKey3(p.c, p.f) === foldKey)) && (!over.has(p.c.id) || p.f.type === 'drawer') && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
-  const still = fixedObstacles(c, z0, z1).concat(near.filter(p => p.v <= 0).reduce((a, p) => a.concat(p.poly), []))
-    .concat((shutAll || []).filter(q => q.key !== frontKey3(c, f) && q.key !== foldKey && !over.has(q.key.slice(0, q.key.indexOf(':'))) && q.z0 < z1 - 0.25 && q.z1 > z0 + 0.25).reduce((a, q) => a.concat(q.poly), []));
-  const moving = near.filter(p => p.v > 0).reduce((a, p) => a.concat(p.poly), []);
-  const shut = f.type === 'door' ? doorPoly(c, f, 0, fr) : drawerPoly(c, f, 0, fr);
-  const obs = still.filter(o => !shut.some(poly => polysHit(poly, o)) && !(own && polysHit(own, o))).concat(moving);
+  // A bi-fold pair (0.63.71) also ignores a cabinet placed over or right against its own (flagged as an overlap):
+  // that is how they were placed, not the doors running into them. Else the pair stays shut and only the folding door
+  // seems to move.
+  const own = fold ? cabPlanPoly(c) : null;
+  // 0.64.4 (Ayden 2026-11-26: "corner door cant open all the way but it should be open more than this, like almost
+  // max"): a bi-fold pair against a cabinet with no filler used to skip that cabinet and its fronts and stop square.
+  // Now it skips only the cabinet bodies its own footprint touches (that is how they were placed) and swings on toward
+  // 185° until it meets their doors, drawers or pulls. Fronts already touching the pair shut are placement, not the
+  // swing running into them.
+  const near = placed.filter(p => !(p.c.id === c.id && (frontKey3(p.c, p.f) === frontKey3(c, f) || frontKey3(p.c, p.f) === foldKey)) && p.z0 < z1 - 0.25 && p.z1 > z0 + 0.25);
+  const fronts = near.filter(p => p.v <= 0).reduce((a, p) => a.concat(p.poly), [])
+    .concat((shutAll || []).filter(q => q.key !== frontKey3(c, f) && q.key !== foldKey && q.z0 < z1 - 0.25 && q.z1 > z0 + 0.25).reduce((a, q) => a.concat(q.poly), []));
+  let moving = near.filter(p => p.v > 0).reduce((a, p) => a.concat(p.poly), []);
+  const shut = f.type === 'door' ? (fold ? doorPoly(c, f, 1e-4, fr, 0) : doorPoly(c, f, 0, fr)) : drawerPoly(c, f, 0, fr);
+  // 0.64.4 (Ayden 2026-11-26, the door left of the sink beside a dishwasher filler: it should open "close to the max"):
+  // a filler or panel standing just in front of a door's hinge edge (up to 1/4" off its face, as Mozaik places the
+  // filler between a dishwasher and the door beside it) is placement too, so the door opens past it instead of stopping
+  // at a few degrees. The real hinge throws the door clear of it.
+  const SHUT_TOL = 0.25, LS = f.type === 'door' && !fold ? frontLocal(c, f, fr) : null;
+  if (LS) shut.push([LS(f.x0, 0), LS(f.x1, 0), LS(f.x1, FRONT_T + SHUT_TOL), LS(f.x0, FRONT_T + SHUT_TOL)]);
+  const clearShut = o => !shut.some(poly => polysHit(poly, o));
+  if (fold) moving = moving.filter(clearShut);
+  const obs = fixedObstacles(c, z0, z1).filter(o => clearShut(o) && !(own && polysHit(own, o))).concat(fronts.filter(clearShut), moving);
   // Boxes first: an obstacle whose box is clear of the front's box can't touch it (same answer, much less work).
   const ob = obs.map(o => [o, planBox(o)]);
   const hit = polys => polys.some(poly => { const b = planBox(poly); return ob.some(([o, q]) => !(q.x1 < b.x0 || q.x0 > b.x1 || q.y1 < b.y0 || q.y0 > b.y1) && polysHit(poly, o)); });
   if (f.type === 'door') {
-    // a bi-fold pair stops at its hinge (185°); against a cabinet with no filler (ignored above) it stops square so it doesn't swing through it
-    const pairMax = over.size ? Math.PI / 2 : CORNER_PAIR_MAX;
+    // a bi-fold pair stops at its hinge (185°) or where it meets something
+    const pairMax = CORNER_PAIR_MAX;
     const max = Math.min(fold ? pairMax : f.face ? DOOR_MAX : pairCap(c, f), cap || (fold ? pairMax : DOOR_MAX)); let v = max;
     // A bi-fold pair straightens as it swings (both by the same share of their move, as in 3D), so each angle it
     // could stop at is checked along the whole way there.
@@ -373,13 +393,15 @@ function clearOpenSolve() { openCache = null; }
 // Every open cabinet's doors and drawers, worked out together so none of them run into each other.
 // First every drawer slides out, then every door goes to 90° at most, bigger fronts first: a front that would hit
 // one already placed opens only as far as it can. Drawers go first (Ayden 2026-11-26: "give drawer cabinet priority"),
-// so an open door next to a drawer cabinet swings less instead of holding its drawers back.
+// so an open door next to a drawer cabinet swings less instead of holding its drawers back. A 90° corner's bi-fold
+// goes before both (0.64.4, Ayden: the corner door "should be open more than this, like almost max"): it needs the
+// most room to fold back, so a drawer or door beside it gives way only where it would run into the fold.
 // Then doors swing on past 90° where nothing is in the way.
 function openSolve() {
   if (openCache) return openCache;
   const items = [];
   S.cabinets.forEach((c, ci) => { if (!ui.open[c.id]) return; computeFronts(c).forEach(f => { if (f.type === 'door' || f.type === 'drawer') items.push({ c, f, ci, area: (f.x1 - f.x0) * (f.z1 - f.z0) }); }); });
-  const drw = it => it.f.type === 'drawer' ? 0 : 1;
+  const drw = it => typeof cornerFoldOf === 'function' && it.f.type === 'door' && cornerFoldOf(it.c, it.f) ? 0 : it.f.type === 'drawer' ? 1 : 2;
   items.sort((a, b) => drw(a) - drw(b) || b.area - a.area || a.ci - b.ci || a.f.row - b.f.row || a.f.idx - b.f.idx || (a.f.x0 - b.f.x0));
   // Every front in the room, shut, with its pull: a door or drawer can't swing or slide into one that stays closed.
   const shutAll = shutCache && shutCache.cabs === S.cabinets ? shutCache.list : [];
@@ -414,7 +436,7 @@ const frontTravel = (c, f) => openAmount(c, f);
 // Top, middle and bottom drawer fronts can each have their own style on the door template. One drawer is the top one.
 function drawerSlotStyle(c, f, dt) {
   if (!dt.drawerTop && !dt.drawerBot) return dt.drawer;
-  const dr = computeFronts(c).filter(x => x.type === 'drawer').sort((a, b) => b.z1 - a.z1), i = dr.findIndex(x => Math.abs(x.z0 - f.z0) < 0.01 && Math.abs(x.x0 - f.x0) < 0.01);
+  const dr = computeFronts(c).filter(drawerLike).sort((a, b) => b.z1 - a.z1), i = dr.findIndex(x => Math.abs(x.z0 - f.z0) < 0.01 && Math.abs(x.x0 - f.x0) < 0.01);
   const topZ = dr.length ? dr[0].z1 : 0, botZ = dr.length ? dr[dr.length - 1].z0 : 0;
   if (i >= 0 && Math.abs(f.z1 - topZ) < 0.01) return dt.drawerTop || dt.drawer;
   if (i >= 0 && dr.length > 1 && Math.abs(f.z0 - botZ) < 0.01) return dt.drawerBot || dt.drawer;
@@ -430,7 +452,7 @@ function sizeRuleStyle(ds, fw, fh) {
 function frontBaseStyle(c, f, dt) {
   dt = dt || doorTpl(cabSet(c, 'doorT'));
   const ty = f.was || f.type;
-  return doorStyle(f.style && S.doorStyles.some(d => d.id === f.style) ? f.style : ty === 'door' ? (c.cat === 'Wall' && dt.wallDoor) || dt.door : ty === 'drawer' ? drawerSlotStyle(c, f, dt) : dt.falseFront);
+  return doorStyle(f.style && S.doorStyles.some(d => d.id === f.style) ? f.style : ty === 'door' ? (c.cat === 'Wall' && dt.wallDoor) || dt.door : ty === 'drawer' || drawerLike(f) ? drawerSlotStyle(c, f, dt) : dt.falseFront);
 }
 function frontStyle(c, f) {
   const dt = doorTpl(cabSet(c, 'doorT'));
@@ -495,8 +517,8 @@ const fMids = o => o && o.mids && (o.mids.S != null || o.mids.R != null) ? { mid
 function frontKind(c, f, ds) {
   if (c && c.made === 'apfront') return 'apfront';
   const t = (f && (f.was || f.type)) || 'door';
-  if (t === 'drawer' && ds && (ds.splitRules || []).some(r => r.on === 'topdrawer') && c && !c.made) {
-    try { const dr = computeFronts(c).filter(x => (x.was || x.type) === 'drawer'); const top = Math.max(...dr.map(x => x.z1)); if (Math.abs(f.z1 - top) < 0.01) return 'drawer-top'; } catch (_) {}
+  if ((t === 'drawer' || drawerLike(f)) && ds && (ds.splitRules || []).some(r => r.on === 'topdrawer') && c && !c.made) {
+    try { const dr = computeFronts(c).filter(drawerLike); const top = Math.max(...dr.map(x => x.z1)); if (Math.abs(f.z1 - top) < 0.01) return 'drawer-top'; } catch (_) {}
   }
   return t === 'drawer' || t === 'false' ? 'drawer' : 'door';
 }

@@ -510,7 +510,7 @@ function qeOpening(c, i, part) {
     <div class="qe-picks">
     ${face ? `${pick('Type', 'type', typeOpts, typeNow)}
       ${row.type === 'door' && n === 1 ? pick('Hinge', 'hinge', [['', 'Default'], ['L', 'Left'], ['R', 'Right']], row.hinge || '') : ''}
-      ${row.type === 'false' ? pick('Pull', 'pull', [['', 'None'], ['1', 'Drawer pull']], row.pull ? '1' : '') : ''}
+      ${row.type === 'false' ? pick('Pull', 'pull', [['', 'None'], ['1', 'Drawer pull']], (f ? f.pull : row.pull) ? '1' : '') : ''}
       ${row.type === 'open' ? '' : `<label class="qe-pick"><span>Style</span>${fctl(R, i + '.style', row.style || '', 'select', { options: styleOpts, label: 'Style' })}</label>`}
       ${typeof mwSpot === 'function' && mwSpot(c, i) ? `<label class="qe-pick"><span>Microwave opening</span>${fctl('cab:' + c.id, 'mwH', mwClear(c), 'len', { label: 'Microwave opening height' })}</label>`
         : `<label class="qe-pick"><span>Height</span>${fctl(R, i + '.h', row.h, 'rowh', { ph: '*', label: 'Height' })}</label>`}` : ''}
@@ -528,7 +528,7 @@ document.addEventListener('change', e => {
       if (v === 'door1' || v === 'door2') { row.type = 'door'; row.count = v === 'door2' ? 2 : 1; if (v === 'door2') delete row.hinge; }
       else if (v !== 'doorN') { if (row.type === 'door' && (row.count | 0) > 1 && v !== 'drawer') row.count = 1; row.type = v; }
     } else if (key === 'hinge') { if (v) row.hinge = v; else delete row.hinge; }
-    else if (key === 'pull') { if (v) row.pull = true; else delete row.pull; }
+    else if (key === 'pull') row.pull = !!v; // 0.64.3: false = no pull (a sink base's top false front has one unless told)
   });
 });
 // The whole-box fittings: a full height divider and a finished interior. Shelves are set opening by opening.

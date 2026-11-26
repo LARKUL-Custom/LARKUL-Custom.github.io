@@ -389,7 +389,7 @@ function fsPanel(c, s) {
     ${split}${dlg}
     ${pick('Type', 'type', types, t)}
     ${lf.type === 'door' && n === 1 ? pick('Hinge', 'hinge', [['', `Auto · ${(f0 && f0.hinge) === 'R' ? 'Right' : 'Left'}`], ['L', 'Left'], ['R', 'Right']], lf.hinge || '') : ''}
-    ${lf.type === 'false' ? pick('Pull', 'pull', [['', 'None'], ['1', 'Drawer pull']], lf.pull ? '1' : '') : ''}
+    ${lf.type === 'false' ? pick('Pull', 'pull', [['', 'None'], ['1', 'Drawer pull']], (f0 ? f0.pull : lf.pull) ? '1' : '') : ''}
     ${size}
     ${lf.type === 'open' ? '' : pick('Style', 'style', styleOpts, lf.style || '')}
     ${lf.type === 'open' || !f0 ? '' : fsMidRows(`secm:${id}:${key}`, lf.mids, (() => { try { const st = frontStyle(c, f0); return st.framed ? { ds: st.ds, fw, fh: f0.z1 - f0.z0, kind: frontKind(c, f0, st.ds) } : null; } catch (_) { return null; } })())}
@@ -526,7 +526,7 @@ document.addEventListener('change', e => {
       fsEnsureRows(c); const lf = fsLeaf(c, key); if (!lf) return;
       if (k === 'type') fsSetType(lf, v, key.includes('.'));
       else if (k === 'hinge') { if (v) lf.hinge = v; else delete lf.hinge; }
-      else if (k === 'pull') { if (v) lf.pull = true; else delete lf.pull; }
+      else if (k === 'pull') lf.pull = !!v;
       else if (k === 'style') { if (v) lf.style = v; else delete lf.style; }
     });
     return;

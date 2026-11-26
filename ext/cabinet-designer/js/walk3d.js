@@ -231,11 +231,15 @@ function walkStart() {
   if (ui.sel) select(null);
   // Every room joined to this one is drawn round it, in this room's plan, for the whole walk (WALK.frame).
   WALK.frame = S.roomId; WALK.pending = true;
+  // 0.64.1: the Walk's own Only through windows starts off (the room's lights and daylight as usual), whatever the
+  // Lights tab says; the Walk bar turns it on.
+  WALK.winOnly = false;
   // The tour is in the Realistic look; it goes back to the plain look after if Walk turned it on.
   WALK.lookWas = { render: !!ui.render3d, hidden: !!ui.hidden3d };
   try {
     if (!ui.render3d || ui.hidden3d) { ui.render3d = true; ui.hidden3d = false; renderRoom(); }
-    else if (typeof houseOf === 'function' && !v.houseBuilt && houseOf(S.roomId).length > 1) buildRoom3D();
+    // Drawn again for the walk: joined rooms round it, open sides closed in, or the Lights tab's windows-only light off.
+    else if ((typeof houseOf === 'function' && !v.houseBuilt && houseOf(S.roomId).length > 1) || (typeof roomScene3 === 'function' && (lay().winOnly || (WALK.autoWalls !== false && walkOpenSides(S.walls).segs.length)))) buildRoom3D();
   } finally { WALK.pending = false; }
   WALK.v = v; WALK.saved = v.getView(); WALK.fov = v.persp.fov; WALK.room0 = S.roomId; WALK.door = {};
   v.cam = v.persp; v.controls.object = v.persp; v.controls.enabled = false;
@@ -261,7 +265,9 @@ function walkStop() {
   v.controls.enabled = true;
   // Doors go back to shut, and the joined rooms go (or are drawn round the room you ended up in, with House on).
   const doors = Object.keys(DOORS.goal).length; DOORS.goal = {}; DOORS.t = {};
-  if ((doors || v.houseBuilt) && ui.viewMode === '3d') buildRoom3D();
+  // The walls the Walk closed open sides with go, and the Lights tab's own light comes back.
+  const relit = typeof lay === 'function' && !!WALK.winOnly !== !!lay().winOnly; WALK.winOnly = false;
+  if ((doors || v.houseBuilt || WALK.autoN || relit) && ui.viewMode === '3d') buildRoom3D();
   WALK.frame = null;
   // Walked into another room: show it from the usual corner; else the view from before the walk.
   if (S.roomId !== WALK.room0) { v.fitted = true; v.look(roomViewDir(0.75)); } else v.setView(WALK.saved);
@@ -525,6 +531,10 @@ function walkUI(v, on) {
     // 0.63.31 (Ayden 2026-11-24): the time of day and the room's lights, right in the Walk bar, to set before full screen.
     + (v.real && typeof SUN === 'object' ? `<label class="walksun" title="Time of day">${icon('sun')}<input type="range" min="5" max="22" step="0.25" value="${SUN.hour}" aria-label="Time of day"><span>${sunLabel(SUN.hour)}</span></label>` : '')
     + `<button class="btn sm walklights" data-walk="lights" aria-pressed="false" title="Turn the room's ceiling lights and LED strips off or on"></button>`
+    // 0.64.1: Only through windows for this walk (off to start; the room's lights stay on with it, Lights off turns them off).
+    + (v.real && typeof winSeal3 === 'function' ? `<button class="btn sm" data-walk="winonly" aria-pressed="false" title="Daylight only comes in through the windows (no sky light from outside the drawing). The room's lights stay on; Lights off turns them off. Only for this walk."></button>` : '')
+    // 0.64.1: the walls Walk puts along open sides of the room, on or off.
+    + (typeof walkAutoWalls === 'function' && typeof roomScene3 === 'function' ? `<button class="btn sm" data-walk="walls" aria-pressed="true" title="Close in the open sides of the room with plain walls while walking, so you never look out into empty space. Only for the walk: nothing is added to the drawing."></button>` : '')
     + (v.real && typeof resetLighting === 'function' ? `<button class="btn sm" data-walk="reset" title="Reset lighting: 3 PM daylight, room lights on, automatic ceiling cans, Only through windows off">${icon('regen')}Reset lighting</button>` : '')
     + `<button class="btn sm" data-walk="stop">${icon('close')}Stop walking</button></div><div class="walkdot"></div>`
     + (coarse ? '<div class="walkstick"><i></i></div>' : '');
@@ -535,6 +545,11 @@ function walkUI(v, on) {
   const sr = box.querySelector('.walksun input');
   if (sr) sr.addEventListener('input', e => { e.stopPropagation(); walkSunSet(v, +sr.value); });
   const rb = box.querySelector('[data-walk=reset]'); if (rb) rb.addEventListener('click', e => { e.stopPropagation(); rb.blur(); resetLighting(); });
+  const wb = box.querySelector('[data-walk=winonly]');
+  if (wb) wb.addEventListener('click', e => { e.stopPropagation(); wb.blur(); WALK.winOnly = !WALK.winOnly; walkRebuild(v); walkNote(WALK.winOnly ? 'Daylight only through the windows' : 'Daylight as usual'); });
+  const ab = box.querySelector('[data-walk=walls]');
+  if (ab) ab.addEventListener('click', e => { e.stopPropagation(); ab.blur(); WALK.autoWalls = WALK.autoWalls === false; walkRebuild(v); walkNote(WALK.autoWalls ? (WALK.autoN ? 'Open sides closed in' : 'This room has no open sides') : 'Open sides left open'); });
+  walkBarBtns();
   const lb = box.querySelector('[data-walk=lights]');
   if (lb) { walkLightsBtn(); lb.addEventListener('click', e => { e.stopPropagation(); lb.blur(); WALK.dark = !WALK.dark; walkLights(v); walkLightsBtn(); v.requestRender(); }); }
 
@@ -615,6 +630,20 @@ function walkLights(v, force) {
   });
   WALK.darkOn = dark;
 }
+// The Walk bar's Only through windows and Close open sides buttons show what is on.
+function walkBarBtns() {
+  const b = WALK.ui && WALK.ui.querySelector('[data-walk=winonly]');
+  if (b) { b.innerHTML = `${icon(WALK.winOnly ? 'check' : 'sun')}Only through windows`; b.classList.toggle('on', !!WALK.winOnly); b.setAttribute('aria-pressed', String(!!WALK.winOnly)); }
+  const a = WALK.ui && WALK.ui.querySelector('[data-walk=walls]'), on = WALK.autoWalls !== false;
+  if (a) { a.innerHTML = `${icon(on ? 'check' : 'wall')}Close open sides`; a.classList.toggle('on', on); a.setAttribute('aria-pressed', String(on)); }
+}
+// The room drawn again in the middle of a walk (a Walk bar setting changed): the walker stays put.
+function walkRebuild(v) {
+  buildRoom3D(); walkRooms(v); walkSolids(v); if (WALK.dark) walkLights(v);
+  // Closing a side in round where you stand would trap you: step back into the room.
+  if (walkHits(WALK.x, WALK.z)) walkPlace(v);
+  walkBarBtns(); walkCam(v); v.requestRender();
+}
 function walkLightsBtn() {
   const b = WALK.ui && WALK.ui.querySelector('[data-walk=lights]'); if (!b) return;
   b.innerHTML = `${icon('bulb')}${WALK.dark ? 'Lights on' : 'Lights off'}`; b.setAttribute('aria-pressed', String(!!WALK.dark));
@@ -655,4 +684,128 @@ function walkFrontHit(v, rc, maxD) {
     if (d <= maxD && d <= (rc.far || 144) && (!best || d < best.d)) best = { c, d };
   });
   return best;
+}
+
+/* ---------- Open sides closed in while walking (0.64.1) ---------- */
+// Ayden 2026-11-26: "i need some way to like autobuild walls when in walk so they cant just see the outside void". A
+// room drawn with a side left open (a U of walls, an L, one wall, a galley) gets plain walls along the open sides while
+// walking, in the room's wall look, as tall as its walls; they block the way like walls. Only the Walk's look (and the
+// walk file's): nothing is added to the drawing, the cut list or the price. A side where a joined room stands (house.js)
+// stays open, and the Walk bar's Close open sides turns it off (WALK.autoWalls).
+// The stretches to close, in the room's own plan: [{ ax, ay, bx, by, nx, ny }] (n points out of the room), and the
+// extra floor area past the walls when the room had to be made deeper ({ x0, x1, y0, y1 } or null).
+function walkOpenSides(walls, others) {
+  const ws = (walls || []).filter(w => !w.hidden && !w.island && Math.hypot(w.x2 - w.x1, w.y2 - w.y1) > 1);
+  if (!ws.length) return { segs: [], ext: null };
+  const T = Math.max(...ws.map(w => +w.thick || 4)), tol = T + 2;
+  // Wall ends that meet (within a wall's thickness) are one corner.
+  const nodes = [], nodeOf = (x, y) => { let k = nodes.findIndex(p => Math.hypot(p.x - x, p.y - y) <= tol); if (k < 0) { k = nodes.length; nodes.push({ x, y, deg: 0 }); } return k; };
+  const E = ws.map(w => { const a = nodeOf(w.x1, w.y1), b = nodeOf(w.x2, w.y2); nodes[a].deg++; nodes[b].deg++; return { w, a, b }; });
+  const dSeg = (x, y, w) => { const dx = w.x2 - w.x1, dy = w.y2 - w.y1, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((x - w.x1) * dx + (y - w.y1) * dy) / L2)); return Math.hypot(w.x1 + t * dx - x, w.y1 + t * dy - y); };
+  // Walls that go all the way round (a closed loop anywhere) need nothing.
+  const par = nodes.map((_, i) => i), find = i => par[i] === i ? i : (par[i] = find(par[i]));
+  for (const e of E) { const a = find(e.a), b = find(e.b); if (a === b) return { segs: [], ext: null }; par[a] = b; }
+  // A loose end: a wall end that meets no other wall (not even the middle of one, like a T).
+  const free = nodes.map((p, i) => i).filter(i => nodes[i].deg === 1 && !ws.some(w => !E.some(e => e.w === w && (e.a === i || e.b === i)) && dSeg(nodes[i].x, nodes[i].y, w) <= tol));
+  if (!free.length) return { segs: [], ext: null };
+  const near = (x, y) => ws.some(w => dSeg(x, y, w) <= (+w.thick || 4) / 2 + 6);
+  // Inside another room drawn beside this one (joined at a doorway): left open.
+  const inOther = (x, y) => (others || []).some(b => x > b.x0 - T && x < b.x1 + T && y > b.y0 - T && y < b.y1 + T);
+  const cand = [];
+  let mid = null, ext = null;
+  // One run of walls from one loose end to the other: closed straight across, or an L made into a box.
+  const comps = new Set(E.map(e => find(e.a)));
+  if (comps.size === 1 && E.length >= 2 && free.length === 2) {
+    const path = [free[0]], used = new Set();
+    while (path.length <= E.length) {
+      const at = path[path.length - 1], e = E.find((x, j) => !used.has(j) && (x.a === at || x.b === at)); if (!e) break;
+      used.add(E.indexOf(e)); path.push(e.a === at ? e.b : e.a);
+    }
+    const P = path.map(i => nodes[i]), A = P[0], B = P[P.length - 1];
+    if (P.length === 3) {
+      const C = { x: A.x + B.x - P[1].x, y: A.y + B.y - P[1].y };
+      const u1 = { x: A.x - P[1].x, y: A.y - P[1].y }, u2 = { x: B.x - P[1].x, y: B.y - P[1].y };
+      const sin = Math.abs(u1.x * u2.y - u1.y * u2.x) / ((Math.hypot(u1.x, u1.y) * Math.hypot(u2.x, u2.y)) || 1);
+      if (sin > 0.3) { mid = { x: (P[1].x + C.x) / 2, y: (P[1].y + C.y) / 2 }; cand.push([A, C], [C, B]); }
+    } else if (P.length > 3) { mid = { x: P.reduce((s, p) => s + p.x, 0) / P.length, y: P.reduce((s, p) => s + p.y, 0) / P.length }; cand.push([A, B]); }
+  }
+  if (!cand.length) {
+    // Anything else (one wall, two walls facing each other, walls apart): the box round all the walls, its open stretches closed.
+    const xs = ws.flatMap(w => [w.x1, w.x2]), ys = ws.flatMap(w => [w.y1, w.y2]);
+    let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    // Too thin to stand in (one wall, or walls in a line): deeper on the side the cabinets are on, to 10 ft.
+    const D = 120;
+    if (x1 - x0 < 48 || y1 - y0 < 48) {
+      const w = ws.slice().sort((a, b) => Math.hypot(b.x2 - b.x1, b.y2 - b.y1) - Math.hypot(a.x2 - a.x1, a.y2 - a.y1))[0], g = wg(w);
+      const s = typeof elevSide === 'function' ? elevSide(w) : 1, nx = g.n.x * s, ny = g.n.y * s, e0 = { x0, x1, y0, y1 };
+      if (x1 - x0 < 48) { if (nx >= 0) x1 = Math.max(x1, x0 + D); else x0 = Math.min(x0, x1 - D); }
+      if (y1 - y0 < 48) { if (ny >= 0) y1 = Math.max(y1, y0 + D); else y0 = Math.min(y0, y1 - D); }
+      ext = { x0, x1, y0, y1, was: e0 };
+    }
+    mid = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+    const c = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+    cand.push([c[0], c[1]], [c[1], c[2]], [c[2], c[3]], [c[3], c[0]]);
+  }
+  // Each side in 3" steps: the stretches with no wall along them and no joined room there get a wall.
+  const segs = [];
+  cand.forEach(([A, B]) => {
+    const L = Math.hypot(B.x - A.x, B.y - A.y); if (L < 6) return;
+    const ux = (B.x - A.x) / L, uy = (B.y - A.y) / L; let nx = -uy, ny = ux;
+    if (mid && ((A.x + B.x) / 2 - mid.x) * nx + ((A.y + B.y) / 2 - mid.y) * ny < 0) { nx = -nx; ny = -ny; }
+    // Next to a wall a stretch runs on into it (reach), so the corner is closed; next to a joined room it stops short.
+    const n = Math.max(1, Math.ceil(L / 3)), reach = T / 2 + 6; let run = null, runWall = false, last = -1;
+    const flush = (endWall) => {
+      if (run === null) return;
+      const a = Math.max(0, run - (runWall ? reach : 0)), b = Math.min(L, last + (endWall ? reach : 0));
+      if (b - a > 4) segs.push({ ax: A.x + ux * a, ay: A.y + uy * a, bx: A.x + ux * b, by: A.y + uy * b, nx, ny, T }); run = null;
+    };
+    let prevWall = true;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n * L, x = A.x + ux * t, y = A.y + uy * t, wl = near(x, y), open = !wl && !inOther(x, y);
+      if (open) { if (run === null) { run = t; runWall = prevWall; } last = t; } else flush(wl);
+      prevWall = !open && wl;
+    }
+    flush(true);
+  });
+  return { segs, ext };
+}
+// Walk (or the walk file being made) with Close open sides on.
+function walkWallsOn() { return (WALK.on || WALK.pending || (typeof WX === 'object' && WX.busy)) && WALK.autoWalls !== false; }
+// The other rooms drawn round this one (a house), as boxes in this room's plan.
+function walkOtherBoxes() {
+  if (typeof HOUSE3 !== 'object' || !HOUSE3.M) return [];
+  const M = HOUSE3.M[S.roomId]; if (!M) return [];
+  const I = m2inv(M), out = [];
+  Object.keys(HOUSE3.M).forEach(id => {
+    if (id === S.roomId) return; const r = roomById(id), ws = r && (r.walls || []).filter(w => !w.hidden); if (!ws || !ws.length) return;
+    const Mo = HOUSE3.M[id], P = ws.flatMap(w => [[w.x1, w.y1], [w.x2, w.y2]]).map(([x, y]) => m2pt(I, m2pt(Mo, x, y).x, m2pt(Mo, x, y).y));
+    out.push({ x0: Math.min(...P.map(p => p.x)), x1: Math.max(...P.map(p => p.x)), y0: Math.min(...P.map(p => p.y)), y1: Math.max(...P.map(p => p.y)) });
+  });
+  return out;
+}
+// Into v.root (the open room's plan): the walls along the open sides, in the wall look wm, and a ceiling over any area
+// the room was made deeper by. Returns how many walls were added.
+function walkAutoWalls(v, wm, ceilMat) {
+  const { segs, ext } = walkOpenSides(S.walls, walkOtherBoxes());
+  if (!segs.length) return 0;
+  const vis = S.walls.filter(w => !w.hidden), cl = typeof roomCeiling === 'function' ? roomCeiling() : {};
+  const H = Math.max(+cl.h || 0, ...vis.map(w => +w.height || 96));
+  segs.forEach(s => {
+    const L = Math.hypot(s.bx - s.ax, s.by - s.ay), T = s.T;
+    // A hair thinner than the real walls, so where it runs into one their faces don't flicker against each other.
+    const m = new THREE.Mesh(new THREE.BoxGeometry(L + T, H, T - 0.5), wm);
+    m.position.set((s.ax + s.bx) / 2, H / 2, (s.ay + s.by) / 2);
+    m.rotation.y = Math.atan2(-(s.by - s.ay), s.bx - s.ax);
+    m.castShadow = m.receiveShadow = true;
+    m.userData.wall = true; m.userData.autoWall = true; v.root.add(m);
+  });
+  if (ext && ceilMat) {
+    const e = ext, w0 = e.was;
+    [[e.x0, w0.x0, e.y0, e.y1], [w0.x1, e.x1, e.y0, e.y1], [w0.x0, w0.x1, e.y0, w0.y0], [w0.x0, w0.x1, w0.y1, e.y1]].forEach(([x0, x1, y0, y1]) => {
+      if (x1 - x0 < 1 || y1 - y0 < 1) return;
+      const c = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), ceilMat);
+      c.rotation.x = Math.PI / 2; c.position.set((x0 + x1) / 2, H, (y0 + y1) / 2); c.userData.noBounds = true; c.userData.wall = true; c.userData.autoWall = true; v.root.add(c);
+    });
+  }
+  return segs.length;
 }

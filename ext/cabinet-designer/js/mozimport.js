@@ -80,6 +80,10 @@ function readMozRoom(el, fallbackName) {
   })).filter(w => w.len > 0);
   const prods = kids(el.querySelector(':scope > Products'), 'Product').map(x => {
     const t = x.querySelector(':scope > ProductType');
+    // 0.64.3: the face's sections (FrontFace > Section, by ID). A section's A or C side of type F is a false front (the sink
+    // base's top "drawer"), and PullDelA/C = 1 is a pull Mozaik took off. Only read when the product has one front face.
+    const ffs = x.getElementsByTagName('FrontFace'), secs = {};
+    if (ffs.length === 1) [...ffs[0].getElementsByTagName('Section')].forEach(q => { secs[q.getAttribute('ID')] = q; });
     return {
       el: x,
       name: x.getAttribute('ProdName') || x.getAttribute('Name') || '', desc: x.getAttribute('ProductDesc') || '',
@@ -99,6 +103,7 @@ function readMozRoom(el, fallbackName) {
       // Every door and drawer front with its spot on the cabinet face (Z up from the cabinet bottom).
       fronts: [...x.getElementsByTagName('ProductDoor'), ...x.getElementsByTagName('DrawerFront')].map(f => ({
         type: f.tagName === 'DrawerFront' || f.getAttribute('IsDrawerFront') === 'True' ? 'drawer' : 'door',
+        ...(q => { const ac = f.getAttribute('SectAC'); return q && /^[AC]$/.test(ac || '') && q.getAttribute(ac + 'oType') === 'F' ? { fals: true, noPull: q.getAttribute('PullDel' + ac) === '1' } : {}; })(secs[f.getAttribute('SectIdx')]),
         w: mzNum(f, 'W'), h: mzNum(f, 'H'), x: mzNum(f, 'X') || 0, y: mzNum(f, 'Y') || 0, z: mzNum(f, 'Z') || 0, face: f.getAttribute('FaceIdx') || '', hinge: (f.getAttribute('HingeEdge') || '')[0] || '', style: f.getAttribute('DoorStyle') || '',
       })).filter(f => f.w > 0 && f.h > 0),
     };
@@ -253,6 +258,9 @@ function mozWalls(src, cv, rm) {
 // The cabinet face from Mozaik's own doors and drawer fronts, when they stack in clean rows: each row is the fronts
 // that share a height band, left to right. Faces Mozaik splits into columns (a drawer bank beside doors) don't fit
 // rows, so those keep the face of the closest library product. Heights are in inches; the tallest row stretches.
+// 0.64.3 (copy Mozaik exactly): a band of Mozaik false fronts (section type F) comes in as false fronts, not drawers, with
+// Mozaik's pull: on unless Mozaik deleted it (Ayden 2026-11-26: the sink top drawer always gets a pull).
+const mozFrontType = fs => fs.some(f => f.type === 'door') ? 'door' : fs.length && fs.every(f => f.fals) ? 'false' : 'drawer';
 function mozRows(p, sz) {
   if (!p.fronts.length) return null;
   const bands = [];
@@ -282,8 +290,9 @@ function mozRows(p, sz) {
   }
   return out;
   function row(b) {
-    const fs = b.fs.sort((x, y) => x.x - y.x), type = fs.some(f => f.type === 'door') ? 'door' : 'drawer';
+    const fs = b.fs.sort((x, y) => x.x - y.x), type = mozFrontType(fs);
     const r = { type, h: b === tall ? '*' : sz(b.h), count: fs.length };
+    if (type === 'false') r.pull = !fs.every(f => f.noPull);
     if (type === 'door' && fs.length === 1 && /[LR]/.test(fs[0].hinge)) r.hinge = fs[0].hinge;
     const st = style(fs[0].style); if (st) r.style = st;
     return r;
@@ -314,8 +323,9 @@ function mozCols(p, sz) {
     bands.forEach((b, i) => {
       const up = bands[i - 1], gap = up ? sz(up.z - (b.z + b.h)) : 0;
       if (gap > 3) leaves.push({ type: 'open', h: r3(gap - 2 * vg) });
-      const bf = b.fs.sort((x, y) => x.x - y.x), type = bf.some(f => f.type === 'door') ? 'door' : 'drawer';
+      const bf = b.fs.sort((x, y) => x.x - y.x), type = mozFrontType(bf);
       const lf = { type, h: sz(b.h), count: bf.length };
+      if (type === 'false') lf.pull = !bf.every(f => f.noPull);
       if (type === 'door' && bf.length === 1 && /[LR]/.test(bf[0].hinge)) lf.hinge = bf[0].hinge;
       const st = style(bf[0].style); if (st) lf.style = st;
       leaves.push(lf);

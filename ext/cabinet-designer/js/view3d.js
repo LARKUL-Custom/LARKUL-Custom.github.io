@@ -774,6 +774,7 @@ function buildRoomScene(v) {
   v.setReal(R3);
   v.setBackground(R3 ? '#e4e1db' : cssVar('--paper'));
   v.clear(); v.beforeDraw = null;
+  if (typeof WALK === 'object') WALK.autoN = 0;
   // 0.63.53: in Walk (and with House on) every room joined to this one through its doorways is drawn round it
   // (house.js); each room in its own group at its place, and one floor under them all.
   const H = typeof houseOf === 'function' && houseOn() ? houseOf(houseFrame()) : null;
@@ -837,6 +838,9 @@ function roomScene3(v, o) {
       v.root.add(cg);
     });
   });
+  // 0.64.1: in Walk (and the walk file) the room's open sides get walls, look only (walk3d.js walkAutoWalls).
+  if (wallMode !== 'hidden' && typeof walkAutoWalls === 'function' && walkWallsOn())
+    WALK.autoN = (WALK.autoN || 0) + walkAutoWalls(v, wallLook3(op, R3 ? realWall3(op) : flat3(cssVar('--wall3d'), op)), L.ceiling ? ceilLook3(R3 ? realCeil3() : flat3(cssVar('--wall3d'))) : null);
   if (cutaway) v.beforeDraw = () => {
     const p = v.cam.position;
     v.root.children.forEach(o => { const c = o.userData.cut; if (c) o.visible = (p.x - c.x) * c.nx + (p.z - c.z) * c.nz > -2; });
