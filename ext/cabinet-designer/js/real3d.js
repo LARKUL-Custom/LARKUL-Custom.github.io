@@ -94,19 +94,27 @@ function aoSetup(v) {
 }
 function aoTargets(S, w, h) {
   if (S.w === w && S.h === h) return;
-  if (S.nt) { S.nt.depthTexture.dispose(); S.nt.dispose(); S.at.dispose(); S.bt.dispose(); }
+  // 0.64.6: Walk switches between full and half size as you move and stop; both sets are kept (no new buffers each time).
+  S.sets = S.sets || {}; const key = w + 'x' + h, old = S.sets[key];
+  if (old) { Object.assign(S, old); return; }
+  const keys = Object.keys(S.sets);
+  if (keys.length >= 2) { const o = S.sets[keys[0]]; o.nt.depthTexture.dispose(); o.nt.dispose(); o.at.dispose(); o.bt.dispose(); delete S.sets[keys[0]]; }
   const dt = new THREE.DepthTexture(w, h); dt.type = THREE.FloatType;
   S.nt = new THREE.WebGLRenderTarget(w, h, { depthTexture: dt, depthBuffer: true, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
   S.at = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
   S.bt = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
-  S.w = w; S.h = h;
+  S.w = w; S.h = h; S.sets[key] = { nt: S.nt, at: S.at, bt: S.bt, w, h };
 }
 // Called by Viewer3D.draw() right after the picture is drawn, only in the realistic look.
 function realAO(v) {
   if (!AO.on) return;
   const r = v.renderer, S = aoSetup(v), sz = r.getDrawingBufferSize(new THREE.Vector2());
   // Full size on a computer; half size on phones and tablets (and very big pictures) for speed.
-  const k = aoCoarse() || sz.x * sz.y > 5e6 ? 2 : 1, w = Math.max(1, Math.round(sz.x / k)), h = Math.max(1, Math.round(sz.y / k));
+  // 0.64.6 (Ayden 2026-11-26: "the walk is really really framy now"): while walking or looking round, the shade is
+  // worked out at half size too (it is soft, so it looks the same in motion); the moment you stop, Walk draws one frame
+  // at full size again (walkCam).
+  const walking = typeof WALK === 'object' && WALK.on && performance.now() - (WALK.movedAt || 0) < 250;
+  const k = aoCoarse() || walking || sz.x * sz.y > 5e6 ? 2 : 1, w = Math.max(1, Math.round(sz.x / k)), h = Math.max(1, Math.round(sz.y / k));
   aoTargets(S, w, h);
   // Only solid things shade: glass, glows, light washes, labels and lines stay out of the shade picture.
   // Each solid draws its normals with its own face side (two-sided models stay solid in the shade picture).

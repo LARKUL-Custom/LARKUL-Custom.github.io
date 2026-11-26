@@ -304,6 +304,9 @@ function walkCam(v) {
   v.persp.position.set(WALK.x, WALK.eye, WALK.z);
   v.persp.rotation.set(WALK.pitch, WALK.yaw, 0, 'YXZ');
   v.persp.updateMatrixWorld();
+  // 0.64.6: moving draws the shade at half size (realAO); once still for a moment, one sharp frame.
+  WALK.movedAt = performance.now(); clearTimeout(WALK.sharpT);
+  WALK.sharpT = setTimeout(() => { if (WALK.on && WALK.v) WALK.v.requestRender(); }, 300);
 }
 
 /* ---------- What blocks the way ---------- */
