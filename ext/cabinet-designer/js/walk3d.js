@@ -63,7 +63,7 @@ function walkRooms(v) {
     planes[p.r.id] = [new THREE.Plane(new THREE.Vector3(-n.x, 0, -n.y), c.x * n.x + c.y * n.y + d.T / 2 + 0.05), ...(box || [])];
   });
   WALK.planes = planes;
-  v.renderer.localClippingEnabled = true;
+  v.renderer.localClippingEnabled = true; v.renderer.shadowMap.needsUpdate = true;
   v.root.children.forEach(g => {
     const id = g.userData.room; if (!id) return;
     const pl = id === S.roomId ? null : planes[id];
@@ -231,19 +231,22 @@ function walkStart() {
   if (ui.sel) select(null);
   // Every room joined to this one is drawn round it, in this room's plan, for the whole walk (WALK.frame).
   WALK.frame = S.roomId; WALK.pending = true;
-  // 0.64.1: the Walk's own Only through windows starts off (the room's lights and daylight as usual), whatever the
-  // Lights tab says; the Walk bar turns it on.
-  WALK.winOnly = false;
   // The tour is in the Realistic look; it goes back to the plain look after if Walk turned it on.
   WALK.lookWas = { render: !!ui.render3d, hidden: !!ui.hidden3d };
   try {
     if (!ui.render3d || ui.hidden3d) { ui.render3d = true; ui.hidden3d = false; renderRoom(); }
     // Drawn again for the walk: joined rooms round it, open sides closed in, or the Lights tab's windows-only light off.
-    else if ((typeof houseOf === 'function' && !v.houseBuilt && houseOf(S.roomId).length > 1) || (typeof roomScene3 === 'function' && (lay().winOnly || (WALK.autoWalls !== false && walkOpenSides(S.walls).segs.length)))) buildRoom3D();
+    else if ((typeof houseOf === 'function' && !v.houseBuilt && houseOf(S.roomId).length > 1) || (typeof roomScene3 === 'function' && WALK.autoWalls !== false && walkOpenSides(S.walls).segs.length)) buildRoom3D();
   } finally { WALK.pending = false; }
   WALK.v = v; WALK.saved = v.getView(); WALK.fov = v.persp.fov; WALK.room0 = S.roomId; WALK.door = {};
   v.cam = v.persp; v.controls.object = v.persp; v.controls.enabled = false;
   v.persp.fov = 62; v.persp.updateProjectionMatrix();
+  // 0.64.7 (Ayden 2026-11-26: "its still very choppy"): while walking only the camera moves, so the shadows (the sun's
+  // and the ceiling lights') are drawn once and kept, and drawn again only when something moves (a door or drawer, a
+  // rebuilt room, the sun). Before, every light's shadow was drawn again every frame, the biggest cost in a frame.
+  // A high-resolution screen walks at one picture pixel per screen pixel (not two), a quarter of the work.
+  WALK.pr0 = v.renderer.getPixelRatio(); if (WALK.pr0 > 1) { v.renderer.setPixelRatio(1); v.resize(); }
+  v.renderer.shadowMap.autoUpdate = false; v.renderer.shadowMap.needsUpdate = true;
   WALK.on = true; v.walk = true; WALK.keys = {}; WALK.stick = null; WALK.solids = null; WALK.vx = WALK.vz = WALK.turnV = 0;
   walkRooms(v);
   walkPlace(v);
@@ -261,13 +264,14 @@ function walkStop() {
   if (WALK.dark || WALK.darkOn) { WALK.dark = false; walkLights(v, false); v.requestRender(); }
   walkRoomsOff(v);
   walkUI(v, false);
+  v.renderer.shadowMap.autoUpdate = true; v.renderer.shadowMap.needsUpdate = true;
+  if (WALK.pr0 > 1) { v.renderer.setPixelRatio(WALK.pr0); v.resize(); } WALK.pr0 = 0;
   v.persp.fov = WALK.fov || 40; v.persp.updateProjectionMatrix();
   v.controls.enabled = true;
   // Doors go back to shut, and the joined rooms go (or are drawn round the room you ended up in, with House on).
   const doors = Object.keys(DOORS.goal).length; DOORS.goal = {}; DOORS.t = {};
   // The walls the Walk closed open sides with go, and the Lights tab's own light comes back.
-  const relit = typeof lay === 'function' && !!WALK.winOnly !== !!lay().winOnly; WALK.winOnly = false;
-  if ((doors || v.houseBuilt || WALK.autoN || relit) && ui.viewMode === '3d') buildRoom3D();
+  if ((doors || v.houseBuilt || WALK.autoN) && ui.viewMode === '3d') buildRoom3D();
   WALK.frame = null;
   // Walked into another room: show it from the usual corner; else the view from before the walk.
   if (S.roomId !== WALK.room0) { v.fitted = true; v.look(roomViewDir(0.75)); } else v.setView(WALK.saved);
@@ -452,6 +456,11 @@ function walkLoop() {
     }
     if (moving && walkDoorways(v)) { if (!WALK.on) return; }
     const doors = doorStep(v, dt);
+    // Shadows follow anything that moved this frame (and once more when it stops).
+    const anim = typeof openAnim !== 'undefined' && !!openAnim;
+    if (rebuilt || doors || anim || WALK.doorsMoving || WALK.animWas) v.renderer.shadowMap.needsUpdate = true;
+    if (!anim && WALK.animWas) v.requestRender();
+    WALK.animWas = anim;
     // Doors swinging: read where they are now and then, and once more when they stop.
     if ((doors && now - WALK.at > 150) || (!doors && WALK.doorsMoving)) walkSolids(v);
     WALK.doorsMoving = doors;
@@ -534,8 +543,8 @@ function walkUI(v, on) {
     // 0.63.31 (Ayden 2026-11-24): the time of day and the room's lights, right in the Walk bar, to set before full screen.
     + (v.real && typeof SUN === 'object' ? `<label class="walksun" title="Time of day">${icon('sun')}<input type="range" min="5" max="22" step="0.25" value="${SUN.hour}" aria-label="Time of day"><span>${sunLabel(SUN.hour)}</span></label>` : '')
     + `<button class="btn sm walklights" data-walk="lights" aria-pressed="false" title="Turn the room's ceiling lights and LED strips off or on"></button>`
-    // 0.64.1: Only through windows for this walk (off to start; the room's lights stay on with it, Lights off turns them off).
-    + (v.real && typeof winSeal3 === 'function' ? `<button class="btn sm" data-walk="winonly" aria-pressed="false" title="Daylight only comes in through the windows (no sky light from outside the drawing). The room's lights stay on; Lights off turns them off. Only for this walk."></button>` : '')
+    // 0.64.1: Only through windows, the same setting as the Lights tab's (0.64.7), off unless turned on.
+    + (v.real && typeof winSeal3 === 'function' ? `<button class="btn sm" data-walk="winonly" aria-pressed="false" title="Daylight only comes in through the windows (no sky light from outside the drawing), following the time of day. Lights you placed stay on; the automatic cans go off. Same setting as the Lights tab's."></button>` : '')
     // 0.64.1: the walls Walk puts along open sides of the room, on or off.
     + (typeof walkAutoWalls === 'function' && typeof roomScene3 === 'function' ? `<button class="btn sm" data-walk="walls" aria-pressed="true" title="Close in the open sides of the room with plain walls while walking, so you never look out into empty space. Only for the walk: nothing is added to the drawing."></button>` : '')
     + (v.real && typeof resetLighting === 'function' ? `<button class="btn sm" data-walk="reset" title="Reset lighting: 3 PM daylight, room lights on, automatic ceiling cans, Only through windows off">${icon('regen')}Reset lighting</button>` : '')
@@ -549,7 +558,13 @@ function walkUI(v, on) {
   if (sr) sr.addEventListener('input', e => { e.stopPropagation(); walkSunSet(v, +sr.value); });
   const rb = box.querySelector('[data-walk=reset]'); if (rb) rb.addEventListener('click', e => { e.stopPropagation(); rb.blur(); resetLighting(); });
   const wb = box.querySelector('[data-walk=winonly]');
-  if (wb) wb.addEventListener('click', e => { e.stopPropagation(); wb.blur(); WALK.winOnly = !WALK.winOnly; walkRebuild(v); walkNote(WALK.winOnly ? 'Daylight only through the windows' : 'Daylight as usual'); });
+  if (wb) wb.addEventListener('click', e => {
+    e.stopPropagation(); wb.blur();
+    // The job's setting (undo brings it back); the room is drawn again by the change, the walker stays put.
+    mutate(() => { S.job.layout = { ...(S.job.layout || {}), winOnly: !lay().winOnly }; });
+    walkRooms(v); walkSolids(v); if (WALK.dark) walkLights(v); walkBarBtns(); walkCam(v); v.requestRender();
+    walkNote(lay().winOnly ? 'Daylight only through the windows' : 'Daylight as usual');
+  });
   const ab = box.querySelector('[data-walk=walls]');
   if (ab) ab.addEventListener('click', e => { e.stopPropagation(); ab.blur(); WALK.autoWalls = WALK.autoWalls === false; walkRebuild(v); walkNote(WALK.autoWalls ? (WALK.autoN ? 'Open sides closed in' : 'This room has no open sides') : 'Open sides left open'); });
   walkBarBtns();
@@ -636,7 +651,8 @@ function walkLights(v, force) {
 // The Walk bar's Only through windows and Close open sides buttons show what is on.
 function walkBarBtns() {
   const b = WALK.ui && WALK.ui.querySelector('[data-walk=winonly]');
-  if (b) { b.innerHTML = `${icon(WALK.winOnly ? 'check' : 'sun')}Only through windows`; b.classList.toggle('on', !!WALK.winOnly); b.setAttribute('aria-pressed', String(!!WALK.winOnly)); }
+  const wo = typeof lay === 'function' && !!lay().winOnly;
+  if (b) { b.innerHTML = `${icon(wo ? 'check' : 'sun')}Only through windows`; b.classList.toggle('on', wo); b.setAttribute('aria-pressed', String(wo)); }
   const a = WALK.ui && WALK.ui.querySelector('[data-walk=walls]'), on = WALK.autoWalls !== false;
   if (a) { a.innerHTML = `${icon(on ? 'check' : 'wall')}Close open sides`; a.classList.toggle('on', on); a.setAttribute('aria-pressed', String(on)); }
 }

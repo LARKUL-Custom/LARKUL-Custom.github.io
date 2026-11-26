@@ -626,6 +626,8 @@ class Viewer3D {
     const dir = this.sunDir || new THREE.Vector3(-0.3, 1.9, 0.6).normalize();
     this.sun.target.position.copy(c); this.sun.position.copy(c).add(dir.clone().multiplyScalar(R * 2));
     s.left = -R; s.right = R; s.top = R; s.bottom = -R; s.near = 1; s.far = R * 4; s.updateProjectionMatrix();
+    // Walk draws the shadows only when something changes (0.64.7); a new room or a new sun is a change.
+    this.renderer.shadowMap.needsUpdate = true;
   }
   clear() {
     this.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });

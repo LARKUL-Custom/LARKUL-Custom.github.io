@@ -80,7 +80,6 @@ function regenCeilLights() {
    Regenerate laid out and any typed can spacing cleared (so the cans come back on their own, at the spacing from the
    ceiling height), 3 PM daylight, and in Walk the room's lights back on. Lights placed by hand stay. */
 function resetLighting() {
-  if (typeof WALK === 'object' && WALK.on) WALK.winOnly = false;
   mutate(() => {
     const L = { ...(S.job.layout || {}) }; delete L.winOnly; delete L.lightGrid; L.autoLights = true; S.job.layout = L;
     S.lights = (S.lights || []).filter(l => !(l.kind === 'ceiling' && l.auto));
@@ -229,12 +228,10 @@ function winSeal3(v) {
   add(new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 2 * o + 4, 2, y1 - y0 + 2 * o + 4), mat).translateX((x0 + x1) / 2).translateY(H + 1.5).translateZ((y0 + y1) / 2));
   g0.userData.noBounds = true; g0.userData.layer = 'lights'; v.root.add(g0);
 }
-// 0.64.1 (Ayden 2026-11-26: "the only through windows option should be in the walk screen as well and it should still
-// leave regular lights on unless they turn that on"): while walking, the Walk bar's own Only through windows decides
-// (WALK.winOnly, off when a walk starts, never saved). There the room's lights stay on, automatic cans too; the Walk's
-// Lights off turns them off. Outside Walk the Lights tab setting decides, as before.
-const walkingNow = () => typeof WALK === 'object' && !!(WALK.on || WALK.pending);
-function winOnlyNow() { return walkingNow() ? !!WALK.winOnly : !!lay().winOnly; }
+// 0.64.7 (Ayden 2026-11-26: "the only through windows lighting doesnt work at all anymore"): one setting again (the
+// Lights tab's); the Walk bar's Only through windows button turns the same setting on and off. 0.64.2 gave Walk its own
+// copy that started off, so a job set to windows-only in the Lights tab walked in full daylight.
+function winOnlyNow() { return !!lay().winOnly; }
 const winOnly3 = R3 => !!(R3 && winOnlyNow());
 const WIN_SKY = { max: 6 };
 function windowSky3(v) {
@@ -269,7 +266,7 @@ function addLights3d(v, R3, layerOn, ceilOn) {
   if (winOnly3(R3)) { windowSky3(v); winSeal3(v); }
   if (!layerOn) return;
   // The automatic and regenerated cans are not lights anyone placed, so they stay off while only windows light the room.
-  const off = winOnly3(R3) && !walkingNow();
+  const off = winOnly3(R3);
   let lamps = 0;
   let shadows = 0;
   const lamp = (grp, col, x, y, z, k, dist, ceiling) => {
