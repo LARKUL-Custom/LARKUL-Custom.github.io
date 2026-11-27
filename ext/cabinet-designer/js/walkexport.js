@@ -6,7 +6,7 @@
 'use strict';
 const WX = { busy: false, maxTex: 1024, floorTex: 2048 };
 
-async function walkExport() {
+async function walkExport(opt = {}) {
   if (WX.busy) return;
   if (typeof CompressionStream === 'undefined') { flash('This browser cannot make a walk file (it needs a newer Chrome or Edge)'); return; }
   WX.busy = true;
@@ -45,6 +45,8 @@ async function walkExport() {
     const clean = t => String(t || '').replace(/[^\w -]/g, '').trim();
     const name = `${clean(S.job.name) || 'Job'} walkthrough.html`, blob = new Blob([html], { type: 'text/html' });
     const mb = (blob.size / 1048576).toFixed(1);
+    // 0.64.27: Share link puts the file on the LARKUL website instead (wxShare), for phones that can't open a file.
+    if (opt.link) { await wxShare(blob, name, mb); return blob; }
     // In the hub: saved to Files › Cabinet Designer and put on the clipboard as a file, so Ctrl+V in an email attaches it.
     if (inHub()) {
       await hubSaveOver(new File([blob], name, { type: 'text/html' }), 'Cabinet Designer');
@@ -63,6 +65,44 @@ async function walkExport() {
     if (keep.view !== ui.viewMode) setView(keep.view);
     if (keep.tab !== ui.tab) goTab(keep.tab);
   }
+}
+/* ---------- Share link (0.64.27) ----------
+   Ayden 2026-11-27: the file "does not load on mobile" and "i thought they would be able to load it in email". A phone
+   opens an emailed .html file only as a preview, which runs no code, so the 3D never starts (iPhone Mail and Files
+   always do this). Share link uploads the same walk file to the LARKUL website through the hub's Website tab
+   (website-controller /admin/walk, which keeps the admin password): it lives at <site>/walk/<22 random letters>, hidden
+   from search engines, and the link is copied so it pastes into an email or a text. Nothing else in the job goes up. */
+async function wxShare(blob, name, mb) {
+  if (!inHub()) { flash('Share link works in the hub (it uses the Website tab to put the file on your website)'); return; }
+  flash(`Putting the walk file on your website (${mb} MB)…`);
+  const api = '/api/ext/website-controller';
+  const r = await fetch(`${api}/admin/walk?name=${encodeURIComponent(name.replace(/\.html$/, ''))}`, { method: 'POST', headers: { 'Content-Type': 'text/html' }, body: blob }).catch(() => null);
+  const body = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok || !body.url) {
+    const why = !r ? 'the hub could not be reached' : r.status === 404 && !body.error ? 'the Website tab is not installed in the hub' : body.error || `your website answered ${r.status}`;
+    flash('Could not share the walk file: ' + why); return;
+  }
+  const st = await fetch(`${api}/settings`).then(x => x.json()).catch(() => ({}));
+  const site = String(st.siteUrl || (st.settings && st.settings.siteUrl) || '').replace(/\/+$/, '');
+  const url = /^https?:/.test(body.url) ? body.url : site + body.url;
+  let copied = false; try { await navigator.clipboard.writeText(url); copied = true; } catch (_) {}
+  wxLinkCard(url, copied);
+}
+// The link on a small card: copy it again, open it, or close.
+function wxLinkCard(url, copied) {
+  document.querySelectorAll('.wxlink').forEach(e => e.remove());
+  const c = document.createElement('div'); c.className = 'wxlink';
+  c.innerHTML = `<b>Walk link ${copied ? 'copied' : 'ready'}</b><span>Paste it into an email or a text. It opens on any phone or computer; only people with the link can find it.</span>`
+    + `<input readonly aria-label="Walk link"><div><button class="btn sm primary" data-k="copy">Copy link</button><a class="btn sm" target="_blank" rel="noopener">Open</a><button class="btn sm" data-k="x">Close</button></div>`;
+  c.querySelector('input').value = url; c.querySelector('a').href = url;
+  c.addEventListener('click', async e => {
+    const k = e.target.closest('[data-k]'); if (!k) return;
+    if (k.dataset.k === 'x') { c.remove(); return; }
+    const i = c.querySelector('input'); i.select();
+    try { await navigator.clipboard.writeText(url); } catch (_) { document.execCommand && document.execCommand('copy'); }
+    k.textContent = 'Copied';
+  });
+  document.body.appendChild(c); c.querySelector('input').select();
 }
 const wxFrames = n => new Promise(res => { const f = () => (n-- <= 0 ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
 // Waits for appliance and shape models that are still being read (each one redraws the room when it comes in).
@@ -265,7 +305,7 @@ async function wxFile(rooms, scenes, ctx) {
 <title>${esc(data.name)} · Walkthrough</title><meta name="description" content="3D walkthrough by LARKUL Custom">
 <style>${wxWalkCss()}\n${WX_CSS}</style></head><body>
 <div class="wx-wrap view3d-wrap" id="wxwrap"><div class="wx-host" id="wxhost"></div></div>
-<div class="wx-load" id="wxload"><img src="${logo}" alt="LARKUL Custom"><b>${esc(data.name)}</b><span id="wxmsg">Opening your 3D walkthrough…</span></div>
+<div class="wx-load" id="wxload"><img src="${logo}" alt="LARKUL Custom"><b>${esc(data.name)}</b><span id="wxmsg">This is only a preview, which can’t run the 3D walkthrough. Open the file in a web browser (Chrome, Safari or Edge) to walk through it.</span></div>
 <img id="wxlogo" src="${logo}" alt="" hidden>
 <script id="wxd" type="application/octet-stream">${b64}</script>
 <script>${WX_BOOT}</script></body></html>`;
@@ -273,6 +313,14 @@ async function wxFile(rooms, scenes, ctx) {
 // Unpacks the file: the code and the room come gzipped in one block (about a quarter of the size).
 const WX_BOOT = `(async function () {
   var msg = function (t) { var m = document.getElementById('wxmsg'); if (m) m.textContent = t; };
+  // 0.64.27: the card's own words are for a viewer that runs no code (a phone's file preview); running code says so.
+  // Anything that goes wrong while opening is written on the card, so a phone shows why instead of waiting forever.
+  var ld = document.getElementById('wxload'); if (ld) ld.className += ' run';
+  msg('Opening your 3D walkthrough…');
+  var fail = function (t) { if (document.getElementById('wxload')) { msg('This walkthrough could not open: ' + t); if (ld) ld.className = 'wx-load'; } };
+  window.addEventListener('error', function (e) { fail(e.message || 'an error'); });
+  window.addEventListener('unhandledrejection', function (e) { fail((e.reason && e.reason.message) || String(e.reason)); });
+  setTimeout(function () { var m = document.getElementById('wxmsg'); if (m && document.getElementById('wxload') && / …$|…$/.test(m.textContent)) m.textContent += ' (taking a while: if nothing changes, close other apps and tabs and open the file again)'; }, 30000);
   try {
     if (typeof DecompressionStream === 'undefined') { msg('Please open this file in an up to date Chrome, Safari, Edge or Firefox.'); return; }
     // 0.64.26: the browser's own base64 reader (fetch of a data: link) is many times quicker on a phone than a loop.
@@ -286,7 +334,7 @@ const WX_BOOT = `(async function () {
     var json = JSON.parse(dec.decode(new Uint8Array(buf, 8 + head[0], head[1]))), at = 8 + head[0] + head[1]; at += (4 - at % 4) % 4;
     window.WXDATA = { data: json, bin: buf.slice(at) };
     var el = document.createElement('script'); el.textContent = code; document.body.appendChild(el);
-  } catch (e) { msg('This walkthrough could not open: ' + (e && e.message || e)); }
+  } catch (e) { fail(e && e.message || e); }
 })();`;
 
 // Names the Walk and the 3D view expect from the app, answered by the walk file.
@@ -335,7 +383,9 @@ function wxPlayer(W) {
   });
   const host = document.getElementById('wxhost'), wrap = document.getElementById('wxwrap'), logo = document.getElementById('wxlogo').src;
   const v = new Viewer3D(host); roomViewer = v; viewers.push(v);
-  if (!v.ok) { document.getElementById('wxmsg').textContent = 'This browser could not start 3D. Try Chrome or Safari.'; return; }
+  if (!v.ok) { document.getElementById('wxmsg').textContent = 'This browser could not start 3D. Try Chrome or Safari.'; document.getElementById('wxload').className = 'wx-load'; return; }
+  // A phone that runs out of graphics memory drops the 3D: say so instead of showing a blank screen.
+  v.renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); const c = document.createElement('div'); c.className = 'wx-card'; c.textContent = 'The phone ran out of graphics memory and stopped the 3D. Close other apps and open the file again.'; wrap.appendChild(c); });
   v.setReal(true); SUN.hour = D.sun || 15;
   S.rooms = D.rooms;
   // 0.64.26 (Ayden 2026-11-26: "make the walk file work way better on mobile"): a phone or tablet draws a lighter picture.
@@ -378,7 +428,7 @@ function wxPlayer(W) {
       v.draw();
       const l = document.getElementById('wxload'); if (l) l.remove();
     }, 0));
-  }).catch(e => say('This walkthrough could not open: ' + (e && e.message || e)));
+  }).catch(e => { say('This walkthrough could not open: ' + (e && e.message || e)); const l = document.getElementById('wxload'); if (l) l.className = 'wx-load'; });
 
   window.wxShow = (id, first) => {
     const r = roomById(id); if (!r) return;
@@ -462,7 +512,7 @@ const WX_CSS = `
 .wx-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,calc(100% - 32px));background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;text-align:center;z-index:8;display:flex;flex-direction:column;align-items:center;gap:12px}
 .wx-card img{height:64px}.wx-card h1{font-size:20px;margin:0}.wx-card p{margin:0;color:var(--t-n)}.wx-card small{color:var(--t-n);font-size:11px}
 .wx-load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#f4f3f0;z-index:20;padding:16px;text-align:center}.wx-load img{height:80px}.wx-load span{color:var(--t-n)}
-.wx-load span::before{content:'';display:block;width:26px;height:26px;margin:4px auto 10px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:wxspin .8s linear infinite}
+.wx-load.run span::before{content:'';display:block;width:26px;height:26px;margin:4px auto 10px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:wxspin .8s linear infinite}
 @keyframes wxspin{to{transform:rotate(360deg)}}
 button,select,input{touch-action:manipulation}
 .wx-flash{position:absolute;left:50%;top:64px;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:8px;padding:6px 12px;font-size:13px;z-index:9}

@@ -49,6 +49,7 @@ const hwRunKey = (inch, part) => 'std:Blum 563H ' + [15, 18, 21].reduce((a, b) =
 const hwRunLen = key => +key.match(/563H (\d+)/)[1];   // the runner length the model is drawn at, inches
 // The model's pieces by colour, as plain geometries in its own frame, or null while it loads.
 function hwModel(key) {
+  if (hwInst()) return null;
   if (hwModel[key]) return hwModel[key];
   if (typeof modelLoad !== 'function' || typeof modelReady !== 'function') return null;
   modelLoad(key); if (!modelReady(key)) return null;
@@ -78,22 +79,12 @@ const hwModelsReady = () => [HWM.cup, HWM.arm, HWM.plate, HWM.lock].every(k => !
 function hwPut(lists, parts, o, ax, zs = 1, zScale = 1) {
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(ax, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, zs * zScale)).setPosition(o[0], o[1], o[2]);
   // Mirrored, each triangle is wound the other way round, so it's turned back (its front would face in, and shade dark).
-  parts.forEach(({ g, kind }) => lists[kind].push({ g: ax * zs < 0 ? hwFlip(g) : g, g0: g, m }));
+  parts.forEach(({ g, kind }) => lists[kind].push({ g: ax * zs < 0 ? hwFlip(g) : g, m }));
 }
-// 0.64.26: while the walk file is being made, Blum models stay one copy each, placed many times (each piece its own
-// mesh on the shared model), instead of baked together per front: in a kitchen the baked copies were nine tenths of
-// the file (Argil: 19 of 21 MB). A mirrored placement keeps the model as drawn (three.js turns a mirrored mesh's
-// faces round itself), so g0, not the flipped copy.
+// 0.64.27 (Ayden 2026-11-27: "leave the blum and everything on for the regular walk, but for the file we just replace
+// them with a super low cost alternative"): while the walk file is being made (WX.busy), hwModel answers null, so every
+// hinge, plate, guide and lock is drawn as the old block shapes (a few boxes per front, merged), not Blum's models.
 const hwInst = () => typeof WX === 'object' && !!WX.busy;
-function hwInstGroup(list, material) {
-  if (!list.length) return null;
-  const grp = new THREE.Group(); grp.userData.hw = true; grp.userData.layer = 'hardware'; grp.userData.noBounds = true;
-  list.forEach(({ g, g0, m }) => {
-    const k = new THREE.Mesh(g0 || g, material); m.decompose(k.position, k.quaternion, k.scale);
-    k.castShadow = false; k.receiveShadow = true; Object.assign(k.userData, { hw: true, layer: 'hardware', noBounds: true }); grp.add(k);
-  });
-  return grp;
-}
 function hwFlip(g) {
   if (g.userData.flip) return g.userData.flip;
   const q = g.clone();
@@ -106,7 +97,7 @@ const hwMatG = () => hwMatG.m || (hwMatG.m = new THREE.MeshStandardMaterial({ co
 const hwMatO = () => hwMatO.m || (hwMatO.m = new THREE.MeshStandardMaterial({ color: new THREE.Color('#e07a1f'), roughness: 0.5, metalness: 0, side: THREE.DoubleSide }));
 const hwMatOf = kind => kind === 'orange' ? hwMatO() : kind === 'grey' ? hwMatG() : hwMatM();
 // One merged mesh per colour.
-function hwMergeAll(lists, put) { for (const k in lists) { const m = hwInst() ? hwInstGroup(lists[k], hwMatOf(k)) : hwMerge(lists[k], hwMatOf(k)); if (m) put(m); } }
+function hwMergeAll(lists, put) { for (const k in lists) { const m = hwMerge(lists[k], hwMatOf(k)); if (m) put(m); } }
 
 // The hinges, pull screws and drawer guides of one front. add puts a piece in the front's own group (cabinetMeshes'
 // frame: the front's back face at z = D, its outside face at D + ft), so it rides with the door or drawer; fixed puts
@@ -230,8 +221,6 @@ function hw3dKey(c) {
 }
 function hw3dCab(c, grp) {
   if (typeof ops3dPlace !== 'function' || !(angledCorner(c) || (!hasCabShape(c) && !(cabTopShape(c) || {}).edges))) return;
-  // The walk file being made: the plate models placed, not baked (hwInst), and nothing kept.
-  if (hwInst()) { hw3dCabMake(c).forEach(h => { const m = h.inst ? hwInstGroup(h.inst, hwMatM()) : hwMesh(h.pos, h.nor, h.hole ? hwHoleMat() : h.real ? hwMatM() : hwMat()); if (h.hole) m.receiveShadow = false; grp.add(m); }); return; }
   let key = null; try { key = hw3dKey(c); } catch (_) {}
   const hit = key && HW3C.get(key);
   if (hit) { hit.forEach(h => { const m = hwMesh(h.pos, h.nor, h.hole ? hwHoleMat() : h.real ? hwMatM() : hwMat()); if (h.hole) m.receiveShadow = false; grp.add(m); }); return; }
@@ -265,14 +254,14 @@ function hw3dCabMake(c) {
       const N = z.N; if (Math.abs(N.x) < 0.9) return;   // plates go on sides and partitions (faces across the cabinet)
       const C = at(z.x, z.y, z.s ? T : 0), sx = N.x;
       const pm = hwModel(HWM.plate);
-      if (pm) { pm.forEach(({ g }) => real.push({ g: sx < 0 ? hwFlip(g) : g, g0: g, m: new THREE.Matrix4().makeBasis(new THREE.Vector3(Math.sign(sx), 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)).setPosition(C.x, C.y, C.z) })); return; }
+      if (pm) { pm.forEach(({ g }) => real.push({ g: sx < 0 ? hwFlip(g) : g, m: new THREE.Matrix4().makeBasis(new THREE.Vector3(Math.sign(sx), 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)).setPosition(C.x, C.y, C.z) })); return; }
       // Blum's cruciform plate: screw ears flat on the side over its two holes, the block the arm clips onto.
       metal.push({ g: hwBox(), m: hwM(C.x + sx * hwMM(1.5), C.y, C.z, hwMM(3), hwMM(50), hwMM(13)) });
       metal.push({ g: hwBox(), m: hwM(C.x + sx * hwMM(4.5), C.y, C.z - hwMM(4), hwMM(9), hwMM(15), hwMM(46)) });
     });
   });
-  const out = [], hb = hwBake(holes), mb = hwBake(metal), rb = hwInst() ? null : hwBake(real);
+  const out = [], hb = hwBake(holes), mb = hwBake(metal), rb = hwBake(real);
   if (hb) out.push({ ...hb, hole: true }); if (mb) out.push(mb);
-  if (real.length && hwInst()) out.push({ inst: real }); else if (rb) out.push({ ...rb, real: true });
+  if (rb) out.push({ ...rb, real: true });
   return out;
 }
