@@ -370,6 +370,24 @@ function setOpen(ids, v) { ids.forEach(id => { if (v === undefined ? !ui.open[id
 function roomLights() { return WXP.lamps ? [{ kind: 'ceiling' }] : []; }
 function realCeil3() { return WXP.ceil || (WXP.ceil = new THREE.MeshStandardMaterial()); }
 function onAllFingersUp() {}
+// 0.64.28: problems after the walkthrough opened are listed in a small box at the bottom (tap it to hide), so a phone
+// shows what went wrong instead of just stopping.
+function wxLog(t) {
+  let b = document.getElementById('wxlog');
+  if (!b) { b = document.createElement('div'); b.id = 'wxlog'; b.className = 'wx-log'; b.addEventListener('click', () => { b.hidden = true; }); document.body.appendChild(b); }
+  const line = document.createElement('div'); line.textContent = String(t).slice(0, 300); b.appendChild(line);
+  while (b.children.length > 6) b.firstChild.remove();
+  b.hidden = false;
+}
+window.addEventListener('error', e => { if (!document.getElementById('wxload')) wxLog('Error: ' + (e.message || 'unknown') + (e.lineno ? ' (line ' + e.lineno + ')' : '')); });
+window.addEventListener('unhandledrejection', e => { if (!document.getElementById('wxload')) wxLog('Error: ' + ((e.reason && e.reason.message) || e.reason)); });
+// A picture bigger than max pixels is drawn smaller (phones: less graphics memory).
+function wxShrinkTex(t, max) {
+  const im = t.image; if (!im || !im.width || Math.max(im.width, im.height) <= max || !(im instanceof HTMLImageElement || im instanceof HTMLCanvasElement || (typeof ImageBitmap !== 'undefined' && im instanceof ImageBitmap))) return;
+  const k = max / Math.max(im.width, im.height), c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
+  try { c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); t.image = c; t.needsUpdate = true; } catch (_) {}
+}
 `;
 
 // The walk file's page: everything below runs in the client's browser, not in Cabinet Designer.
@@ -384,33 +402,40 @@ function wxPlayer(W) {
   const host = document.getElementById('wxhost'), wrap = document.getElementById('wxwrap'), logo = document.getElementById('wxlogo').src;
   const v = new Viewer3D(host); roomViewer = v; viewers.push(v);
   if (!v.ok) { document.getElementById('wxmsg').textContent = 'This browser could not start 3D. Try Chrome or Safari.'; document.getElementById('wxload').className = 'wx-load'; return; }
-  // A phone that runs out of graphics memory drops the 3D: say so instead of showing a blank screen.
-  v.renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); const c = document.createElement('div'); c.className = 'wx-card'; c.textContent = 'The phone ran out of graphics memory and stopped the 3D. Close other apps and open the file again.'; wrap.appendChild(c); });
+  // 0.64.28: a phone that runs out of graphics memory drops the 3D; it's noted on screen and brought back when the
+  // browser allows (every look and picture is sent to the graphics chip again).
+  const el3 = v.renderer.domElement;
+  el3.addEventListener('webglcontextlost', e => { e.preventDefault(); wxLog('The phone dropped the 3D (graphics memory). Trying to bring it back…'); });
+  el3.addEventListener('webglcontextrestored', () => {
+    v.scene.traverse(o => [].concat(o.material || []).forEach(m => { if (!m) return; m.needsUpdate = true; for (const k in m) if (m[k] && m[k].isTexture) m[k].needsUpdate = true; }));
+    v.renderer.shadowMap.needsUpdate = true; v.requestRender(); wxLog('3D back.');
+  });
   v.setReal(true); SUN.hour = D.sun || 15;
   S.rooms = D.rooms;
-  // 0.64.26 (Ayden 2026-11-26: "make the walk file work way better on mobile"): a phone or tablet draws a lighter picture.
-  // At most 1.5 picture pixels per screen pixel (phones have 3), a smaller sun shadow, no shadows from the room's own
-  // lamps (each one draws the room six more times), and no soft shade while moving: it comes back the moment you stop.
-  const phone = WXP.phone = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 600;
-  if (phone) { v.renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1)); v.sun.shadow.mapSize.set(1024, 1024); v.resize(); }
-  const moving = () => performance.now() - Math.max(WXP.movedAt || 0, (typeof WALK === 'object' && WALK.movedAt) || 0) < 250;
+  // 0.64.28 (Ayden 2026-11-27: the link "loads once then freezes after running like 7 frames"): phones and tablets run a
+  // safe mode. One picture pixel per screen pixel, never changed while walking (changing the picture's size makes the
+  // phone set up its drawing memory again, and Walk's speed check did that as you started and stopped). No soft shade
+  // (it draws the whole room a second time into extra pictures each frame). One small sun shadow, drawn only when
+  // something changes; no lamp shadows. Pictures at most 1024 px. Add ?safe=1 to the link to try it on a computer,
+  // ?safe=0 to turn it off on a phone.
+  const qs = new URLSearchParams(location.search), force = qs.get('safe');
+  const phone = WXP.phone = force === '1' ? true : force === '0' ? false : matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 600;
+  if (phone) {
+    v.renderer.setPixelRatio(1); v.sun.shadow.mapSize.set(1024, 1024); v.resize();
+    AO.on = false; walkRes = function () {};
+    v.renderer.shadowMap.autoUpdate = false;
+  }
   v.beforeDraw = () => {
     // Hinges, guides and screws behind shut doors are hidden when looking around too, not only while walking.
     if (!v.walk && typeof walkHwCull === 'function') walkHwCull(v);
-    AO.on = !(phone && moving());
+    if (phone) { AO.on = false; v.renderer.shadowMap.autoUpdate = false; }
   };
-  v.controls.addEventListener('change', () => { WXP.movedAt = performance.now(); clearTimeout(WXP.sharpT); WXP.sharpT = setTimeout(() => v.requestRender(), 300); });
-  // Walking on a phone: standing still draws at the sharp 1.5 (Walk's own start drops to 1), moving starts a step
-  // smaller and Walk's own speed check (walkRes) goes smaller or bigger from there.
-  if (phone && typeof walkStart === 'function') {
-    const start0 = walkStart;
-    walkStart = function () {
-      start0.apply(this, arguments);
-      if (!WALK.on || (window.devicePixelRatio || 1) <= 1) return;
-      WALK.prW = Math.min(1.5, window.devicePixelRatio || 1); WALK.resLv = 2; WALK.resOn = 0;
-      v.renderer.setPixelRatio(WALK.prW); v.resize();
-    };
-  }
+  // A picture that takes over 1.5 s to draw is noted on screen (what the phone was doing helps find what froze it).
+  const draw0 = v.draw.bind(v);
+  v.draw = function () {
+    const t0 = performance.now(); draw0(); const dt = performance.now() - t0;
+    if (dt > 1500 && WXP.shownOnce) wxLog(`A picture took ${(dt / 1000).toFixed(1)} s to draw (${WALK.on ? 'walking' : 'looking around'}${typeof openAnim !== 'undefined' && openAnim ? ', opening' : ''}).`);
+  };
   const say = t => { const m = document.getElementById('wxmsg'); if (m) m.textContent = t; };
   new THREE.ObjectLoader().parseAsync(D.scene).then(all => {
     all.children.forEach(g => { WXP.scenes[g.userData.scene] = g.children.slice(); });
@@ -418,6 +443,7 @@ function wxPlayer(W) {
       if (x.userData.open && x.userData.cabId) WXP.opens.add(x.userData.cabId);
       if (x.material) [].concat(x.material).forEach(m => { if (m && m.userData && m.userData.ceil) WXP.ceil = m; });
       if (phone && x.isLight && x.castShadow) x.castShadow = false;
+      if (phone && x.material) [].concat(x.material).forEach(m => { if (m) for (const k in m) if (m[k] && m[k].isTexture) wxShrinkTex(m[k], 1024); });
     }));
     wxUI();
     wxShow(D.rooms[0].id, true);
@@ -425,7 +451,7 @@ function wxPlayer(W) {
     // The first picture builds every look the room needs (slow on a phone); done behind the loading card.
     requestAnimationFrame(() => setTimeout(() => {
       try { v.renderer.compile(v.scene, v.cam); } catch (_) {}
-      v.draw();
+      v.draw(); WXP.shownOnce = true;
       const l = document.getElementById('wxload'); if (l) l.remove();
     }, 0));
   }).catch(e => { say('This walkthrough could not open: ' + (e && e.message || e)); const l = document.getElementById('wxload'); if (l) l.className = 'wx-load'; });
@@ -465,6 +491,8 @@ function wxPlayer(W) {
       });
       v.requestRender();
       openAnim = moving ? requestAnimationFrame(step) : 0;
+      // Safe mode draws shadows only on a change: once the door or drawer stops.
+      if (!moving) v.renderer.shadowMap.needsUpdate = true;
     };
     openAnim = requestAnimationFrame(step);
   };
@@ -522,6 +550,7 @@ button,select,input{touch-action:manipulation}
    bar shows icons only, in finger-sized buttons, its hints in a note under it. */
 .wx-wrap:has(.walkui) .wx-bar{left:auto;right:max(12px,env(safe-area-inset-right));transform:none}
 .wx-wrap:has(.walkui) .wx-bar:not(:has(select)){display:none}
+.wx-log{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:30;background:rgba(150,20,20,.92);color:#fff;font-size:12px;line-height:1.35;border-radius:8px;padding:6px 10px;max-height:30vh;overflow:auto}
 @media (pointer:coarse){
 .btn{min-height:40px}.wx-bar select{min-height:40px}
 .walkbar{top:max(10px,env(safe-area-inset-top));gap:6px;padding:5px}

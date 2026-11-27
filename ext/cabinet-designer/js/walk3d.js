@@ -555,8 +555,10 @@ function walkFull(on) {
   const card = v.host.parentElement, el = v.renderer.domElement;
   if (on) {
     if (!WALK.on) return;
-    try { const p = card.requestFullscreen && card.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+    try { const p = card.requestFullscreen ? card.requestFullscreen() : card.webkitRequestFullscreen && card.webkitRequestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
     walkLock();
+    // 0.64.28: a phone that won't fill the screen (iPhone Safari allows it only for videos) says so.
+    setTimeout(() => { if (WALK.on && !document.fullscreenElement && !document.webkitFullscreenElement && matchMedia('(pointer: coarse)').matches) walkNote('This phone doesn\'t allow full screen here. Turn it sideways for a bigger view.'); }, 800);
   } else {
     if (document.pointerLockElement === el) try { document.exitPointerLock(); } catch (_) {}
     if (document.fullscreenElement === card) try { const p = document.exitFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
@@ -565,8 +567,17 @@ function walkFull(on) {
 function walkLock() {
   const el = WALK.v && WALK.v.renderer.domElement; if (!el || !el.requestPointerLock) return;
   if (matchMedia('(pointer: coarse)').matches) return;   // a finger looks by dragging, full screen or not
-  try { const p = el.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+  if (WALK.noLock) return;
+  try { const p = el.requestPointerLock(); if (p && p.catch) p.catch(walkNoLock); } catch (_) { walkNoLock(); }
 }
+// 0.64.28 (Ayden 2026-11-27: the shared link "freezes" and full screen doesn't work on the PC): a page that may not
+// lock the mouse (the website's walk page is sandboxed, some browsers ask first) keeps full screen and looks by
+// dragging, instead of each click asking for the lock again and the view never turning.
+function walkNoLock() {
+  if (WALK.noLock) return; WALK.noLock = true;
+  if (WALK.on) walkNote('Drag to look · W A S D to walk · Esc leaves full screen');
+}
+document.addEventListener('pointerlockerror', walkNoLock);
 // Leaving one leaves the other: the browser's own Esc may only drop the mouse lock or only the full screen.
 document.addEventListener('pointerlockchange', () => {
   if (!WALK.v) return;
@@ -642,7 +653,7 @@ function walkUI(v, on) {
     // Mouse locked: a click opens what is under the dot in the middle.
     if (locked()) { if (e.button === 0) { const r = el.getBoundingClientRect(); walkTap(v, r.left + r.width / 2, r.top + r.height / 2); } return; }
     // In full screen without the lock (it was refused or lost), a click locks it again.
-    if (document.fullscreenElement === v.host.parentElement && e.pointerType === 'mouse') { walkLock(); return; }
+    if (document.fullscreenElement === v.host.parentElement && e.pointerType === 'mouse' && !WALK.noLock) { walkLock(); return; }
     drags.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: performance.now(), touch: e.pointerType === 'touch' });
     // 0.64.26: two fingers on the screen pinch (no tap, no look); a new touch stops a walk to a tapped spot.
     if (drags.size > 1) { drags.forEach(d => { d.multi = true; }); WALK.pinchD = 0; }
