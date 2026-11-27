@@ -409,7 +409,10 @@ function apPull(c, fx, q, fr) {
     let side = q.hinge === 'R' ? 'L' : q.hinge === 'L' ? 'R' : '';
     if (mate) side = mate.x > q.x ? 'R' : 'L';
     if (!side) side = 'R';
-    const x = side === 'R' ? q.x + q.w - inset : q.x + inset;
+    // 0.64.31: on a framed panel front the pull sits on the middle of its pull-side stile, like a cabinet door's.
+    let edge = inset;
+    try { const st = apStyle(c, { type: 'door', x0: q.x, x1: q.x + q.w, z0: q.z, z1: q.z + q.h, ...fMids(q) }), ds = st.ds; if (st.framed) { const sw = side === 'R' ? (+ds.sR > 0 ? +ds.sR : ds.stile) : (+ds.sL > 0 ? +ds.sL : ds.stile); if (sw > 0) edge = sw / 2; } } catch (_) {}
+    const x = side === 'R' ? q.x + q.w - edge : q.x + edge;
     // The pull sits where a hand reaches it, 40" off the floor like a tall cabinet's: low on an upper door, high on a
     // lower one (as Mozaik draws them), at 40" on a full-height door.
     const mid = q.z + q.h / 2, reach = 40 - (c.elev || 0), zc = q.h > len + 6 ? Math.min(q.z + q.h - len / 2 - 3, Math.max(q.z + len / 2 + 3, reach)) : mid;

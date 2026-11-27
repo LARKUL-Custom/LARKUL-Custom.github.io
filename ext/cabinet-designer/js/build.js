@@ -650,7 +650,15 @@ function pullPlacement(c, f) {
     const z = dt.drawerPullFromTop > 0 ? fh - dt.drawerPullFromTop : fh / 2;
     return { hw: p, x: fw / 2, z, vertical: false };
   }
-  const x = f.hinge === 'L' ? fw - dt.pullFromEdge : dt.pullFromEdge;
+  // 0.64.31 (Ayden 2026-11-27: "handles dont line up correctly, they need to be closer to the center of the stile same height"):
+  // on a framed door the pull sits on the middle of its latch-side stile, so a pair's pulls line up on the meeting stiles.
+  // A slab door (or one too small for its frame) keeps the template's From edge.
+  let edge = dt.pullFromEdge;
+  try {
+    const { ds, framed } = frontStyle(c, f);
+    if (framed) { const sw = f.hinge === 'L' ? (+ds.sR > 0 ? +ds.sR : ds.stile) : (+ds.sL > 0 ? +ds.sL : ds.stile); if (sw > 0) edge = sw / 2; }
+  } catch (_) {}
+  const x = f.hinge === 'L' ? fw - edge : edge;
   const lo = dt.pullFromEnd + len / 2, hi = fh - dt.pullFromEnd - len / 2;
   let z;
   if (c.cat === 'Wall') z = lo;
