@@ -439,6 +439,19 @@ function walkLoop() {
     const k = WALK.keys, fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0), side = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0), turn = (k.ArrowLeft || k.KeyQ ? 1 : 0) - (k.ArrowRight || k.KeyE ? 1 : 0);
     let f = fwd, s = side;
     if (WALK.stick) { f += -WALK.stick.y; s += WALK.stick.x; }
+    // A tapped spot on the floor (0.64.26): walk toward it at the usual pace, easing in the last two feet; keys or the
+    // stick take over.
+    const G = WALK.goal;
+    if (G && (fwd || side || WALK.stick)) WALK.goal = null;
+    else if (G) {
+      const gx = G.x - WALK.x, gz = G.z - WALK.z, gd = Math.hypot(gx, gz);
+      if (gd < 4 || G.stuck > 20) WALK.goal = null;
+      else {
+        // Into the walker's own forward/sideways (yaw): forward is (-sin, -cos), right is (cos, -sin).
+        const k2 = Math.min(1, gd / 24), fx = -Math.sin(WALK.yaw), fz = -Math.cos(WALK.yaw);
+        f = (gx * fx + gz * fz) / gd * k2; s = (gx * -fz + gz * fx) / gd * k2;
+      }
+    }
     // The speed you want, as a direction on the floor; the real speed eases toward it (quick to start, a little
     // softer to stop), so steps blend instead of jerking on and off.
     const n = Math.hypot(f, s), want = n > 0.05, sp = k.ShiftLeft || k.ShiftRight ? WALK.fast : WALK.speed;
@@ -455,6 +468,7 @@ function walkLoop() {
     if (want) walkBumpDoor(tx, tz);
     if (moving) {
       const x0 = WALK.x, z0 = WALK.z; walkMove(WALK.vx * dt, WALK.vz * dt);
+      if (WALK.goal) WALK.goal.stuck = Math.hypot(WALK.x - x0, WALK.z - z0) < 0.05 ? WALK.goal.stuck + 1 : 0;
       // Bumping into something takes the speed out of that direction, so you slide along it and don't stick.
       if (WALK.x === x0) WALK.vx = 0; if (WALK.z === z0) WALK.vz = 0;
     }
@@ -550,6 +564,7 @@ function walkFull(on) {
 }
 function walkLock() {
   const el = WALK.v && WALK.v.renderer.domElement; if (!el || !el.requestPointerLock) return;
+  if (matchMedia('(pointer: coarse)').matches) return;   // a finger looks by dragging, full screen or not
   try { const p = el.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
 }
 // Leaving one leaves the other: the browser's own Esc may only drop the mouse lock or only the full screen.
@@ -584,8 +599,10 @@ function walkUI(v, on) {
   }
   const coarse = matchMedia('(pointer: coarse)').matches;
   const box = document.createElement('div'); box.className = 'walkui';
-  box.innerHTML = `<div class="walkbar"><span class="walkhint">${coarse ? 'Stick to walk · drag to look · tap a cabinet to open it' : 'W A S D or arrows to walk · drag to look · click a cabinet to open it'}</span>`
-    + (coarse ? '' : `<button class="btn sm" data-walk="full" title="Fill the screen and look by moving the mouse (F). Esc comes back.">${icon('expand')}Full screen</button>`)
+  // 0.64.26: on a phone or tablet that allows it (Android; not iPhone), Full screen hides the browser's own bars.
+  const fullOk = !coarse || !!document.fullscreenEnabled;
+  box.innerHTML = `<div class="walkbar"><span class="walkhint">${coarse ? 'Stick or tap the floor to walk · drag to look · pinch to step · tap a cabinet to open it' : 'W A S D or arrows to walk · drag to look · click a cabinet to open it'}</span>`
+    + (fullOk ? `<button class="btn sm" data-walk="full" title="${coarse ? 'Fill the screen' : 'Fill the screen and look by moving the mouse (F). Esc comes back.'}">${icon('expand')}Full screen</button>` : '')
     // 0.63.31 (Ayden 2026-11-24): the time of day and the room's lights, right in the Walk bar, to set before full screen.
     + (v.real && typeof SUN === 'object' ? `<label class="walksun" title="Time of day">${icon('sun')}<input type="range" min="5" max="22" step="0.25" value="${SUN.hour}" aria-label="Time of day"><span>${sunLabel(SUN.hour)}</span></label>` : '')
     + `<button class="btn sm walklights" data-walk="lights" aria-pressed="false" title="Turn the room's ceiling lights and LED strips off or on"></button>`
@@ -594,7 +611,7 @@ function walkUI(v, on) {
     // 0.64.1: the walls Walk puts along open sides of the room, on or off.
     + (typeof walkAutoWalls === 'function' && typeof roomScene3 === 'function' ? `<button class="btn sm" data-walk="walls" aria-pressed="true" title="Close in the open sides of the room with plain walls while walking, so you never look out into empty space. Only for the walk: nothing is added to the drawing."></button>` : '')
     + (v.real && typeof resetLighting === 'function' ? `<button class="btn sm" data-walk="reset" title="Reset lighting: 3 PM daylight, room lights on, automatic ceiling cans, Only through windows off">${icon('regen')}Reset lighting</button>` : '')
-    + `<button class="btn sm" data-walk="stop">${icon('close')}Stop walking</button></div><div class="walkdot"></div>`
+    + `<button class="btn sm" data-walk="stop" title="Stop walking">${icon('close')}Stop walking</button></div><div class="walkdot"></div>`
     + (coarse ? '<div class="walkstick"><i></i></div>' : '');
   v.host.parentElement.appendChild(box); WALK.ui = box;
   WALK.hintT = setTimeout(() => { const h = box.querySelector('.walkhint'); if (h) h.classList.add('gone'); }, 6000);
@@ -626,7 +643,10 @@ function walkUI(v, on) {
     if (locked()) { if (e.button === 0) { const r = el.getBoundingClientRect(); walkTap(v, r.left + r.width / 2, r.top + r.height / 2); } return; }
     // In full screen without the lock (it was refused or lost), a click locks it again.
     if (document.fullscreenElement === v.host.parentElement && e.pointerType === 'mouse') { walkLock(); return; }
-    drags.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: performance.now() });
+    drags.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t: performance.now(), touch: e.pointerType === 'touch' });
+    // 0.64.26: two fingers on the screen pinch (no tap, no look); a new touch stops a walk to a tapped spot.
+    if (drags.size > 1) { drags.forEach(d => { d.multi = true; }); WALK.pinchD = 0; }
+    if (e.pointerType === 'touch') WALK.goal = null;
     try { el.setPointerCapture(e.pointerId); } catch (_) {}
   };
   const move = e => {
@@ -637,6 +657,16 @@ function walkUI(v, on) {
       walkCam(v); v.requestRender(); return;
     }
     const d = drags.get(e.pointerId); if (!d) return;
+    // 0.64.26: pinch apart to step forward, together to step back (like zooming in on a photo), against walls as walking.
+    if (drags.size > 1) {
+      d.x = e.clientX; d.y = e.clientY;
+      const [a, b] = [...drags.values()], dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (WALK.pinchD) {
+        const step = (dist - WALK.pinchD) * 0.35, fx = -Math.sin(WALK.yaw), fz = -Math.cos(WALK.yaw);
+        if (Math.abs(step) > 0.01) { walkMove(fx * step, fz * step); walkDoorways(v); walkCam(v); v.requestRender(); }
+      }
+      WALK.pinchD = dist; return;
+    }
     const k = e.pointerType === 'touch' ? 0.006 : 0.0045;
     // Grab the view and pull it, like the normal 3D view and street view photos.
     WALK.yaw += (e.clientX - d.x) * k; WALK.pitch = Math.max(-1.3, Math.min(1.3, WALK.pitch + (e.clientY - d.y) * k));
@@ -644,9 +674,11 @@ function walkUI(v, on) {
   };
   const up = e => {
     const d = drags.get(e.pointerId); if (!d) return; drags.delete(e.pointerId);
-    if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 6 && performance.now() - d.t < 500 && e.button === 0) walkTap(v, e.clientX, e.clientY);
+    if (drags.size < 2) WALK.pinchD = 0;
+    // A finger lifted after a pinch is no tap; a finger that moved less than a fidget is (touch screens wobble more).
+    if (!d.multi && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < (d.touch ? 10 : 6) && performance.now() - d.t < 500 && e.button === 0) walkTap(v, e.clientX, e.clientY, d.touch);
   };
-  const cancel = e => drags.delete(e.pointerId);
+  const cancel = e => { drags.delete(e.pointerId); if (drags.size < 2) WALK.pinchD = 0; };
   el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', cancel);
   WALK.off = () => { el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', cancel); };
 
@@ -711,11 +743,11 @@ function walkRebuild(v) {
 }
 function walkLightsBtn() {
   const b = WALK.ui && WALK.ui.querySelector('[data-walk=lights]'); if (!b) return;
-  b.innerHTML = `${icon('bulb')}${WALK.dark ? 'Lights on' : 'Lights off'}`; b.setAttribute('aria-pressed', String(!!WALK.dark));
+  b.innerHTML = `${icon('bulb')}${WALK.dark ? 'Lights on' : 'Lights off'}`; b.setAttribute('aria-pressed', String(!!WALK.dark)); b.title = WALK.dark ? 'Turn the room lights on' : 'Turn the room lights off';
 }
 
 // Opens or closes the cabinet under the pointer when it is within reach of the room (12').
-function walkTap(v, cx, cy) {
+function walkTap(v, cx, cy, touch) {
   const r = v.renderer.domElement.getBoundingClientRect();
   const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), v.cam);
   rc.far = 144;
@@ -731,7 +763,13 @@ function walkTap(v, cx, cy) {
   if (key && !(fh && fh.d < hit.distance - 0.5)) { doorToggle(key); return; }
   if (fh) { setOpen([fh.c.id]); walkLoop(); return; }
   const hr = hit && hit.object.userData.room, id = hit && (!hr || hr === S.roomId) && hit.object.userData.cabId, c = id && cab(id);
-  if (c && openable(c)) { setOpen([c.id]); walkLoop(); }
+  if (c && openable(c)) { setOpen([c.id]); walkLoop(); return; }
+  // 0.64.26: on a touch screen a tap on the floor walks there (stops short of whatever is in the way).
+  if (touch) {
+    const fl = rc.intersectObjects(v.root.children, true).find(h => h.object.isMesh && h.object.visible && !h.object.isSprite);
+    if (fl && fl.point.y < 2 && fl.distance > 12) { WALK.goal = { x: fl.point.x, z: fl.point.z, stuck: 0 }; walkLoop(); }
+    else if (!hit || hit.point.y < 2) { rc.far = 600; const far = rc.intersectObjects(v.root.children, true).find(h => h.object.isMesh && h.object.visible && h.point.y < 2); if (far) { WALK.goal = { x: far.point.x, z: far.point.z, stuck: 0 }; walkLoop(); } }
+  }
 }
 // The nearest openable cabinet whose closed front face the ray crosses within maxD: { c, d } or null.
 function walkFrontHit(v, rc, maxD) {

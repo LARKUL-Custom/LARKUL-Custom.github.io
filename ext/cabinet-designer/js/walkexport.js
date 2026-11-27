@@ -107,6 +107,10 @@ function wxGeo(g, ctx) {
   const attributes = {};
   for (const [name, a] of Object.entries(g.attributes)) {
     let arr = wxAttrArray(a), normalized = !!a.normalized;
+    // 0.64.26: points rounded to 1/512" (a twentieth of a millimetre, never seen): the low bits go quiet and the file packs
+    // about a third smaller.
+    if (name === 'position' && arr instanceof Float32Array) { const q = new Float32Array(arr.length); for (let i = 0; i < arr.length; i++) q[i] = Math.round(arr[i] * 512) / 512; arr = q; }
+    if (name === 'uv' && arr instanceof Float32Array) { const q = new Float32Array(arr.length); for (let i = 0; i < arr.length; i++) q[i] = Math.round(arr[i] * 4096) / 4096; arr = q; }
     if (name === 'normal' && arr instanceof Float32Array) { const q = new Int8Array(arr.length); for (let i = 0; i < arr.length; i++) q[i] = Math.round(Math.max(-1, Math.min(1, arr[i])) * 127); arr = q; normalized = true; }
     attributes[name] = { itemSize: a.itemSize, type: arr.constructor.name, array: wxChunk(ctx, arr), normalized };
   }
@@ -259,7 +263,7 @@ async function wxFile(rooms, scenes, ctx) {
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>${esc(data.name)} · Walkthrough</title><meta name="description" content="3D walkthrough by LARKUL Custom">
-<style>${WX_CSS}\n${wxWalkCss()}</style></head><body>
+<style>${wxWalkCss()}\n${WX_CSS}</style></head><body>
 <div class="wx-wrap view3d-wrap" id="wxwrap"><div class="wx-host" id="wxhost"></div></div>
 <div class="wx-load" id="wxload"><img src="${logo}" alt="LARKUL Custom"><b>${esc(data.name)}</b><span id="wxmsg">Opening your 3D walkthrough…</span></div>
 <img id="wxlogo" src="${logo}" alt="" hidden>
@@ -271,10 +275,13 @@ const WX_BOOT = `(async function () {
   var msg = function (t) { var m = document.getElementById('wxmsg'); if (m) m.textContent = t; };
   try {
     if (typeof DecompressionStream === 'undefined') { msg('Please open this file in an up to date Chrome, Safari, Edge or Firefox.'); return; }
-    var s = atob(document.getElementById('wxd').textContent), u = new Uint8Array(s.length);
-    for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
-    s = null; document.getElementById('wxd').remove();
-    var buf = await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+    // 0.64.26: the browser's own base64 reader (fetch of a data: link) is many times quicker on a phone than a loop.
+    var el0 = document.getElementById('wxd'), t = el0.textContent, blob; el0.remove();
+    try { blob = await (await fetch('data:application/octet-stream;base64,' + t)).blob(); }
+    catch (_) { var s = atob(t), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); s = null; blob = new Blob([u]); }
+    t = null; msg('Unpacking the rooms…');
+    var buf = await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+    msg('Building the 3D…'); await new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 0); }); });
     var head = new Uint32Array(buf, 0, 2), dec = new TextDecoder(), code = dec.decode(new Uint8Array(buf, 8, head[0]));
     var json = JSON.parse(dec.decode(new Uint8Array(buf, 8 + head[0], head[1]))), at = 8 + head[0] + head[1]; at += (4 - at % 4) % 4;
     window.WXDATA = { data: json, bin: buf.slice(at) };
@@ -331,16 +338,47 @@ function wxPlayer(W) {
   if (!v.ok) { document.getElementById('wxmsg').textContent = 'This browser could not start 3D. Try Chrome or Safari.'; return; }
   v.setReal(true); SUN.hour = D.sun || 15;
   S.rooms = D.rooms;
+  // 0.64.26 (Ayden 2026-11-26: "make the walk file work way better on mobile"): a phone or tablet draws a lighter picture.
+  // At most 1.5 picture pixels per screen pixel (phones have 3), a smaller sun shadow, no shadows from the room's own
+  // lamps (each one draws the room six more times), and no soft shade while moving: it comes back the moment you stop.
+  const phone = WXP.phone = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 600;
+  if (phone) { v.renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1)); v.sun.shadow.mapSize.set(1024, 1024); v.resize(); }
+  const moving = () => performance.now() - Math.max(WXP.movedAt || 0, (typeof WALK === 'object' && WALK.movedAt) || 0) < 250;
+  v.beforeDraw = () => {
+    // Hinges, guides and screws behind shut doors are hidden when looking around too, not only while walking.
+    if (!v.walk && typeof walkHwCull === 'function') walkHwCull(v);
+    AO.on = !(phone && moving());
+  };
+  v.controls.addEventListener('change', () => { WXP.movedAt = performance.now(); clearTimeout(WXP.sharpT); WXP.sharpT = setTimeout(() => v.requestRender(), 300); });
+  // Walking on a phone: standing still draws at the sharp 1.5 (Walk's own start drops to 1), moving starts a step
+  // smaller and Walk's own speed check (walkRes) goes smaller or bigger from there.
+  if (phone && typeof walkStart === 'function') {
+    const start0 = walkStart;
+    walkStart = function () {
+      start0.apply(this, arguments);
+      if (!WALK.on || (window.devicePixelRatio || 1) <= 1) return;
+      WALK.prW = Math.min(1.5, window.devicePixelRatio || 1); WALK.resLv = 2; WALK.resOn = 0;
+      v.renderer.setPixelRatio(WALK.prW); v.resize();
+    };
+  }
+  const say = t => { const m = document.getElementById('wxmsg'); if (m) m.textContent = t; };
   new THREE.ObjectLoader().parseAsync(D.scene).then(all => {
     all.children.forEach(g => { WXP.scenes[g.userData.scene] = g.children.slice(); });
     Object.values(WXP.scenes).flat().forEach(o => o.traverse(x => {
       if (x.userData.open && x.userData.cabId) WXP.opens.add(x.userData.cabId);
       if (x.material) [].concat(x.material).forEach(m => { if (m && m.userData && m.userData.ceil) WXP.ceil = m; });
+      if (phone && x.isLight && x.castShadow) x.castShadow = false;
     }));
     wxUI();
     wxShow(D.rooms[0].id, true);
-    document.getElementById('wxload').remove();
-  }).catch(e => { document.getElementById('wxmsg').textContent = 'This walkthrough could not open: ' + (e && e.message || e); });
+    say('Getting the picture ready…');
+    // The first picture builds every look the room needs (slow on a phone); done behind the loading card.
+    requestAnimationFrame(() => setTimeout(() => {
+      try { v.renderer.compile(v.scene, v.cam); } catch (_) {}
+      v.draw();
+      const l = document.getElementById('wxload'); if (l) l.remove();
+    }, 0));
+  }).catch(e => say('This walkthrough could not open: ' + (e && e.message || e)));
 
   window.wxShow = (id, first) => {
     const r = roomById(id); if (!r) return;
@@ -392,7 +430,7 @@ function wxPlayer(W) {
       + `<label class="wx-sun" title="Time of day">${icon('sun')}<input type="range" id="wxsun" min="5" max="22" step="0.25" value="${SUN.hour}" aria-label="Time of day"><span id="wxsunl">${sunLabel(SUN.hour)}</span></label>`
       + `<button class="btn primary" id="walk3d" data-act="walk3d"></button>`;
     const card = document.createElement('div'); card.className = 'wx-card'; card.id = 'wxcard';
-    card.innerHTML = `<img src="${logo}" alt=""><h1>${esc(D.name)}</h1><p>Walk through your new ${D.rooms.length > 1 ? 'rooms' : 'room'} in 3D. ${coarse ? 'Use the stick at the bottom left to walk and drag to look around.' : 'Use W A S D or the arrow keys to walk and drag to look around.'} ${coarse ? 'Tap' : 'Click'} a cabinet to open it.</p>`
+    card.innerHTML = `<img src="${logo}" alt=""><h1>${esc(D.name)}</h1><p>Walk through your new ${D.rooms.length > 1 ? 'rooms' : 'room'} in 3D. ${coarse ? 'Walk with the stick at the bottom left or tap the floor to walk there. Drag to look around, pinch to step forward or back.' : 'Use W A S D or the arrow keys to walk and drag to look around.'} ${coarse ? 'Tap' : 'Click'} a cabinet to open it.</p>`
       + `<button class="btn primary big" data-go="walk">${icon('walk')}Start walking</button><button class="btn link" data-go="look">Look around from outside</button>`
       + `<small>Designed by LARKUL Custom · ${esc(D.made)}</small>`;
     const fl = document.createElement('div'); fl.className = 'wx-flash'; fl.id = 'wxflash'; fl.hidden = true;
@@ -424,7 +462,26 @@ const WX_CSS = `
 .wx-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,calc(100% - 32px));background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;text-align:center;z-index:8;display:flex;flex-direction:column;align-items:center;gap:12px}
 .wx-card img{height:64px}.wx-card h1{font-size:20px;margin:0}.wx-card p{margin:0;color:var(--t-n)}.wx-card small{color:var(--t-n);font-size:11px}
 .wx-load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#f4f3f0;z-index:20;padding:16px;text-align:center}.wx-load img{height:80px}.wx-load span{color:var(--t-n)}
+.wx-load span::before{content:'';display:block;width:26px;height:26px;margin:4px auto 10px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:wxspin .8s linear infinite}
+@keyframes wxspin{to{transform:rotate(360deg)}}
+button,select,input{touch-action:manipulation}
 .wx-flash{position:absolute;left:50%;top:64px;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:8px;padding:6px 12px;font-size:13px;z-index:9}
-@media (max-width:700px){.wx-wrap:has(.walkui) .wx-top{display:none}}
+@media (max-width:700px),(max-height:500px){.wx-wrap:has(.walkui) .wx-top{display:none}}
 @media (max-width:560px){.wx-sun span{display:none}.wx-sun input{width:80px}.wx-top img{height:28px}}
+/* 0.64.26: phones and tablets. While walking the room picker moves to the bottom right, clear of the stick; the Walk
+   bar shows icons only, in finger-sized buttons, its hints in a note under it. */
+.wx-wrap:has(.walkui) .wx-bar{left:auto;right:max(12px,env(safe-area-inset-right));transform:none}
+.wx-wrap:has(.walkui) .wx-bar:not(:has(select)){display:none}
+@media (pointer:coarse){
+.btn{min-height:40px}.wx-bar select{min-height:40px}
+.walkbar{top:max(10px,env(safe-area-inset-top));gap:6px;padding:5px}
+.walkbar .btn{width:44px;height:44px;padding:0;justify-content:center;font-size:0;gap:0}.walkbar .btn .ic{width:20px;height:20px}
+.walkbar .walklights[aria-pressed=true]{background:var(--ink);color:#fff}
+.walkhint{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:rgba(29,37,51,.88);color:#fff;font-size:13px;padding:7px 12px;border-radius:9px;white-space:normal;width:max-content;max-width:min(92vw,420px);text-align:center;pointer-events:none}
+.walkbar:has(.walkhint){padding-left:5px}
+.walksun span{display:none}.walksun input{width:min(34vw,140px)}
+.walkstick{width:128px;height:128px;left:max(18px,env(safe-area-inset-left));bottom:max(22px,env(safe-area-inset-bottom))}.walkstick i{width:52px;height:52px}
+.wx-card{max-height:calc(100% - 24px);overflow:auto}
+}
+@media (pointer:coarse) and (max-height:500px){.wx-card{padding:14px;gap:8px}.wx-card img{height:40px}.wx-card h1{font-size:17px}.btn.big{padding:9px 18px}}
 `;
