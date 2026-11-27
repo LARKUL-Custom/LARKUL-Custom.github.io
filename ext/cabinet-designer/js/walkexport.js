@@ -425,17 +425,60 @@ function wxPlayer(W) {
     AO.on = false; walkRes = function () {};
     v.renderer.shadowMap.autoUpdate = false;
   }
+  // 0.64.29 (Ayden 2026-11-27: "literally runs at like 5 frames a second even with the safe=1 added", on the PC): a
+  // browser drawing 3D without the graphics card (hardware acceleration off or the card refused, so the computer's main
+  // chip draws every pixel) runs this room at about 5 frames a second, the same as Ayden saw. Such a browser, or any
+  // that walks slower than about 20 frames a second, switches once to Simple look: no shadows, plain (matte) surfaces,
+  // and a smaller picture stretched to the screen; about 8 times quicker there. ?lite=1 forces it, ?lite=0 never.
+  const soft = (() => { try { const gl = v.renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); const n = String(x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)); return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(n) ? n : ''; } catch (_) { return ''; } })();
+  WXP.soft = soft;
+  const liteQ = qs.get('lite'), mats = new Map();
+  const plain = m => {
+    if (!m || !(m.isMeshStandardMaterial)) return m;
+    let l = mats.get(m); if (l) return l;
+    l = new THREE.MeshLambertMaterial({ color: m.color, map: m.map, emissive: m.emissive, emissiveMap: m.emissiveMap, emissiveIntensity: m.emissiveIntensity, alphaMap: m.alphaMap, transparent: m.transparent, opacity: m.opacity, side: m.side, depthWrite: m.depthWrite, visible: m.visible, toneMapped: m.toneMapped });
+    l.userData = m.userData; l.name = m.name; mats.set(m, l); return l;
+  };
+  const liteObj = o => o.traverse(x => { if (x.isMesh && x.material) x.material = Array.isArray(x.material) ? x.material.map(plain) : plain(x.material); });
+  window.wxLite = why => {
+    if (WXP.lite || liteQ === '0') return; WXP.lite = why;
+    const r = v.renderer; AO.on = false; walkRes = function () {};
+    r.shadowMap.enabled = false; r.shadowMap.autoUpdate = false;
+    Object.values(WXP.scenes).flat().forEach(liteObj); liteObj(v.scene);
+    if (WXP.ceil) WXP.ceil = mats.get(WXP.ceil) || WXP.ceil;
+    WXP.litePr = Math.min(1, 900 / Math.max(1, v.host.clientWidth));
+    v.requestRender();
+    wxLog(why === 'soft' ? 'This browser is drawing 3D without the graphics card, so the walkthrough uses a simple look. Turning on "Use graphics acceleration" in the browser\'s settings brings the full look back.' : 'This computer was drawing slowly, so the walkthrough switched to a simple look.');
+  };
   v.beforeDraw = () => {
     // Hinges, guides and screws behind shut doors are hidden when looking around too, not only while walking.
     if (!v.walk && typeof walkHwCull === 'function') walkHwCull(v);
-    if (phone) { AO.on = false; v.renderer.shadowMap.autoUpdate = false; }
+    if (phone || WXP.lite) { AO.on = false; v.renderer.shadowMap.autoUpdate = false; }
+    if (WXP.lite) {
+      const r = v.renderer, w = v.host.clientWidth, h = v.host.clientHeight;
+      WXP.litePr = Math.min(WXP.litePr, 900 / Math.max(1, w), 1);
+      if (w && h && Math.abs(r.getPixelRatio() - WXP.litePr) > 0.001) { r.setPixelRatio(WXP.litePr); r.setSize(w, h, false); }
+      // The plain look follows anything shown later (another room, a door redrawn).
+      v.scene.traverse(x => { if (x.isMesh && x.material && x.material.isMeshStandardMaterial) x.material = plain(x.material); });
+      if (WXP.ceil && mats.get(WXP.ceil)) WXP.ceil = mats.get(WXP.ceil);
+    }
   };
   // A picture that takes over 1.5 s to draw is noted on screen (what the phone was doing helps find what froze it).
-  const draw0 = v.draw.bind(v);
+  // Walking slower than about 20 frames a second for a second switches to the simple look (and smaller still if needed).
+  const draw0 = v.draw.bind(v); let last = 0, ft = 0, slowN = 0;
   v.draw = function () {
-    const t0 = performance.now(); draw0(); const dt = performance.now() - t0;
+    const t0 = performance.now(), gap = t0 - last; last = t0;
+    draw0(); const dt = performance.now() - t0;
     if (dt > 1500 && WXP.shownOnce) wxLog(`A picture took ${(dt / 1000).toFixed(1)} s to draw (${WALK.on ? 'walking' : 'looking around'}${typeof openAnim !== 'undefined' && openAnim ? ', opening' : ''}).`);
+    if (!WALK.on || !WALK.raf || gap > 1000) { slowN = 0; ft = 0; return; }
+    ft = ft ? ft * 0.8 + gap * 0.2 : gap;
+    if (ft > 50) slowN++; else slowN = 0;
+    if (slowN < 15) return;
+    slowN = 0; ft = 0;
+    if (!WXP.lite) wxLite('slow');
+    else if (WXP.litePr > 0.4) { WXP.litePr *= 0.75; v.requestRender(); }
   };
+  if (soft || liteQ === '1') wxLite(soft ? 'soft' : 'asked');
   const say = t => { const m = document.getElementById('wxmsg'); if (m) m.textContent = t; };
   new THREE.ObjectLoader().parseAsync(D.scene).then(all => {
     all.children.forEach(g => { WXP.scenes[g.userData.scene] = g.children.slice(); });
