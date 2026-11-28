@@ -636,6 +636,33 @@ function hingeHeights(p, fh, hg) {
   for (let i = 0; i < n; i++) out.push(a + (b - a) * i / (n - 1));
   return out;
 }
+// 0.64.35 (Ayden 2026-11-27, Johnson kitchen: "random handle in the corner cab, not connected to any door", on the
+// filler at the corner): a door that runs into a corner behind the filler or cabinet on the other wall has its pull
+// spot buried behind that piece, so in 3D its pull poked out of the filler's face. A pull whose spot is inside another
+// cabinet, filler or panel at its height isn't drawn in 3D (the room, Walk and the walk file). The cut list, drilling
+// and hardware count still have it, as drawn.
+function pullCovered(c, f, pp) {
+  if (f.face || !S || !S.cabinets || !S.cabinets.includes(c)) return false;
+  const fr = typeof frontFrame === 'function' && frontFrame(c); if (!fr) return false;
+  const L = Math.max((pp.hw.lengthMM || 0) * MM, 1), hx = pp.hw.ccMM && pp.vertical ? 0.2 : L / 2, hz = pp.vertical ? L / 2 : 0.2;
+  const x = f.x0 + pp.x, z = (c.elev || 0) + f.z0 + pp.z, P = fr.P;
+  // The pull as it stands off the shut front (1/4" to 3/4" out), a little smaller than its own size.
+  const poly = [P(x - hx, 0.25), P(x + hx, 0.25), P(x + hx, 0.75), P(x - hx, 0.75)], b = planBox(poly);
+  // A cabinet placed over this one is an overlap (flagged before print), not a corner piece: its pulls stay.
+  let mine; const body = () => mine === undefined ? (mine = cabPlanPoly(c)) : mine;
+  return S.cabinets.some(o => {
+    if (o.id === c.id || !((o.elev || 0) < z + hz - 0.25 && (o.elev || 0) + o.h > z - hz + 0.25)) return false;
+    const q = cabPlanPoly(o); if (!q) return false;
+    const qb = planBox(q); if (qb.x1 < b.x0 || qb.x0 > b.x1 || qb.y1 < b.y0 || qb.y0 > b.y1) return false;
+    if (!polysHit(poly, q)) return false;
+    const m = body(); return !(m && polysHit(shrinkPoly(m, 0.1), shrinkPoly(q, 0.1)));
+  });
+}
+// A plan polygon pulled in toward its middle by d, so pieces that only touch along an edge don't count as overlapping.
+function shrinkPoly(P, d) {
+  const cx = P.reduce((a, p) => a + p.x, 0) / P.length, cy = P.reduce((a, p) => a + p.y, 0) / P.length;
+  return P.map(p => { const dx = p.x - cx, dy = p.y - cy, l = Math.hypot(dx, dy) || 1; return { x: p.x - dx / l * Math.min(d, l / 2), y: p.y - dy / l * Math.min(d, l / 2) }; });
+}
 function pullPlacement(c, f) {
   // A false front gets a pull only when its row asks for one (glued-on drawer fronts that should look like drawers).
   if (f.type !== 'door' && f.type !== 'drawer' && !(f.type === 'false' && f.pull)) return null;

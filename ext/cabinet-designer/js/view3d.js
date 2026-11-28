@@ -347,7 +347,7 @@ function cabinetMeshes(c, opts = {}) {
     const fg = new THREE.Group(), add = (o, ly = 'fronts') => { o.userData.layer = ly; fg.add(o); };
     fg.userData.coFront = c.id + ':' + fi;  // the cutout card cuts each front on its own
     doorMeshes(ds, framed, f, ft, fmM, L3(mat(ds.panelMat) || fm, fk), D, add);
-    const pp = pullPlacement(c, f);
+    const pp0 = pullPlacement(c, f), pp = pp0 && !(typeof pullCovered === 'function' && pullCovered(c, f, pp0)) ? pp0 : null;
     if (pp) {
       const L = Math.max(pp.hw.lengthMM * MM, 1), pm = (R3 ? metal3 : flat3)(pullColor(c, pp.hw));
       const px = f.x0 + pp.x, py = f.z0 + pp.z, pz = D + ft + 0.55;

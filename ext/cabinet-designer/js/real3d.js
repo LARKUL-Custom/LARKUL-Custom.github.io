@@ -187,17 +187,20 @@ function sunAt(h) {
   const t = (h - 6) / 14, el = Math.sin(Math.PI * Math.max(0, Math.min(1, t))) * 60 * Math.PI / 180, az = (90 + 180 * t) * Math.PI / 180;
   const up = t > 0 && t < 1 ? Math.sin(el) : -0.2;
   // x east, y up, z south (plan y runs down the page).
-  return { dir: new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.max(up, 0.02), -Math.cos(az) * Math.cos(el)).normalize(), day: Math.max(0, Math.min(1, (h - 5.5) / 1.5, (20.5 - h) / 1.5)), low: Math.max(0, 1 - el / (25 * Math.PI / 180)) };
+  return { dir: new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.max(up, 0.02), -Math.cos(az) * Math.cos(el)).normalize(), day: Math.max(0, Math.min(1, (h - 5.5) / 1.5, (20.5 - h) / 1.5)), low: Math.max(0, 1 - el / (35 * Math.PI / 180)), hi: Math.sin(el) / Math.sin(Math.PI / 3) };
 }
 const mixHex = (a, b, k) => new THREE.Color(a).lerp(new THREE.Color(b), Math.max(0, Math.min(1, k)));
 function realLight(v) {
   const S0 = sunAt(SUN.hour), F0 = typeof sunFacing === 'function' ? sunFacing() : typeof WXP === 'object' ? WXP.sunFace : null;
   // 0.64.8: the sun comes from the room's facing (lights.js sunFacing; the walk file carries it per room).
   if (F0 && typeof sunTurn === 'function') S0.dir = sunTurn(S0.dir, F0); else if (F0 && typeof WXP === 'object' && WXP.sunTurn) S0.dir = WXP.sunTurn(S0.dir, F0);
-  const d = S0.day, hasLamps = typeof roomLights === 'function' && (roomLights().some(l => l.kind === 'ceiling') || (typeof AUTO_CEIL === 'object' && AUTO_CEIL.n > 0));
+  // 0.64.37 (Ayden 2026-11-28: the time slider "didnt change"): daylight used to be full from 7 AM to 7 PM, so only the
+  // sun's direction moved. Now it follows how high the sun is: a morning or late afternoon is dimmer and warmer than
+  // midday (about a third of it just after sunrise), and the sun is warm while it is under 35 degrees.
+  const d = S0.day * (S0.hi === undefined ? 1 : 0.3 + 0.7 * Math.max(0, Math.min(1, S0.hi))), hasLamps = typeof roomLights === 'function' && (roomLights().some(l => l.kind === 'ceiling') || (typeof AUTO_CEIL === 'object' && AUTO_CEIL.n > 0));
   v.sunDir = S0.dir;
   // Sun: warm and orange when low, white at midday, gone at night.
-  v.sun.intensity = 2.4 * d; v.sun.castShadow = d > 0.01; v.sun.color.copy(mixHex(0xfff3e2, 0xffa860, S0.low));
+  v.sun.intensity = 2.4 * d; v.sun.castShadow = S0.day > 0.01; v.sun.color.copy(mixHex(0xfff3e2, 0xffa860, S0.low));
   // Sky and bounce: bright in the day, a dim blue at night.
   v.hemi.intensity = hasLamps ? 0.12 + 0.26 * d : 0.14 + 0.42 * d; v.hemi.color.copy(mixHex(0x5a6a90, 0xeef2ff, d)); v.hemi.groundColor.copy(mixHex(0x2a2a30, 0xb39b7e, d));
   // A soft light from overhead stands in for room lighting when the room has no ceiling lights drawn.
@@ -215,10 +218,15 @@ function realLight(v) {
   // light at each window (windowSky3 in lights.js) follows the daylight. The sun still comes in where walls let it.
   if (typeof winOnlyNow === 'function' ? winOnlyNow() : typeof lay === 'function' && lay().winOnly) {
     v.hemi.intensity = 0; v.hemi.color.set(0xf4efe6); v.hemi.groundColor.set(0xb8a894); v.fill.intensity = 0;
-    v.renderer.toneMappingExposure = 1.05;
+    // 0.64.35 (Ayden 2026-11-28: "after turning on the only through windows the lighting gets very bright and the slider
+    // stops working ... just have the rays come through the window"): the sky light at each window was a strong wide
+    // wash that lit the whole room evenly at every hour, so the sun's patches didn't show and the hour changed nothing.
+    // Now it is a faint glow by the window, the exposure is the usual one, and the sun is a little stronger, so the
+    // light is the patches the sun throws through the window, moving with the time of day.
+    v.sun.intensity = 3 * d;
     if (typeof realCeil3 === 'function') realCeil3().emissive.set(0x000000);
     v.envK = 0;
-    v.root.traverse(o => { if (o.isSpotLight && o.userData.winSky) o.intensity = o.userData.winSky * 3.2 * d; if (o.isPointLight && o.userData.winBounce) o.intensity = o.userData.winBounce * d; });
+    v.root.traverse(o => { if (o.isSpotLight && o.userData.winSky) o.intensity = o.userData.winSky * 0.5 * d; if (o.isPointLight && o.userData.winBounce) o.intensity = o.userData.winBounce * 0.3 * d; });
   }
   v.scene.traverse(o => { if (!o.isMesh) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
     if (!m || !m.isMeshStandardMaterial) return;
