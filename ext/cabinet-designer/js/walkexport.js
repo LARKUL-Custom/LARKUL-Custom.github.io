@@ -45,8 +45,6 @@ async function walkExport(opt = {}) {
     const clean = t => String(t || '').replace(/[^\w -]/g, '').trim();
     const name = `${clean(S.job.name) || 'Job'} walkthrough.html`, blob = new Blob([html], { type: 'text/html' });
     const mb = (blob.size / 1048576).toFixed(1);
-    // 0.64.27: Share link puts the file on the LARKUL website instead (wxShare), for phones that can't open a file.
-    if (opt.link) { await wxShare(blob, name, mb); return blob; }
     // In the hub: saved to Files › Cabinet Designer and put on the clipboard as a file, so Ctrl+V in an email attaches it.
     if (inHub()) {
       await hubSaveOver(new File([blob], name, { type: 'text/html' }), 'Cabinet Designer');
@@ -66,44 +64,9 @@ async function walkExport(opt = {}) {
     if (keep.tab !== ui.tab) goTab(keep.tab);
   }
 }
-/* ---------- Share link (0.64.27) ----------
-   Ayden 2026-11-27: the file "does not load on mobile" and "i thought they would be able to load it in email". A phone
-   opens an emailed .html file only as a preview, which runs no code, so the 3D never starts (iPhone Mail and Files
-   always do this). Share link uploads the same walk file to the LARKUL website through the hub's Website tab
-   (website-controller /admin/walk, which keeps the admin password): it lives at <site>/walk/<22 random letters>, hidden
-   from search engines, and the link is copied so it pastes into an email or a text. Nothing else in the job goes up. */
-async function wxShare(blob, name, mb) {
-  if (!inHub()) { flash('Share link works in the hub (it uses the Website tab to put the file on your website)'); return; }
-  flash(`Putting the walk file on your website (${mb} MB)…`);
-  const api = '/api/ext/website-controller';
-  const r = await fetch(`${api}/admin/walk?name=${encodeURIComponent(name.replace(/\.html$/, ''))}`, { method: 'POST', headers: { 'Content-Type': 'text/html' }, body: blob }).catch(() => null);
-  const body = r ? await r.json().catch(() => ({})) : {};
-  if (!r || !r.ok || !body.url) {
-    const why = !r ? 'the hub could not be reached' : r.status === 404 && !body.error ? 'the Website tab is not installed in the hub' : body.error || `your website answered ${r.status}`;
-    flash('Could not share the walk file: ' + why); return;
-  }
-  const st = await fetch(`${api}/settings`).then(x => x.json()).catch(() => ({}));
-  const site = String(st.siteUrl || (st.settings && st.settings.siteUrl) || '').replace(/\/+$/, '');
-  const url = /^https?:/.test(body.url) ? body.url : site + body.url;
-  let copied = false; try { await navigator.clipboard.writeText(url); copied = true; } catch (_) {}
-  wxLinkCard(url, copied);
-}
-// The link on a small card: copy it again, open it, or close.
-function wxLinkCard(url, copied) {
-  document.querySelectorAll('.wxlink').forEach(e => e.remove());
-  const c = document.createElement('div'); c.className = 'wxlink';
-  c.innerHTML = `<b>Walk link ${copied ? 'copied' : 'ready'}</b><span>Paste it into an email or a text. It opens on any phone or computer; only people with the link can find it.</span>`
-    + `<input readonly aria-label="Walk link"><div><button class="btn sm primary" data-k="copy">Copy link</button><a class="btn sm" target="_blank" rel="noopener">Open</a><button class="btn sm" data-k="x">Close</button></div>`;
-  c.querySelector('input').value = url; c.querySelector('a').href = url;
-  c.addEventListener('click', async e => {
-    const k = e.target.closest('[data-k]'); if (!k) return;
-    if (k.dataset.k === 'x') { c.remove(); return; }
-    const i = c.querySelector('input'); i.select();
-    try { await navigator.clipboard.writeText(url); } catch (_) { document.execCommand && document.execCommand('copy'); }
-    k.textContent = 'Copied';
-  });
-  document.body.appendChild(c); c.querySelector('input').select();
-}
+// 0.64.34 (Ayden 2026-11-27: "i think ill just get rid of the share link entirely and just give them an option to download
+// a file to walk through it"): the Share link button (0.64.27, the walk file put on the website) is gone; the walk file
+// is the one way to send a walkthrough.
 const wxFrames = n => new Promise(res => { const f = () => (n-- <= 0 ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
 // Waits for appliance and shape models that are still being read (each one redraws the room when it comes in).
 async function wxModels() {
@@ -403,10 +366,8 @@ function wxPlayer(W) {
     Object.values(g.data.attributes).forEach(fix); fix(g.data.index);
   });
   const host = document.getElementById('wxhost'), wrap = document.getElementById('wxwrap'), logo = document.getElementById('wxlogo').src;
-  // 0.64.30 (Ayden 2026-11-27: "How do we get it faster"): the fast look draws without smoothed edges (each pixel drawn
-  // once instead of four times; the smaller picture stretched to the screen softens the edges anyway): about 20% quicker
-  // without a graphics card.
-  const gc0 = HTMLCanvasElement.prototype.getContext, fastStart = new URLSearchParams(location.search).get('lite') !== '0';
+  // 0.64.30: the simple look (now only with ?lite=1 on the link) draws without smoothed edges.
+  const gc0 = HTMLCanvasElement.prototype.getContext, fastStart = new URLSearchParams(location.search).get('lite') === '1';
   if (fastStart) HTMLCanvasElement.prototype.getContext = function (t, o) { return gc0.call(this, t, o && typeof o === 'object' ? { ...o, antialias: false } : o); };
   let v;
   try { v = new Viewer3D(host); } finally { HTMLCanvasElement.prototype.getContext = gc0; }
@@ -450,60 +411,66 @@ function wxPlayer(W) {
     l.userData = m.userData; l.name = m.name; mats.set(m, l); return l;
   };
   const liteObj = o => o.traverse(x => { if (x.isMesh && x.material) x.material = Array.isArray(x.material) ? x.material.map(plain) : plain(x.material); });
-  const wxNoShadow = () => {
-    const r = v.renderer; if (!r.shadowMap.enabled) return false;
-    r.shadowMap.enabled = false; mats.forEach(l => { l.needsUpdate = true; }); v.requestRender(); return true;
-  };
   window.wxLite = why => {
-    if (WXP.lite || liteQ === '0') return; WXP.lite = why;
-    const r = v.renderer; AO.on = false; walkRes = function () {};
-    // Light kept but lighter (Ayden: "try to keep lighting but reduce it"): the sun still casts one small soft shadow,
-    // worked out only when something changes (a door, the time of day); lamps still light but cast none.
-    // A browser without the graphics card (or one still slow) drops that shadow too (wxNoShadow).
-    r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = true;
-    if (why === 'soft') wxNoShadow();
-    if (v.sun) { v.sun.shadow.mapSize.set(1024, 1024); if (v.sun.shadow.map) { v.sun.shadow.map.dispose(); v.sun.shadow.map = null; } }
-    const noLampShadow = o => o.traverse(x => { if (x.isLight && x.castShadow && x !== v.sun) x.castShadow = false; });
-    Object.values(WXP.scenes).flat().forEach(noLampShadow); noLampShadow(v.scene);
+    if (WXP.lite) return; WXP.lite = why;
+    const r = v.renderer; AO.on = false;
+    r.shadowMap.enabled = false; mats.forEach(l => { l.needsUpdate = true; });
     Object.values(WXP.scenes).flat().forEach(liteObj); liteObj(v.scene);
     if (WXP.ceil) WXP.ceil = mats.get(WXP.ceil) || WXP.ceil;
-    WXP.litePr = Math.min(1, 800 / Math.max(1, v.host.clientWidth));
     v.requestRender();
-    if (why === 'slow') wxLog('This computer was drawing slowly, so the walkthrough switched to the fast look.');
-    if (window.wxLookBtn) wxLookBtn();
   };
+  // 0.64.33 (Ayden 2026-11-27: "that share link looks so bad there is no point of it, could we do a 3d preview that they
+  // can rotate maybe at near full quality"): the walkthrough opens at the full look (shadows, soft shading, smooth edges,
+  // shiny surfaces) and draws only when something moves. While the view turns or you walk, the picture is drawn smaller
+  // with no soft shading (its size follows how fast this computer keeps up); a moment after it stops, one full picture.
+  // A computer drawing without its graphics card only draws the small picture while moving, so turning stays smooth.
+  // Phones keep their safe mode (one size, no soft shading). ?lite=1 on the link still gives the old simple look.
+  walkRes = function () {};
+  const D2 = WXP.draft = { full: v.renderer.getPixelRatio(), pr: 0, ft: 0, at: 0, movedAt: 0, last: 0, t: 0 };
+  const capW = soft ? 640 : 1100;
+  v.controls.addEventListener('change', () => { D2.movedAt = performance.now(); });
+  const movedAt = () => Math.max(D2.movedAt, (typeof WALK === 'object' && WALK.movedAt) || 0);
   v.beforeDraw = () => {
     // Hinges, guides and screws behind shut doors are hidden when looking around too, not only while walking.
     if (!v.walk && typeof walkHwCull === 'function') walkHwCull(v);
-    if (phone || WXP.lite) { AO.on = false; v.renderer.shadowMap.autoUpdate = false; }
+    const r = v.renderer;
     if (WXP.lite) {
-      const r = v.renderer, w = v.host.clientWidth, h = v.host.clientHeight;
-      WXP.litePr = Math.min(WXP.litePr, 800 / Math.max(1, w), 1);
-      if (w && h && Math.abs(r.getPixelRatio() - WXP.litePr) > 0.001) { r.setPixelRatio(WXP.litePr); r.setSize(w, h, false); }
-      // The plain look follows anything shown later (another room, a door redrawn).
-      v.scene.traverse(x => { if (x.isLight && x.castShadow && x !== v.sun) x.castShadow = false; if (x.isMesh && x.material && x.material.isMeshStandardMaterial) x.material = plain(x.material); });
+      AO.on = false;
+      v.scene.traverse(x => { if (x.isMesh && x.material && x.material.isMeshStandardMaterial) x.material = plain(x.material); });
       if (WXP.ceil && mats.get(WXP.ceil)) WXP.ceil = mats.get(WXP.ceil);
+      return;
     }
+    if (phone) { AO.on = false; r.shadowMap.autoUpdate = false; return; }
+    const now = performance.now(), moving = now - movedAt() < 200, anim = typeof openAnim !== 'undefined' && !!openAnim;
+    const w = v.host.clientWidth, h = v.host.clientHeight; if (!w || !h) return;
+    if (!D2.pr) D2.pr = Math.min(D2.full, capW / w);
+    if (moving) {
+      // How long frames take while moving; every half second the moving picture gets smaller or bigger to keep up.
+      const gap = now - D2.last; if (gap < 300) D2.ft = D2.ft ? D2.ft * 0.8 + gap * 0.2 : gap;
+      if (now - D2.at > 500 && D2.ft) {
+        D2.at = now;
+        if (D2.ft > 40) D2.pr = Math.max(0.2, D2.pr * 0.8);
+        else if (D2.ft < 22) D2.pr = Math.min(D2.full, capW / w, D2.pr * 1.15);
+      }
+    } else D2.ft = 0;
+    D2.last = now;
+    const pr = moving ? D2.pr : D2.full;
+    if (Math.abs(r.getPixelRatio() - pr) > 0.001) { r.setPixelRatio(pr); r.setSize(w, h, false); }
+    AO.on = !moving;
+    // Shadows don't change when only the view turns or you walk; worked out again for the still picture and while
+    // doors swing.
+    r.shadowMap.autoUpdate = !moving || anim;
+    // The full picture a moment after the last move.
+    if (moving) { clearTimeout(D2.t); D2.t = setTimeout(() => v.requestRender(), 230); }
   };
   // A picture that takes over 1.5 s to draw is noted on screen (what the phone was doing helps find what froze it).
-  // Walking slower than about 20 frames a second for a second switches to the simple look (and smaller still if needed).
-  const draw0 = v.draw.bind(v); let last = 0, ft = 0, slowN = 0;
+  const draw0 = v.draw.bind(v);
   v.draw = function () {
-    const t0 = performance.now(), gap = t0 - last; last = t0;
-    draw0(); const dt = performance.now() - t0;
-    if (dt > 1500 && WXP.shownOnce) wxLog(`A picture took ${(dt / 1000).toFixed(1)} s to draw (${WALK.on ? 'walking' : 'looking around'}${typeof openAnim !== 'undefined' && openAnim ? ', opening' : ''}).`);
-    if (!WALK.on || !WALK.raf || gap > 1000) { slowN = 0; ft = 0; return; }
-    ft = ft ? ft * 0.8 + gap * 0.2 : gap;
-    if (ft > 50) slowN++; else slowN = 0;
-    if (slowN < 15) return;
-    slowN = 0; ft = 0;
-    if (!WXP.lite) wxLite('slow');
-    else if (!wxNoShadow() && WXP.litePr > 0.4) { WXP.litePr *= 0.75; v.requestRender(); }
+    const t0 = performance.now(); draw0(); const dt = performance.now() - t0;
+    if (dt > 1500 && WXP.shownOnce && (phone || now0() - movedAt() < 200)) wxLog(`A picture took ${(dt / 1000).toFixed(1)} s to draw (${WALK.on ? 'walking' : 'looking around'}${typeof openAnim !== 'undefined' && openAnim ? ', opening' : ''}).`);
   };
-  // 0.64.30 (Ayden 2026-11-27: "is there anyway to cut down on performance so much that it runs smoothly very smoothly
-  // just through the email link"): every walkthrough opens in the fast look; the Best look button (or ?lite=0) brings
-  // back shadows, soft shading and shiny surfaces for a strong computer.
-  if (liteQ !== '0') wxLite(soft ? 'soft' : 'default');
+  const now0 = () => performance.now();
+  if (liteQ === '1') wxLite('asked');
   const say = t => { const m = document.getElementById('wxmsg'); if (m) m.textContent = t; };
   new THREE.ObjectLoader().parseAsync(D.scene).then(all => {
     all.children.forEach(g => { WXP.scenes[g.userData.scene] = g.children.slice(); });
@@ -574,11 +541,10 @@ function wxPlayer(W) {
     const bar = document.createElement('div'); bar.className = 'wx-bar';
     bar.innerHTML = (D.rooms.length > 1 ? `<select id="wxroom" aria-label="Room">${D.rooms.map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select>` : '')
       + `<label class="wx-sun" title="Time of day">${icon('sun')}<input type="range" id="wxsun" min="5" max="22" step="0.25" value="${SUN.hour}" aria-label="Time of day"><span id="wxsunl">${sunLabel(SUN.hour)}</span></label>`
-      + `<button class="btn primary" id="walk3d" data-act="walk3d"></button>`
-      + `<button class="btn sm" id="wxlook"></button>`;
+      + `<button class="btn primary" id="walk3d" data-act="walk3d"></button>`;
     const card = document.createElement('div'); card.className = 'wx-card'; card.id = 'wxcard';
-    card.innerHTML = `<img src="${logo}" alt=""><h1>${esc(D.name)}</h1><p>Walk through your new ${D.rooms.length > 1 ? 'rooms' : 'room'} in 3D. ${coarse ? 'Walk with the stick at the bottom left or tap the floor to walk there. Drag to look around, pinch to step forward or back.' : 'Use W A S D or the arrow keys to walk and drag to look around.'} ${coarse ? 'Tap' : 'Click'} a cabinet to open it.</p>`
-      + `<button class="btn primary big" data-go="walk">${icon('walk')}Start walking</button><button class="btn link" data-go="look">Look around from outside</button>`
+    card.innerHTML = `<img src="${logo}" alt=""><h1>${esc(D.name)}</h1><p>See your new ${D.rooms.length > 1 ? 'rooms' : 'room'} in 3D. ${coarse ? 'Drag to turn it, pinch to zoom.' : 'Drag to turn it, scroll to zoom.'} Or walk through it: ${coarse ? 'the stick at the bottom left walks, or tap the floor.' : 'W A S D or the arrow keys walk.'} ${coarse ? 'Tap' : 'Click'} a cabinet to open it.</p>`
+      + `<button class="btn primary big" data-go="look">Look around in 3D</button><button class="btn big" data-go="walk">${icon('walk')}Walk through it</button>`
       + `<small>Designed by LARKUL Custom · ${esc(D.made)}</small>`;
     const fl = document.createElement('div'); fl.className = 'wx-flash'; fl.id = 'wxflash'; fl.hidden = true;
     wrap.append(top, bar, card, fl);
@@ -586,14 +552,8 @@ function wxPlayer(W) {
     bar.querySelector('#walk3d').addEventListener('click', () => { const c = document.getElementById('wxcard'); if (c) c.remove(); walkToggle(); });
     const rs = bar.querySelector('#wxroom'); if (rs) rs.addEventListener('change', () => { const on = WALK.on; if (on) walkStop(); wxShow(rs.value); if (on) walkStart(); });
     bar.querySelector('#wxsun').addEventListener('input', e => { SUN.hour = +e.target.value; document.getElementById('wxsunl').textContent = sunLabel(SUN.hour); v.fitShadow(); v.requestRender(); });
-    // Fast look (default) or Best look: the page opens again with the other one.
-    bar.querySelector('#wxlook').addEventListener('click', () => {
-      const q = new URLSearchParams(location.search); if (WXP.lite) q.set('lite', '0'); else q.delete('lite');
-      const s = q.toString(); location.search = s ? '?' + s : '';
-    });
-    wxLookBtn(); wxBtn();
+    wxBtn();
   }
-  window.wxLookBtn = () => { const b = document.getElementById('wxlook'); if (!b) return; b.textContent = WXP.lite ? 'Best look' : 'Fast look'; b.title = WXP.lite ? 'Shadows and shiny surfaces (needs a strong computer)' : 'Smoother on slow computers and phones'; };
   window.wxBtn = () => { if (typeof renderRoomWalkBtn === 'function') renderRoomWalkBtn(); };
 }
 

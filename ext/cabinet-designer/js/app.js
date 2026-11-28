@@ -303,7 +303,6 @@ function renderRoom() {
   $('#hidden3d').innerHTML = `${icon('cube')}Hidden line`; $('#hidden3d').setAttribute('aria-pressed', String(!!ui.hidden3d));
   $('[data-act=snap3d]').innerHTML = `${icon('camera')}Save image`;
   { const b = $('[data-act=walkexp]'); if (b) b.innerHTML = `${icon('walk')}Walk file`; }
-  { const b = $('[data-act=walklink]'); if (b) b.innerHTML = `${icon('link')}Share link`; }
   $('[data-act=co-open]').innerHTML = `${icon('print')}Cutout card`;
   renderFull3d();
   const sel = $('#elevwall');
@@ -1043,7 +1042,6 @@ document.addEventListener('click', e => {
     case 'hidden3d': ui.hidden3d = !ui.hidden3d; if (ui.hidden3d) ui.render3d = false; try { localStorage.setItem(KEY + '.hidden', ui.hidden3d ? '1' : '0'); localStorage.setItem(KEY + '.render', ui.render3d ? '1' : '0'); } catch (_) {} renderRoom(); break;
     case 'snap3d': saveRoomImage(); break;
     case 'walkexp': walkExport(); break;
-    case 'walklink': walkExport({ link: true }); break;
     case 'walk3d': walkToggle(); break;
     case 'house3d': ui.house3d = !ui.house3d; if (roomViewer) roomViewer.fitted = false; renderRoom(); break;
     case 'full3d': toggleFull3d(); break;

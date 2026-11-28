@@ -1824,6 +1824,20 @@ function countertopRunsAll() {
   const fillerOnly = r => r.cabs.length && r.cabs.every(id => { const k = S.cabinets.find(x => x.id === id), d = k && k.moz && typeof mozDef === 'function' && mozDef(k.moz); return d && d.group === 'filler'; });
   const covered = r => runs.some(g => g.generic && g.wall === r.wall && g.side === r.side && Math.min(g.end, r.end) - Math.max(g.start, r.start) > 0.5);
   for (let i = runs.length - 1; i >= 0; i--) if (!runs[i].generic && fillerOnly(runs[i]) && covered(runs[i])) runs.splice(i, 1);
+  // 0.64.32 (Ayden 2026-11-27, Argil island: "these weird top issue again"): the two tops of an island (one on each side
+  // of the island line, like the sink side's and a top placed by hand over the seating side) end together. The shorter
+  // one's end runs out to the longer one's (up to 6"), so the island's end is one straight edge, not a 3/4" step.
+  runs.forEach(a => {
+    const w = wall(a.wall); if (!w || !(w.island || w.hidden)) return;
+    runs.forEach(b => {
+      if (b === a || b.wall !== a.wall || b.side === a.side || Math.abs(b.top - a.top) > 1) return;
+      const a0 = a.start - a.ovS, a1 = a.end + a.ovE, b0 = b.start - b.ovS, b1 = b.end + b.ovE;
+      if (Math.min(a1, b1) - Math.max(a0, b0) < 1) return;
+      if (b0 < a0 - 0.01 && a0 - b0 <= 6) a.ovS = r3(a.ovS + a0 - b0);
+      if (b1 > a1 + 0.01 && b1 - a1 <= 6) a.ovE = r3(a.ovE + b1 - a1);
+      a.len = r3(a.end - a.start + a.ovS + a.ovE);
+    });
+  });
   // Corners where two tops meet: mitered or one running through (ctjoint.js). Reshapes the tops and their lengths.
   runs.corners = typeof ctjApply === 'function' ? ctjApply(runs) : [];
   // 0.59.1 (Ayden 2026-11-19, right-click a top's edge in the Tops tab): each top's backsplash height (bs on the run, or
