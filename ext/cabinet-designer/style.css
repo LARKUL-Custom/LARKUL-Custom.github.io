@@ -4157,3 +4157,5 @@ main.lib-on > .page > .pagehead:first-child h2::before{box-shadow:none}
 .prx-tot tr.subi td{color:var(--muted);font-size:12.5px;padding-left:18px}
 .prx-tot tr.sub td{font-weight:700}
 
+/* Walk file: Computer or Phone menu (0.64.38) */
+#ctxmenu [data-act^=walkexp-]{display:flex;align-items:center;gap:8px}

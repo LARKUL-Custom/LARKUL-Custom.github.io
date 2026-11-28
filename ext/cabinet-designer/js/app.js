@@ -1041,7 +1041,15 @@ document.addEventListener('click', e => {
     // Hidden line and Realistic are two looks of the same view: turning one on turns the other off.
     case 'hidden3d': ui.hidden3d = !ui.hidden3d; if (ui.hidden3d) ui.render3d = false; try { localStorage.setItem(KEY + '.hidden', ui.hidden3d ? '1' : '0'); localStorage.setItem(KEY + '.render', ui.render3d ? '1' : '0'); } catch (_) {} renderRoom(); break;
     case 'snap3d': saveRoomImage(); break;
-    case 'walkexp': walkExport(); break;
+    // 0.64.38 (Ayden 2026-11-27: "when i click walk file ask me if its for mobile or pc"): PC is the full detail file,
+    // Phone the light one.
+    case 'walkexp': {
+      const m = $('#ctxmenu'), b = $('[data-act=walkexp]'), r = b ? b.getBoundingClientRect() : { left: 200, bottom: 120 };
+      m.innerHTML = `<div class="ctxhead">Walk file for…</div><button role="menuitem" data-act="walkexp-pc" title="Full detail: Blum hinges, guides and locks, the outside view, shadows and soft shading">${icon('monitor')}Computer (full detail)</button><button role="menuitem" data-act="walkexp-phone" title="Light: simple hardware, no outside view, made for a phone's smaller graphics">${icon('phone')}Phone (light)</button>`;
+      placeCtx(m, r.left, r.bottom + 4); break;
+    }
+    case 'walkexp-pc': walkExport({ phone: false }); break;
+    case 'walkexp-phone': walkExport({ phone: true }); break;
     case 'walk3d': walkToggle(); break;
     case 'house3d': ui.house3d = !ui.house3d; if (roomViewer) roomViewer.fitted = false; renderRoom(); break;
     case 'full3d': toggleFull3d(); break;

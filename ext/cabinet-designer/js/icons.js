@@ -1,6 +1,8 @@
 // Line icons used across the app. icon(name) returns an inline SVG that takes the text color.
 'use strict';
 const ICON_PATHS = {
+  monitor: '<rect x="2.5" y="3.5" width="15" height="10" rx="1"/><path d="M7 16.5h6M10 13.5v3"/>',
+  phone: '<rect x="6" y="2.5" width="8" height="15" rx="1.5"/><path d="M9 15h2"/>',
   folder: '<path d="M2.5 5.5a1 1 0 0 1 1-1h4l1.6 1.8h7.4a1 1 0 0 1 1 1v8.2a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z"/>',
   user: '<circle cx="10" cy="6.8" r="3.3"/><path d="M3.5 17c.6-3.4 3.2-5.4 6.5-5.4s5.9 2 6.5 5.4"/>',
   stack: '<path d="M3 7l7-3.5L17 7l-7 3.5z"/><path d="M3 10.5l7 3.5 7-3.5M3 14l7 3.5 7-3.5"/>',

@@ -84,7 +84,8 @@ function hwPut(lists, parts, o, ax, zs = 1, zScale = 1) {
 // 0.64.27 (Ayden 2026-11-27: "leave the blum and everything on for the regular walk, but for the file we just replace
 // them with a super low cost alternative"): while the walk file is being made (WX.busy), hwModel answers null, so every
 // hinge, plate, guide and lock is drawn as the old block shapes (a few boxes per front, merged), not Blum's models.
-const hwInst = () => typeof WX === 'object' && !!WX.busy;
+// 0.64.38: only the Phone walk file; the Computer one keeps Blum's models.
+const hwInst = () => typeof WX === 'object' && !!WX.busy && !!WX.phone;
 function hwFlip(g) {
   if (g.userData.flip) return g.userData.flip;
   const q = g.clone();

@@ -9,7 +9,7 @@ const WX = { busy: false, maxTex: 1024, floorTex: 2048 };
 async function walkExport(opt = {}) {
   if (WX.busy) return;
   if (typeof CompressionStream === 'undefined') { flash('This browser cannot make a walk file (it needs a newer Chrome or Edge)'); return; }
-  WX.busy = true;
+  WX.busy = true; WX.phone = !!opt.phone;
   const keep = { tab: ui.tab, view: ui.viewMode, room: S.roomId, render: ui.render3d, hidden: ui.hidden3d, cut: ui.cutaway, op: ui.wallOp, layers: ui.layers, open: ui.open, house: ui.house3d, cam: null };
   const openWas = { ...openT };
   if (typeof WALK !== 'undefined' && WALK.on) walkStop();
@@ -43,7 +43,7 @@ async function walkExport(opt = {}) {
     if (!rooms.length) throw new Error('this job has no rooms to walk');
     const html = await wxFile(rooms, scenes, ctx);
     const clean = t => String(t || '').replace(/[^\w -]/g, '').trim();
-    const name = `${clean(S.job.name) || 'Job'} walkthrough.html`, blob = new Blob([html], { type: 'text/html' });
+    const name = `${clean(S.job.name) || 'Job'} walkthrough${WX.phone ? ' (phone)' : ''}.html`, blob = new Blob([html], { type: 'text/html' });
     const mb = (blob.size / 1048576).toFixed(1);
     // In the hub: saved to Files › Cabinet Designer and put on the clipboard as a file, so Ctrl+V in an email attaches it.
     if (inHub()) {
@@ -183,9 +183,10 @@ function wxUserData(o) {
 }
 function wxNode(o, ctx) {
   if (o.isSprite || o.isCamera || o.userData.hlEdge) return null;
-  // 0.64.30 (Ayden 2026-11-27: "remove the hinges guides and locks and remove the background outside"): the walk file
-  // carries no hinges, plates, drawer guides or locks and no outside landscape (sky dome, ground, trees); the app keeps them.
-  if (o.userData.hw || o.userData.land) return null;
+  // 0.64.30 (Ayden 2026-11-27: "remove the hinges guides and locks and remove the background outside"): the Phone walk
+  // file (0.64.38) carries no hinges, plates, drawer guides or locks and no outside landscape (sky dome, ground, trees);
+  // the Computer one keeps them, like the app.
+  if (WX.phone && (o.userData.hw || o.userData.land)) return null;
   if (o.visible === false && !o.userData.cut) return null;
   let j;
   if (o.isLight) { j = o.toJSON().object; delete j.children; }
@@ -258,7 +259,7 @@ async function wxFile(rooms, scenes, ctx) {
   const [three, orbit, icons, walk, logo] = await Promise.all([wxText('vendor/three.min.js'), wxText('vendor/OrbitControls.js'), wxText('js/icons.js'), wxText('js/walk3d.js'), wxDataUrl('img/logo.png')]);
   const meta = ctx.meta, vals = o => Object.values(o);
   const data = {
-    v: 1, name: S.job.name || 'Your job', made: new Date().toISOString().slice(0, 10), sun: typeof SUN === 'object' ? SUN.hour : 15,
+    v: 1, phone: !!WX.phone, name: S.job.name || 'Your job', made: new Date().toISOString().slice(0, 10), sun: typeof SUN === 'object' ? SUN.hour : 15,
     rooms,
     scene: { metadata: { version: 4.5, type: 'Object', generator: 'Cabinet Designer walk file' }, geometries: vals(meta.geometries), materials: vals(meta.materials), textures: vals(meta.textures), images: vals(meta.images), object: { uuid: THREE.MathUtils.generateUUID(), type: 'Group', matrix: new THREE.Matrix4().toArray(), children: scenes } },
   };
@@ -390,7 +391,7 @@ function wxPlayer(W) {
   // something changes; no lamp shadows. Pictures at most 1024 px. Add ?safe=1 to the link to try it on a computer,
   // ?safe=0 to turn it off on a phone.
   const qs = new URLSearchParams(location.search), force = qs.get('safe');
-  const phone = WXP.phone = force === '1' ? true : force === '0' ? false : matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 600;
+  const phone = WXP.phone = force === '1' ? true : force === '0' ? false : !!D.phone || matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 600;
   if (phone) {
     v.renderer.setPixelRatio(1); v.sun.shadow.mapSize.set(1024, 1024); v.resize();
     AO.on = false; walkRes = function () {};
